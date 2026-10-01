@@ -202,14 +202,25 @@ silent living players receive a whereabouts turn before voting. This gives
 otherwise unheard players an opportunity to state an account
 ([`meetings/manager.py`](../meetings/manager.py)).
 
+### kill cooldown
+
+The ticks an impostor must wait before it can kill. It is set at round start,
+after each of the impostor's own kills and after a regroup, and it counts down
+one tick at a time during play. Its value is the map's (4 ticks on the canonical
+map) unless a recording sets another with the recorded setting
+`kill_cooldown_ticks`
+([`engine/world.py`](../engine/world.py),
+[experiment arms](experiment-arms.md)).
+
 ### regroup (the full meeting reset)
 
 What a meeting's close does under the recorded setting
 `meeting_reset = hub_with_grace`, when the meeting did not end the game. Every
 living player is placed in the meeting room; every corpse is cleared, reported
 or not; an impostor inside a vent is brought out; ongoing actions stop; and each
-living impostor's kill cooldown restarts at the map's value, so no kill is
-possible for that many ticks after the meeting. Task progress, button uses and
+living impostor's kill cooldown restarts at its full value, the map's unless the
+recording sets another, so no kill is possible for that many ticks after the
+meeting. Task progress, button uses and
 an active sabotage survive it. The relocation is announced, not walked: every
 living player's memory records it, states it beside the meeting record and as
 its own step in the player's route. The first observations after it carry only

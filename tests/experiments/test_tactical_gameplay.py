@@ -25,6 +25,11 @@ from orchestrator.replay import GameEndReplayEntry, read_all_entries
 from orchestrator.seeder import seed_initial_state
 
 
+#: The arms whose seed-1000 game holds no meeting on this roster, with a seed
+#: whose game does, so every arm's reconstruction includes a meeting.
+_SEED_WITH_A_MEETING: dict[str, int] = {"stage_b_full_kill_cooldown_6": 1001}
+
+
 @pytest.mark.parametrize(
     "arm",
     [
@@ -44,12 +49,15 @@ from orchestrator.seeder import seed_initial_state
         "stage_b_full_minus_own_fresh_kill",
         "stage_b_full_minus_physical",
         "stage_b_full_minus_hub_with_grace",
+        "stage_b_full_kill_cooldown_6",
+        "stage_b_full_kill_cooldown_8",
     ],
 )
 def test_genuine_candidate_reconstructs_in_api_and_repeats(
     tmp_path: Path, arm: str
 ) -> None:
     roster = Roster(num_players=4, num_impostors=1, tasks_per_crewmate=1)
+    seed = _SEED_WITH_A_MEETING.get(arm, 1000)
     metrics = []
     for name in ("first", "repeat"):
         directory = tmp_path / name
@@ -57,15 +65,15 @@ def test_genuine_candidate_reconstructs_in_api_and_repeats(
         (directory / "roster.json").write_text(
             roster.model_dump_json(), encoding="utf-8"
         )
-        path = directory / "replay-seed-1000.jsonl"
+        path = directory / f"replay-seed-{seed}.jsonl"
         row = run_candidate(
-            seed=1000, roster=roster, config=candidate_configs()[arm], replay_path=path
+            seed=seed, roster=roster, config=candidate_configs()[arm], replay_path=path
         )
         metrics.append(row)
         assert row.error is None and row.completion_status == "completed"
         assert row.model_calls > 0 and row.input_tokens > 0
         assert row.reported_cost_usd == 0
-        replay = ReplayLoader(directory).load_replay("headless-seed-1000")
+        replay = ReplayLoader(directory).load_replay(f"headless-seed-{seed}")
         assert replay.metadata.outcome_verified
         assert replay.metadata.winner == row.winner
         raw = [json.loads(line) for line in path.read_text().splitlines()]

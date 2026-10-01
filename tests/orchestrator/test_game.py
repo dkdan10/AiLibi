@@ -124,6 +124,7 @@ def _override_seeder(monkeypatch: pytest.MonkeyPatch, *, state: WorldState) -> N
         num_players: int,
         num_impostors: int = 1,
         tasks_per_crewmate: int = 1,
+        kill_cooldown_ticks: int | None = None,
     ) -> WorldState:
         return state
 
@@ -836,6 +837,7 @@ def _capture_seed_kwargs(
         num_players: int,
         num_impostors: int = 1,
         tasks_per_crewmate: int = 1,
+        kill_cooldown_ticks: int | None = None,
     ) -> WorldState:
         captured["tasks_per_crewmate"] = tasks_per_crewmate
         return seed_initial_state(
@@ -844,6 +846,7 @@ def _capture_seed_kwargs(
             num_players=num_players,
             num_impostors=num_impostors,
             tasks_per_crewmate=tasks_per_crewmate,
+            kill_cooldown_ticks=kill_cooldown_ticks,
         )
 
     monkeypatch.setattr("orchestrator.game.seed_initial_state", spy)

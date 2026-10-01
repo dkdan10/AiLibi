@@ -162,8 +162,8 @@ Recorded settings
 The ``evidence-honesty`` profile reads recordings that carry experiment settings,
 and :data:`HONESTY_READS` names, field by field, the ones it reads: every setting
 in :data:`eval.recorded_settings.READABLE_SETTINGS`. The engine settings reach
-every advance through the engine-arguments helper (which refuses one it does not
-thread), and the perception this module rebuilds reads the witness lists those
+the seeding, every advance and every applied meeting through the
+engine-arguments helper (which refuses one it does not thread), and the perception this module rebuilds reads the witness lists those
 advances produce. The vent exit and entry policies reach the I-11 fold as the
 recorded policy above. A rebuttal reply, the trigger's described body handle and
 the ballot settings reach the folds only as recorded turns, flags and prompts:

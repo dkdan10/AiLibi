@@ -401,6 +401,29 @@ class Map(_FrozenModel):
                 raise MapValidationError(f"{label} references unknown room: {room_id}")
 
 
+def resolve_kill_cooldown(game_map: Map, kill_cooldown_ticks: int | None) -> int:
+    """The kill cooldown an impostor is set to: a recorded override, else the map's.
+
+    ``None`` means the map's ``kill_cooldown_ticks``. An override must be an
+    integer (``bool`` is not one here) of at least 1, the bound the map holds
+    for its own value. Every engine write of a cooldown, at round start, after a
+    kill and at a regroup, takes its value from here.
+    """
+
+    if kill_cooldown_ticks is None:
+        return game_map.kill_cooldown_ticks
+    if type(kill_cooldown_ticks) is not int:
+        raise ValueError(
+            f"a kill cooldown must be an integer number of ticks, got "
+            f"{kill_cooldown_ticks!r}"
+        )
+    if kill_cooldown_ticks < 1:
+        raise ValueError(
+            f"a kill cooldown must be at least 1 tick, got {kill_cooldown_ticks}"
+        )
+    return kill_cooldown_ticks
+
+
 def _attach_mapping_ids(
     *, field_name: str, raw_items: object
 ) -> dict[str, dict[str, object]]:

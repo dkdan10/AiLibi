@@ -512,6 +512,7 @@ EXPECTED_EVAL_REPORT_FIELDS: Final[frozenset[str]] = frozenset(
         "report_body_handle_version",
         "ballot_kill_row_version",
         "impostor_ballot_version",
+        "kill_cooldown_ticks",
         "provenance_groups",
         "game_ids",
         "skip_confidence_threshold",

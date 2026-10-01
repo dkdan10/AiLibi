@@ -1,6 +1,6 @@
 # The kill cooldown becomes a recorded dial
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -182,7 +182,21 @@ four-set verification prove it moves no byte (Acceptance, last item).
 Each item names its enforcing mechanism and a planted or perturbed proof. Each new test is written
 first and fails at the base for the stated reason; Results quotes that failing run.
 
-- [ ] **The field, validated and omitted at its default.** `kill_cooldown_ticks: int | None = None`
+- [x] Review correction: the failing-first quote in Results is the output its stated run prints.
+  Each new test file, run alone against a `git archive` export of `107956bf`, exits 2 at
+  collection with `ImportError: cannot import name 'resolve_kill_cooldown' from 'engine.world'`.
+  The readers file asks for that name (line 53) before it asks for `CooldownWrite` from
+  `eval.gameplay_census` (line 61), so the second line the quote carried was never printed. Proof:
+  the per-file command quoted in Results, "Failing first, at the base", re-run for this correction.
+  Results, "Review corrections, round 2 (2026-10-01)".
+- [x] Review correction: the census's regroup writes skip a meeting that ends the game.
+  The filter `applied.state.phase == "PLAY"` in `_load_game` was unpinned: a listed-class mutant
+  (`is not None`) survived, and under it round 1 breached falsely. It is now pinned by
+  `tests/eval/test_kill_cooldown_readers.py::test_a_meeting_that_ends_the_game_writes_no_regroup_cooldown`
+  (planted: a scripted fake game whose second meeting ends it with both impostors alive below the
+  window) and `::test_round_one_reads_every_cooldown_write_at_the_maps_value` (round 1 reads 0 of
+  487, split 100, 227 and 160). Results, "Review corrections, round 1 (2026-10-01)".
+- [x] **The field, validated and omitted at its default.** `kill_cooldown_ticks: int | None = None`
   is declared after `impostor_ballot_version`, accepts only a true integer of at least 1 (checked
   before coercion, as `_literal_versions_are_integers` does), is assigned `engine` in `FIELD_LAYER`,
   sits in `OMITTED_AT_DEFAULT`, and stays out of `_PRE_WAVE_VALUES`, so a set value is a wave
@@ -195,7 +209,7 @@ first and fails at the base for the stated reason; Results quotes that failing r
     validates with `format_version` 1.
   - Perturbed: the field removed from `OMITTED_AT_DEFAULT` fails
     `test_every_committed_recorded_payload_reserializes_byte_for_byte` at the first archive row.
-- [ ] **One resolver, three engine writes.** One engine function (named in Results; for example
+- [x] **One resolver, three engine writes.** One engine function (named in Results; for example
   `engine.world.resolve_kill_cooldown(game_map, kill_cooldown_ticks)`) returns the map's value for
   `None` and the integer otherwise, and raises `ValueError` for a non-integer or a value below 1.
   `advance_tick`, `_apply_action` and `_apply_kill`, `seed_initial_state`, `regroup_after_meeting`
@@ -208,7 +222,7 @@ first and fails at the base for the stated reason; Results quotes that failing r
   - 0 raises at each entry point, and the input state is unchanged.
   - Planted: each of the three writes restored to `game_map.kill_cooldown_ticks` fails its own case
     and only that case (three plants).
-- [ ] **The helper threads it to every re-simulation site.** `EngineArguments` gains
+- [x] **The helper threads it to every re-simulation site.** `EngineArguments` gains
   `kill_cooldown_ticks: int | None`, and `engine_arguments` returns the recorded value, or `None` for
   no config. The nine call lines in Evidence pass the helper's value to seeding and to meeting
   application; the advances already take `**engine`. Proof:
@@ -217,7 +231,7 @@ first and fails at the base for the stated reason; Results quotes that failing r
     engine field, takes 6 for this integer field; with the field left out of the threaded set the
     helper refuses, naming `kill_cooldown_ticks=6`;
   - the `ast` scan over the re-simulation modules stays green unchanged.
-- [ ] **The reader gate: a site that forgets the value fails.** Mechanism: the hash chain at every
+- [x] **The reader gate: a site that forgets the value fails.** Mechanism: the hash chain at every
   reader, and direct value checks on the writer. The fixture, in
   `tests/eval/test_kill_cooldown_readers.py`, is one fake-provider game recorded into `tmp_path` by
   `HeadlessGame` with `RecordedExperimentConfig(kill_cooldown_ticks=6, meeting_reset="hub_with_grace")`
@@ -233,7 +247,7 @@ first and fails at the base for the stated reason; Results quotes that failing r
   - Planted, parametrised over the thirteen calls in Evidence's table (nine seeding and meeting
     lines, four advances): the helper's value replaced by `None` at exactly one site makes the
     test fail, naming that site.
-- [ ] **Every reader that names its settings reads the field, or refuses it.** `READABLE_SETTINGS`
+- [x] **Every reader that names its settings reads the field, or refuses it.** `READABLE_SETTINGS`
   gains `kill_cooldown_ticks`, so the five instruments that read it whole, and the golden, read a
   cooldown recording through the walk. Any reader that does not name the field refuses it by name
   before its first advance (`refuse_unread_settings`).
@@ -244,7 +258,7 @@ first and fails at the base for the stated reason; Results quotes that failing r
   instruments' walks completes on the reader-gate fixture with every hash its profile checks;
   perturbed, with the field removed from `READABLE_SETTINGS`, each refuses with a message naming
   `kill_cooldown_ticks`.
-- [ ] **The census grace window follows the recording.** `load_census_inputs` resolves the set's
+- [x] **The census grace window follows the recording.** `load_census_inputs` resolves the set's
   era first and reads the window from it through the same resolver; `CensusInputs`, `_constants`,
   the grace-window cell's definition and the docstrings say "the recorded kill cooldown, else the
   map's". `FieldUse` gains a third kind, read as a value: a member naming what reads the field's
@@ -259,7 +273,7 @@ first and fails at the base for the stated reason; Results quotes that failing r
     era raises nothing;
   - perturbed: the window read from the map again fails the T+5 case;
   - a scratch set of one `None` game and one cooldown-6 game raises `GameplayCensusEraError`.
-- [ ] **A census cell checks the three writes against the recorded value.** A new conformance cell,
+- [x] **A census cell checks the three writes against the recorded value.** A new conformance cell,
   key `kill_cooldowns_differing_from_recorded`, title "Kill cooldowns that differ from the recorded
   value", is guarded `always`. It compares every impostor's cooldown at round start, on the state
   after each of its kills, and after each regroup, with the resolved value: the recorded override,
@@ -272,14 +286,14 @@ first and fails at the base for the stated reason; Results quotes that failing r
     regroup row empty where no regroup ran;
   - planted, three cases: the engine's write left at the map's value at exactly one writer (the
     live game and the walk then agree and every hash passes) raises the breach naming that writer.
-- [ ] **The validity gate covers it by homogeneity, unchanged.** `experiment_config_violations`
+- [x] **The validity gate covers it by homogeneity, unchanged.** `experiment_config_violations`
   (`eval/validity.py:424-443`) compares each game's normalized config with the declared one, so a
   game recorded at another cooldown fails `cost_and_provenance_exact`. Nothing in `eval/validity.py`
   changes. Proof: on a scratch set of two fake games, one at 6 and one at `None`,
   `scripts/validity_gate.py` with `--expected-experiment-config` at 6 fails
   `cost_and_provenance_exact`, naming the `None` game; with no expected config it fails that check
   naming the cooldown-6 game; on a set of two cooldown-6 games that check passes.
-- [ ] **The lab has the dial and reports ticks to parity.** `candidate_configs` gains
+- [x] **The lab has the dial and reports ticks to parity.** `candidate_configs` gains
   `stage_b_full_kill_cooldown_6` and `stage_b_full_kill_cooldown_8` (`STAGE_B_FULL_SETTINGS` plus the
   cooldown); `stage_b_full` is the 4 column. The output gains one top-level key, count-only: per arm
   and roster, the games, the parity games, and the minimum, median and maximum `tick_rows` of the
@@ -293,7 +307,7 @@ first and fails at the base for the stated reason; Results quotes that failing r
     field, so no default path moved; `tests/orchestrator/test_experiment_config.py` counts 19 arms.
   - Results quote the count-only parity table for 4, 6 and 8 on development seeds 1000-1007, both
     rosters, from a run written outside the tree; this card commits no lab output.
-- [ ] **The mirrors and the pages state the field.** `ExperimentConfigView` gains the field with
+- [x] **The mirrors and the pages state the field.** `ExperimentConfigView` gains the field with
   the same type and default; `frontend/src/types/api.ts` is regenerated with it optional (one entry
   in `scripts/gen_frontend_types.py`); `tests/api/test_leak.py` allows the name. `_WAVE_FIELDS`
   gains it, and the page check accepts an integer field when its row spells `none` and "an integer
@@ -304,7 +318,7 @@ first and fails at the base for the stated reason; Results quotes that failing r
   says the cooldown restarts at that value. The census terms "grace window" and "regroup" say the
   same. No copy names a card, ruling or audit. Proof: the view-mirror test; the page check bites the
   row deleted; `npm run tsc:check`.
-- [ ] **Nothing committed moves, and the bundle is byte-identical.** Mechanism: the `None` default
+- [x] **Nothing committed moves, and the bundle is byte-identical.** Mechanism: the `None` default
   and the omitted key. Evidence at the branch head:
   - the committed-payload test still counts 956 rows in 101 files;
   - `bash scripts/verify_samples.sh <set>` once per directory: the four sets and round 1;
@@ -509,8 +523,354 @@ viewer code changes and the bundle diff is the publication proof; `check.sh` run
 
 ## Results
 
-Not started. The implementer records here: the commits, the sections relied on (this card, the
-decision memo's sections 0.3 and 7, the direction addendum of 2026-10-01, `docs/experiment-arms.md`
-and `docs/architecture.md` "Determinism and the substrate ladder"), the decisions above, the
-resolver's name, the reader-gate seed, each planted failure with its test id, the lab's parity
-table, the census diff and every validation command with its exit code.
+Implemented at `e164f57d` (`feat: the kill cooldown becomes a recorded dial`) on
+`work/kill-cooldown-arm`, branched from `main` at `107956bf`; this Results commit follows it.
+Sources relied on: this card; the decision memo's sections 0.3 (items 2 and 6) and 7; the
+direction addendum of 2026-10-01; `docs/experiment-arms.md` ("Adopted arms", "One
+engine-arguments helper"); `docs/architecture.md`, "Determinism and the substrate ladder" and
+"Explicit cleanup experiments". No live call, no `.env`, no held-out band, no prompt text printed.
+
+### What was built
+
+- **The field.** `kill_cooldown_ticks: int | None = None` follows `impostor_ballot_version`. A
+  before-mode validator refuses anything but a true integer of at least 1. `FIELD_LAYER` assigns
+  it `engine`, it sits in `OMITTED_AT_DEFAULT`, and it is not in `_PRE_WAVE_VALUES`.
+- **The resolver** is `engine.world.resolve_kill_cooldown(game_map, kill_cooldown_ticks)`, beside
+  `Map`'s own bound. `None` returns the map's value; a non-integer (`bool` included) or a value
+  below 1 raises `ValueError` naming the value. `seed_initial_state`, `advance_tick`,
+  `_apply_action`, `_apply_kill`, `regroup_after_meeting` and `apply_meeting_result` each take the
+  keyword with a `None` default and resolve it before changing any state.
+- **The threading.** `EngineArguments` gains the field, so every advance takes it through
+  `**engine`. Nine call lines pass the helper's value outside the tick: the live game's two seeds
+  and its meeting application, and the seeding and meeting application of the loader, the walk and
+  the golden's `walk_replay_meetings`. In the golden, the `engine_arguments` line moved above the
+  seed. `_first_meeting_state` is exempt: it reads only `replays/samples/9p2i` and applies no
+  meeting. The golden's docstrings are unchanged; they stay true.
+- **The readers.** `READABLE_SETTINGS` gains the field. The five instruments that read it whole
+  and the golden therefore read a cooldown recording. The "Recorded settings" docstrings of the
+  five instruments, `eval/recorded_settings.py`, `eval/replay_walk.py` and
+  `eval/gameplay_census.py` now say the engine settings reach the seeding, every advance and
+  every applied meeting.
+- **The census.**
+  - `FieldUse` gains a third kind, `value_read_by`, and `__post_init__` requires exactly one
+    kind. The field's row reads "read as a value by: the length of the grace window, and the
+    value the kill cooldown cell checks every cooldown write against".
+  - `load_census_inputs` resolves the set's era first and reads the window through
+    `recorded_kill_cooldown(era, map)`, which calls the engine resolver.
+  - The loader keeps every impostor's cooldown after each write as a `CooldownWrite` on
+    `GameFacts.cooldown_writes`. The field defaults to empty, so a hand-built carrier checks none.
+  - The cell `kill_cooldowns_differing_from_recorded` ("Kill cooldowns that differ from the
+    recorded value") is guarded `always`. Its denominator is every write. The table
+    `kill_cooldown_writes_by_writer` has the rows `round_start`, `after_kill` and `regroup`. Both
+    sit under a new heading, "The kill cooldown".
+  - A breach reads, for example, `set S, seed N, the after_kill write of p-3's cooldown at tick 12
+    (4 against 6) breaches it`.
+  - The grace-window cell's definition and the "regroup" and "grace window" terms say "the
+    recorded kill cooldown, else the map's".
+- **The lab.** `stage_b_full_kill_cooldown_6` and `stage_b_full_kill_cooldown_8`
+  (`STAGE_B_KILL_COOLDOWNS`) bring the arm count to 19. The output gains the top-level key
+  `ticks_to_parity`. No existing row changes shape.
+- **The mirrors and pages.**
+  - `ExperimentConfigView` gains the field, and `frontend/src/types/api.ts` is regenerated with it
+    optional. `tests/api/test_leak.py` allows the name.
+  - `_WAVE_FIELDS` gains the field, and the page check requires "an integer of at least 1" for an
+    integer field.
+  - `docs/experiment-arms.md` gains the row, the omitted-at-default name and the helper sentence.
+    Its heading "The eight fields" became "The fields", and two sentences that counted eight
+    fields were reworded.
+  - `docs/glossary.md` gains "kill cooldown", and the regroup entry says the cooldown restarts at
+    its full value, the map's unless the recording sets another.
+
+### Decisions
+
+- The value is threaded through `engine_arguments`, not substituted into the map (Evidence). The
+  engine entry points keep a `None` default, so no test call line of the engine functions moved.
+- The guard against a forgotten site is the hash chain plus the reader gate. The guard against a
+  writer and reader sharing one mistake is the census cell. The cell is guarded `always`, so the
+  committed sets carry a measured 0 against 4.
+- `FieldUse` gains a third kind, because an `always` cell has no predicate and the not-read kind
+  would publish the field as unread.
+- The reader gate's own reading of the recording calls the engine entry points this test module
+  imports. A plant at any of the four sites therefore never reaches it, and a mismatch there can
+  only mean that the recording itself was made at another cooldown (problem prefix `live`).
+- `test_genuine_candidate_reconstructs_in_api_and_repeats` runs the 6 arm on seed 1001. The 6
+  arm's seed-1000 game on that 4-player roster holds no meeting and so makes no model call, which
+  the test requires. Every other arm keeps seed 1000.
+- `test_the_view_mirrors_every_config_field_value_and_default` now also compares annotations. The
+  Literal comparison alone reads `int | None` and `str | None` as equal.
+- **Deviation (outside Expected scope, directly necessary).** Seeder test doubles in
+  `tests/orchestrator/test_game.py`, `tests/orchestrator/test_meeting_integration.py`,
+  `tests/orchestrator/test_replay_meetings.py` and `tests/eval/test_balance_eval_meeting_runner.py`
+  had fixed signatures, so the live game's new keyword raised `TypeError` in 32 tests. Each double
+  now accepts `kill_cooldown_ticks: int | None = None`, and the one recording spy forwards it. No
+  assertion changed.
+- The orchestrator's dispatch asked the worker to flip Status and re-derive the inventory sentence
+  in `tasks/README.md` (now "2 ready, 88 done").
+- Unchanged, as the card requires: the pretend-task dwell (`observation/service.py:77-83`), the
+  features' cooldown normalizer (`agents/tactical/features.py:138`) and the vote-correctness tick
+  window (`eval/vote_correctness.py:215`).
+
+### Failing first, at the base
+
+Each new test file was copied into an export of `107956bf` (`git archive`) and run there on its
+own, with the worktree's environment. `pyproject.toml` sets `pythonpath = ["."]` and the project
+is not installed into the environment, so the export's modules are the ones imported:
+
+```
+cd <export> && <worktree>/.venv/bin/python -m pytest -p no:cacheprovider <test file>
+```
+
+Both runs exit 2 at collection, on the same missing name. One line per file, the override file
+first; the export's path that follows each line is elided:
+
+```
+E   ImportError: cannot import name 'resolve_kill_cooldown' from 'engine.world'
+E   ImportError: cannot import name 'resolve_kill_cooldown' from 'engine.world'
+```
+
+The readers file also needs `CooldownWrite`, which the base's `eval.gameplay_census` lacks, but it
+asks for `resolve_kill_cooldown` first (line 53, before line 61). Collection stops there, so
+`CooldownWrite` never appears in the output.
+
+### The reader gate
+
+The fixture is `record_game` with the fake provider, seed 0, the 9p2i sample roster (9 players, 2
+impostors, 2 tasks per crewmate), prompt set `qwen3_6_27b`, and
+`RecordedExperimentConfig(kill_cooldown_ticks=6, meeting_reset="hub_with_grace")`. The meeting
+runner is built from the config, with no process environment. Every tick row and the footer carry
+that config.
+
+Non-vacuity is asserted, count-only: kills with a later row, regroups that resume play with a
+living impostor, and the default re-simulation failing at `seeding hash at tick 0`.
+
+The walk, with every tick and meeting hash verified, reads 6 at every write. `ReplayLoader` serves
+it `outcome_verified`. The golden re-renders every recorded prompt. At least one recorded impostor
+prompt carries the cooldown line above 4 (a regex count; no text printed).
+
+### Planted and perturbed proofs (every one passes at the head)
+
+| Test id (abridged) | Plant | Result |
+|---|---|---|
+| `tests/engine/test_kill_cooldown_override.py::test_restoring_one_write_to_the_map_fails_that_case_and_only_it[round_start\|after_kill\|regroup]` | each module's `resolve_kill_cooldown` binding replaced by the map's value | exactly that writer's case fails |
+| `...::test_without_the_omission_rule_the_first_archive_row_fails` | the field left out of `OMITTED_AT_DEFAULT` | the first archive row mismatches |
+| `...::test_an_invalid_value_raises_at_every_entry_point_before_any_change`, `...::test_advance_tick_refuses_before_applying_any_action` | 0, -3, `True`, 6.0 at the seven entry points | each raises; input unchanged; no action applied |
+| `tests/orchestrator/test_experiment_arms.py::test_an_engine_field_the_helper_does_not_thread_is_refused[kill_cooldown_ticks]` | the field left out of the threaded set | the helper refuses `kill_cooldown_ticks=6` |
+| `tests/eval/test_kill_cooldown_readers.py::test_a_site_that_forgets_the_value_fails_the_gate_naming_it[<13 sites>]` | the helper's value replaced by `None` at one of: `live`, `live unrecorded`, `loader`, `walk`, `golden` x seeding / advance / meeting (live unrecorded: seeding only) | the gate names that reader and phase |
+| `...::test_without_the_cooldown_in_the_readable_settings_each_instrument_refuses[6 walks]` | the field removed from the readable settings | each refuses naming `kill_cooldown_ticks=6` |
+| `...::test_a_write_left_at_the_maps_value_breaches_the_cell_naming_its_writer[round_start\|after_kill\|regroup]` | one engine write left at the map's value, live and walk alike | `--set-dir` exits 1 naming set, seed, writer, impostor and tick |
+| `...::test_a_kill_at_meeting_plus_five_breaches_the_grace_window_at_six` / `...::test_the_same_kill_in_the_default_cooldown_era_raises_nothing` / `...::test_the_window_read_from_the_map_again_misses_the_plus_five_kill` | a kill at T+5 after a regroup | raises at 6; nothing at the default; perturbed window misses it |
+| `...::test_the_census_refuses_a_set_mixing_cooldowns` | a 4p1i set of one `None` game and one cooldown-6 game | `GameplayCensusEraError` |
+| `...::test_the_validity_gate_fails_a_set_mixing_cooldowns_naming_the_odd_game` | the same mixed set through `scripts/validity_gate.py --json` | declared 6: fails `cost_and_provenance_exact` naming `headless-seed-1` (`None`); undeclared: names `headless-seed-0` (`kill_cooldown_ticks=6`); two cooldown-6 games pass |
+| `...::test_the_six_arm_with_the_field_withheld_kills_before_six` | every `engine_arguments` binding drops the field | the 6 arm kills before tick 6 |
+| `tests/orchestrator/test_experiment_arms.py::test_the_page_check_bites_the_cooldown_row_and_its_integer_values` | the row deleted; "an integer of at least 1" or `none` removed | each named |
+| manual, at the working tree of `e164f57d` | the resolver returns 6 for `None` | `publish_gameplay_census.py --check` exit 1 (`ReplayIntegrityError`: `headless-seed-1000` at tick 0, `tick_hash_mismatch`); `verify_samples.sh replays/samples/4p1i` exit 1 ("50/50 samples drifted"); restored from a copy and `cmp` equal |
+
+### Neuter table and the bounded mutation pass
+
+The script lives in scratch and is not committed. It applied 87 mutants, one at a time, to the
+lines this diff adds or changes. Each mutant ran its targeted tests (`pytest -x -n 6`) and was
+then restored from a byte copy, never from git; `git diff` hashed the same before and after.
+
+| group | mutants | operator classes | killed | survived |
+|---|---|---|---|---|
+| resolver, `engine/world.py` | 6 | neuter; literal; inverse None test; message constant | 6 | 0 |
+| tick, regroup, seeder | 11 | neuter (each line, argument and write) | 11 | 0 |
+| config field, validator, layer and omission rows, `EngineArguments` | 9 | neuter; message constant; dict row; tuple member | 9 | 0 |
+| live game: validation, regroup argument, three call arguments | 5 | neuter | 5 | 0 |
+| loader, walk, golden call arguments | 6 | neuter | 6 | 0 |
+| `READABLE_SETTINGS` row | 1 | tuple member | 1 | 0 |
+| census (`FieldUse`, classification, fold, loader writes, filter, window, view branch, rows, terms, heading) | 38 | neuter; None test and inverse; tick, kind and role constant; message constant; swap collection; drop filter; literal; swap adjacent branches; tuple member | 37 | 1 |
+| API view and generated-type entry | 3 | neuter; swap type; tuple member | 3 | 0 |
+| lab (rows, loop, summary filter, kind, collection, output key, cooldown literal) | 7 | tuple member; neuter; drop filter; kind constant; swap collection; literal | 7 | 0 |
+| arm-page row | 1 | neuter | 1 | 0 |
+
+- **The one survivor, X15, is equivalent.** It replaced the round-start write's tick read
+  (`event.state.tick`) with 0. The first state any walk opens is the seeded state, whose tick is
+  always 0.
+- **Planted before the pass.** These cases were added after reading the diff, before the first
+  probe ran:
+  - the resolver and validator messages;
+  - the property's second impostor;
+  - the exact breach text;
+  - the living-impostor filter;
+  - the census refusal of a non-integer window;
+  - the census refusal of mixed windows;
+  - the comparison's wiring.
+- **The one first-run correction.** X9 initially failed by a `SyntaxError` in the mutant itself.
+  With valid quoting it was killed by the writer-breach case.
+
+### The lab, development seeds 1000-1007 (count-only, run outside the tree)
+
+The run's `source_sha256` equals `runtime_fingerprint` of the tree at `e164f57d` (`3da4e260...`).
+The ten round-1 arms' rows equal `audits/tactical-gameplay/stage-b-r1-frozen-head.json` field for
+field: 2,240 fields compared, 0 differing. The output's only new top-level key is
+`ticks_to_parity`.
+
+| arm | roster | games | parity games | parity tick rows min / median / max | kills |
+|---|---|---|---|---|---|
+| `stage_b_full` (4) | 9p2i | 8 | 8 | 26 / 35.5 / 58 | 40 |
+| `stage_b_full` (4) | 4p1i | 8 | 7 | 14 / 17 / 19 | 15 |
+| `stage_b_full_kill_cooldown_6` | 9p2i | 8 | 7 | 30 / 44 / 68 | 39 |
+| `stage_b_full_kill_cooldown_6` | 4p1i | 8 | 1 | 18 / 18 / 18 | 8 |
+| `stage_b_full_kill_cooldown_8` | 9p2i | 8 | 3 | 49 / 52 / 58 | 30 |
+| `stage_b_full_kill_cooldown_8` | 4p1i | 8 | 0 | n/a | 2 |
+
+The first-kill check uses seed 1000 on the 4p1i roster: `stage_b_full` kills first at tick 4, the
+6 arm at tick 6 and the 8 arm at tick 11.
+
+### Census
+
+- **Committed sets.** `docs/gameplay-census.json` was regenerated. A structural diff against
+  `107956bf` finds the following, and nothing else:
+  - the new cell and table in all six sections;
+  - `field_classification.kill_cooldown_ticks`;
+  - the grace-window cell's `definition` in all six sections;
+  - `terms["grace window"]` and `terms["regroup"]`.
+
+  The cell reads 0 by construction everywhere: 0/275 on s9 (100 round start, 175 after a kill),
+  0/850 on c9, 0/116 on s4, 0/108 on c4, 0/1349 pooled. The regroup row is empty on all four.
+  `grace_window_ticks` stays 4.
+- **Round 1.** `--set-dir replays/candidates/stage-b-r1/9p2i` at the head, against the base export,
+  differs only in the new cell, the new table and the grace-window definition. The cell reads
+  0/487 (100 round start, 227 after a kill, 160 at a regroup). The grace cell still reads 0/139.
+
+### Validation (exit codes captured directly, at the working tree committed as `e164f57d`)
+
+| command | result |
+|---|---|
+| `uv run lint-imports` | 0; 4 contracts kept |
+| `bash scripts/verify_samples.sh` on `replays/samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i` | 0 each; 50, 50, 150, 50 and 50 verified clean |
+| `build_sample_report.py --check` on the four sets and round 1 | 0 each |
+| `publish_process_scorecard.py --check` | 0 |
+| `publish_gameplay_census.py` then `--check` | 0 |
+| `check_doc_facts.py`; `validate_task_docs.py`; `gen_frontend_types.py --check`; `verify_ml_evidence.py` (offline) | 0 each |
+| `uv run pytest -m campaign` | 0; 336 passed |
+| targeted suites (the two new files, arms, config, lab, census, golden, leak) | pass; the two new files 117 tests |
+| committed-payload test | 956 rows in 101 files, byte for byte |
+| `build_demo_bundle.py` at `107956bf` (export) and at the head; `diff -r` | 0; 194 files each. The sample replays' mtimes were pinned equal in both trees, since `created_at` is the file mtime; the first, unpinned build differed only there |
+| `bash scripts/check.sh` | run once at the head that carries this subsection, exit code captured directly; the PR body quotes its counts |
+
+### Limitations
+
+- The lab's fake games establish mechanics, not model play.
+- The tactical constants named above were tuned at 4 and are not re-derived. The learned
+  features' normalizer reads a cooldown of 6 above 1.0.
+- `training/scenarios.py` still bounds a staged cooldown by the map's value. It runs only
+  unrecorded training drills and is out of scope.
+- `PublicResults.tsx` has no words for this field (Constraints). The promoting card owns the
+  label.
+- The round-2 outcome cannot separate the cooldown from hosted generation's own variation. The
+  record card states that.
+
+### Review corrections, round 1 (2026-10-01)
+
+One blocking finding, from the docs lens on PR 493 at `e55a2e16`. It is fixed in the commit that
+carries this subsection. No production line changed; the fix is two tests and a docstring.
+
+**The finding.** A listed-class mutant survived at the census's regroup-write filter
+(`eval/gameplay_census.py:2801`, `if applied.state.phase == "PLAY":`): a comparison replaced by a
+None test (`is not None`). The original pass had no case where the filter decides anything. Under
+the mutant, `publish_gameplay_census.py --set-dir replays/candidates/stage-b-r1/9p2i` exits 1 with a
+false breach, because a meeting that ends the game is counted as a regroup. The finding is valid,
+and the mutant is not equivalent.
+
+**The repair.** Both tests are in `tests/eval/test_kill_cooldown_readers.py`.
+
+- `test_a_meeting_that_ends_the_game_writes_no_regroup_cooldown` is the planted case. It records a
+  fake 9p2i game, seed 4, at cooldown 6 under the regroup reset. The scripted client
+  (`ScriptedMeetingClient` with `Ejection(meeting=1, target_turn=0)`) has every other voter eject
+  the second meeting's opener.
+  - Its first meeting resumes play. The second ejects a crewmate and ends the game (`GAME_OVER`)
+    with both impostors alive and below the window. Each of these facts, the ejection's outcome
+    and the ejected player's role included, is asserted from a full hashed walk, so the case is
+    not vacuous.
+  - The census's regroup writes must equal the living impostors of the meetings that resumed play,
+    each at 6. `--set-dir` must exit 0 with the cell at 0 and the regroup row equal to those writes.
+- `test_round_one_reads_every_cooldown_write_at_the_maps_value` reads the committed round 1,
+  count-only. The cell must read 0 of 487 and the table 100 at round start, 227 after a kill and
+  160 at a regroup. The grace-window cell must read 0 of 139. A non-vacuity count requires at least
+  one round-1 meeting that ends the game while an impostor who was not ejected holds a cooldown
+  other than 4. This pins the round-1 numbers in "Census" above, which were only quoted before.
+  The set is walked once, through the shared committed-walk cache
+  (`tests._helpers.committed.census_inputs`), and folded and serialized by the `--set-dir` path's
+  own function (`publish_gameplay_census.set_dir_json`).
+- The module docstring said no committed set is read. It now names this one count-only case.
+
+**The bounded mutation pass over the named span** (`eval/gameplay_census.py:2799-2806`, the
+regroup-write block). It used only the listed operator classes. Each mutant ran the three census
+suites: `tests/eval/test_kill_cooldown_readers.py`, `tests/eval/test_gameplay_census.py` and
+`tests/scripts/test_publish_gameplay_census.py` (`pytest -x -n 6`). The module was then restored
+from a byte copy and compared equal. The script lives in scratch and is not committed.
+
+| id | mutant | first-run | killed by |
+|---|---|---|---|
+| R1 | `phase == "PLAY"` to `phase is not None` (the finding) | green before this fix | both new tests |
+| R2 | to `phase is None` | red | the regroup writer-breach case; the fixture's census case |
+| R3 | `==` to `!=` | red | the same two cases |
+| R4 | filter dropped (`if True:`) | green before this fix | both new tests |
+| R5 | phase read replaced by the constant `"PLAY"` | green before this fix | both new tests |
+| R6 | phase read from the opened meeting's state | red | the regroup writer-breach case; the fixture's census case |
+| R7 | write tick replaced by the constant 0 | red | the regroup writer-breach case (its exact tick) |
+| R8 | writer kind `"regroup"` replaced by `"after_kill"` | red | the regroup writer-breach case; the fixture's census case |
+| R9 | the write reads the opened meeting's state | red | the regroup writer-breach case; the fixture's census case |
+| R10 | `if regroup_recorded:` wrapper dropped | red | `tests/eval/test_gameplay_census.py::test_the_recorded_body_handle_setting_reaches_its_guard` and `::test_every_value_the_census_holds_is_read_only` |
+| R11 | the wrapper inverted | red | the regroup writer-breach case; the fixture's census case |
+
+Eleven mutants: all killed, none named equivalent. "Green before this fix" means R1, R4 and R5 were
+re-run with the two new tests deselected. The three suites then passed 386 tests under each mutant,
+which reproduces the survivor. Each new test, run alone, fails under each of the three. Under R1,
+the planted case's regroup writes gain the ending meeting's two writes at 4. In the round-1 case,
+the fold raises `GameplayCensusConformanceError` on the cooldown cell.
+
+**Validation at the fix head.** Exit codes were captured directly.
+
+| command | result |
+|---|---|
+| targeted suites (the two new files, arms, config, lab, census and its script, golden, leak, the committed-walk scanner) | 0; 708 passed; `tests/eval/test_kill_cooldown_readers.py` holds 58 tests (56 before) |
+| `uv run lint-imports` | 0; 4 contracts kept |
+| `bash scripts/verify_samples.sh` on the four sets and round 1 | 0 each; 50, 50, 150, 50 and 50 verified clean |
+| `build_sample_report.py --check` on the four sets and round 1 | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0 each |
+| `check_doc_facts.py`; `validate_task_docs.py`; `gen_frontend_types.py --check`; `verify_ml_evidence.py` (offline) | 0 each |
+| `uv run pytest -m campaign` | 0; 336 passed |
+| `bash scripts/check.sh` | run once at the head that carries this subsection, exit code captured directly; the PR body quotes it |
+
+A first local state of this fix, never pushed, ran `check.sh` and exited 1 on one test:
+`tests/_helpers/test_committed_single_home.py::test_every_committed_walk_goes_through_the_shared_cache`
+named the round-1 case's direct `load_census_inputs` call, a second walk of a committed set outside
+the shared cache. That state was folded into this commit, and the case now reads the set through
+the cache, as described above. The scanner module passes (22 tests). The R1, R4 and R5 probes were
+re-run against the revised case: each new test still fails alone under each of them, and the three
+suites without the new tests still pass 386.
+
+This commit changes only a test module and this card. No file under `api/`, `frontend/`,
+`replays/`, `audits/`, `tests/fixtures/` or `docs/` moves. The demo bundle and the lab output
+therefore stand as measured at `e164f57d`, and no artifacts row or restamp is due.
+
+### Review corrections, round 2 (2026-10-01)
+
+One blocking finding, from the docs lens on PR 493 at `ab9df8c2`. It is fixed in the commit that
+carries this subsection, which changes only this card. No code, test, recording, derived view or
+doc outside this card moves.
+
+**The finding.** "Failing first, at the base" quoted a second line,
+`ImportError: cannot import name 'CooldownWrite' from 'eval.gameplay_census'`, which the stated run
+does not print. The readers file imports `resolve_kill_cooldown` from `engine.world` at line 53
+and `CooldownWrite` from `eval.gameplay_census` at line 61 (52 and 60 at `e164f57d`). At the base
+the first of these already fails, so collection never reaches the second. The finding is valid.
+
+**The repair.** The section now quotes the run's own output, one line per file, both
+`cannot import name 'resolve_kill_cooldown' from 'engine.world'`. It also states the command and
+why `CooldownWrite` does not appear. For this correction the run was repeated against a fresh
+`git archive` export of `107956bf`, one file per run, with the worktree's environment, for three
+files: the override file and the readers file as committed at `ab9df8c2`, and the readers file as
+committed at `e164f57d`. Each exits 2 at collection with that one `E` line and no other. The
+export and its logs live in scratch, outside the tree.
+
+**Neuter and mutation.** No production line, test line or recorded byte changes, and the finding
+names no production span, so there is nothing to neuter or mutate: zero mutants.
+
+**Validation at the fix head.** The card's Validation and `check.sh` ran at the head that carries
+this subsection, with exit codes captured directly; the PR body quotes the results. The lab and
+the demo bundle read no file this commit touches, so they stand as measured at `e164f57d`. No
+artifacts row or restamp is due.

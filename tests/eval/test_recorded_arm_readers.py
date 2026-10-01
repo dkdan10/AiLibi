@@ -317,7 +317,9 @@ def test_the_readable_settings_are_the_wave_fields_and_redistribution() -> None:
         "ballot_kill_row_version",
         "impostor_ballot_version",
     }
-    assert READABLE_SETTINGS == frozenset(wave | {"redistribution_policy"})
+    assert READABLE_SETTINGS == frozenset(
+        wave | {"redistribution_policy", "kill_cooldown_ticks"}
+    )
     assert set(READABLE_SETTINGS) <= set(FIELD_LAYER)
 
 

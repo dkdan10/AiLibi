@@ -80,7 +80,8 @@ from orchestrator.seeder import seed_initial_state
 _REPO = Path(__file__).resolve().parents[2]
 _SET = "qwen3_6_27b"
 
-#: The eight fields of the wave's version plan (decision memo section 3.3).
+#: The eight fields of the wave's version plan (decision memo section 3.3),
+#: and the kill cooldown its balance round added (section 7).
 _WAVE_FIELDS: tuple[str, ...] = (
     "vent_witness_rule",
     "vent_exit_policy",
@@ -90,7 +91,11 @@ _WAVE_FIELDS: tuple[str, ...] = (
     "report_body_handle_version",
     "ballot_kill_row_version",
     "impostor_ballot_version",
+    "kill_cooldown_ticks",
 )
+
+#: How the contract page spells an integer field's values beside ``none``.
+_INTEGER_VALUES: str = "an integer of at least 1"
 
 #: The round-1 config the decision memo declares (section 1, "Arms").
 _WAVE_CONFIG: dict[str, object] = {
@@ -113,7 +118,11 @@ def _constructed(values: dict[str, object]) -> RecordedExperimentConfig:
 
 
 def _literal_values(model: type[BaseModel], field: str) -> tuple[object, ...]:
-    """Every value a Literal (or optional Literal, or bool) field accepts."""
+    """Every value a Literal (or optional Literal, or bool) field accepts.
+
+    An optional integer field yields ``None`` alone; :func:`_is_integer_field`
+    says it also takes integers.
+    """
 
     annotation = model.model_fields[field].annotation
     if annotation is bool:
@@ -130,6 +139,25 @@ def _literal_values(model: type[BaseModel], field: str) -> tuple[object, ...]:
         else:
             pending.extend(get_args(node))
     return tuple(values)
+
+
+def _is_integer_field(model: type[BaseModel], field: str) -> bool:
+    """Whether ``field`` takes plain integers, not only Literal values."""
+
+    annotation = model.model_fields[field].annotation
+    return annotation is int or int in get_args(annotation)
+
+
+def _on_engine_value(field: str) -> object:
+    """The first non-default value of an engine field; 6 for the integer one."""
+
+    if _is_integer_field(RecordedExperimentConfig, field):
+        return 6
+    return next(
+        value
+        for value in _literal_values(RecordedExperimentConfig, field)
+        if value != RecordedExperimentConfig.model_fields[field].default
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -274,12 +302,19 @@ def test_no_config_threads_todays_engine_arguments() -> None:
     assert engine_arguments(None) == {
         "redistribution_policy": "lowest_id",
         "vent_witness_rule": "both_rooms",
+        "kill_cooldown_ticks": None,
     }
     assert engine_arguments(RecordedExperimentConfig()) == engine_arguments(None)
     workload = RecordedExperimentConfig(redistribution_policy="least_remaining_work")
     assert engine_arguments(workload) == {
         "redistribution_policy": "least_remaining_work",
         "vent_witness_rule": "both_rooms",
+        "kill_cooldown_ticks": None,
+    }
+    assert engine_arguments(RecordedExperimentConfig(kill_cooldown_ticks=6)) == {
+        "redistribution_policy": "lowest_id",
+        "vent_witness_rule": "both_rooms",
+        "kill_cooldown_ticks": 6,
     }
     assert set(experiment_config._THREADED_ENGINE_FIELDS) <= set(
         fields_in_layer("engine")
@@ -299,11 +334,7 @@ def test_an_engine_field_the_helper_does_not_thread_is_refused(
             name for name in experiment_config._THREADED_ENGINE_FIELDS if name != field
         ),
     )
-    value = next(
-        value
-        for value in _literal_values(RecordedExperimentConfig, field)
-        if value != RecordedExperimentConfig.model_fields[field].default
-    )
+    value = _on_engine_value(field)
     with pytest.raises(ValueError, match=re.escape(f"{field}={value!r}")):
         engine_arguments(_constructed({field: value}))
 
@@ -330,6 +361,7 @@ def test_a_stand_in_engine_field_raises_where_hand_threading_runs_the_default(
     assert engine_arguments(_StandIn()) == {
         "redistribution_policy": "lowest_id",
         "vent_witness_rule": "both_rooms",
+        "kill_cooldown_ticks": None,
     }
 
 
@@ -902,6 +934,7 @@ def test_the_view_mirrors_every_config_field_value_and_default() -> None:
         assert _literal_values(ExperimentConfigView, field) == _literal_values(
             RecordedExperimentConfig, field
         ), field
+        assert ExperimentConfigView.model_fields[field].annotation == info.annotation
         assert ExperimentConfigView.model_fields[field].default == info.default
 
 
@@ -956,6 +989,10 @@ def _page_problems(
             spelled = "none" if value is None else f"`{value}`"
             if spelled not in row.group("values"):
                 problems.append(f"the page omits {field}'s value {spelled}")
+        if _is_integer_field(
+            RecordedExperimentConfig, field
+        ) and _INTEGER_VALUES not in row.group("values"):
+            problems.append(f"the page omits {field}'s value {_INTEGER_VALUES}")
     for symbol in (
         "FIELD_LAYER",
         "OMITTED_AT_DEFAULT",
@@ -994,6 +1031,27 @@ def test_the_page_check_bites_a_missing_field_and_a_missing_link() -> None:
     unlinked = architecture.replace("](experiment-arms.md)", "](elsewhere.md)")
     assert _page_problems(page, unlinked) == [
         "the architecture section does not link the page"
+    ]
+
+
+def test_the_page_check_bites_the_cooldown_row_and_its_integer_values() -> None:
+    page = _PAGE.read_text(encoding="utf-8")
+    architecture = _ARCHITECTURE.read_text(encoding="utf-8")
+    row = next(
+        line
+        for line in page.splitlines()
+        if line.startswith("| `kill_cooldown_ticks` |")
+    )
+    assert _page_problems(page.replace(row + "\n", ""), architecture) == [
+        "the page does not state kill_cooldown_ticks in the engine layer"
+    ]
+    no_integers = page.replace(row, row.replace(_INTEGER_VALUES, "a count"))
+    assert _page_problems(no_integers, architecture) == [
+        f"the page omits kill_cooldown_ticks's value {_INTEGER_VALUES}"
+    ]
+    no_default = page.replace(row, row.replace("none", "unset"))
+    assert _page_problems(no_default, architecture) == [
+        "the page omits kill_cooldown_ticks's value none"
     ]
 
 

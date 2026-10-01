@@ -192,8 +192,9 @@ engine states, kill events, the engine's own trigger body id and the recorded
 ejection, and computes sight from engine visibility rather than from any
 recorded witness list. So each of those settings reaches it through the walk
 and nothing here re-decides it: the engine settings through the
-engine-arguments helper (which refuses one it does not thread), the meeting
-reset through the walk's applied meetings, and the tactical, meeting and trigger
+engine-arguments helper at the seeding, every advance and every applied meeting
+(it refuses one it does not thread), the meeting reset through the walk's
+applied meetings, and the tactical, meeting and trigger
 settings only as the recorded actions and meeting rows the walk replays; the
 trigger's described body handle is never read. Any other recorded setting, a
 settings format other than the first, and temporal delivery are refused before

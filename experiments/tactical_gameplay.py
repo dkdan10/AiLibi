@@ -148,12 +148,22 @@ STAGE_B_MINUS_ONE: Final[Mapping[str, str]] = MappingProxyType(
     }
 )
 
+#: The kill-cooldown dial: each arm is the full Stage-B arm with the recorded
+#: cooldown set; ``stage_b_full`` is the map's own value, 4.
+STAGE_B_KILL_COOLDOWNS: Final[Mapping[str, int]] = MappingProxyType(
+    {
+        "stage_b_full_kill_cooldown_6": 6,
+        "stage_b_full_kill_cooldown_8": 8,
+    }
+)
+
 
 def candidate_configs() -> dict[str, RecordedExperimentConfig]:
     """Predeclared comparisons; no automatic promotion of an arm.
 
     One-change arms, the Stage-B arm that sets every round-1 field acting
-    during play, and one attribution arm per such field, which drops it.
+    during play, one attribution arm per such field, which drops it, and the
+    Stage-B arm at each kill cooldown of the dial.
     """
 
     configs = {
@@ -186,7 +196,42 @@ def candidate_configs() -> dict[str, RecordedExperimentConfig]:
                 field: RecordedExperimentConfig.model_fields[field].default,
             }
         )
+    for name, ticks in STAGE_B_KILL_COOLDOWNS.items():
+        configs[name] = RecordedExperimentConfig.model_validate(
+            {**STAGE_B_FULL_SETTINGS, "kill_cooldown_ticks": ticks}
+        )
     return configs
+
+
+def ticks_to_parity(arms: Mapping[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
+    """Count-only: per arm and roster, how long the impostors took to reach parity.
+
+    ``arms`` is the comparison's ``arms`` block. For each arm and roster: the
+    games, the games the impostors won by parity, the minimum, median and
+    maximum ``tick_rows`` of those parity games (a game's tick rows are its
+    game-over tick plus one; ``None`` with no parity game), and the kills over
+    every game.
+    """
+
+    summary: dict[str, dict[str, dict[str, Any]]] = {}
+    for arm, entry in arms.items():
+        for roster, rows in entry["sets"].items():
+            parity = [
+                row["counts"]["tick_rows"]
+                for row in rows
+                if row["reason"] == "IMPOSTOR_PARITY"
+            ]
+            summary.setdefault(arm, {})[roster] = {
+                "games": len(rows),
+                "parity_games": len(parity),
+                "parity_tick_rows_minimum": min(parity) if parity else None,
+                "parity_tick_rows_median": statistics.median(parity)
+                if parity
+                else None,
+                "parity_tick_rows_maximum": max(parity) if parity else None,
+                "kills": sum(row["counts"].get("event:Killed", 0) for row in rows),
+            }
+    return summary
 
 
 def entry_after_own_fresh_kill(
@@ -969,6 +1014,7 @@ def build_comparison(
             output["arms"].setdefault(
                 arm, {"config": configs[arm].model_dump(mode="json"), "sets": {}}
             )["sets"][name] = rows
+    output["ticks_to_parity"] = ticks_to_parity(output["arms"])
     if runtime_fingerprint(root) != before:
         raise RuntimeError(
             "runtime source changed during the comparison; rerun on frozen inputs"

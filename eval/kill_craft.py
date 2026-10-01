@@ -145,8 +145,8 @@ The ``kill-craft`` profile reads recordings that carry experiment settings, and
 in :data:`eval.recorded_settings.READABLE_SETTINGS`. Both folds read engine
 state and kill events only, so each of those settings reaches them through the
 walk and nothing here re-decides it: the engine settings through the
-engine-arguments helper at every advance (which refuses one it does not
-thread), the meeting reset through the walk's applied meetings (the post-reset positions
+engine-arguments helper at the seeding, every advance and every applied meeting
+(it refuses one it does not thread), the meeting reset through the walk's applied meetings (the post-reset positions
 are the next tick's pre-advance frame), and the tactical, meeting and trigger
 settings only as the recorded actions and meeting rows the walk replays. Any
 other recorded setting, a settings format other than the first, and temporal

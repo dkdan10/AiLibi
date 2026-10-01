@@ -32,7 +32,7 @@ settings or temporal delivery. The profile's row belongs to the drift table in
 :mod:`eval.replay_walk`, which this module does not edit; it is documented here.
 
 Recorded settings reach the walk by the arm spine's contract. Engine-layer
-settings go to every advance through
+settings go to the seeding, every advance and every applied meeting through
 :func:`orchestrator.experiment_config.engine_arguments`, which refuses, before
 the first advance, one it does not thread. The profile declares its own
 ``threaded_layers`` rather than inheriting the current-report profile's:
@@ -46,8 +46,10 @@ Settings, eras and the cells a setting forces to zero
 -----------------------------------------------------
 Every field of :class:`orchestrator.experiment_config.RecordedExperimentConfig`
 is classified in :data:`FIELD_CLASSIFICATION` as read by a named setting
-predicate or deliberately not read, and a recording or carrier naming a field
-outside that table raises. The predicates (:class:`SettingPredicate`) read the
+predicate, read as a value, or deliberately not read, and a recording or carrier
+naming a field outside that table raises. The one field read as a value is the
+recorded kill cooldown: it sets the grace window's length and the value the
+kill cooldown cell checks every engine write of a cooldown against. The predicates (:class:`SettingPredicate`) read the
 carrier's plain recorded values, where a missing key means the historical
 default; they never build a ``RecordedExperimentConfig``.
 
@@ -99,7 +101,7 @@ from engine.events import (
     VentEnteredEvent,
     VentExitedEvent,
 )
-from engine.world import Map, WorldState, load_canonical_map
+from engine.world import Map, WorldState, load_canonical_map, resolve_kill_cooldown
 from eval.balance_eval import _CURRENT_REPORT_WALK_CONFIG
 from eval.process_scorecard import AGENT_CLOCK_OFFSET, COMMITTED_SETS, NINE_PLAYER_SETS
 from eval.replay_walk import (
@@ -145,6 +147,10 @@ TriggerKind: TypeAlias = Literal["report", "emergency"]
 
 #: The phase a meeting's result leaves the game in, as the engine's state names it.
 Phase: TypeAlias = Literal["PLAY", "MEETING", "GAME_OVER"]
+
+#: The engine step that set an impostor's kill cooldown: the seeding at round
+#: start, a kill (the killer's own cooldown), or the regroup at a meeting's close.
+CooldownWriter: TypeAlias = Literal["round_start", "after_kill", "regroup"]
 
 #: The ``type`` of every observation shape the meeting schema accepts.
 ObservationKind: TypeAlias = Literal[
@@ -345,27 +351,34 @@ PREDICATES: Final[Mapping[str, SettingPredicate]] = MappingProxyType(
 
 @dataclass(frozen=True)
 class FieldUse:
-    """How the census uses one recorded setting.
+    """How the census uses one recorded setting: exactly one of three kinds.
 
-    ``predicates`` names the setting predicates that read the field; an empty
-    tuple means the census deliberately does not read it, for ``reason``.
+    ``predicates`` names the setting predicates that read the field.
+    ``value_read_by`` names what reads the field's recorded value itself, for a
+    field no predicate tests against one value. ``reason`` says why the census
+    deliberately does not read the field.
     """
 
-    predicates: tuple[str, ...]
+    predicates: tuple[str, ...] = ()
+    value_read_by: str = ""
     reason: str = ""
 
     def __post_init__(self) -> None:
-        if bool(self.predicates) == bool(self.reason):
-            raise ValueError("a field is read by predicates or not read for a reason")
+        kinds = (bool(self.predicates), bool(self.value_read_by), bool(self.reason))
+        if sum(kinds) != 1:
+            raise ValueError(
+                "a field is read by predicates, read as a value, or not read for a "
+                "reason: exactly one"
+            )
 
 
 def _not_read(reason: str) -> FieldUse:
-    return FieldUse(predicates=(), reason=reason)
+    return FieldUse(reason=reason)
 
 
-#: Every recorded setting field, read by a named predicate or deliberately not
-#: read. ``tests/eval/test_gameplay_census.py`` holds its names equal to
-#: ``RecordedExperimentConfig.model_fields``, both ways.
+#: Every recorded setting field, read by a named predicate, read as a value or
+#: deliberately not read. ``tests/eval/test_gameplay_census.py`` holds its names
+#: equal to ``RecordedExperimentConfig.model_fields``, both ways.
 FIELD_CLASSIFICATION: Final[Mapping[str, FieldUse]] = MappingProxyType(
     {
         "format_version": _not_read("a serialization version, not a game rule"),
@@ -405,6 +418,12 @@ FIELD_CLASSIFICATION: Final[Mapping[str, FieldUse]] = MappingProxyType(
         "impostor_ballot_version": _not_read(
             "an instructed ballot framing; the tally does not enforce it, so no "
             "cell is forced by it"
+        ),
+        "kill_cooldown_ticks": FieldUse(
+            value_read_by=(
+                "the length of the grace window, and the value the kill cooldown "
+                "cell checks every cooldown write against"
+            )
         ),
     }
 )
@@ -684,6 +703,21 @@ class DiscardedAction:
 
 
 @dataclass(frozen=True)
+class CooldownWrite:
+    """One impostor's kill cooldown on the state an engine write left.
+
+    ``tick`` is the tick the write belongs to: 0 at round start, the kill's tick,
+    or the regroup meeting's tick. ``ticks`` is ``None`` when that state holds no
+    cooldown for the impostor, which the cooldown cell counts as a difference.
+    """
+
+    writer: CooldownWriter
+    tick: int
+    player: PlayerId
+    ticks: int | None
+
+
+@dataclass(frozen=True)
 class GameFacts:
     seed: int
     roles: Mapping[PlayerId, Role]
@@ -697,6 +731,9 @@ class GameFacts:
     rows_without_dispositions: int
     winner: WinnerSide | None
     terminal_tick: int
+    #: Every impostor's kill cooldown after each engine write of it. The loader
+    #: fills it; a hand-built carrier without writes checks none.
+    cooldown_writes: tuple[CooldownWrite, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -704,9 +741,10 @@ class CensusInputs:
     """Everything the pure fold needs about one replay set.
 
     ``label`` names the set on the page and ``source`` is the path of the
-    directory walked. ``kill_cooldown_ticks`` and ``neighbours`` are read from
-    the loaded map: the grace window after a regroup and the rooms an in-vent
-    impostor infers it can see.
+    directory walked. ``kill_cooldown_ticks`` is the recorded kill cooldown,
+    else the map's (:func:`recorded_kill_cooldown`): the grace window after a
+    regroup, and the value every cooldown write must hold. ``neighbours`` is read
+    from the loaded map: the rooms an in-vent impostor infers it can see.
     """
 
     label: str
@@ -764,6 +802,7 @@ _TRIPS: Final[str] = "Vent trips and surfacings"
 _PROOF: Final[str] = "Vent proof at meetings"
 _CORPSES: Final[str] = "Corpses and the state play resumes in"
 _REGROUP: Final[str] = "After a regroup"
+_COOLDOWN: Final[str] = "The kill cooldown"
 _STRUCTURE: Final[str] = "Meeting structure"
 _REBUTTALS: Final[str] = "Rebuttals"
 _BALLOTS: Final[str] = "Ballots"
@@ -776,6 +815,7 @@ HEADINGS: Final[tuple[str, ...]] = (
     _PROOF,
     _CORPSES,
     _REGROUP,
+    _COOLDOWN,
     _STRUCTURE,
     _REBUTTALS,
     _BALLOTS,
@@ -1024,9 +1064,9 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
         "kills_in_grace_window_after_regroup": CellSpec(
             "Kills in the grace window after a regroup",
             _REGROUP,
-            "Kills made on a tick after a regroup meeting no later than the map's "
-            "kill cooldown, over all kills made between a regroup and the next "
-            "meeting.",
+            "Kills made on a tick after a regroup meeting no later than the "
+            "recorded kill cooldown, else the map's, over all kills made between a "
+            "regroup and the next meeting.",
             ("Killed", "meeting row"),
             MEETING_REGROUP,
         ),
@@ -1061,6 +1101,16 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             "Regroup meetings that opened with a sabotage active, over all regroup "
             "meetings.",
             ("state at the meeting",),
+        ),
+        "kill_cooldowns_differing_from_recorded": CellSpec(
+            "Kill cooldowns that differ from the recorded value",
+            _COOLDOWN,
+            "Impostor kill cooldowns that differ from the recorded kill cooldown, "
+            "else the map's, read on the state each engine write leaves: every "
+            "impostor at round start, the killer after each of its kills and every "
+            "living impostor after each regroup; over all such writes.",
+            ("state at round start", "Killed", "state after the meeting"),
+            ALWAYS,
         ),
         "first_reply_accuses_opener": CellSpec(
             "The first reply accuses the opener",
@@ -1319,6 +1369,14 @@ TABLES: Final[Mapping[str, TableSpec]] = MappingProxyType(
             "by kind.",
             _REGROUP_DROPPED_KINDS,
             scope=MEETING_REGROUP,
+        ),
+        "kill_cooldown_writes_by_writer": TableSpec(
+            "Kill cooldown writes by writer",
+            _COOLDOWN,
+            "The writes the kill cooldown cell checks, by the engine step that made "
+            "them: round_start (the seeding), after_kill (the killer's own "
+            "cooldown) and regroup (every living impostor at a regroup).",
+            ("state at round start", "Killed", "state after the meeting"),
         ),
         "meetings_by_trigger": TableSpec(
             "Meetings by trigger",
@@ -1598,6 +1656,7 @@ def _inferred_visible(
 
 
 def _fold_game(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> None:
+    _fold_cooldown_writes(game, inputs, acc)
     _fold_witnesses(game, acc)
     _fold_trips(game, inputs, acc)
     _fold_meetings(game, inputs, acc)
@@ -1616,6 +1675,24 @@ def _fold_game(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> None
             game.winner == "IMPOSTORS",
             seed=game.seed,
             where="the game over row",
+        )
+
+
+def _fold_cooldown_writes(
+    game: GameFacts, inputs: CensusInputs, acc: _Accumulator
+) -> None:
+    """Check every cooldown write against the set's recorded kill cooldown."""
+
+    for write in game.cooldown_writes:
+        acc.tally("kill_cooldown_writes_by_writer", write.writer)
+        acc.count(
+            "kill_cooldowns_differing_from_recorded",
+            write.ticks != inputs.kill_cooldown_ticks,
+            seed=game.seed,
+            where=(
+                f"the {write.writer} write of {write.player}'s cooldown at tick "
+                f"{write.tick} ({write.ticks} against {inputs.kill_cooldown_ticks})"
+            ),
         )
 
 
@@ -2618,6 +2695,7 @@ def _load_game(
     discarded: list[DiscardedAction] = []
     rows_without_dispositions = 0
     applied_meetings: list[tuple[MeetingOpened, MeetingApplied]] = []
+    cooldown_writes: list[CooldownWrite] = []
     opened: MeetingOpened | None = None
     game_end: GameEndReplayEntry | None = None
     terminal_tick: int | None = None
@@ -2631,6 +2709,10 @@ def _load_game(
         config=CENSUS_WALK_CONFIG,
     ):
         if isinstance(event, TickOpened):
+            if not entries:
+                cooldown_writes.extend(
+                    _impostor_cooldowns(event.state, "round_start", event.state.tick)
+                )
             entries.append(event.entry)
             frames[event.entry.tick] = _frame_of(event.state)
         elif isinstance(event, TickAdvanced):
@@ -2646,6 +2728,14 @@ def _load_game(
                         )
                     )
                     killed[engine_event.target] = engine_event.tick
+                    cooldown_writes.append(
+                        CooldownWrite(
+                            writer="after_kill",
+                            tick=engine_event.tick,
+                            player=engine_event.actor,
+                            ticks=event.state.cooldowns.get(engine_event.actor),
+                        )
+                    )
                 elif isinstance(engine_event, (VentEnteredEvent, VentExitedEvent)):
                     vents.append(
                         VentFact(
@@ -2706,6 +2796,14 @@ def _load_game(
     stamps = prompt_stamps_from_cell(manifest_cell) if applied_meetings else None
     era = _game_era(entries, stamps)
     regroup_recorded = MEETING_REGROUP.holds(era.values)
+    if regroup_recorded:
+        for opened_meeting, applied in applied_meetings:
+            if applied.state.phase == "PLAY":
+                cooldown_writes.extend(
+                    _impostor_cooldowns(
+                        applied.state, "regroup", opened_meeting.entry.tick
+                    )
+                )
     return GameFacts(
         seed=seed,
         roles=MappingProxyType(dict(roles)),
@@ -2722,7 +2820,37 @@ def _load_game(
         rows_without_dispositions=rows_without_dispositions,
         winner=game_end.winner if game_end is not None else None,
         terminal_tick=terminal_tick,
+        cooldown_writes=tuple(cooldown_writes),
     )
+
+
+def _impostor_cooldowns(
+    state: WorldState, writer: CooldownWriter, tick: int
+) -> tuple[CooldownWrite, ...]:
+    """Every living impostor's kill cooldown on ``state``, as ``writer``'s writes."""
+
+    return tuple(
+        CooldownWrite(
+            writer=writer, tick=tick, player=pid, ticks=state.cooldowns.get(pid)
+        )
+        for pid, player in sorted(state.players.items())
+        if player.alive and player.role == "IMPOSTOR"
+    )
+
+
+def recorded_kill_cooldown(era: EraKey, game_map: Map) -> int:
+    """The kill cooldown an era's games ran at: the recorded value, else the map's.
+
+    Read through :func:`engine.world.resolve_kill_cooldown`, the engine's own
+    rule, so the grace window and the cooldown cell follow the recording.
+    """
+
+    value = setting_value(era.values, "kill_cooldown_ticks")
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+        raise GameplayCensusFieldError(
+            f"the recorded kill_cooldown_ticks={value!r} is not a tick count"
+        )
+    return resolve_kill_cooldown(game_map, value)
 
 
 #: The checkout this module lies in. A walked directory inside it is named
@@ -2786,11 +2914,12 @@ def load_census_inputs(set_dir: Path) -> CensusInputs:
         for seed in seeds
     )
     walked = set_dir.resolve()
+    era = resolve_era(tuple(game.era for game in games))
     return CensusInputs(
         label=f"{walked.parent.name}/{walked.name}",
         source=_walked_source(walked),
-        era=resolve_era(tuple(game.era for game in games)),
-        kill_cooldown_ticks=resolved_map.kill_cooldown_ticks,
+        era=era,
+        kill_cooldown_ticks=recorded_kill_cooldown(era, resolved_map),
         neighbours=MappingProxyType(
             {
                 room: resolved_map.room_neighbors(room)
@@ -2848,12 +2977,13 @@ TERMS: Final[Mapping[str, str]] = MappingProxyType(
         "regroup": (
             "the optional meeting reset: when play resumes every survivor stands in "
             "the meeting room, corpses are cleared, no one is inside a vent and each "
-            "impostor's kill cooldown restarts at the map's value."
+            "impostor's kill cooldown restarts at the recorded kill cooldown, else the "
+            "map's value."
         ),
         "grace window": (
             "the ticks after a regroup before the impostors' restarted kill cooldown "
-            "runs out: from the tick after the meeting through the map's kill "
-            "cooldown."
+            "runs out: from the tick after the meeting through the recorded kill "
+            "cooldown, else the map's."
         ),
         "vent trip": (
             "an impostor's stay inside the vents, from its entry to its exit, or to "
@@ -3111,6 +3241,8 @@ def _field_classification_view() -> dict[str, str]:
         name: (
             "read by: " + ", ".join(use.predicates)
             if use.predicates
+            else f"read as a value by: {use.value_read_by}"
+            if use.value_read_by
             else f"not read: {use.reason}"
         )
         for name, use in FIELD_CLASSIFICATION.items()
@@ -3118,6 +3250,8 @@ def _field_classification_view() -> dict[str, str]:
 
 
 def _constants(kill_cooldown_ticks: int) -> dict[str, int]:
+    """The named windows; the grace window is the recorded kill cooldown, else the map's."""
+
     return {
         "fresh_kill_window_ticks": FRESH_KILL_WINDOW_TICKS,
         "in_vent_cap_ticks": IN_VENT_CAP_TICKS,
@@ -3140,7 +3274,9 @@ def census_from_inputs(inputs: Sequence[CensusInputs]) -> GameplayCensus:
         raise ValueError("no replay sets to fold")
     cooldowns = {item.kill_cooldown_ticks for item in inputs}
     if len(cooldowns) != 1:
-        raise ValueError("the sets were walked on maps with different kill cooldowns")
+        raise ValueError(
+            "the sets ran at different kill cooldowns (recorded, else the map's)"
+        )
     tallies = [fold_set(item) for item in inputs]
     nine = [
         tally
@@ -3232,6 +3368,8 @@ __all__ = [
     "CensusSection",
     "CensusTable",
     "CensusTally",
+    "CooldownWrite",
+    "CooldownWriter",
     "DiscardedAction",
     "EraKey",
     "EraView",
@@ -3261,6 +3399,7 @@ __all__ = [
     "load_census_inputs",
     "pool",
     "prompt_stamps_from_cell",
+    "recorded_kill_cooldown",
     "resolve_era",
     "section_from_tally",
     "selector_pick",

@@ -219,6 +219,7 @@ def _seed_meeting_setup(
         num_players: int,
         num_impostors: int = 1,
         tasks_per_crewmate: int = 1,
+        kill_cooldown_ticks: int | None = None,
     ) -> WorldState:
         return state_with_body
 

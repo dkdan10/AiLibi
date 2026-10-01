@@ -1517,6 +1517,7 @@ class ReplayLoader:
             num_players=num_players,
             num_impostors=num_impostors,
             tasks_per_crewmate=tasks_per_crewmate,
+            kill_cooldown_ticks=engine["kill_cooldown_ticks"],
         )
         state = initial_state
 
@@ -1815,6 +1816,7 @@ class ReplayLoader:
                     meeting_reset=experiment.meeting_reset
                     if experiment
                     else "preserve",
+                    kill_cooldown_ticks=engine["kill_cooldown_ticks"],
                 )
                 after = _state_hash(state)
                 if after != meeting_entry.state_hash_after:

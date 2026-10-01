@@ -770,15 +770,16 @@ def walk_replay_meetings(
     num_players, num_impostors, tasks_per_crewmate = _roster_for(
         replay_path.parent, replay_entries
     )
+    engine = engine_arguments(recorded)
     state = seed_initial_state(
         seed=seed,
         game_map=game_map,
         num_players=num_players,
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
+        kill_cooldown_ticks=engine["kill_cooldown_ticks"],
     )
     agents = _build_agents(state, experiment_config=recorded, game_map=game_map)
-    engine = engine_arguments(recorded)
 
     with TemporaryDirectory(prefix="ailibi-golden-audit-") as audit_dir:
         service = ObservationService(
@@ -845,6 +846,7 @@ def walk_replay_meetings(
                 triggering_body_id=body_id,
                 redistribution_policy=settings.redistribution_policy,
                 meeting_reset=settings.meeting_reset,
+                kill_cooldown_ticks=engine["kill_cooldown_ticks"],
             )
             after = _state_hash(next_state)
             if after != meeting_entry.state_hash_after:

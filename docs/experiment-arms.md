@@ -5,7 +5,7 @@ arms. Each arm is a field of `RecordedExperimentConfig`
 ([`orchestrator/experiment_config.py`](../orchestrator/experiment_config.py)),
 off by default, written on every tick row and on the game-over row of a
 recording that turns it on. The wave adds no `AILIBI_*` lever and no
-environment switch. The one older switch among the eight fields,
+environment switch. The one older switch among the wave's fields,
 `AILIBI_BOUNDED_REBUTTAL`, still selects `bounded_rebuttal_version` for a
 meeting runner built from the environment, and a game using that runner
 records the value; `build_default_meeting_runner` refuses the switch exported
@@ -14,12 +14,13 @@ ON beside a declared profile. The owner's rulings and the wave's design are in
 (sections 0.3, 1 and 3.3) and in the dated 2026-09-24 addendum to
 [the process-over-outcome direction](../tasks/direction-2026-09-19-process-over-outcome.md).
 
-## The eight fields
+## The fields
 
 `FIELD_LAYER` classifies every config field by the consumer that reads it:
 `format` (the recording format), `engine` (the engine tick), `orchestrator`
 (the game's own wiring), `tactical` (the per-tick policies) or `meeting` (the
-meeting evidence profile). The wave's fields, defaults first:
+meeting evidence profile). The wave's eight fields and the kill cooldown the
+balance round added, defaults first:
 
 | Field | Values | Layer | Card that builds it |
 | --- | --- | --- | --- |
@@ -31,6 +32,7 @@ meeting evidence profile). The wave's fields, defaults first:
 | `report_body_handle_version` | none, `1` | orchestrator | [body handle](../tasks/work/report-body-handle.md) |
 | `ballot_kill_row_version` | none, `1` | meeting | [ballot](../tasks/work/ballot-kill-row-and-impostor-strategy.md) |
 | `impostor_ballot_version` | none, `1` | meeting | [ballot](../tasks/work/ballot-kill-row-and-impostor-strategy.md) |
+| `kill_cooldown_ticks` | none (the map's value), an integer of at least 1 | engine | [kill cooldown](../tasks/work/kill-cooldown-arm.md) |
 
 The meeting layer is exactly `MeetingEvidenceProfile`'s fields, and the
 tactical layer is exactly `TacticalExperimentOptions`' fields apart from the
@@ -40,8 +42,8 @@ derived `meeting_positions_preserved`; tests in
 ## What a missing key means
 
 `vent_witness_rule`, `vent_entry_policy`, `report_body_handle_version`,
-`ballot_kill_row_version` and `impostor_ballot_version` are omitted from the
-serialized config while they hold their default, under every
+`ballot_kill_row_version`, `impostor_ballot_version` and `kill_cooldown_ticks`
+are omitted from the serialized config while they hold their default, under every
 `format_version` (`OMITTED_AT_DEFAULT`, applied by the config's serializer). So
 no committed payload gains a key and the wave's config serializes with
 `format_version` 1. A missing key means the historical default, now and after
@@ -51,7 +53,7 @@ config payload and requires the committed bytes.
 
 ## Every value is built
 
-Every value of the eight fields has its behaviour built, so config validation
+Every value of the wave's fields has its behaviour built, so config validation
 accepts each of them and the declared round-1 config validates. The guard that
 refused a value while its behaviour was unbuilt was deleted, with its call sites
 and its tests, by the ballot card, the last arm card to merge. Validation still
@@ -66,7 +68,11 @@ arguments of `engine.tick.advance_tick`. The live tick in
 sites of the tactical lab take their engine keywords from it. It raises,
 naming the field, for an engine-layer field set off its default that it does
 not thread, because a witness list lives only in the events and a site that
-dropped such a field could still reproduce every state hash. An `ast` scan in
+dropped such a field could still reproduce every state hash. The kill cooldown
+is also written outside the tick, at the seeding and at each regroup, so the
+live game, the loader, the walk and the prompt-byte golden pass the same
+helper result's `kill_cooldown_ticks` to `seed_initial_state` and to every
+`apply_meeting_result`. An `ast` scan in
 `tests/orchestrator/test_experiment_arms.py` fails on an `advance_tick` or
 `_apply_action` call in those modules that does not take the helper's
 arguments.

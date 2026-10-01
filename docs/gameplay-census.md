@@ -14,8 +14,8 @@ This page is generated. Do not edit it by hand: run `uv run python scripts/publi
 * **trigger tick**: the play tick on which a meeting opened. Actions submitted for that tick after the one that opened the meeting are thrown away unexecuted.
 * **vent proof**: a meeting's contradiction flag of the vent-sighting kind naming a player who was alive when the meeting opened.
 * **vent band**: the ejections whose ejected player such a vent-sighting flag names.
-* **regroup**: the optional meeting reset: when play resumes every survivor stands in the meeting room, corpses are cleared, no one is inside a vent and each impostor's kill cooldown restarts at the map's value.
-* **grace window**: the ticks after a regroup before the impostors' restarted kill cooldown runs out: from the tick after the meeting through the map's kill cooldown.
+* **regroup**: the optional meeting reset: when play resumes every survivor stands in the meeting room, corpses are cleared, no one is inside a vent and each impostor's kill cooldown restarts at the recorded kill cooldown, else the map's value.
+* **grace window**: the ticks after a regroup before the impostors' restarted kill cooldown runs out: from the tick after the meeting through the recorded kill cooldown, else the map's.
 * **vent trip**: an impostor's stay inside the vents, from its entry to its exit, or to the meeting or game end that closed it.
 * **ticks inside**: the play ticks a vent trip lasted, counting again from zero at a meeting the trip spanned.
 * **in-vent cap**: 4 ticks inside: under the look-and-wait exit an impostor must surface at this count.
@@ -63,6 +63,7 @@ Every recorded setting field, and how this census uses it:
 | `report_body_handle_version` | read by: public_body_handle |
 | `ballot_kill_row_version` | read by: own_kill_ballot_row |
 | `impostor_ballot_version` | not read: an instructed ballot framing; the tally does not enforce it, so no cell is forced by it |
+| `kill_cooldown_ticks` | read as a value by: the length of the grace window, and the value the kill cooldown cell checks every cooldown write against |
 
 Named windows, in ticks:
 
@@ -193,6 +194,19 @@ Every set below pooled, so every game shares one era, derived from the recording
 | row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
 | --- | --- | --- | --- | --- | --- | --- |
 | (none) | n/a | n/a | n/a | n/a | n/a | n/a |
+
+### The kill cooldown
+
+| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
+| --- | --- | --- | --- | --- | --- | --- |
+| Kill cooldowns that differ from the recorded value | 0/1349 by construction | 0/1125 by construction | 0/850 by construction | 0/275 by construction | 0/108 by construction | 0/116 by construction |
+
+**Kill cooldown writes by writer.**
+
+| row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
+| --- | --- | --- | --- | --- | --- | --- |
+| after_kill | 849 | 725 | 550 | 175 | 58 | 66 |
+| round_start | 500 | 400 | 300 | 100 | 50 | 50 |
 
 ### Meeting structure
 
@@ -344,7 +358,7 @@ Every set below pooled, so every game shares one era, derived from the recording
 
 **Impostors able to kill when a meeting opened** (`impostor_cooldown_zero_at_open`). Living impostors whose kill cooldown was zero when a meeting opened, over living impostors at every meeting. Reads `state at the meeting`.
 
-**Kills in the grace window after a regroup** (`kills_in_grace_window_after_regroup`). Kills made on a tick after a regroup meeting no later than the map's kill cooldown, over all kills made between a regroup and the next meeting. Reads `Killed`, `meeting row`. Zero by construction while `meeting_reset = hub_with_grace`.
+**Kills in the grace window after a regroup** (`kills_in_grace_window_after_regroup`). Kills made on a tick after a regroup meeting no later than the recorded kill cooldown, else the map's, over all kills made between a regroup and the next meeting. Reads `Killed`, `meeting row`. Zero by construction while `meeting_reset = hub_with_grace`.
 
 **Reported corpses older than the last regroup** (`report_corpses_older_than_last_close`). Report meetings whose reported victim was killed on or before the previous meeting's tick, over report meetings whose previous meeting regrouped. Reads `Killed`, `MeetingTriggered`, `meeting row`. Zero by construction while `meeting_reset = hub_with_grace`.
 
@@ -353,6 +367,8 @@ Every set below pooled, so every game shares one era, derived from the recording
 **Kill witnesses pressing the button soon after a regroup** (`kill_witness_button_calls_soon_after_regroup`). Button meetings called at most 6 ticks after a regroup by a player who witnessed a kill since it, over button meetings whose previous meeting regrouped. Reads `Killed`, `MeetingTriggered`, `meeting row`.
 
 **Sabotage active at a regroup** (`sabotage_active_at_regroup`). Regroup meetings that opened with a sabotage active, over all regroup meetings. Reads `state at the meeting`.
+
+**Kill cooldowns that differ from the recorded value** (`kill_cooldowns_differing_from_recorded`). Impostor kill cooldowns that differ from the recorded kill cooldown, else the map's, read on the state each engine write leaves: every impostor at round start, the killer after each of its kills and every living impostor after each regroup; over all such writes. Reads `state at round start`, `Killed`, `state after the meeting`. Zero by construction in every recording.
 
 **The first reply accuses the opener** (`first_reply_accuses_opener`). Meetings whose second turn carries a structured accusation of the opener, over all meetings. Reads `meeting row turns`.
 
@@ -421,6 +437,8 @@ Every set below pooled, so every game shares one era, derived from the recording
 **Corpse age at report** (`corpse_age_at_report`). Report meetings by the ticks between the reported victim's kill and the meeting. Reads `Killed`, `MeetingTriggered`.
 
 **Trigger-tick movement and task events a regroup drops** (`trigger_tick_events_dropped_by_regroup`). Movement and task events on the trigger tick of every regroup meeting, by kind. Reads `Moved`, `TaskProgressed`, `TaskCompleted`. Counted only in games recorded with `meeting_reset = hub_with_grace`; in any other era it reads n/a.
+
+**Kill cooldown writes by writer** (`kill_cooldown_writes_by_writer`). The writes the kill cooldown cell checks, by the engine step that made them: round_start (the seeding), after_kill (the killer's own cooldown) and regroup (every living impostor at a regroup). Reads `state at round start`, `Killed`, `state after the meeting`.
 
 **Meetings by trigger** (`meetings_by_trigger`). Meetings by what opened them: a reported corpse or a button press. Reads `MeetingTriggered`.
 

@@ -205,6 +205,8 @@ _VERSION_PLAN: dict[str, ConfigLayer] = {
     "report_body_handle_version": "orchestrator",
     "ballot_kill_row_version": "meeting",
     "impostor_ballot_version": "meeting",
+    # The balance round's dial (decision memo section 7).
+    "kill_cooldown_ticks": "engine",
 }
 
 
@@ -236,8 +238,10 @@ def _literal_values(model: type[BaseModel], field: str) -> tuple[object, ...]:
 
 
 def _on_value(field: str) -> object:
-    """The first value of ``field`` other than its default."""
+    """The first value of ``field`` other than its default; 6 for the integer one."""
 
+    if field == "kill_cooldown_ticks":
+        return 6
     default = RecordedExperimentConfig.model_fields[field].default
     values = _literal_values(RecordedExperimentConfig, field)
     return next(value for value in values if value != default)
@@ -267,9 +271,13 @@ def test_an_unclassified_field_fails_the_classification() -> None:
 def test_the_wave_fields_and_the_derived_rows_sit_in_their_layers() -> None:
     assert {field: FIELD_LAYER[field] for field in _VERSION_PLAN} == _VERSION_PLAN
     # The rows no consumer-equality test below derives: the format field, and
-    # the one engine field the engine-arguments helper threads today.
+    # the engine fields the engine-arguments helper threads.
     assert FIELD_LAYER["format_version"] == "format"
-    assert fields_in_layer("engine") == ("redistribution_policy", "vent_witness_rule")
+    assert fields_in_layer("engine") == (
+        "redistribution_policy",
+        "vent_witness_rule",
+        "kill_cooldown_ticks",
+    )
     assert fields_in_layer("orchestrator") == (
         "meeting_reset",
         "report_body_handle_version",
@@ -305,7 +313,7 @@ def test_the_omitted_fields_are_exactly_the_fields_the_wave_added() -> None:
         experiment_config._PRE_WAVE_VALUES
     )
     assert set(OMITTED_AT_DEFAULT) == added
-    assert len(OMITTED_AT_DEFAULT) == 5
+    assert len(OMITTED_AT_DEFAULT) == 6
 
 
 @pytest.mark.parametrize(
@@ -416,7 +424,7 @@ def test_evidence_version_two_with_the_reset_still_validates() -> None:
 
 def test_no_lab_candidate_combines_either_reset_pair() -> None:
     candidates = candidate_configs()
-    assert len(candidates) == 17
+    assert len(candidates) == 19
     combined = [
         name
         for name, config in candidates.items()

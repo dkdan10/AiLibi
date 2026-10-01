@@ -113,7 +113,7 @@ from engine.rng import EngineRng, RngStateHashPolicy
 from engine.meeting_reset import regroup_after_meeting
 from engine.rules import resolve_win_conditions
 from engine.tick import RedistributionPolicy, advance_tick, redistribute_dead_tasks
-from engine.world import Map, WorldState, load_canonical_map
+from engine.world import Map, WorldState, load_canonical_map, resolve_kill_cooldown
 from llm.budget import GameBudget
 from llm.budgeted_client import BudgetedLLMClient
 from llm.client import LLMClient, LLMResponse
@@ -2054,6 +2054,7 @@ def apply_meeting_result(
     rng_hash_policy: RngStateHashPolicy = RngStateHashPolicy.FULL,
     redistribution_policy: RedistributionPolicy = "lowest_id",
     meeting_reset: Literal["preserve", "hub_with_grace"] = "preserve",
+    kill_cooldown_ticks: int | None = None,
 ) -> tuple[WorldState, list[EngineEvent]]:
     """Apply a :class:`MeetingResult` to engine-owned state (DESIGN.md §3.1, §5.1).
 
@@ -2103,11 +2104,13 @@ def apply_meeting_result(
     runs the full reset (:func:`engine.meeting_reset.regroup_after_meeting`):
     every living player is gathered in the meeting room, every corpse is
     cleared, the vents are emptied, ongoing actions stop and each living
-    impostor's kill cooldown restarts at the map's ``kill_cooldown_ticks``, so
-    after a meeting at tick ``T`` a kill is refused at ``T+1`` through
-    ``T+kill_cooldown_ticks``. Tasks, sabotage and emergency uses survive. The
-    win check above returns first, so a meeting that ends the game is never
-    reset.
+    impostor's kill cooldown restarts at ``kill_cooldown_ticks``, the recorded
+    override, or the map's value for ``None``
+    (:func:`engine.world.resolve_kill_cooldown`), so after a meeting at tick
+    ``T`` a kill is refused at ``T+1`` through ``T`` plus that cooldown. Tasks,
+    sabotage and emergency uses survive. The win check above returns first, so
+    a meeting that ends the game is never reset. An invalid
+    ``kill_cooldown_ticks`` raises before any state changes, under either reset.
     """
 
     if state.phase != "MEETING":
@@ -2123,6 +2126,7 @@ def apply_meeting_result(
         raise ValueError("workload redistribution requires the redistribute task rule")
     if meeting_reset not in ("preserve", "hub_with_grace"):
         raise ValueError(f"unknown meeting reset profile: {meeting_reset!r}")
+    resolve_kill_cooldown(game_map, kill_cooldown_ticks)
 
     events: list[EngineEvent] = []
     working = state
@@ -2206,7 +2210,9 @@ def apply_meeting_result(
         return game_over_state, events
 
     if meeting_reset == "hub_with_grace":
-        working = regroup_after_meeting(working, game_map=game_map)
+        working = regroup_after_meeting(
+            working, game_map=game_map, kill_cooldown_ticks=kill_cooldown_ticks
+        )
 
     # Advance the rng cursor one step so the per-tick rng-state
     # transition mirrors the end-of-tick advance in
@@ -2695,6 +2701,7 @@ class HeadlessGame:
             num_players=self._num_players,
             num_impostors=self._num_impostors,
             tasks_per_crewmate=self._tasks_per_crewmate,
+            kill_cooldown_ticks=self._engine_arguments["kill_cooldown_ticks"],
         )
         agents = self._build_agents(state.players)
 
@@ -2771,6 +2778,7 @@ class HeadlessGame:
                 num_players=self._num_players,
                 num_impostors=self._num_impostors,
                 tasks_per_crewmate=self._tasks_per_crewmate,
+                kill_cooldown_ticks=self._engine_arguments["kill_cooldown_ticks"],
             )
         initial_state = state
         observation_service = ObservationService(
@@ -3038,6 +3046,7 @@ class HeadlessGame:
                     if self._experiment_config is not None
                     else "preserve"
                 ),
+                kill_cooldown_ticks=self._engine_arguments["kill_cooldown_ticks"],
             )
             # An emergency has no body report. Check before committing a
             # resolved meeting, retaining its calls if the guard rejects it.

@@ -116,8 +116,8 @@ Recorded settings: the ``funnel-instrument`` profile reads recordings that carry
 experiment settings, and :data:`FUNNEL_READS` names, field by field, the ones
 both funnel walks read: every setting in
 :data:`eval.recorded_settings.READABLE_SETTINGS`. The engine settings reach
-every advance through the engine-arguments helper (which refuses one it does not
-thread), and the vent folds read the witness lists those advances produce, so a
+the seeding, every advance and every applied meeting through the
+engine-arguments helper (which refuses one it does not thread), and the vent folds read the witness lists those advances produce, so a
 changed witness rule reaches Stage 2 and the pooled perception. The meeting reset
 reaches the applied meetings, and the per-tick perception across a meeting reads
 the shared resume events (``orchestrator.replay.compose_resume_events``: after a
