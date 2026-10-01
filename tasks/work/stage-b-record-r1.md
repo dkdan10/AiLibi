@@ -1,6 +1,6 @@
 # B5: record s9 seeds 0-49 as candidate round 1 and assess it
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -727,3 +727,118 @@ in and re-run its gates. The change:
 After that, `check.sh` runs once more at the new head, and the card can flip
 to done. No provider call is needed: the round is complete and its bytes do
 not change.
+
+### Test follow-through (2026-10-01)
+
+**Status: done.** The orchestrator ruled on the question above in its round-3
+dispatch of 2026-10-01: "Test-only follow-through is allowed on this branch:
+re-scope the 14 tests that assumed no candidate round exists, without
+weakening any of them". The ruling widens this card's "Not in scope" by
+exactly the two test files below. Every other test, code, template and
+instrument file stays out. This is a follow-through, not a review correction,
+so Acceptance gains no item. No recorded byte, derived view, fixture or
+number moved. The audit is unchanged, and so is the assessment in its
+section 6. No provider was called.
+
+**What changed.** Two test files, this card and the derived sentence in
+`tasks/README.md`:
+
+1. **`tests/scripts/test_refresh_samples.py`.** The ruling names two routes.
+   The first, an overridable candidates root like the one the plumbing card
+   gave `verify_samples.sh` (`AILIBI_CANDIDATES_ROOT`), does not exist in the
+   recorder. Adding one would edit `scripts/`, which the freeze holds. So the
+   cases take the second route: each aims at a round of its own.
+   - `_absent_round_name()` mints `probe-<12 hex digits>`.
+     `_require_absent_round` raises `ValueError` if `replays/<name>`,
+     `replays/candidates/<name>` or `replays/candidates/.<name>` exists, so
+     each case proves its target absent before the run. The three round-name
+     targets (`replays/<name>`, the one-level round and the hidden round) use
+     that name.
+   - Every refusal assertion stands as it was. Each case still checks the
+     exit code 1, the refusal text, `Nothing was staged.`, the resolved path,
+     the silent key gate, the absent slate line and the absent stage
+     directories.
+   - The two fixed-name absence checks now read the case's own name, and the
+     hidden name joins them. A new check adds `_new_replays_paths(before) ==
+     []`: no path under `replays/` that the snapshot taken before the run
+     lacks.
+   - The acceptance case dry-runs at `replays/candidates/<its own name>/9p2i`.
+     It keeps its echo and absence checks and gains the same no-new-path
+     check.
+   - Planted: `test_a_round_already_on_disk_is_still_refused_and_left_as_it_was`
+     plants a round directory of its own holding one file, as the committed
+     round now sits on disk, and aims the one-level case at it. The run is
+     refused: exit 1, "records only into a candidate set", the directory's
+     resolved path, nothing staged. The planted file is unchanged and nothing
+     new appears under `replays/`. `_require_absent_round` refuses the
+     planted name, and a stray directory made after the snapshot is the one
+     path `_new_replays_paths` names. `_replays_tree_restored` removes the
+     planted tree.
+2. **`tests/meetings/test_prompt_byte_golden.py`.** The retired-guard pin is
+   now `_RETIRED_GUARD_PINS`, keyed by the set's path under `replays/`:
+   `samples/9p2i` (145, 845, 0, 0), `samples/4p1i` (39, 117, 0, 0) and
+   `candidates/stage-b-r1/9p2i` (124, 717, 0, 0). The candidate's row is the
+   census the test itself measures through the production walk, the figure
+   the failure at `dae00688` printed. `_retired_guard_pin` raises `KeyError`
+   for an unpinned set rather than lending it another set's row. Planted:
+   `test_the_retired_guard_pins_are_keyed_by_the_path_under_replays` asserts
+   four things. The two `9p2i` sets read different pins. Keyed by base name,
+   the rows collapse into fewer keys. The pinned keys equal the directories
+   the golden walks. An unpinned `candidates/round-2/9p2i` raises.
+
+**Mutation probe over the changed spans**: 16 mutants, each run against the
+targeted selection (the 14 refresh cases, or the four `retired_guard` cases),
+stopping at the first failure (`-x`). All 16 were killed; the table names the
+case that failed first:
+
+| id | mutant | killed by |
+|---|---|---|
+| R1 | the absence check skips `candidates/<name>` | the planted case (`ValueError` not raised) |
+| R2 | the absence check never raises | the planted case |
+| R3 | `_new_replays_paths` reports nothing | the planted case (the stray is not named) |
+| R4 | `_new_replays_paths` inverted | the first refused case |
+| R5 | the probe name fixed to `stage-b-r1` | `_require_absent_round` raises on the committed round |
+| R6 | the hidden-round refusal expects the undotted name | the `a hidden round name` case |
+| R7 | the acceptance target is the committed round | the acceptance case (`target.parent` exists) |
+| R8 | the planted stray expected not to be named | the planted case |
+| G1 | the pin keyed by base name | `[9p2i]` (`KeyError` on the base name) |
+| G2 | the candidate pin off by one ballot | `[candidates/stage-b-r1/9p2i]` |
+| G3 | the candidate pin equal to the sample pin | `[candidates/stage-b-r1/9p2i]` |
+| G4 | the candidate row removed | `[candidates/stage-b-r1/9p2i]` (`KeyError`) |
+| G5 | an unpinned set borrows a default row | the planted case (`KeyError` not raised) |
+| G6 | a stale row for an unwalked set | the planted case (key-set equality) |
+| G7 | the s9 pin off by one ballot | `[9p2i]` |
+| G8 | the s4 pin off by one meeting | `[4p1i]` |
+
+**Verification**, in a bare shell (0 `AILIBI_*` exports), each exit code
+captured directly:
+
+| step | command | result |
+|---|---|---|
+| refresh cases | `uv run pytest tests/scripts/test_refresh_samples.py -k "<the 13 cases or round_already_on_disk>"` | 14 passed, exit 0; at `3f7586a6` the same 13 failed |
+| retired guard | `uv run pytest tests/meetings/test_prompt_byte_golden.py -k retired_guard` | 4 passed: `[9p2i]`, `[4p1i]`, `[candidates/stage-b-r1/9p2i]` and the planted keyed case |
+| golden on the candidate | the same file, `-k "candidates/stage-b-r1/9p2i or keyed_by_the_path"` | 9 passed, exit 0: the eight cases parametrized on the candidate and the planted case |
+| golden walk | `walk_directory` on `replays/candidates/stage-b-r1/9p2i`, count-only | exit 0: 50 seeds, 124 meetings, 1,556 prompts, 0 not reproduced, 0 miscounted meetings, as in audit 5.5 |
+| verify | `bash scripts/verify_samples.sh` bare, then once per set (s9, s4, c9, c4, the candidate) | exit 0 each. The bare run walks both sample sets and the candidate. Clean counts: 50, 50, 150, 50 and 50 |
+| doc gates | `check_doc_facts.py`, `validate_task_docs.py`, offline `verify_ml_evidence.py` | exit 0 each. `verify_ml_evidence.py` reports its 7 expected `EVIDENCE-BRANCH-ABSENT` checks; it never ran with `--complete` |
+| lint and types | `ruff check`, `ruff format --check` and `mypy` on the two files | clean |
+| whole gate | `bash scripts/check.sh` | run once at the head that carries this subsection, in this worktree, with its exit code captured directly. The head was pushed only on exit 0, and PR #492's body quotes the counts |
+
+**Decisions.**
+- The refresh cases aim at a round they own, not at an overridden
+  candidates root. The recorder has no such override, and adding one is a
+  `scripts/` change under the freeze. Their absence checks are also widened
+  to every new path under `replays/`.
+- Every walked directory must now hold its own retired-guard row, and no
+  row may name a set that is not walked. A later round's card adds its row,
+  measured through the production walk, or the golden raises on it.
+- Status flips to done here, as the round-3 dispatch directs. The card
+  otherwise leaves the Status line to the orchestrator.
+
+**Limitations.**
+- On Linux CI the three alias cases still skip, by filesystem, as before.
+  The re-scope does not change which cases run where.
+- The probe name is new on every run. A name that is already taken raises,
+  and never passes.
+- The recorder's refusal is unchanged and is covered as before. This
+  follow-through adds no gate to the recorder.
