@@ -352,7 +352,8 @@ class ReconstructedMeeting:
     re-record. The baseline-9 record was written after D6, so no committed
     ballot carries either retired reason and nothing moves: the census
     :func:`test_every_reconstruction_divergence_is_a_retired_guard` pins per set
-    reads ``(145, 845, 0, 0)`` for 9p2i and ``(39, 117, 0, 0)`` for 4p1i. Every
+    (``_RETIRED_GUARD_PINS``) reads ``(145, 845, 0, 0)`` for samples/9p2i and
+    ``(39, 117, 0, 0)`` for samples/4p1i. Every
     consumer of this walk therefore reads the decision the recording actually
     made, which is what each of them was already asserting about.
 
@@ -1349,6 +1350,26 @@ _RETIRED_REWRITE_REASONS: Final[frozenset[str]] = frozenset(
     {"under_gate_redirect", "uncited_coerced"}
 )
 
+#: Pinned at this head, through the production path, as
+#: ``(meetings, ballots, ballots whose target moved, meetings holding one)``.
+#: Keyed by the set's path under ``replays/``, never by its base name: a
+#: candidate set takes its roster's name, so it shares that name with a sample
+#: set. Every directory the golden walks has its own row.
+_RETIRED_GUARD_PINS: Final[Mapping[str, tuple[int, int, int, int]]] = {
+    "samples/9p2i": (145, 845, 0, 0),  # was (151, 869, 23, 14)
+    "samples/4p1i": (39, 117, 0, 0),  # was (39, 117, 1, 1)
+    "candidates/stage-b-r1/9p2i": (124, 717, 0, 0),
+}
+
+
+def _retired_guard_pin(set_dir: Path) -> tuple[int, int, int, int]:
+    """``set_dir``'s pinned census, by its path under ``replays/``; unpinned raises."""
+
+    key = set_dir.relative_to(_REPO_ROOT / "replays").as_posix()
+    if key not in _RETIRED_GUARD_PINS:
+        raise KeyError(f"no retired-guard pin for {key}")
+    return _RETIRED_GUARD_PINS[key]
+
 
 def test_every_reconstruction_divergence_is_a_retired_guard(
     set_walk: _SetWalk,
@@ -1415,23 +1436,42 @@ def test_every_reconstruction_divergence_is_a_retired_guard(
             assert meeting.result.ejected_player_id == meeting.entry.ejected_player_id
             assert meeting.result.ballots == meeting.entry.ballots
 
-    # Pinned at this head, through the production path, as
-    # ``(meetings, ballots, ballots whose target moved, meetings holding one)``.
-    # The baseline-9 record was written after D6, so ``under_gate_redirect`` and
-    # ``uncited_coerced`` are 0 in all four committed sets and no target moves:
-    # today's chain re-decides every recorded ballot to its recorded target. The
-    # moved-ballot branch above is therefore unexercised on these bytes; it held
-    # on baseline 8's 23 and 1 redirects.
-    expected = {
-        "9p2i": (145, 845, 0, 0),  # was (151, 869, 23, 14)
-        "4p1i": (39, 117, 0, 0),  # was (39, 117, 1, 1)
-    }[set_walk.set_dir.name]
+    # The baseline-9 record and the candidate round were written after D6, so
+    # ``under_gate_redirect`` and ``uncited_coerced`` are 0 in every walked set
+    # and no target moves: today's chain re-decides every recorded ballot to its
+    # recorded target. The moved-ballot branch above is therefore unexercised on
+    # these bytes; it held on baseline 8's 23 and 1 redirects.
+    expected = _retired_guard_pin(set_walk.set_dir)
     assert (
         meetings,
         ballots,
         moved_ballots,
         meetings_with_a_moved_ballot,
     ) == expected
+
+
+def test_the_retired_guard_pins_are_keyed_by_the_path_under_replays() -> None:
+    """Planted: two sets that share the base name ``9p2i`` read different pins.
+
+    Keyed by base name, the candidate round was held to the sample set's row.
+    Keyed by path, each walked set reads its own row, no row names a set the
+    golden does not walk, and an unpinned set raises instead of borrowing one.
+    """
+
+    replays = _REPO_ROOT / "replays"
+    sample = replays / "samples" / "9p2i"
+    candidate = replays / "candidates" / "stage-b-r1" / "9p2i"
+    assert sample.name == candidate.name
+    assert _retired_guard_pin(sample) == (145, 845, 0, 0)
+    assert _retired_guard_pin(candidate) == (124, 717, 0, 0)
+    # The defect this keying removes: by base name, two rows collapse into one.
+    by_base_name = {Path(key).name: pin for key, pin in _RETIRED_GUARD_PINS.items()}
+    assert len(by_base_name) < len(_RETIRED_GUARD_PINS)
+    assert {
+        directory.relative_to(replays).as_posix() for directory in golden_directories()
+    } == set(_RETIRED_GUARD_PINS)
+    with pytest.raises(KeyError, match="candidates/round-2/9p2i"):
+        _retired_guard_pin(replays / "candidates" / "round-2" / "9p2i")
 
 
 # --------------------------------------------------------------------------- #

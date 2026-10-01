@@ -112,3 +112,10 @@ profile.
 Once round 1 is recorded, an arm value's meaning is frozen. A revision adds a
 new value (for example `look_and_wait_2`) and never redefines a recorded one;
 this holds for `hub_with_grace` too.
+
+## Candidate round 1
+
+The ladder tip stands at baseline 9.
+[`replays/candidates/stage-b-r1/9p2i`](../replays/candidates/stage-b-r1/README.md)
+is candidate round 1, recorded with the experimental switches its README
+names; it adopts nothing and is not a canonical sample set.

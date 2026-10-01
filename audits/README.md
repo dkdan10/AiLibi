@@ -385,6 +385,17 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   reported beside every cell and gates nothing. It mints baseline 9, and the
   ladder tip stands at baseline 9.
 
+## The Stage-B gameplay wave
+
+- [audit-2026-09-27-stage-b-r1.md](audit-2026-09-27-stage-b-r1.md) —
+  candidate round 1: the first 50 seeds of the 9-player sample roster, recorded
+  once with every Stage-B switch on into a candidate directory beside the
+  sample sets. It opens with the readings fixed before the first seed, then
+  records the spend against the owner's ceilings, the gates and the operating
+  events, and reads the round beside the shipped numbers for the same seeds,
+  never pooled with them. It gives no verdict and adopts nothing; each
+  switch's next step is the owner's.
+
 ## Cleanup measurements
 
 - [reasoning-evidence/](reasoning-evidence/) — source-bound offline engineering

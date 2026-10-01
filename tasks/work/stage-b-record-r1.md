@@ -1,6 +1,6 @@
 # B5: record s9 seeds 0-49 as candidate round 1 and assess it
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -107,7 +107,7 @@ them and re-anchored at dispatch: the gate's `--expected-seeds` and `--require-o
 the census and scorecard `--set-dir DIR --json-stdout`, the golden's directory walk,
 `tests/_helpers/scripted_meeting.py` and the candidate test.
 
-- [ ] **The owner's confirmations and the pre-registration precede the first seed, and neither is
+- [x] **The owner's confirmations and the pre-registration precede the first seed, and neither is
   rewritten.**
   - Mechanism: no provider call is made until the owner has answered memo 5 items 1-4 in their own
     words: the ceilings under Constraints, the landing, the readings and envelope below, and v1 or
@@ -128,14 +128,14 @@ the census and scorecard `--set-dir DIR --json-stdout`, the golden's directory w
     the section at the PR head; any correction is a dated addendum after it.
   - Proof: the ancestry command with P replaced by the PR head exits 1. A one-character edit to a
     reading, in a scratch copy, makes the section comparison print a difference.
-- [ ] **The before column is the shipped baseline-9 numbers.** Mechanism: at `F`, the census and
+- [x] **The before column is the shipped baseline-9 numbers.** Mechanism: at `F`, the census and
   scorecard `--set-dir replays/samples/9p2i --json-stdout` outputs equal, cell for cell, the s9
   entries of `docs/gameplay-census.json` and `docs/process-scorecard.json`. A command the audit quotes prints
   the before table from them and re-measures every memo count below. The ballot family's before
   values come from `measure_baseline.py replays/samples/9p2i --honesty --json` at `F`, as the
   ballot card reports them. Proof: the comparison against a copy with one cell edited is
   non-empty.
-- [ ] **The readings are pre-registered as memo 4 fixes them.** "Conf." cells must read exactly as
+- [x] **The readings are pre-registered as memo 4 fixes them.** "Conf." cells must read exactly as
   built, and a miss is a code defect that stops the round. "Reported" cells carry no rule. Rates
   carry Wilson 95% intervals. The per-arm reading is computed from the after column by P's rules,
   never restated, and P's section also fixes each after value's source (the assessment item
@@ -161,12 +161,12 @@ the census and scorecard `--set-dir DIR --json-stdout`, the golden's directory w
   | self-report off | impostor openers | 0 | Conf. 0 |
   | envelope | impostor win share; innocent ejections, and reporters ejected per report meeting; role-correct ejections; vent-proof meetings; scorecard rows 1-9 | 11/50; 9 innocent, 7 of 135; 81/90; 70/145; as published | non-gating. A win share outside 0.20-0.60 is flagged, and one above 0.60 names the status-quo fallback for the vent exit. Reporter ejections above 0.104 per report meeting (twice 7/135) are flagged |
 
-- [ ] **The preflight holds at `F`.** Mechanism: `git grep -n WAVE_ARMS_PENDING -- '*.py'` prints
+- [x] **The preflight holds at `F`.** Mechanism: `git grep -n WAVE_ARMS_PENDING -- '*.py'` prints
   nothing. The declared file validates as a `RecordedExperimentConfig` whose non-default fields are
   exactly the eight above, and `prompt_versions_for_set(..., experiment_config=...)` returns the
   composite ballot stamp beside the three `.v6` stamps. Proof: validation with one unknown key added
   is refused (`extra="forbid"`), and with one field removed the non-default set has seven members.
-- [ ] **The fake dress rehearsal passes every instrument at `F`, at $0.** Mechanism: seeds 0-49 are
+- [x] **The fake dress rehearsal passes every instrument at `F`, at $0.** Mechanism: seeds 0-49 are
   recorded with `AILIBI_LLM_PROVIDER=fake` on the declared config, into a scratch directory outside
   `replays/`. Each of these then exits 0 on it: the census `--set-dir` with every Conf. cell at 0;
   the scorecard `--set-dir`; the validity gate with `--expected-experiment-config`,
@@ -174,54 +174,54 @@ the census and scorecard `--set-dir DIR --json-stdout`, the golden's directory w
   directory walk; `measure_baseline.py <dir> --honesty`; and `scan_recording_packets.py <dir>`.
   Proof: gated against a copy of the config without `vent_witness_rule`, the gate fails and names
   the field.
-- [ ] **The scripted rehearsal proves that the meeting arms fire.** Fake games eject nobody and fire
+- [x] **The scripted rehearsal proves that the meeting arms fire.** Fake games eject nobody and fire
   no rebuttal (`partial_record.md` section 7). Mechanism: at `F`, the scripted cases that the readers
   and ballot cards landed pass: a rebuttal, an impostor EJECT with and without a row pointing toward
   the target, a kill row and a teammate coercion. Then one scratch scripted game on the full declared
   config passes the plain loader, the census and scorecard `--set-dir` and the gate, with its
   rebuttal counted once. Proof: those cards' perturbed cases pass at `F`; for example, dropping the
   evidence profile leaves the rebuttal call unconsumed.
-- [ ] **The lab attribution matrix runs at `F`.** Mechanism: `experiments.tactical_gameplay` runs on
+- [x] **The lab attribution matrix runs at `F`.** Mechanism: `experiments.tactical_gameplay` runs on
   the development split (seeds 1000-1007, both rosters) for ten arms: `baseline`, `vent_risk`,
   `vent_physical`, `vent_look_and_wait`, `vent_own_fresh_kill`, `stage_b_full` and the four
   minus-one arms. It writes the new `audits/tactical-gameplay/stage-b-r1-frozen-head.json`, and the
   audit quotes count-only rows and the runtime fingerprint as mechanical attribution only. Proof:
   the `baseline` and `vent_risk` rows equal `audits/tactical-gameplay/stage-b-development.json` in
   waits, exposure and calls. A mismatch means a default path moved, and it stops the card.
-- [ ] **The dry run and the probe pass before the rest of the round queues.** Mechanism: the dry run
+- [x] **The dry run and the probe pass before the rest of the round queues.** Mechanism: the dry run
   echoes P's sha256, the eight fields and the bare slate, and leaves `git status --porcelain` at 0
   lines. Seed 0 then records, and the probe runs on it: the gate with the declared config,
   `verify_samples.sh`, the golden's walk, the census conformance cells, the scorecard fold,
   `measure_baseline.py --honesty` (a raise is a STOP) and `scan_recording_packets.py`. A seed 0 with
   no meeting or no fired rebuttal extends the probe to seeds 0-3; seeds 0-3 with a meeting but no
   rebuttal stop the card. Proof: the dry run with a stray `AILIBI_BOUNDED_REBUTTAL=1` exits 1.
-- [ ] **The round is exactly the declaration.** Mechanism: `scripts/validity_gate.py` on the
+- [x] **The round is exactly the declaration.** Mechanism: `scripts/validity_gate.py` on the
   candidate passes all ten checks, named individually, with `--expected-model Qwen/Qwen3.6-27B
   --require-zero-cost`, the four `--expected-prompt-versions` pairs, `--expected-experiment-config`,
   `--expected-seeds 0-49` and `--require-one-recording-sha`. The MANIFEST's flags column equals s9's
   and its policy column reads `fsm-default`; `grep -l deadline_default` over the 50 replays counts 0;
   the plumbing card's candidate test passes in `check.sh`. Proof: the gate with
   `--expected-seeds 0-50` fails, and so does `replays/samples/9p2i` against the declared config.
-- [ ] **Every conformance cell reads 0 on the round.** Mechanism: the census `--set-dir` exits 0 on
+- [x] **Every conformance cell reads 0 on the round.** Mechanism: the census `--set-dir` exits 0 on
   the candidate; on any breach it exits non-zero, naming (set, seed, meeting). The golden, which
   `check.sh` runs on every candidate directory, reproduces every call. Proof: at `F`, the census
   card's planted breach per Conf. cell and each arm card's end-to-end perturbed copy pass; Results
   names them by test id.
-- [ ] **The spend stays inside the ceilings.** Mechanism: the tally command counts the candidate's
+- [x] **The spend stays inside the ceilings.** Mechanism: the tally command counts the candidate's
   `llm_calls` rows. It re-projects after the probe and after 10 seeds, as Constraints defines, and
   compares each figure with 90% of its ceiling. Proof: on `replays/samples/9p2i` the tally prints
   `1694 9850930 422941 0.0`, so it is the same measure as the anchor.
-- [ ] **The recording checkout never moves, and no key leaves it.** Mechanism: seeds record in a
+- [x] **The recording checkout never moves, and no key leaves it.** Mechanism: seeds record in a
   checkout detached at `F`. Checkpoints are commits in a separate delivery worktree on
   `work/stage-b-record-r1`, made after the probe, after the 10-seed re-projection and after the leg.
   A count-only key scan, with gzip decompressed, precedes each push. The key file is 0600, outside
   the repository, and deleted after the last seed. Proof: the MANIFEST names one `git_sha`, the short
   sha of `F`; each of the five scan patterns fires once on a planted key.
-- [ ] **The freeze held.** Mechanism: `git log --oneline F..HEAD` and `git log --oneline
+- [x] **The freeze held.** Mechanism: `git log --oneline F..HEAD` and `git log --oneline
   F..origin/main` print nothing over `engine agents meetings observation orchestrator eval api
   scripts llm` at the PR head. Proof: the same pathspec over `e886b663..F` is non-empty, so the
   command does see code changes.
-- [ ] **The derived views and the registration are rebuilt, never hand-edited.** Mechanism: the
+- [x] **The derived views and the registration are rebuilt, never hand-edited.** Mechanism: the
   recorder's post-step writes `tournament-eval-report.json.gz` through `eval/report_io.py`, and
   `build_sample_report.py --sample-dir <candidate> --check` is consistent. The round README's
   `candidate-declaration` block holds the sha256 line and `9p2i seeds 0-49`. The `replays/candidates/`
@@ -229,7 +229,7 @@ the census and scorecard `--set-dir DIR --json-stdout`, the golden's directory w
   files (the family README, the round README, the config and 53 set files), and offline
   `verify_ml_evidence.py` reads both rows as OK. Proof: the plumbing card's planted round
   perturbations (a config byte, a missing seed, a foreign sha, an edited report cell) pass.
-- [ ] **The assessment is written as pre-registered.**
+- [x] **The assessment is written as pre-registered.**
   - Mechanism, the pre-registered source rule: the after column comes only from these, run on the
     candidate: the census and scorecard `--set-dir DIR --json-stdout`; `measure_baseline.py DIR
     --honesty --json`, whose ballot family (the ballot card's evidence-honesty cells) supplies cell
@@ -244,7 +244,7 @@ the census and scorecard `--set-dir DIR --json-stdout`, the golden's directory w
     `replays/candidates/stage-b-r2/`; escalate to hidden travel for the vent exit; or fall back to
     the status quo.
   - Proof: pooling s9 with the candidate through the census raises its mixed-era refusal.
-- [ ] **Nothing publishes, and nothing committed moves.** Mechanism: `git diff --stat F..HEAD` is
+- [x] **Nothing publishes, and nothing committed moves.** Mechanism: `git diff --stat F..HEAD` is
   empty over the committed sets, `tests/fixtures`, `training`, `api`, `frontend` and the scorecard
   and census docs. `verify_samples.sh` passes once per set directory on all four sets and on the
   candidate. The four committed `build_sample_report.py --check` runs, the scorecard and census
@@ -252,7 +252,7 @@ the census and scorecard `--set-dir DIR --json-stdout`, the golden's directory w
   test stays green with `_ARCHITECTURE_WORD_BUDGET` unedited, and the demo bundle
   built at `F` and at the head is byte-identical (`diff -r`). Proof:
   `test_audits_index_ladder_tip_drift_detected` and `test_unindexed_audit_detected` pass at the head.
-- [ ] **The copy this card adds is plain.** Mechanism: in the round README, the candidate
+- [x] **The copy this card adds is plain.** Mechanism: in the round README, the candidate
   sentence and the prose of the index row (its link aside), a count-only scan for
   `\b[AB][0-9]\b|\bR[0-9]+\b|Task [0-9]|audit-` prints 0. The README names switches by field and
   in plain words, points to the assessment through `audits/README.md`, and states no threshold
@@ -286,6 +286,11 @@ memo 5 item 1; this is the live-call authorization AGENTS.md requires).
 +10% prompt growth are **unmeasured planning assumptions**, re-measured at the probe. The low case,
 about 0.72x the meetings with no growth, is 104.4 meetings, about 1,320 calls and 7.6M input. The
 subscription fee is already paid and is not incurred by this run.
+
+**Amended 2026-09-28 by the owner**, verbatim: "Raise the wall to 12h in an 18h window and resume.
+Make sure it allows for a pause." The recording wall becomes 12 h summed over sittings, with its
+stop at 10.8 h, and each sitting runs inside an 18 h elapsed window; the other ceilings and stops
+are unchanged. The audit's section 4 records the amendment, the pause and the batch mechanics.
 
 **Re-projection**, after the probe and after 10 seeds: each count is (the candidate total over the
 completed seeds / the s9 total over the same seeds) x the s9 leg total. Wall is the elapsed recording
@@ -464,13 +469,376 @@ changes, the bundle comparison stands in, and `check.sh` runs the frontend unit 
 
 ## Results
 
-Not started. The operator records, here and in the PR: the owner's confirmations (verbatim, dated),
-P's sha, `F` and each checkout by role; the pre-spend outputs, the dry-run echo, the probe, both
-re-projections and the spend against each ceiling; every event and every Validation command with its
-real exit code, and the key-scan counts; the architecture sections relied on ("Determinism and the
-substrate ladder", and the spine's arm page `docs/experiment-arms.md`, linked under "Explicit
-cleanup experiments"); the decisions
-(the three checkouts, which reconcile checkpoint pushes with one recording sha; the lab JSON's path;
-the candidate sentence's page and wording; the audit date); and the limitations (hosted generation is not
-byte-reproducible; the arms land together; the kill row has no power at this size; fake and lab rows
-establish mechanics, not reasoning quality).
+### 2026-09-27: the pre-spend, the probe, and the stop it called
+
+**Status: active, stopped at the probe.** The pre-spend half is complete and the
+probe seed recorded and passed every gate, but its wall re-projection is past
+the 90% stop of the recording-wall ceiling, so seeds 1-49 were not queued and
+the round waits on the owner. The audit is
+[`audits/audit-2026-09-27-stage-b-r1.md`](../../audits/audit-2026-09-27-stage-b-r1.md);
+its section 3 carries the stop.
+
+**Commits and checkouts.** `F` is `f937dfaa` (the merge of PR #491). P is
+`f1133de5`, a `coordination:` commit on this branch holding the audit's
+pre-registration section (1), its `audits/README.md` row and the re-derived
+`audits/` row of `docs/artifacts.md`, pushed before the first seed; the
+pre-spend checkpoint is `343792ef`. Recording: a worktree detached at P (not at
+`F`: see Decisions), `uv sync --frozen`, no `.env`. Verification: a worktree
+detached at `F`. Delivery: this branch's worktree.
+
+**The owner's confirmation**, 2026-09-27, relayed verbatim by the orchestrator:
+"Confirm the ceilings, v1 and the envelope as proposed". It is quoted, dated,
+in the audit's 1.1 with what it covers.
+
+**Evidence, each command's real exit code** (audit sections 1-3 give the full
+outputs; every census count-only):
+
+| step | command | result |
+|---|---|---|
+| guard | `git grep -n WAVE_ARMS_PENDING -- '*.py'` at `F` | no output, exit 1 |
+| config | `shasum -a 256` on the declared bytes; the loader of `scripts/_declared_experiment.py` | `4f0c4dd4779cd38f69194b6735221d86bf7c6944fe12769a3971e38e4e46d6c7`; 8 non-default fields; composite ballot stamp beside the three `.v6` stamps. Proof: an unknown key is refused (`extra_forbidden`); without `vent_witness_rule`, 7 non-default fields |
+| before | census and scorecard `--set-dir replays/samples/9p2i --json-stdout` against the shipped s9 entries | 973 of 973 and 108 of 108 leaves equal, exit 0. Proof: one numerator raised in a copy prints one differing leaf, exit 1 |
+| tally | the Validation tally on `replays/samples/9p2i` | `1694 9850930 422941 0.0` |
+| fake rehearsal | seeds 0-49, `AILIBI_LLM_PROVIDER=fake`, scratch directory outside the tree | 50/50 in 15 s, $0; census, scorecard, gate (ten checks), `verify_samples.sh`, the golden's walk (1,414 prompts reproduced), honesty and `scan_recording_packets.py` all exit 0; 16 forced-zero cells read 0. Proof: gated against the config without `vent_witness_rule`, the gate exits 1 on 50 of 50 games naming the field |
+| scripted | the scripted and ballot-arm tests at `F` | 267 passed; the golden's scripted rebuttal game (its perturbed half leaves the rebuttal unconsumed), the reset post-hash and the forced kill-row gate cases pass; one scratch scripted game on the declared file passes the loader, census, scorecard, the gate and the golden, 2 rebuttals each counted once |
+| proofs at `F` | census, arm-card, ballot, scripted, reader and candidate-set test files | 774 passed, among them every `test_a_breach_raises_with_the_setting_on_and_publishes_with_it_off` case, `test_every_guarded_cell_has_a_planted_pair`, `test_without_the_coercion_the_betrayal_check_fails`, `test_the_golden_fails_when_a_bound_arm_value_is_dropped` and the four planted round perturbations of `tests/scripts/test_candidate_sets.py`; `test_audits_index_ladder_tip_drift_detected` and `test_unindexed_audit_detected` pass at P |
+| lab | `python -m experiments.tactical_gameplay --split development --arms <the ten>` at `F` | `audits/tactical-gameplay/stage-b-r1-frozen-head.json`; `baseline` and `vent_risk` rows equal `stage-b-development.json` in waits, exposure and calls (and every field) |
+| dry run | recorder `--full --dry-run` in the recording checkout at P | exit 0; echoes the sha256, the eight fields, the bare slate; wrote nothing. Proof: with `AILIBI_BOUNDED_REBUTTAL=1`, exit 1 |
+| probe | `uv run --env-file <key file> bash scripts/refresh_samples.sh --seeds 0 ...` | exit 0, 838 s, 3 meetings, 3 rebuttals, `$0.0000`, no retry |
+| probe gates | gate with the declared config and `--expected-seeds 0`, `verify_samples.sh`, the golden's walk, census, scorecard, honesty, packet scan | all exit 0; every Conf. cell 0; no honesty raise; no `deadline_default` |
+| ancestry | `git merge-base --is-ancestor f1133de5 f1133de5` (P against the MANIFEST's one sha) | exit 0. Proof: the branch head in place of P, exit 1 |
+| section | the pre-registration section at P against the head | 432 lines, 0 differing. Proof: "0.30" edited to "0.31" in one reading of a copy, 2 differing lines, exit 1 |
+| key scan | five shapes plus the exact key value, count-only, gzip decompressed, over every file changed since `F` | 0 before each push. Proof: each shape and the exact-value count fire once on planted fakes |
+
+**Spend so far, against the ceilings:** 39 calls of 2,800; 270,760 input of
+17,500,000; 10,976 output of 750,000; 838 s of recording wall (0.23 h of 4.5
+h); every `cost_usd` 0.0000.
+
+**The stop.** The rule's re-projection after the probe: calls 1,573 (56.2%),
+input 9,807,175 (56.0%), output 442,705 (59.0%), all inside; the wall 838 s x 50
+= 11.64 h, past the 4.05 h stop. Two workers halve it to 5.82 h, and a
+per-call projection gives 4.70 h: every reading is past the stop. The cause is
+provider latency (21.5 s per call on one worker against about 10.3 s per call
+per worker on the baseline-9 leg), not the arms' traffic. The owner decides
+whether to raise the wall ceiling, resume under the same ceiling later with the
+10-seed re-projection binding, or end the round at seed 0.
+
+**Decisions.**
+- Recording at P, not `F`. The dispatch forbids touching `main`, so P is on
+  this branch; recording at `f937dfaa` would make the card's ancestry check
+  (`git merge-base --is-ancestor P <MANIFEST sha>`) exit 1. P's tree differs
+  from `F`'s only in three documentation files, so the recorded code is `F`'s,
+  and the MANIFEST names P's short sha.
+- The declared config and the round README were committed in the pre-spend
+  checkpoint, before the first seed; the branch runs no CI until a pull
+  request opens.
+- The operator log sits outside the repository under the run's own scratch
+  subdirectory.
+- The `replays/candidates/` row of `docs/artifacts.md` states the checkpoint's 7
+  tracked files, so offline `verify_ml_evidence.py` passes at this head (it
+  failed that row, 1 stated against 7 tracked, before the edit); delivery
+  re-derives it to 56. `check_doc_facts.py` and `validate_task_docs.py` pass here.
+- The candidate sentence will go on `docs/experiment-arms.md`, the card's
+  default: `docs/architecture.md` has 1,283 words against its 1,300 budget.
+
+**Limitations.** Hosted generation is not byte-reproducible; the arms land
+together; the kill row has no power at this size; fake and lab rows establish
+mechanics, not reasoning quality. Two cells of the pre-registered table are not
+carried by any named source (false resume perceptions, regroup-notice presence)
+and rest on mechanism plus the golden, and two reported cells are not carried
+(ballots citing a rebuttal, `none_held` SKIPs). The branch head holds a partial
+round, so the candidate test and `check.sh` fail there by construction until
+seeds 1-49 land; `check.sh` has not been run on it.
+
+### Sitting 2 (2026-09-28)
+
+**Status: active, blocked on `check.sh`.** The owner raised the wall, and
+seeds 1-49 recorded in ten batches. The round is complete: every round gate
+passes and every conformance cell reads 0. The audit's section 4 carries the
+amendment, section 5 the sitting, and section 6 the assessment. But
+`bash scripts/check.sh` fails at `dae00688` on 14 tests that assume no round
+exists. Fixing them edits test files, which this card may not touch, so the
+card waits on the owner (the last subsection below). Nothing publishes, and
+the merge is the owner's.
+
+**The owner's ruling**, 2026-09-28, relayed verbatim: "Raise the wall to 12h
+in an 18h window and resume. Make sure it allows for a pause." It is applied
+as a dated addendum after the pre-registration (audit section 4), committed and
+pushed as `2f63e331` before the sitting's first seed. The recording wall
+becomes 12 h summed over sittings, with its stop at 10.8 h. Each sitting runs
+inside an 18 h elapsed window. The call, token and cost ceilings are
+unchanged. Constraints carries a dated note of the amendment. The
+pre-registration section at the head equals P's: 432 lines, 0 differing. The
+one-character proof differs in 2 lines and exits 1.
+
+**The pause.** Before each batch the operator checked for a pause file
+outside the repository. If it existed, no batch would start: the key file
+would be deleted, the last checkpoint pushed, and the log would name the next
+batch. It never existed, so the sitting never paused.
+
+**The leg** (audit 5.2). The recording checkout stayed detached at P
+(`f1133de5`). The batches ran `--seeds 1,...,5` through `46,...,49`, and seed 0
+was never re-recorded. After each batch the per-batch gates ran and a pushed
+`record:` checkpoint followed (`9725ece0` through `b16690af`). Seeds recorded
+from 09:52:00Z to 13:25:36Z, with 11,938 s of recording wall and 2 workers.
+
+**Events** (audit 5.3):
+- Seed 31's batch exited 0, but its gate failed `cost_and_provenance_exact`.
+  The seed held one `(deadline_default)` row: the one-reply opt-in turn failed
+  validation (an alibi whose route segments overlapped) and defaulted. By the
+  failed-seed rule, the husk moved out of the set and seed 31 re-recorded alone
+  at P (702 s, clean). The husk's 30 calls, 164,457 input and 7,875 output are
+  counted in the spend.
+- No stall, no pause, no retry, and no stop.
+
+**Spend against the ceilings**, including the husk (the set's own tally is
+`1556 9344346 433660 0.0`):
+
+| limit | sitting 1 | sitting 2 | summed | ceiling | share |
+|---|---|---|---|---|---|
+| calls | 39 | 1,547 | 1,586 | 2,800 | 56.6% |
+| input | 270,760 | 9,238,043 | 9,508,803 | 17,500,000 | 54.3% |
+| output | 10,976 | 430,559 | 441,535 | 750,000 | 58.9% |
+| recording wall | 838 s | 11,938 s | 12,776 s = 3.55 h | 12 h | 29.6% |
+| cost | $0.0000 | $0.0000 | $0.0000 | $0.00 | |
+
+The re-projection after 10 seeds covered seeds 0-10 and 3,633 s: calls 1,551
+(55.4%), input 9,325,616 (53.3%), output 433,102 (57.7%) and wall 4.59 h
+against the 10.8 h stop. Every figure was inside. Sitting 2 ran 3 h 34 min of
+its 18 h window.
+
+**Evidence at the recorded bytes, each command's real exit code** (audit 5.5;
+bare shell, 0 `AILIBI_*` exports; every census count-only):
+
+| step | command | result |
+|---|---|---|
+| gate | `validity_gate.py <C> --expected-model Qwen/Qwen3.6-27B --require-zero-cost --expected-prompt-versions <4 pairs> --expected-experiment-config <CFG> --expected-seeds 0-49 --require-one-recording-sha` | exit 0, the ten checks PASS by name (audit 5.5). Proofs: `--expected-seeds 0-50` exit 1 ("missing [50]"); `replays/samples/9p2i` against the declared config exit 1 |
+| conformance | census `--set-dir <C> --json-stdout` | exit 0; the 16 Conf. cells read 0, and the gate's betrayal check reads 0 of 717 |
+| golden | the golden's directory walk on `<C>` | exit 0; 1,556 prompts, 0 not reproduced, 0 miscounted meetings |
+| other probe gates | scorecard `--set-dir`, `measure_baseline.py --honesty --json`, `scan_recording_packets.py` | exit 0 each; no honesty raise |
+| failed seeds | `grep -l deadline_default <C>/replay-seed-*.jsonl \| wc -l` | 0 |
+| MANIFEST | columns over the 50 rows | one `git_sha` `f1133de5`; policy `fsm-default`; flags equal s9's; cost `0.0000` |
+| ancestry | `git merge-base --is-ancestor f1133de5 f1133de5` | exit 0. Proof: head `b16690af` in place of P, exit 1 |
+| verify | `bash scripts/verify_samples.sh` bare, then once per set (s9, s4, c9, c4, `<C>`) | exit 0 each, all clean |
+| reports | `build_sample_report.py --sample-dir <dir> --check`, the four sets and `<C>` | exit 0 each |
+| pooling proof | `fold_set` on s9 and `<C>`, then `pool` | `GameplayCensusEraError` ("two eras differ in settings") |
+| freeze | `git log --oneline f937dfaa..HEAD` and `f937dfaa..origin/main` over `engine agents meetings observation orchestrator eval api scripts llm` | empty; `main` is still `f937dfaa`. Proof: `e886b663..f937dfaa` prints 50 |
+| nothing moved | `git diff --stat f937dfaa..HEAD` over the committed sets, `tests/fixtures`, `training`, `api`, `frontend` and the scorecard and census docs | empty |
+| doc gates | scorecard and census `--check`, `check_doc_facts.py`, `validate_task_docs.py`, offline `verify_ml_evidence.py` | exit 0 each; `check_doc_facts.py` and `_LADDER_TIP_AUDIT` are unchanged since `F`; `docs/architecture.md` has 1,283 words |
+| tests | `tests/scripts/test_candidate_sets.py`, `test_audits_index_ladder_tip_drift_detected`, `test_unindexed_audit_detected` and the two word-budget tests | 33 passed |
+| campaign | `uv run pytest -m campaign -q` | 336 passed, exit 0 |
+| bundle | `build_demo_bundle.py --out` at `F` and at the head, then `diff -r` | exit 0 once the sample replays' mtimes are pinned equal in both checkouts. The first, unpinned build differed only in `created_at`, which the loader takes from file mtime (`_iso_mtime`) |
+| plain copy | the scan over the round README, the candidate sentence and the index row's prose | 0. Proof: with "R7" planted in a scratch copy, 1 |
+| key | `keyscan.py` before every push: five shapes plus the exact value, count-only, gzip decompressed | 0 at every push. Proof: each shape and the exact value fire once on planted fakes (TOTAL 6, exit 1) |
+
+**The assessment** (audit section 6) was computed by the pre-registered
+command, unchanged, from the named sources. Every Conf. cell reads 0. The
+readings:
+- look and wait: **effective**, with 8/72 exits seen from the exit room against
+  53/85 before;
+- one reply: **effective**, with 19/19 evaluable opener rebuttals answering (82
+  not evaluable) and 17/121 redirect-only;
+- kill row: **present**, with 4 rows served;
+- impostor ballot: **the wording holds**, at 0/107.
+
+The envelope is non-gating. The impostor win share is 34/50 = 0.68, flagged
+above 0.60, which names the status-quo fallback for the vent exit. Reporter
+ejections are 11/118, not flagged. Role-correct ejections are 39/54 against
+81/90, reported only. The decision menu per arm is the owner's (audit 6.5).
+
+**Decisions.**
+- The pause is a file check before each batch, not a signal to a running leg.
+  A batch in flight finishes and checkpoints first, so a pause never strands a
+  half-recorded seed or an unpushed checkpoint.
+- Recording wall is the recorder's own figure per leg, summed over sittings.
+  Gates and checkpoints between batches count only against the 18 h window.
+- The re-projection printed at every checkpoint, not only after 10 seeds. The
+  10-seed one is the pre-registered one.
+- The key file stayed mode 0600 outside every checkout after the last seed,
+  until the final push, so every push's scan could count the exact value. It
+  was deleted after that push; the operator log records when.
+- The husk sits outside the repository, kept for its spend tally.
+- The candidate sentence sits on `docs/experiment-arms.md` under a new
+  "Candidate round 1" heading, the card's default.
+- The `replays/candidates/` row now reads 35 MB / 56 files, re-derived with
+  `git ls-files`. The `audits/` row's tracked bytes are re-derived at each
+  audit edit. `audits/README.md`'s row, landed at P, still describes the
+  audit and is unchanged.
+- `tasks/README.md`'s derived count sentence follows the Status line, as
+  `validate_task_docs.py` requires.
+
+**Limitations.**
+- Hosted generation is not byte-reproducible.
+- The arms land together, so only the Conf. cells and the lab rows attribute
+  an effect to one arm.
+- At this size the kill row served only 4 rows, and the one-reply reading
+  rests on 19 evaluable opener rebuttals.
+- Four pre-registered cells are not carried.
+- Wall and the husk's spend come from logs outside the repository.
+
+### `check.sh` at `dae00688` (2026-09-28): 14 failures, and the question for the owner
+
+`bash scripts/check.sh` ran once at `dae00688`, in a clean worktree with a
+bare shell (0 `AILIBI_*` exports), from 13:45:50Z to 13:51:04Z. Its exit code,
+captured directly: **1**.
+
+Ruff, format, the import contracts, `validate_task_docs.py`,
+`generate_prompts.py --check` and mypy passed. Pytest failed with 14 failed,
+9,753 passed, 20 skipped and 3 xfailed. The frontend leg did not run, because
+`set -e` stops at the first failing leg; nothing under `frontend/` changed.
+
+Every failure comes from a test written before a round existed. None of them
+reads the recorded bytes as wrong:
+
+1. **Thirteen cases of `tests/scripts/test_refresh_samples.py`**: the twelve
+   `test_a_switched_on_config_is_refused_at_every_unsafe_target` cases, and
+   `test_a_switched_on_config_is_accepted_at_a_candidate_set_directory`. After
+   its refused or dry run, each asserts that `replays/candidates/stage-b-r1`
+   does not exist (`:2034`, `:2061`); the acceptance case also uses that path
+   as its dry-run target. That path is now the committed round, the card's
+   fixed landing, so the assertion cannot hold. The refusals and the dry-run acceptance themselves behaved as built
+   in each case; only the non-existence assertion failed.
+2. **`tests/meetings/test_prompt_byte_golden.py::test_every_reconstruction_divergence_is_a_retired_guard[candidates/stage-b-r1/9p2i]`**.
+   The test walks every golden directory, candidates included, but it pins
+   its expected counts by the directory's base name (`:1425-1428`). The
+   candidate's set directory is also named `9p2i`, so the test compares it
+   with s9's pin: `(124, 717, 0, 0)` against `(145, 845, 0, 0)`. The part
+   that matters holds on the candidate: 0 ballots moved, and 0 meetings hold
+   a moved ballot.
+
+The golden's reproduction cases and the candidate test
+(`tests/scripts/test_candidate_sets.py`) passed on the round.
+
+**Why this stops the card.** The card puts every test file out of scope
+(Expected scope, "Not in scope"). Stop and ask covers a test that turns red
+only because a round exists. The fix is a test edit, and the record does not
+make it.
+
+**The question for the owner.** A test-only change is proposed, either on
+this branch with the owner's leave or as a small card that merges into `main`
+first. `tests/` is outside the freeze, so this branch could then merge `main`
+in and re-run its gates. The change:
+- the refresh-samples dry-run tests aim at a round name that no committed
+  round uses, and assert that it was not created;
+- the retired-guard pin is keyed by the set's path under `replays/`
+  (`samples/9p2i`, `candidates/stage-b-r1/9p2i`) rather than its base name,
+  with the candidate pinned at `(124, 717, 0, 0)`.
+
+After that, `check.sh` runs once more at the new head, and the card can flip
+to done. No provider call is needed: the round is complete and its bytes do
+not change.
+
+### Test follow-through (2026-10-01)
+
+**Status: done.** The orchestrator ruled on the question above in its round-3
+dispatch of 2026-10-01: "Test-only follow-through is allowed on this branch:
+re-scope the 14 tests that assumed no candidate round exists, without
+weakening any of them". The ruling widens this card's "Not in scope" by
+exactly the two test files below. Every other test, code, template and
+instrument file stays out. This is a follow-through, not a review correction,
+so Acceptance gains no item. No recorded byte, derived view, fixture or
+number moved. The audit is unchanged, and so is the assessment in its
+section 6. No provider was called.
+
+**What changed.** Two test files, this card and the derived sentence in
+`tasks/README.md`:
+
+1. **`tests/scripts/test_refresh_samples.py`.** The ruling names two routes.
+   The first, an overridable candidates root like the one the plumbing card
+   gave `verify_samples.sh` (`AILIBI_CANDIDATES_ROOT`), does not exist in the
+   recorder. Adding one would edit `scripts/`, which the freeze holds. So the
+   cases take the second route: each aims at a round of its own.
+   - `_absent_round_name()` mints `probe-<12 hex digits>`.
+     `_require_absent_round` raises `ValueError` if `replays/<name>`,
+     `replays/candidates/<name>` or `replays/candidates/.<name>` exists, so
+     each case proves its target absent before the run. The three round-name
+     targets (`replays/<name>`, the one-level round and the hidden round) use
+     that name.
+   - Every refusal assertion stands as it was. Each case still checks the
+     exit code 1, the refusal text, `Nothing was staged.`, the resolved path,
+     the silent key gate, the absent slate line and the absent stage
+     directories.
+   - The two fixed-name absence checks now read the case's own name, and the
+     hidden name joins them. A new check adds `_new_replays_paths(before) ==
+     []`: no path under `replays/` that the snapshot taken before the run
+     lacks.
+   - The acceptance case dry-runs at `replays/candidates/<its own name>/9p2i`.
+     It keeps its echo and absence checks and gains the same no-new-path
+     check.
+   - Planted: `test_a_round_already_on_disk_is_still_refused_and_left_as_it_was`
+     plants a round directory of its own holding one file, as the committed
+     round now sits on disk, and aims the one-level case at it. The run is
+     refused: exit 1, "records only into a candidate set", the directory's
+     resolved path, nothing staged. The planted file is unchanged and nothing
+     new appears under `replays/`. `_require_absent_round` refuses the
+     planted name, and a stray directory made after the snapshot is the one
+     path `_new_replays_paths` names. `_replays_tree_restored` removes the
+     planted tree.
+2. **`tests/meetings/test_prompt_byte_golden.py`.** The retired-guard pin is
+   now `_RETIRED_GUARD_PINS`, keyed by the set's path under `replays/`:
+   `samples/9p2i` (145, 845, 0, 0), `samples/4p1i` (39, 117, 0, 0) and
+   `candidates/stage-b-r1/9p2i` (124, 717, 0, 0). The candidate's row is the
+   census the test itself measures through the production walk, the figure
+   the failure at `dae00688` printed. `_retired_guard_pin` raises `KeyError`
+   for an unpinned set rather than lending it another set's row. Planted:
+   `test_the_retired_guard_pins_are_keyed_by_the_path_under_replays` asserts
+   four things. The two `9p2i` sets read different pins. Keyed by base name,
+   the rows collapse into fewer keys. The pinned keys equal the directories
+   the golden walks. An unpinned `candidates/round-2/9p2i` raises.
+
+**Mutation probe over the changed spans**: 16 mutants, each run against the
+targeted selection (the 14 refresh cases, or the four `retired_guard` cases),
+stopping at the first failure (`-x`). All 16 were killed; the table names the
+case that failed first:
+
+| id | mutant | killed by |
+|---|---|---|
+| R1 | the absence check skips `candidates/<name>` | the planted case (`ValueError` not raised) |
+| R2 | the absence check never raises | the planted case |
+| R3 | `_new_replays_paths` reports nothing | the planted case (the stray is not named) |
+| R4 | `_new_replays_paths` inverted | the first refused case |
+| R5 | the probe name fixed to `stage-b-r1` | `_require_absent_round` raises on the committed round |
+| R6 | the hidden-round refusal expects the undotted name | the `a hidden round name` case |
+| R7 | the acceptance target is the committed round | the acceptance case (`target.parent` exists) |
+| R8 | the planted stray expected not to be named | the planted case |
+| G1 | the pin keyed by base name | `[9p2i]` (`KeyError` on the base name) |
+| G2 | the candidate pin off by one ballot | `[candidates/stage-b-r1/9p2i]` |
+| G3 | the candidate pin equal to the sample pin | `[candidates/stage-b-r1/9p2i]` |
+| G4 | the candidate row removed | `[candidates/stage-b-r1/9p2i]` (`KeyError`) |
+| G5 | an unpinned set borrows a default row | the planted case (`KeyError` not raised) |
+| G6 | a stale row for an unwalked set | the planted case (key-set equality) |
+| G7 | the s9 pin off by one ballot | `[9p2i]` |
+| G8 | the s4 pin off by one meeting | `[4p1i]` |
+
+**Verification**, in a bare shell (0 `AILIBI_*` exports), each exit code
+captured directly:
+
+| step | command | result |
+|---|---|---|
+| refresh cases | `uv run pytest tests/scripts/test_refresh_samples.py -k "<the 13 cases or round_already_on_disk>"` | 14 passed, exit 0; at `3f7586a6` the same 13 failed |
+| retired guard | `uv run pytest tests/meetings/test_prompt_byte_golden.py -k retired_guard` | 4 passed: `[9p2i]`, `[4p1i]`, `[candidates/stage-b-r1/9p2i]` and the planted keyed case |
+| golden on the candidate | the same file, `-k "candidates/stage-b-r1/9p2i or keyed_by_the_path"` | 9 passed, exit 0: the eight cases parametrized on the candidate and the planted case |
+| golden walk | `walk_directory` on `replays/candidates/stage-b-r1/9p2i`, count-only | exit 0: 50 seeds, 124 meetings, 1,556 prompts, 0 not reproduced, 0 miscounted meetings, as in audit 5.5 |
+| verify | `bash scripts/verify_samples.sh` bare, then once per set (s9, s4, c9, c4, the candidate) | exit 0 each. The bare run walks both sample sets and the candidate. Clean counts: 50, 50, 150, 50 and 50 |
+| doc gates | `check_doc_facts.py`, `validate_task_docs.py`, offline `verify_ml_evidence.py` | exit 0 each. `verify_ml_evidence.py` reports its 7 expected `EVIDENCE-BRANCH-ABSENT` checks; it never ran with `--complete` |
+| lint and types | `ruff check`, `ruff format --check` and `mypy` on the two files | clean |
+| whole gate | `bash scripts/check.sh` | run once at the head that carries this subsection, in this worktree, with its exit code captured directly. The head was pushed only on exit 0, and PR #492's body quotes the counts |
+
+**Decisions.**
+- The refresh cases aim at a round they own, not at an overridden
+  candidates root. The recorder has no such override, and adding one is a
+  `scripts/` change under the freeze. Their absence checks are also widened
+  to every new path under `replays/`.
+- Every walked directory must now hold its own retired-guard row, and no
+  row may name a set that is not walked. A later round's card adds its row,
+  measured through the production walk, or the golden raises on it.
+- Status flips to done here, as the round-3 dispatch directs. The card
+  otherwise leaves the Status line to the orchestrator.
+
+**Limitations.**
+- On Linux CI the three alias cases still skip, by filesystem, as before.
+  The re-scope does not change which cases run where.
+- The probe name is new on every run. A name that is already taken raises,
+  and never passes.
+- The recorder's refusal is unchanged and is covered as before. This
+  follow-through adds no gate to the recorder.
