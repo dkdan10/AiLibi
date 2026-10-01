@@ -138,3 +138,10 @@ The ladder tip stands at baseline 9.
 [`replays/candidates/stage-b-r1/9p2i`](../replays/candidates/stage-b-r1/README.md)
 is candidate round 1, recorded with the experimental switches its README
 names; it adopts nothing and is not a canonical sample set.
+
+## Candidate round 2
+
+[`replays/candidates/stage-b-r2/9p2i`](../replays/candidates/stage-b-r2/README.md)
+is candidate round 2, recorded with the adopted switches, the kept vent exit
+and a longer kill cooldown, as its README names; it adopts nothing and is not a
+canonical sample set.
