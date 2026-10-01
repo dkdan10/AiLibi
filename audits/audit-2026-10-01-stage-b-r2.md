@@ -689,3 +689,300 @@ for p in glob.glob(sys.argv[1]+"/replay-seed-*.jsonl"):
       c+=1; i+=k["input_tokens"]; o+=k["output_tokens"]; u+=k["cost_usd"]
 print(c,i,o,u)' <set dir>
 ```
+
+## 2. The pre-spend, at `F` and before the first seed
+
+Nothing in this section called a provider. Every command ran in a bare shell
+(`env | grep -c '^AILIBI_'` printed 0) unless it names its own exports, in this
+branch's worktree while it was still at `F` with a clean status, except the dry
+run (2.7), which ran in the recording checkout at P. Scratch outputs lived
+outside the repository; every census here is count-only.
+
+### 2.1 The preflight
+
+- `git grep -n WAVE_ARMS_PENDING -- '*.py'` at `F`: no output, exit 1.
+- The declared file, read through `scripts/_declared_experiment.py`'s own
+  loader: sha256 `0c02fa61…5c192b` (1.4); nine fields off their default, round
+  1's eight and `kill_cooldown_ticks`; `FIELD_LAYER["kill_cooldown_ticks"]` is
+  `engine`, `OMITTED_AT_DEFAULT` holds it, and `engine_arguments` returns
+  `kill_cooldown_ticks: 6` beside `vent_witness_rule: 'physical'` instead of
+  raising; `prompt_versions_for_set("qwen3_6_27b", experiment_config=...)`
+  serves round 1's four stamps, equal to what round 1's own config serves.
+- Proof, two perturbations of the same payload: with one unknown key added,
+  validation is refused (`extra_forbidden`, `('unknown_switch',)`); with
+  `kill_cooldown_ticks` removed, the fields off their default number 8, and the
+  config equals round 1's.
+- The kill-cooldown card's refusals pass at `F`:
+  `tests/orchestrator/test_experiment_arms.py::test_an_engine_field_the_helper_does_not_thread_is_refused[kill_cooldown_ticks]`
+  (an unthreaded cooldown is refused by the helper),
+  `tests/engine/test_kill_cooldown_override.py::test_an_invalid_value_raises_at_every_entry_point_before_any_change`
+  (0, -3, `True` and 6.0 at the eight entry points) and
+  `tests/engine/test_kill_cooldown_override.py::test_advance_tick_refuses_before_applying_any_action`,
+  in the run of 2.8.
+
+### 2.2 The before columns
+
+- **s9.** `publish_gameplay_census.py --set-dir replays/samples/9p2i
+  --json-stdout` exited 0 and equals the `samples/9p2i` entry of
+  `docs/gameplay-census.json` in 998 of 998 leaves;
+  `publish_process_scorecard.py --set-dir replays/samples/9p2i --json-stdout`
+  exited 0 and equals the shipped entry in 108 of 108. `measure_baseline.py
+  replays/samples/9p2i --honesty --json` exited 0. The readings command prints
+  the same s9 column on the shipped file and on the `--set-dir` section
+  (`cmp` equal). Proof: against a copy of the shipped census whose
+  `kill_cooldowns_differing_from_recorded` denominator is raised by one, the
+  leaf comparison prints one difference
+  (`cells.kill_cooldowns_differing_from_recorded.denominator: set-dir=275
+  shipped=276`) and exits 1; against a copy of the shipped scorecard whose
+  `grounded_skip` numerator is raised by one, it prints
+  `grounded_skip.numerator: set-dir=79 shipped=80` and exits 1.
+- **Round 1.** The census, scorecard and honesty modes on
+  `replays/candidates/stage-b-r1/9p2i` each exited 0, and the validity gate
+  with round 1's declared config, `--expected-seeds 0-49` and
+  `--require-one-recording-sha` exited 0 with its ten checks PASS (the
+  betrayal check 0 over 717). A count-only comparison script holding every
+  count round 1's audit section 6 states (6.1's scorecard rows, 6.2's Conf.
+  cells, readings and reported cells, 6.3's envelope, 6.4's split) and the
+  card's balance row compares 83 counts: 83 equal, 0 differing, exit 0. No
+  round-1 count moved. Proof: against a copy of the round-1 census whose
+  `impostor_cooldown_zero_at_open` numerator is raised by one, it prints
+  `impostor_cooldown_zero_at_open: re-measured (85, 203), audit states (84,
+  203)` and exits 1.
+- **The cooldown cell on both.** s9 reads 0/275 against the map's 4 (round
+  start 100, after a kill 175, no regroup write); round 1 reads 0/487 against
+  4 (100, 227 and 160 at a regroup).
+- **The tally** prints `1694 9850930 422941 0.0` on `replays/samples/9p2i` and
+  `1556 9344346 433660 0.0` on round 1, the anchors' own figures.
+
+### 2.3 The readings and re-projection proofs
+
+`readings.py` (1.12) on scratch copies of the round-1 census section, with
+round 1's honesty file:
+
+| copy | command | result |
+|---|---|---|
+| unedited | `--after --round-3-rule` | exit 0; the last line `round-3 rule: names round 3 at kill_cooldown_ticks = 8` (34/50) |
+| the cooldown table's `regroup` row removed | `--after --round-3-rule` | exit 1; `Conf.: BREACH (no write counted at regroup)` and `Conf. misses: kill_cooldown_writes_by_writer.regroup` |
+| `stale_report_meetings` numerator raised by one | `--after --round-3-rule` | exit 1; `Conf. misses: stale_report_meetings` |
+| `impostor_wins` numerator set to 20 | `--after --round-3-rule` | exit 0; `round-3 rule: names the era-keyed promotion of round 2, for the owner to decide` |
+| the same, with the report row of `innocent_opener_ejections_by_trigger` set to 13 (13/118 = 0.110) | `--after --round-3-rule` | exit 0; `envelope: flagged above 0.104` and `round-3 rule: names no step` |
+
+`reproject.py` (1.13) on a scratch copy of round 1's seeds 0-10, against
+`replays/samples/9p2i`:
+
+| copy and wall | result |
+|---|---|
+| unedited, 3,633 s | exit 0; calls 1,551, input 9,325,616, output 433,102, wall 16,514 s = 4.59 h: round 1's own 10-seed figures (its audit 5.4) |
+| 60,000 output tokens added to one call of seed 0, 3,633 s | exit 1; output 678,541 (100.5% of the 675,000 stop) `STOP`, and `STOP: output` |
+| unedited, 9,000 s | exit 1; wall 40,909 s = 11.36 h `STOP`, and `STOP: wall` |
+
+### 2.4 The fake dress rehearsal
+
+Seeds 0-49 on the declared config, recorded with `AILIBI_LLM_PROVIDER=fake`
+into a scratch directory outside the repository:
+
+```
+AILIBI_LLM_PROVIDER=fake AILIBI_PROMPT_SET=qwen3_6_27b AILIBI_NUM_PLAYERS=9 \
+AILIBI_NUM_IMPOSTORS=2 AILIBI_TASKS_PER_CREWMATE=2 AILIBI_SAMPLE_DIR=<scratch>/9p2i \
+AILIBI_MANIFEST=<scratch>/9p2i/MANIFEST.md AILIBI_REFRESH_WORKERS=4 \
+  bash scripts/refresh_samples.sh --full --expect-levers "" --experiment-config <scratch config copy>
+```
+
+Exit 0: 50 of 50 seeds in 25 s, `$0.0000`, 132 meetings, the report rebuilt,
+every MANIFEST row naming `e87403b7`. The tally prints `1652 6409973 94990
+0.0`. Each instrument then exited 0 on it:
+
+| instrument | result |
+|---|---|
+| `validity_gate.py <dir> --require-zero-cost --expected-prompt-versions <the four pairs> --expected-experiment-config <config> --expected-seeds 0-49 --require-one-recording-sha` | exit 0; all ten checks PASS |
+| `bash scripts/verify_samples.sh <dir>` | exit 0; "All 50 samples verified clean." |
+| the golden's directory walk (`walk_directory`, count-only runner) | exit 0; 50 seeds, 132 meetings, 1,652 prompts, 0 not reproduced, 0 miscounted meetings |
+| `publish_gameplay_census.py --set-dir <dir> --json-stdout` | exit 0; through the readings command with `--after`, all 17 Conf. cells read 0, and the cooldown cell reads 0/591 with a write at all three writers: round start 100, after a kill 227, at a regroup 264 |
+| `publish_process_scorecard.py --set-dir <dir> --json-stdout` | exit 0 |
+| `measure_baseline.py <dir> --honesty --json` | exit 0; no raise |
+| `scan_recording_packets.py <dir>` | exit 0 |
+
+The Conf. cells on the rehearsal: `vent_exits_seen_only_from_room_left` 0/86,
+`vent_band_resting_only_on_room_left` 0/0, `surfacings_before_cap_in_view`
+0/86, `trips_longer_than_cap` 0/68, `vent_entries_not_after_own_fresh_kill`
+0/165, `stale_report_meetings` 0/128, `report_corpses_older_than_last_close`
+0/78, `play_resumes_with_impostor_in_vent` 0/132, `play_resumes_with_corpse`
+0/132, `kills_in_grace_window_after_regroup` 0/141 (T+1 to T+6),
+`rebuttals_differing_from_selector` 0/0, `meetings_with_second_repeat_speaker`
+0/132, `report_openings_with_kill_tick_handle` 0/128,
+`own_kill_rows_breaching` 0/25, `recorded_teammate_ballot_targets` 0/264,
+`impostor_openers` 0/132 and `kill_cooldowns_differing_from_recorded` 0/591. A
+fake meeting fires no rebuttal, so the meeting arms are proved by 2.5, not here.
+
+Proof: gated against round 1's config, the gate exits 1 and fails
+`cost_and_provenance_exact` on 50 of 50 games, each line naming the recorded
+`kill_cooldown_ticks` that round 1's config lacks.
+
+### 2.5 The scripted rehearsal
+
+At `F`, round 1's scripted and ballot-arm cases pass:
+`tests/_helpers/test_scripted_meeting.py` (the one rebuttal),
+`tests/meetings/test_ballot_arms.py` (impostor EJECTs with and without a row
+pointing toward the target, the kill row, the teammate coercion,
+`test_without_the_coercion_the_betrayal_check_fails` and
+`test_the_golden_fails_when_a_bound_arm_value_is_dropped`) and
+`tests/eval/test_recorded_arm_readers.py`, in the run of 2.8; and the golden's
+`test_the_scripted_rebuttal_game_re_renders_byte_equal`, whose perturbed half
+drops the recorded evidence profile and leaves the rebuttal call unconsumed,
+`test_dropping_the_recorded_reset_fails_the_meeting_post_hash` and
+`test_the_kill_row_gate_forced_on_fails_the_golden_at_the_kill_holders`, all
+passed (6 passed with `test_the_retired_guard_pins_are_keyed_by_the_path_under_replays`
+and the two audit-index cases).
+
+The scratch scripted game, recorded from the declared file. The ballot card's
+whole script (`record_ballot_arms_game`, seed 26) takes the declared config,
+but under the longer cooldown the game runs differently: before the first
+ballot, crewmate p-1 has not watched p-3 kill, so the script's first ballot,
+which must cite that kill row, raises (`the ballot prompt serves no
+own_kill_row row about p-3`). The helper refuses rather than record an id the
+voter was not served, as it is built to. So the rehearsal recorded the same
+seed through the same helper (`record_game` with `ScriptedMeetingClient`) with
+the ballot card's two scripted accusations and its four scripted ballots that
+cite nothing (the teammate ballot the meeting layer coerces to a skip, an
+impostor ballot naming a crewmate without a row, and two crewmate ballots
+below the tally's floor):
+
+| check | result |
+|---|---|
+| the recording | 3 meetings; both scripted accusations fired; recorded config `0c02fa61…` on every row |
+| `verify_samples.sh <dir>` (the plain loader) | "All 1 samples verified clean." |
+| census `--set-dir` | exit 0; the 2 rebuttals counted once each: `meetings_with_repeat_speaker` 2/3, `meetings_with_second_repeat_speaker` 0/3, `rebuttals_differing_from_selector` 0/2, beneficiaries "the opener, answering an impostor" 2; authored teammate targets 1/6 and recorded 0/6; the cooldown cell 0/12 with writes at round start 2, after a kill 4 and at a regroup 6; every Conf. cell 0 |
+| scorecard `--set-dir` | exit 0 |
+| `validity_gate.py <dir> --require-zero-cost --expected-prompt-versions <the four pairs> --expected-experiment-config <config> --expected-seeds 26 --require-one-recording-sha` | exit 0; ten checks PASS |
+| the golden's directory walk | 3 meetings, 40 prompts, 0 not reproduced, 0 miscounted meetings |
+| honesty and the packet scan | exit 0 each |
+
+The kill row and an impostor EJECT do not occur in this one game (no voter
+watched a kill before a ballot, and no scripted impostor EJECT landed); they
+are proved by the ballot-arm cases above.
+
+### 2.6 The lab attribution matrix
+
+```
+uv run python -m experiments.tactical_gameplay --output <scratch>/lab-F.json --split development \
+  --arms baseline vent_risk vent_physical vent_look_and_wait vent_own_fresh_kill stage_b_full \
+    stage_b_full_minus_look_and_wait stage_b_full_minus_own_fresh_kill \
+    stage_b_full_minus_physical stage_b_full_minus_hub_with_grace \
+    stage_b_full_kill_cooldown_6 stage_b_full_kill_cooldown_8
+```
+
+Run at `F` (`git_head` `e87403b778649dae35a0a09e297752160d92d0c1`,
+`source_sha256` `3da4e260f08d4e59f2ba9daa7d18ffb8a28e67a08fad28cc71c88c0568a0a197`)
+on development seeds 1000-1007 of both rosters, with the lab's injected
+deterministic fake: no provider, no spend, written to scratch. **Proof:** the
+ten round-1 arms' rows equal `audits/tactical-gameplay/stage-b-r1-frozen-head.json`
+field for field: 14,052 fields compared, 0 differing. Against a copy with one
+counter edited (`stage_b_full`, 9p2i seed 1000, `applied:IMPOSTOR:kill` 5 to 6)
+the comparison prints that one field and exits 1. The output's only new
+top-level key is `ticks_to_parity`; it stays in scratch, and
+`audits/tactical-gameplay/` is not edited.
+
+The cooldown arms, mechanical attribution only (fake outcomes are not
+model-quality evidence), 9p2i then 4p1i:
+
+| arm | games | games ending at impostor parity | parity tick rows min / median / max | kills | impostor wins |
+|---|---|---|---|---|---|
+| `stage_b_full` (the map's 4) | 8; 8 | 8; 7 | 26 / 35.5 / 58; 14 / 17 / 19 | 40; 15 | 8; 7 |
+| `stage_b_full_kill_cooldown_6` | 8; 8 | 7; 1 | 30 / 44 / 68; 18 / 18 / 18 | 39; 8 | 7; 1 |
+| `stage_b_full_kill_cooldown_8` | 8; 8 | 3; 0 | 49 / 52 / 58; n/a | 30; 2 | 3; 0 |
+
+### 2.7 The dry run, in the recording checkout at P
+
+The recording checkout is a worktree detached at P (`43b5ee45`), outside the
+repository's working tree, with `uv sync --frozen`, no `.env`, and an
+untracked copy of the declared file at
+`replays/candidates/stage-b-r2/experiment-config.json` whose `shasum -a 256`
+prints `0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b`. The
+recording shell's exports (1.8), and nothing else (the dry run ran under
+`env -i` with only `HOME`, `PATH` and `TERM` beside them):
+
+```
+bash scripts/refresh_samples.sh --full --expect-levers "" \
+  --experiment-config replays/candidates/stage-b-r2/experiment-config.json --dry-run
+```
+
+Exit 0, and its resolved configuration (the model-coupling, registry,
+lever-preflight, per-seed stage and full-mode clean-up lines and the full seed
+list elided; the run printed them):
+
+```
+[dry-run] Experiment config: replays/candidates/stage-b-r2/experiment-config.json (sha256 0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b)
+[dry-run] Experiment config settings: meeting_reset='hub_with_grace', vent_exit_policy='look_and_wait', bounded_rebuttal_version=1, vent_witness_rule='physical', vent_entry_policy='own_fresh_kill', report_body_handle_version=1, ballot_kill_row_version=1, impostor_ballot_version=1, kill_cooldown_ticks=6
+[dry-run] Experiment switch exports: none
+[dry-run] mode: full
+[dry-run] roster: num_players=9 num_impostors=2 tasks_per_crewmate=2
+[dry-run] roster descriptor: would ensure replays/candidates/stage-b-r2/9p2i/roster.json = {num_players: 9, num_impostors: 2, tasks_per_crewmate: 2} (fails loud if an existing one disagrees)
+[dry-run] sample dir: replays/candidates/stage-b-r2/9p2i
+[dry-run] provider: featherless
+[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; $0 provider-keyed cost)
+[dry-run] meeting model: Qwen/Qwen3.6-27B
+[dry-run] prompt set: qwen3_6_27b
+[dry-run] substrate flags: expected levers ON = (none — the bare slate: every live toggle OFF); every other live toggle OFF; the graduated levers unconditional ON
+[dry-run] seed workers: 2 parallel (each records one seed, then pulls the next available seed from the queue; Featherless: 2 units per 32B request → 4-unit cap)
+[dry-run] seed crash-retry: up to 8 attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)
+[dry-run]   AILIBI_LLM_PROVIDER=featherless uv run python scripts/run_tournament.py --start-seed <seed> --num-games 1 --output-dir <stage> --num-players 9 --num-impostors 2 --tasks-per-crewmate 2 --force --experiment-config <stage-dir>/experiment-config.json
+[dry-run] experiment config: would copy replays/candidates/stage-b-r2/experiment-config.json into the stage directory once, if it still reads sha256 0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b, and pass that copy to every seed
+[dry-run] manifest: replays/candidates/stage-b-r2/9p2i/MANIFEST.md
+[dry-run] eval report: would rebuild replays/candidates/stage-b-r2/9p2i/tournament-eval-report.json.gz from the refreshed replays (scripts/build_sample_report.py; $0, no provider)
+[dry-run] no API calls made; no files written.
+Substrate slate OK: expected levers ON = (none — the bare slate: every live toggle OFF); every other live toggle OFF; the graduated levers unconditional ON.
+```
+
+The porcelain status read the same one line before and after the dry run, the
+untracked declared copy (`?? replays/candidates/stage-b-r2/`), and with
+untracked files hidden it read 0 lines: the dry run wrote nothing. Proof: the
+same dry run with a stray `AILIBI_BOUNDED_REBUTTAL=1` exported exits 1 with
+"Refused: the environment exports AILIBI_BOUNDED_REBUTTAL. A recording takes
+its experimental switches only from a declared config file
+(--experiment-config), so unset these variables before recording. Nothing was
+staged."
+
+### 2.8 The planted proofs at `F`
+
+```
+.venv/bin/pytest -q -n 6 tests/engine/test_kill_cooldown_override.py tests/eval/test_kill_cooldown_readers.py \
+  tests/orchestrator/test_experiment_arms.py tests/orchestrator/test_experiment_config.py \
+  tests/eval/test_gameplay_census.py tests/scripts/test_candidate_sets.py \
+  tests/_helpers/test_scripted_meeting.py tests/meetings/test_ballot_arms.py tests/eval/test_recorded_arm_readers.py
+```
+
+844 passed, exit 0. Among them: the census card's planted breach per Conf.
+cell (`test_every_guarded_cell_has_a_planted_pair` and the 19
+`test_a_breach_raises_with_the_setting_on_and_publishes_with_it_off` cases);
+the kill-cooldown card's planted breaches,
+`test_a_write_left_at_the_maps_value_breaches_the_cell_naming_its_writer[round_start-orchestrator.seeder]`,
+`[after_kill-engine.tick]` and `[regroup-engine.meeting_reset]`,
+`test_a_kill_at_meeting_plus_five_breaches_the_grace_window_at_six` and
+`test_the_same_kill_in_the_default_cooldown_era_raises_nothing`
+(`tests/eval/test_kill_cooldown_readers.py`); and the record-plumbing card's
+planted round perturbations in `tests/scripts/test_candidate_sets.py`
+(`test_one_byte_of_the_config_fails_the_declared_sha`,
+`test_a_missing_seed_fails`, `test_a_foreign_recording_sha_fails`,
+`test_a_mixed_config_fails`, `test_one_edited_report_cell_fails` and the rest).
+The golden and audit-index cases of 2.5 ran separately: 6 passed, exit 0,
+among them `test_audits_index_ladder_tip_drift_detected` and
+`test_unindexed_audit_detected`.
+
+### 2.9 The key, and the count-only scan
+
+`FEATHERLESS_API_KEY` lives only in the main checkout's untracked `.env`. Its
+one line was copied by a `grep` whose output went straight to the file and was
+never printed, into a mode-0600 file in a mode-0700 directory outside every
+checkout; a count-only `grep -c` on the source found 1 matching line, and on
+the copy 1 non-empty value. Every live leg runs `uv run --env-file <that file>
+bash scripts/refresh_samples.sh ...`; no step reads `.env` itself.
+
+The scan (`keyscan.py`, count-only, gzip decompressed) counts seven patterns
+over every file changed since `F` (committed, staged or untracked): the exact
+value, its first eight characters (what the recorder prints into its own log),
+and five generic credential shapes (a key assignment, a bearer token, two
+secret-key prefixes and an API-key field). Before the pre-spend push it read 0
+over the 5 files changed since `F`. Proof: one planted scratch file per
+pattern, each scanned alone, fires its own pattern and exits 1 (the exact-value
+plant, gzip-compressed, also fires the prefix and one generic shape); the
+plants were deleted after the run.
