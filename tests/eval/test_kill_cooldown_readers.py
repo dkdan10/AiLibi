@@ -13,8 +13,9 @@ call.
 The rest of the module holds the readers that name their settings, the census's
 grace window and its cooldown cell, the validity gate's homogeneity check and the
 tactical lab's dial. Every recording here is a fake-provider game recorded into a
-temporary directory from a declared config; no committed set is read and no
-prompt is printed: the one prompt check is a regex count.
+temporary directory from a declared config, except one count-only census case
+over the committed candidate round 1, the one committed set recorded under the
+regroup reset. No prompt is printed: the one prompt check is a regex count.
 """
 
 from __future__ import annotations
@@ -110,7 +111,13 @@ from orchestrator.replay import (
     recorded_experiment_config,
 )
 from orchestrator.seeder import seed_initial_state
-from tests._helpers.scripted_meeting import PROMPT_SET, record_game
+from tests._helpers.committed import census_inputs
+from tests._helpers.scripted_meeting import (
+    PROMPT_SET,
+    Ejection,
+    ScriptedMeetingClient,
+    record_game,
+)
 
 _SCRIPTS: Final[Path] = Path(__file__).resolve().parents[2] / "scripts"
 if str(_SCRIPTS) not in sys.path:
@@ -711,6 +718,113 @@ def _living_impostors(state: WorldState) -> tuple[PlayerId, ...]:
 def test_the_writer_modules_are_the_ones_planted() -> None:
     assert sys.modules["engine.tick"] is tick_module
     assert sys.modules["engine.meeting_reset"] is meeting_reset_module
+
+
+#: A fake 9p2i game at cooldown 6 under the regroup reset whose first meeting
+#: resumes play and whose second, every voter but turn 0's speaker ejecting that
+#: crewmate, ends the game with both impostors alive below the window.
+ENDING_SEED: Final[int] = 4
+ENDING_EJECTION: Final[Ejection] = Ejection(meeting=1, target_turn=0)
+
+
+def test_a_meeting_that_ends_the_game_writes_no_regroup_cooldown(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Planted: a meeting that ends the game is not a regroup. Its living
+    impostors keep the cooldown they held, below the window, so a regroup write
+    counted there breaches the cell."""
+
+    set_dir = tmp_path / "ending" / "9p2i"
+    path = record_game(
+        set_dir,
+        seed=ENDING_SEED,
+        config=COOLDOWN_SIX,
+        client=ScriptedMeetingClient(script=(), ejections=(ENDING_EJECTION,)),
+        **ROSTER,
+    )
+    applied = [
+        step
+        for step in walk_replay(
+            path, seed=ENDING_SEED, game_map=MAP, config=READERS_PROFILE, **ROSTER
+        )
+        if isinstance(step, MeetingApplied)
+    ]
+    resumed = [step for step in applied if step.state.phase == "PLAY"]
+    ending = applied[-1]
+    # Not vacuous: a regroup resumes play, and the game ends at a meeting with
+    # living impostors whose cooldowns are below the window.
+    assert resumed and ending.state.phase == "GAME_OVER"
+    ejected = ending.entry.ejected_player_id
+    assert ending.entry.outcome == "EJECTED" and ejected is not None
+    assert ending.state.players[ejected].role == "CREWMATE"
+    left = [ending.state.cooldowns.get(pid) for pid in _living_impostors(ending.state)]
+    assert left and all(ticks is not None and ticks < SIX for ticks in left)
+    regroup_writes = [
+        (write.tick, write.player, write.ticks)
+        for write in load_census_inputs(set_dir).games[0].cooldown_writes
+        if write.writer == "regroup"
+    ]
+    assert regroup_writes == [
+        (step.entry.tick, pid, SIX)
+        for step in resumed
+        for pid in _living_impostors(step.state)
+    ]
+    code, section, err = _set_dir_section(set_dir, capsys)
+    assert (code, err) == (0, "") and section is not None
+    cell = section["cells"]["kill_cooldowns_differing_from_recorded"]
+    writes = section["tables"]["kill_cooldown_writes_by_writer"]["counts"]
+    assert cell["numerator"] == 0
+    assert writes["regroup"] == len(regroup_writes)
+
+
+#: Candidate round 1, the one committed set recorded under the regroup reset.
+ROUND_ONE: Final[Path] = (
+    Path(__file__).resolve().parents[2]
+    / "replays"
+    / "candidates"
+    / "stage-b-r1"
+    / "9p2i"
+)
+
+
+def test_round_one_reads_every_cooldown_write_at_the_maps_value() -> None:
+    """Count-only, on the committed round 1: 0 of 487 writes differ from 4 (100 at
+    round start, 227 after a kill, 160 at a regroup) and 0 of 139 kills fall in a
+    grace window. Some of its meetings end the game with a living impostor below
+    the window, so counting those meetings as regroups breaches the cell.
+
+    The set is walked once, through the shared committed-walk cache, and folded
+    and serialized by the ``--set-dir`` path's own function.
+    """
+
+    loaded = census_inputs(ROUND_ONE)
+    ending = sum(
+        1
+        for game in loaded.games
+        for meeting in game.meetings
+        if meeting.phase_after == "GAME_OVER"
+        and any(
+            pid != meeting.ejected and ticks != MAP.kill_cooldown_ticks
+            for pid, ticks in meeting.impostor_cooldowns_at_open
+        )
+    )
+    assert ending >= 1
+    section = json.loads(
+        publish_gameplay_census.set_dir_json(ROUND_ONE, load=census_inputs)
+    )
+    cell = section["cells"]["kill_cooldowns_differing_from_recorded"]
+    assert (cell["numerator"], cell["denominator"], cell["by_construction"]) == (
+        0,
+        487,
+        "always",
+    )
+    assert section["tables"]["kill_cooldown_writes_by_writer"]["counts"] == {
+        "round_start": 100,
+        "after_kill": 227,
+        "regroup": 160,
+    }
+    grace = section["cells"]["kills_in_grace_window_after_regroup"]
+    assert (grace["numerator"], grace["denominator"]) == (0, 139)
 
 
 def _cooldown_era(**settings_: Any) -> EraKey:

@@ -182,6 +182,13 @@ four-set verification prove it moves no byte (Acceptance, last item).
 Each item names its enforcing mechanism and a planted or perturbed proof. Each new test is written
 first and fails at the base for the stated reason; Results quotes that failing run.
 
+- [x] Review correction: the census's regroup writes skip a meeting that ends the game.
+  The filter `applied.state.phase == "PLAY"` in `_load_game` was unpinned: a listed-class mutant
+  (`is not None`) survived, and under it round 1 breached falsely. It is now pinned by
+  `tests/eval/test_kill_cooldown_readers.py::test_a_meeting_that_ends_the_game_writes_no_regroup_cooldown`
+  (planted: a scripted fake game whose second meeting ends it with both impostors alive below the
+  window) and `::test_round_one_reads_every_cooldown_write_at_the_maps_value` (round 1 reads 0 of
+  487, split 100, 227 and 160). Results, "Review corrections, round 1 (2026-10-01)".
 - [x] **The field, validated and omitted at its default.** `kill_cooldown_ticks: int | None = None`
   is declared after `impostor_ballot_version`, accepts only a true integer of at least 1 (checked
   before coercion, as `_literal_versions_are_integers` does), is assigned `engine` in `FIELD_LAYER`,
@@ -734,3 +741,88 @@ The first-kill check uses seed 1000 on the 4p1i roster: `stage_b_full` kills fir
   label.
 - The round-2 outcome cannot separate the cooldown from hosted generation's own variation. The
   record card states that.
+
+### Review corrections, round 1 (2026-10-01)
+
+One blocking finding, from the docs lens on PR 493 at `e55a2e16`. It is fixed in the commit that
+carries this subsection. No production line changed; the fix is two tests and a docstring.
+
+**The finding.** A listed-class mutant survived at the census's regroup-write filter
+(`eval/gameplay_census.py:2801`, `if applied.state.phase == "PLAY":`): a comparison replaced by a
+None test (`is not None`). The original pass had no case where the filter decides anything. Under
+the mutant, `publish_gameplay_census.py --set-dir replays/candidates/stage-b-r1/9p2i` exits 1 with a
+false breach, because a meeting that ends the game is counted as a regroup. The finding is valid,
+and the mutant is not equivalent.
+
+**The repair.** Both tests are in `tests/eval/test_kill_cooldown_readers.py`.
+
+- `test_a_meeting_that_ends_the_game_writes_no_regroup_cooldown` is the planted case. It records a
+  fake 9p2i game, seed 4, at cooldown 6 under the regroup reset. The scripted client
+  (`ScriptedMeetingClient` with `Ejection(meeting=1, target_turn=0)`) has every other voter eject
+  the second meeting's opener.
+  - Its first meeting resumes play. The second ejects a crewmate and ends the game (`GAME_OVER`)
+    with both impostors alive and below the window. Each of these facts, the ejection's outcome
+    and the ejected player's role included, is asserted from a full hashed walk, so the case is
+    not vacuous.
+  - The census's regroup writes must equal the living impostors of the meetings that resumed play,
+    each at 6. `--set-dir` must exit 0 with the cell at 0 and the regroup row equal to those writes.
+- `test_round_one_reads_every_cooldown_write_at_the_maps_value` reads the committed round 1,
+  count-only. The cell must read 0 of 487 and the table 100 at round start, 227 after a kill and
+  160 at a regroup. The grace-window cell must read 0 of 139. A non-vacuity count requires at least
+  one round-1 meeting that ends the game while an impostor who was not ejected holds a cooldown
+  other than 4. This pins the round-1 numbers in "Census" above, which were only quoted before.
+  The set is walked once, through the shared committed-walk cache
+  (`tests._helpers.committed.census_inputs`), and folded and serialized by the `--set-dir` path's
+  own function (`publish_gameplay_census.set_dir_json`).
+- The module docstring said no committed set is read. It now names this one count-only case.
+
+**The bounded mutation pass over the named span** (`eval/gameplay_census.py:2799-2806`, the
+regroup-write block). It used only the listed operator classes. Each mutant ran the three census
+suites: `tests/eval/test_kill_cooldown_readers.py`, `tests/eval/test_gameplay_census.py` and
+`tests/scripts/test_publish_gameplay_census.py` (`pytest -x -n 6`). The module was then restored
+from a byte copy and compared equal. The script lives in scratch and is not committed.
+
+| id | mutant | first-run | killed by |
+|---|---|---|---|
+| R1 | `phase == "PLAY"` to `phase is not None` (the finding) | green before this fix | both new tests |
+| R2 | to `phase is None` | red | the regroup writer-breach case; the fixture's census case |
+| R3 | `==` to `!=` | red | the same two cases |
+| R4 | filter dropped (`if True:`) | green before this fix | both new tests |
+| R5 | phase read replaced by the constant `"PLAY"` | green before this fix | both new tests |
+| R6 | phase read from the opened meeting's state | red | the regroup writer-breach case; the fixture's census case |
+| R7 | write tick replaced by the constant 0 | red | the regroup writer-breach case (its exact tick) |
+| R8 | writer kind `"regroup"` replaced by `"after_kill"` | red | the regroup writer-breach case; the fixture's census case |
+| R9 | the write reads the opened meeting's state | red | the regroup writer-breach case; the fixture's census case |
+| R10 | `if regroup_recorded:` wrapper dropped | red | `tests/eval/test_gameplay_census.py::test_the_recorded_body_handle_setting_reaches_its_guard` and `::test_every_value_the_census_holds_is_read_only` |
+| R11 | the wrapper inverted | red | the regroup writer-breach case; the fixture's census case |
+
+Eleven mutants: all killed, none named equivalent. "Green before this fix" means R1, R4 and R5 were
+re-run with the two new tests deselected. The three suites then passed 386 tests under each mutant,
+which reproduces the survivor. Each new test, run alone, fails under each of the three. Under R1,
+the planted case's regroup writes gain the ending meeting's two writes at 4. In the round-1 case,
+the fold raises `GameplayCensusConformanceError` on the cooldown cell.
+
+**Validation at the fix head.** Exit codes were captured directly.
+
+| command | result |
+|---|---|
+| targeted suites (the two new files, arms, config, lab, census and its script, golden, leak, the committed-walk scanner) | 0; 708 passed; `tests/eval/test_kill_cooldown_readers.py` holds 58 tests (56 before) |
+| `uv run lint-imports` | 0; 4 contracts kept |
+| `bash scripts/verify_samples.sh` on the four sets and round 1 | 0 each; 50, 50, 150, 50 and 50 verified clean |
+| `build_sample_report.py --check` on the four sets and round 1 | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0 each |
+| `check_doc_facts.py`; `validate_task_docs.py`; `gen_frontend_types.py --check`; `verify_ml_evidence.py` (offline) | 0 each |
+| `uv run pytest -m campaign` | 0; 336 passed |
+| `bash scripts/check.sh` | run once at the head that carries this subsection, exit code captured directly; the PR body quotes it |
+
+A first local state of this fix, never pushed, ran `check.sh` and exited 1 on one test:
+`tests/_helpers/test_committed_single_home.py::test_every_committed_walk_goes_through_the_shared_cache`
+named the round-1 case's direct `load_census_inputs` call, a second walk of a committed set outside
+the shared cache. That state was folded into this commit, and the case now reads the set through
+the cache, as described above. The scanner module passes (22 tests). The R1, R4 and R5 probes were
+re-run against the revised case: each new test still fails alone under each of them, and the three
+suites without the new tests still pass 386.
+
+This commit changes only a test module and this card. No file under `api/`, `frontend/`,
+`replays/`, `audits/`, `tests/fixtures/` or `docs/` moves. The demo bundle and the lab output
+therefore stand as measured at `e164f57d`, and no artifacts row or restamp is due.
