@@ -113,6 +113,19 @@ Once round 1 is recorded, an arm value's meaning is frozen. A revision adds a
 new value (for example `look_and_wait_2`) and never redefines a recorded one;
 this holds for `hub_with_grace` too.
 
+## Adopted arms
+
+On 2026-10-01 the owner adopted seven of the Stage-B fields after candidate round 1
+(`audits/audit-2026-09-27-stage-b-r1.md`): `vent_witness_rule = physical`,
+`vent_entry_policy = own_fresh_kill`, `meeting_reset = hub_with_grace`,
+`bounded_rebuttal_version = 1`, `report_body_handle_version = 1`,
+`ballot_kill_row_version = 1` and `impostor_ballot_version = 1`. Adopted means every
+candidate round from round 2 on declares them ON, and the documents describe the
+game they produce as the current one. It does not move any default: a missing key
+keeps its historical meaning, which is what lets the baseline-9 sets keep verifying
+byte-identically. `vent_exit_policy = look_and_wait` is kept in every round as well;
+its balance effect is the subject of round 2, which adds one dial and nothing else.
+
 ## Candidate round 1
 
 The ladder tip stands at baseline 9.

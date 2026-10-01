@@ -1307,6 +1307,23 @@ command when it merges (3.4, card 2).
 
 ---
 
+## 7. Round 1 outcome and the owner's rulings (2026-10-01)
+
+Round 1 is `replays/candidates/stage-b-r1/9p2i` (merged as PR #492, `cd1a8454`; audit
+`audits/audit-2026-09-27-stage-b-r1.md`). Spend 1,586 calls, 9.51M input, 442k output, 3.55 h, $0, inside the
+ceilings as amended on 2026-09-28. Every conformance cell read 0; the vent exit and the one reply read effective;
+the body handle, the kill row and the impostor-ballot wording read as built; impostor win share 34 of 50, flagged
+above 0.60.
+
+The owner ruled on 2026-10-01, verbatim: "Merge.  Adopt all 7 non-balance arms. And run a balance round". The
+orchestrator applies it as: the seven arms are adopted in the sense the direction addendum of 2026-10-01 defines
+(declared ON in every later round; defaults untouched; the shown set moves by the era-keyed promotion once a round
+sits inside the envelope); `look_and_wait` stays; round 2 is a balance round with exactly one dial, a recorded
+kill-cooldown override field on the engine layer, first value 6 ticks against the map's 4, with a pre-registered
+round-3 rule (win share above 0.60 at 6 names 8; below 0.20 names 5), the same eight arms, the same amended
+ceilings, the same pause mechanism, and its own candidate directory `replays/candidates/stage-b-r2/9p2i`. Two
+cards carry it: `kill-cooldown-arm` and `stage-b-record-r2`.
+
 ## Appendix: reproduction
 
 The scratch scripts named here are session aids and are not committed; the load-bearing counts are

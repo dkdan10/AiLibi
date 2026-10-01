@@ -449,3 +449,17 @@ seed. The ladder tip stays at baseline 9 until an adopting decision.
 On 2026-09-25 the gameplay census counted the meeting structure this addendum describes: the first reply accuses the
 opener in 521 of 676 meetings and the opener speaks a second time in 0 of 676, and
 `uv run python scripts/publish_gameplay_census.py --check` recomputes both from the recordings.
+
+Addendum, 2026-10-01 (Stage B, round 1 assessed). Candidate round 1 (`replays/candidates/stage-b-r1/9p2i`,
+50 seeds, `audits/audit-2026-09-27-stage-b-r1.md`) read every conformance cell at zero, the vent exit effective
+(exits seen from the exit room 8 of 72 against 53 of 85), the one reply effective (19 of 19 evaluable opener
+rebuttals answered), the body handle, the kill row and the impostor-ballot wording as built, and an impostor win
+share of 34 of 50, flagged above the pre-registered 0.60. The owner ruled on 2026-10-01, verbatim: "Merge.  Adopt
+all 7 non-balance arms. And run a balance round". The seven adopted arms are `vent_witness_rule = physical`,
+`vent_entry_policy = own_fresh_kill`, `meeting_reset = hub_with_grace`, `bounded_rebuttal_version = 1`,
+`report_body_handle_version = 1`, `ballot_kill_row_version = 1` and `impostor_ballot_version = 1`. Adoption under
+the 50-seed rule means: every round from round 2 on records them ON in its declared config, and the project's
+documents describe them as the current game; a missing key keeps its historical meaning so the baseline-9 sets
+keep verifying, and the shown set moves by the era-keyed promotion once a round sits inside the envelope. The
+vent exit `vent_exit_policy = look_and_wait` is kept, not fallen back, and the balance is addressed by a second
+round with one dial, a recorded kill-cooldown override, so that the two are never confounded.
