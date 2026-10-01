@@ -24,6 +24,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
 from collections.abc import Iterator, Sequence
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -1881,6 +1882,41 @@ def test_a_run_without_any_export_passes_the_environment_check() -> None:
 
 _DECOY = _REPO_ROOT / "replays" / "samples" / ".test-config-decoy"
 
+
+def _require_absent_round(name: str) -> str:
+    """``name``, once no path the round cases aim at exists under it; else raises.
+
+    Committed rounds land under ``replays/candidates/``, so the cases below never
+    aim at a fixed round name: each takes a name of its own and proves it absent
+    before the run, which keeps their "the run created nothing" checks true
+    whichever rounds the tree holds.
+    """
+
+    replays = _REPO_ROOT / "replays"
+    for path in (
+        replays / name,
+        replays / "candidates" / name,
+        replays / "candidates" / f".{name}",
+    ):
+        if path.exists():
+            raise ValueError(f"round name {name!r} is taken: {path} exists")
+    return name
+
+
+def _absent_round_name() -> str:
+    """A candidate round name of this case's own, absent from ``replays/``."""
+
+    return _require_absent_round(f"probe-{uuid.uuid4().hex[:12]}")
+
+
+def _new_replays_paths(before: set[Path]) -> list[Path]:
+    """Every path under ``replays/`` that ``before`` does not hold, in path order."""
+
+    return sorted(
+        path for path in (_REPO_ROOT / "replays").rglob("*") if path not in before
+    )
+
+
 #: macOS reaches every directory of its data volume through this prefix too (a
 #: firmlink): the same directory on disk under a second spelling.
 _DATA_VOLUME = Path("/System/Volumes/Data")
@@ -1922,8 +1958,13 @@ def _alias_skip_reason(case: str) -> str | None:
     return None
 
 
-def _refused_target_env(case: str, tmp_path: Path) -> tuple[dict[str, str], str]:
-    """The environment aiming a switched-on config at ``case``, and the refusal."""
+def _refused_target_env(
+    case: str, tmp_path: Path, round_name: str
+) -> tuple[dict[str, str], str]:
+    """The environment aiming a switched-on config at ``case``, and the refusal.
+
+    The three round-name cases aim at ``round_name``, a round of the case's own.
+    """
 
     env = _clean_env()
     replays = _REPO_ROOT / "replays"
@@ -1940,14 +1981,14 @@ def _refused_target_env(case: str, tmp_path: Path) -> tuple[dict[str, str], str]
             tmp_path / "looks-like-scratch",
             "inside replays/samples/",
         ),
-        "replays/<name>": (replays / "stage-b-r1", "records only into a candidate set"),
+        "replays/<name>": (replays / round_name, "records only into a candidate set"),
         "one-level candidates/<round>": (
-            replays / "candidates" / "stage-b-r1",
+            replays / "candidates" / round_name,
             "records only into a candidate set",
         ),
         "a hidden round name": (
-            replays / "candidates" / ".stage-b-r1" / "9p2i",
-            "name '.stage-b-r1' must start with a letter or digit",
+            replays / "candidates" / f".{round_name}" / "9p2i",
+            f"name '.{round_name}' must start with a letter or digit",
         ),
         "a case-variant spelling of samples": (
             _REPO_ROOT / "REPLAYS" / "Samples" / "9p2i",
@@ -2008,11 +2049,13 @@ def test_a_switched_on_config_is_refused_at_every_unsafe_target(
     skip_reason = _alias_skip_reason(case)
     if skip_reason is not None:
         pytest.skip(skip_reason)
-    env, refusal = _refused_target_env(case, tmp_path)
+    round_name = _absent_round_name()
+    env, refusal = _refused_target_env(case, tmp_path, round_name)
     config = _test_config(tmp_path)
     if case == "a symlink into samples":
         _DECOY.mkdir()
         (tmp_path / "looks-like-scratch").symlink_to(_DECOY)
+    before = set((_REPO_ROOT / "replays").rglob("*"))
     try:
         with _replays_tree_restored():
             proc = _run("--seeds", "0", "--experiment-config", str(config), env=env)
@@ -2030,8 +2073,12 @@ def test_a_switched_on_config_is_refused_at_every_unsafe_target(
             assert "ANTHROPIC_API_KEY" not in proc.stderr
             assert "Substrate slate OK" not in proc.stdout
             assert _stage_dirs() == []
-            assert not (_REPO_ROOT / "replays" / "stage-b-r1").exists()
-            assert not (_REPO_ROOT / "replays" / "candidates" / "stage-b-r1").exists()
+            assert not (_REPO_ROOT / "replays" / round_name).exists()
+            assert not (_REPO_ROOT / "replays" / "candidates" / round_name).exists()
+            assert not (
+                _REPO_ROOT / "replays" / "candidates" / f".{round_name}"
+            ).exists()
+            assert _new_replays_paths(before) == []
             assert not (tmp_path / "scratch-set").exists()
     finally:
         if _DECOY.exists():
@@ -2041,10 +2088,11 @@ def test_a_switched_on_config_is_refused_at_every_unsafe_target(
 def test_a_switched_on_config_is_accepted_at_a_candidate_set_directory(
     tmp_path: Path,
 ) -> None:
-    target = _REPO_ROOT / "replays" / "candidates" / "stage-b-r1" / "9p2i"
+    target = _REPO_ROOT / "replays" / "candidates" / _absent_round_name() / "9p2i"
     env = _clean_env()
     env.update(AILIBI_SAMPLE_DIR=str(target), AILIBI_MANIFEST=f"{target}/MANIFEST.md")
     config = _test_config(tmp_path)
+    before = set((_REPO_ROOT / "replays").rglob("*"))
     with _replays_tree_restored():
         proc = _run(
             "--seeds",
@@ -2059,6 +2107,44 @@ def test_a_switched_on_config_is_accepted_at_a_candidate_set_directory(
         assert proc.returncode == 0, proc.stdout + proc.stderr
         assert f"[dry-run] {_TEST_SETTINGS_ECHO}" in proc.stdout.splitlines()
         assert not target.parent.exists()
+        assert _new_replays_paths(before) == []
+
+
+def test_a_round_already_on_disk_is_still_refused_and_left_as_it_was(
+    tmp_path: Path,
+) -> None:
+    """Planted: a round directory of the case's own sits on disk, as a committed one does.
+
+    Aimed at that directory itself, one level deep, a switched-on config is
+    refused; the planted bytes stay as they were and nothing new appears under
+    ``replays/``. The no-trace check bites: a path made after the snapshot is
+    named, and a name whose round exists is refused as a probe name.
+    """
+
+    round_name = _absent_round_name()
+    planted = _REPO_ROOT / "replays" / "candidates" / round_name
+    env = _clean_env()
+    env.update(AILIBI_SAMPLE_DIR=str(planted), AILIBI_MANIFEST=f"{planted}/MANIFEST.md")
+    config = _test_config(tmp_path)
+    with _replays_tree_restored():
+        planted.mkdir()
+        (planted / "README.md").write_text("planted\n", encoding="utf-8")
+        before = set((_REPO_ROOT / "replays").rglob("*"))
+        proc = _run("--seeds", "0", "--experiment-config", str(config), env=env)
+        assert proc.returncode == 1
+        assert "records only into a candidate set" in proc.stderr
+        assert f"resolves to {os.path.realpath(planted)}" in proc.stderr
+        assert _NOTHING_STAGED in proc.stderr
+        assert "Substrate slate OK" not in proc.stdout
+        assert _new_replays_paths(before) == []
+        assert sorted(planted.iterdir()) == [planted / "README.md"]
+        assert (planted / "README.md").read_text(encoding="utf-8") == "planted\n"
+        with pytest.raises(ValueError, match="is taken"):
+            _require_absent_round(round_name)
+        stray = planted / "9p2i"
+        stray.mkdir()
+        assert _new_replays_paths(before) == [stray]
+    assert not planted.exists()
 
 
 def test_a_config_of_historical_defaults_goes_anywhere_and_records_no_key(
