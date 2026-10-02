@@ -206,6 +206,39 @@ fails at this card's base for the stated reason; Results quotes that failing run
 through `SPECTATOR_COPY` or the picker data. It carries no task or audit ID, no unexplained jargon and no
 threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
 
+- [x] Review correction (round 1): each tick fact of the supported case, and each case's meeting tick, is
+  held by a planted case. Each of these is applied alone, every other fact as recorded: the turn's vent sighting
+  retimed to tick 11; the cited reference's observation tick (11), scene tick (10), kind and subject; the
+  recorded meeting moved one tick off each case (13, 30); each case's own `meeting_tick` moved off its meeting.
+  Each withholds the case, and the unmoved replay passes. Mechanism: `tests/api/test_public_results.py`, the
+  `_PERTURBATIONS` rows `venting-at-tick-12`, `the-vent-meeting-at-tick-12` and `the-weak-meeting-at-tick-31`,
+  `test_each_fact_of_the_cited_observation_is_held_alone` and
+  `test_a_case_naming_another_meeting_tick_withholds_publication`. Proof: the verifiers' four mutants (the
+  turn's tick, the reference's observation and scene ticks read as constants, the meeting-tick check as a None
+  test) and the reference's kind read as a constant pass the `c43b457b` suite and fail now (R-K1, R-K3, R-K4,
+  R-N1 and R-K6 in Results, Review corrections, round 1).
+- [x] Review correction (round 1): each argument of the omniscient corpse line is read off the recording. A DOM
+  case reports p-3, not p-4: killed at tick 0, five ticks before its meeting, and killed at tick 2, one tick
+  before a meeting at tick 3. A vent leg in Admin pins the route's room argument. Mechanism:
+  `frontend/src/components/MeetingView.test.tsx`, "reads the victim, the kill tick and the age off the
+  recording, in both forms" and "names the room of each vent leg off the recording". Proof: the plural
+  victim, kill tick and age (the age is the verifiers' mutant), the singular victim and kill tick, and the vent
+  room, each replaced by a constant, pass the `c43b457b` suite and fail now (M-M1 to M-M5 and M-M9).
+- [x] Review correction (round 1, the Codex P2 comment on PR 496): the map note speaks only of the meetings
+  play resumes from. A meeting that ends its game is followed by no frame and no regroup, because
+  `orchestrator/game.py` returns the game-over state before it regroups. 15 of the promoted set's 117 meetings
+  end their game, among them the featured head's third. The note now reads "On this recording, whenever play
+  resumes after a meeting, the survivors start from the meeting room with the bodies cleared, so the map jumps
+  to where they stand on the next tick." The regroup item below is qualified to match. Mechanism:
+  `frontend/src/lib/regroup.test.ts`, "the regroup note against the committed sets", over the committed
+  skeleton; the copy pin in `copy.test.ts`; the e2e regroup-note test. Proof: the planted earlier wording
+  throws ("claims every meeting, but 15 end"), and seed 19 meeting 2, at tick 44, has no later frame.
+- [x] Review correction (round 1): the write-first counts are re-measured at the base, with the test-file
+  revision and the command named. With the `646810c4` test files: Python 42 failed, 426 passed, 2 skipped;
+  vitest 6 failed, with 3 files that cannot import; Playwright 8 failed, 6 passed, 3 skipped. With the
+  `837c84d3` test files: Python 73 failed, 425 passed, 2 skipped; vitest 13 failed, with the same 3 files.
+  Mechanism: the commands in Results, Review corrections, round 1. Proof: the earlier 44 and 8 reproduce from
+  no committed revision, and they are corrected in place.
 - [x] **The instrument names the candidates.** `scripts/measure_featured_criterion.py` gains `--list`. Per set
   it prints the seeds behind each count it already prints, plus two new lists:
   - the non-vent openers: games whose FIRST meeting ejects an impostor, with no flag anywhere in the game and
@@ -308,8 +341,8 @@ threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
   - the e2e fog test (`journey.spec.ts:796`) is extended to all three.
 - [x] **The regroup, shown as it happens.** On a replay whose recorded `meeting_reset` is `hub_with_grace`, a
   single step onto the first frame after a meeting's close does not tween: tokens appear in the meeting room.
-  Elsewhere a single step still tweens. A per-replay note in plain words says that each meeting gathers the
-  survivors in the meeting room and clears the bodies. It shows on reset replays only; `4p1i` stays `preserve`
+  Elsewhere a single step still tweens. A per-replay note in plain words says that each meeting the game
+  outlives gathers the survivors in the meeting room and clears the bodies (qualified in review round 1). It shows on reset replays only; `4p1i` stays `preserve`
   and shows nothing new. The `bodies.ts` header comment is rewritten to say a regroup clears every corpse.
   Mechanism: a pure `isRegroupStep` in `frontend/src/lib/` that `MapView`'s `animate` reads. Proofs:
   - unit tests cover a reset step, a preserve step and a two-tick scrub;
@@ -590,12 +623,18 @@ recategorised replay, which accepts it.
 
 ### Planted failures and the write-first runs
 
-- The new tests at the base code (the base tree from `git archive 80d40422`, with this card's test files copied
-  in): Python 44 failed, 426 passed (each new pin, perturbation, split-root, prose and bundle test, the three check-16
-  tests; e.g. `('9p2i', 3) == ('9p2i', 19)`, `assert None == '…148fa211…/9p2i/'`, `module … has no attribute
-  'opens_on_non_vent_impostor_ejection'`); frontend 8 failed and 3 files failed to import (`vents`, `regroup`,
-  `annotations` absent); Playwright 4 failed, 6 passed (evidence journey, the guard, the fog record, the regroup
-  note). Passing at the base by construction: the test-local criterion rejections and the `bodies.test.ts` leg
+- The new tests at the base code (the base tree from `git archive 80d40422`, with the card's test files at
+  `646810c4` laid over it; corrected in review round 1, which names the commands): Python 42 failed, 426 passed,
+  2 skipped. The skips are two `test_check_doc_facts.py` cases that need full git history. The failures are
+  counted by file, not attributed test by test: 27 in `test_public_results.py`, 6 in `test_sets.py`, 4 in
+  `test_measure_featured_criterion.py`, 3 in `test_check_doc_facts.py` and 2 in `test_build_demo_bundle.py`.
+  Examples: `('9p2i', 3) == ('9p2i', 19)`, `assert None == '…148fa211…/9p2i/'`, `module … has no attribute
+  'opens_on_non_vent_impostor_ejection'`. Frontend: 6 failed (2 in `MapView.wiring.test.ts`, 4 in
+  `MeetingView.test.tsx`), and 3 files cannot import, because `vents`, `regroup` and `annotations` are absent.
+  Playwright: 8 failed, 6 passed, 3 skipped. Four failures are the evidence journey, the guard, the fog record
+  and the regroup note. The other four are the static-bundle tests, whose bundle build stops when `tsc`
+  type-checks the laid-over unit tests against the base. (This bullet first read 44 failed and 8 failed, which
+  no committed revision reproduces.) Passing at the base by construction: the test-local criterion rejections and the `bodies.test.ts` leg
   (the shipped body rule already read the served rows; the leg proves the rewritten comment).
 - Planted, each green now: the no-reply note appears without the opener's rebuttal and leaves when it is added
   (lib and DOM); the leak helper passes every agent lens and throws on the omniscient render; the config-blind
@@ -623,7 +662,9 @@ One bounded mutation pass, exactly the eight listed classes, 68 mutants over `sc
 10, T drop a tuple member 2, B swap branches 7, L loaded source to literal 6). First run: 55 killed, 11 came back
 green (F4, K14, M1-M8, M10), 2 spans not applied (S8, N1). After the message-text and opener tests: 67 killed;
 F4 is equivalent (deleting the current entry while iterating a JS `Map` is safe; the copy is defensive). The full
-tables are in the PR.
+tables are in the PR. That count holds of those 68 mutants only, not of every mutant of the eight classes over
+these spans. Review round 1 found five more that survived in `api/public_results.py` and `MeetingView.tsx`;
+they are killed in Review corrections, round 1.
 
 ### The bundle
 
@@ -717,3 +758,168 @@ fixture gains `ticks: []`); `frontend/src/components/MeetingView.test.tsx`, `Map
 `frontend/src/lib/skeleton.testkit.ts` (new test files). Ruling 4's extension: `README.md` (caption and samples
 sentence), `docs/media/*`, `frontend/e2e/media.spec.ts`, `tests/scripts/test_public_recording_provenance.py`
 (the placement phrase "Archive only"), and the `docs/artifacts.md` media row.
+
+### Review corrections, round 1 (2026-10-02)
+
+A fix round from `c43b457b` on four verifier findings, one of them the Codex P2 comment on PR 496. Commits:
+`a4242ae4` (the case tick facts and the corpse line's arguments), `837c84d3` (the map note), then the commit
+that records this subsection. The changed files are `tests/api/test_public_results.py`,
+`frontend/src/components/MeetingView.test.tsx`, `frontend/src/lib/copy.ts`, `copy.test.ts`, `regroup.ts` (one
+doc comment), `regroup.test.ts`, `frontend/e2e/journey.spec.ts` and this card. The only production change is
+the map note's wording. No recorded byte, fixture, DTO, audit row or front-door page moves. The promotion branch
+had not moved: `origin/work/promote-round-2` is still `2087821e`, which this branch already merged, so nothing
+was merged.
+
+**Finding 1: the case tick facts.** At `c43b457b`, four listed-class mutants of `_check_case` passed the case
+suite: the turn's sighting tick, the reference's observation tick and scene tick each read as a constant, and
+the meeting-tick check replaced by a None test. No planted case moved those facts. Now each moves alone, every
+other fact as recorded:
+- `_PERTURBATIONS` gains `venting-at-tick-12` (the turn's `saw_vent` at tick 11), `the-vent-meeting-at-tick-12`
+  (meeting 0 at tick 13) and `the-weak-meeting-at-tick-31` (meeting 1 at tick 30);
+- `test_each_fact_of_the_cited_observation_is_held_alone` moves the cited reference's observation tick (11),
+  scene tick (10), kind and subject, one per case, and first asserts the recorded values (`saw_vent`, p-6, 12, 11);
+- `test_a_case_naming_another_meeting_tick_withholds_publication` moves each case's own `meeting_tick` (13, 30).
+
+Each withholds the case by name, and the unmoved replay passes. `tests/api/test_public_results.py`: 64 passed at
+`c43b457b`, 73 now.
+
+**Finding 2: the corpse line's arguments.** Both corpse tests at `c43b457b` reported p-4. The plural one had age
+3 and kill tick 2, and the singular one kill tick 4, so an argument replaced by those values passed. The new DOM
+case "reads the victim, the kill tick and the age off the recording, in both forms" reports p-3. In one render
+p-3 is killed at tick 0 and reported at tick 5 ("killed at tick 0, 5 ticks before this meeting"). In the other
+it is killed at tick 2 and reported at tick 3 ("killed at tick 2, one tick before this meeting"). Neither render
+names p-4. "Names the room of each vent leg off the recording" adds a vent leg in Admin. The bounded pass found
+that the room argument read as "Labs" passed too. `MeetingView.test.tsx`: 13 passed at `c43b457b`, 15 now.
+
+**Finding 3: the map note (the Codex P2 comment, valid).** `orchestrator/game.py` returns the game-over state
+before `regroup_after_meeting`. So a meeting that ends its game is followed by no frame and no gathering, and no
+bodies are cleared. Over the committed skeleton, the promoted 9p2i has 117 meetings: 102 are outlived by their
+game and 15 end it. The featured head's third meeting (seed 19 meeting 2, tick 44) is one of the 15: tick 44 is
+its last frame. The note said every meeting ends with the survivors gathered. It now reads: "On this recording,
+whenever play resumes after a meeting, the survivors start from the meeting room with the bodies cleared, so the
+map jumps to where they stand on the next tick." `regroup.test.ts` adds "the regroup note against the committed
+sets". It counts the 15 game-ending meetings and shows that seed 19 meeting 2 has no later frame. It holds the
+note to the meetings play resumes from, and the note's first wording, planted, throws ("claims every meeting,
+but 15 end"). The copy pin in `copy.test.ts`, the e2e substring and the comments in `copy.ts`, `regroup.ts`,
+`regroup.test.ts` and `journey.spec.ts` follow it. The regroup Acceptance item is qualified to match.
+`git grep -n "every meeting ends\|survivors gathered"` now finds only the planted wording in `regroup.test.ts`.
+The note still shows for the whole replay, and on 9p2i only.
+
+**Finding 4: the write-first counts, re-run.** Both base trees are git-less extractions of `80d40422`. Each has
+the card's test files at one revision laid over it:
+
+```
+git archive --format=tar -o <scratch>/base80.tar 80d40422           # extracted into one tree per revision
+git show <rev>:<path> > <tree>/<path>                                 # rev 646810c4 or 837c84d3, each file below
+uv run --directory <tree> --frozen pytest tests/api/test_sets.py tests/api/test_public_results.py \
+  tests/scripts/test_build_demo_bundle.py tests/scripts/test_check_doc_facts.py \
+  tests/scripts/test_measure_featured_criterion.py -q -p no:cacheprovider -n 6 -rfEs
+cd <tree>/frontend && npx vitest run                                  # node_modules linked; package files identical
+cd <tree>/frontend && CI=1 npx playwright test                        # the 646810c4 tree
+```
+
+The laid-over files are the five Python files above, plus these frontend files: `MapView.wiring.test.ts`,
+`MeetingView.test.tsx`, `PrivateReasoning.test.tsx`, `annotations.test.ts`, `bodies.test.ts`, `copy.test.ts`,
+`regroup.test.ts`, `vents.test.ts`, `skeleton.testkit.ts`, `replay-skeleton.fixture.json`, `e2e/journey.spec.ts`
+and `e2e/evidence-journey.ts`.
+
+| test files at | Python | vitest | Playwright |
+|---|---|---|---|
+| `646810c4` | 42 failed, 426 passed, 2 skipped; by file 27 public results, 6 sets, 4 criterion, 3 doc facts, 2 bundle | 6 failed, 583 passed; 3 files cannot import | 8 failed, 6 passed, 3 skipped |
+| `837c84d3` | 73 failed, 425 passed, 2 skipped; by file 55, 6, 6, 4, 2 | 13 failed, 589 passed; the same 3 files | not run |
+
+Notes on the table:
+- The two skips are `test_check_doc_facts.py:4959` and `:4998`, which need full git history to resolve a pull
+  request.
+- The three files that cannot import are `annotations`, `regroup` and `vents`, whose modules the base lacks.
+- Four Playwright failures are the evidence journey, the guard, the fog record and the regroup note. The other
+  four are the static-bundle tests, whose build stops when `tsc` type-checks the laid-over unit tests against the
+  base.
+- `837c84d3`'s e2e files differ from `646810c4`'s only in the regroup-note substring and its comment, so the
+  Playwright leg was not re-run on that tree.
+
+The earlier "44 failed" and "8 failed" reproduce from no committed revision. They are corrected in place above,
+and the claim that each failure is a new card test is dropped: the failures are counted by file.
+
+**The bounded mutation pass.** The pass covers the spans this round changes and the spans the findings name,
+using only the listed classes. That is 28 mutants: 14 in `api/public_results.py` and 14 in `MeetingView.tsx`.
+Three neuter probes of the note's line are added. Each was applied alone, its suite run, and the file restored from
+a copy with its sha256 checked. The suites are `pytest tests/api/test_public_results.py -x` and `vitest` on
+`MeetingView.test.tsx`, or on `regroup.test.ts`, `copy.test.ts` and `MapView.wiring.test.ts` for the note.
+
+First run, with the first version of the corpse case: 28 killed and 3 green (R-K6, M-M5 and M-M9). The kind and
+subject projections, the second corpse meeting and the Admin vent leg answer them. Now: 31 of 31 killed. With the
+`c43b457b` test files swapped in (and restored, sha256 checked), R-K1, R-K3, R-K4, R-N1, R-K6, M-M1 to M-M5 and
+M-M9 all pass. Those are the verifiers' four mutants and the seven that the earlier cases' values hid.
+
+| id | file | mutant (old → new) | first run | now |
+|---|---|---|---|---|
+| R-K1 | `public_results.py` | `(o.subject, o.room, o.tick)` → `(o.subject, o.room, 12)` | killed | killed |
+| R-K2 | `public_results.py` | `o.room` in the turn check → `"ENGINEERING"` | killed | killed |
+| R-K3 | `public_results.py` | `observation.observation_tick` → `12` | killed | killed |
+| R-K4 | `public_results.py` | `observation.scene_tick` → `11` | killed | killed |
+| R-K5 | `public_results.py` | `observation.room` → `"ENGINEERING"` | killed | killed |
+| R-K6 | `public_results.py` | `observation.kind` → `"saw_vent"` | green | killed |
+| R-K7 | `public_results.py` | `meeting.tick` in the meeting check → `12` | killed | killed |
+| R-K8 | `public_results.py` | `case.meeting_tick` in the meeting check → `12` | killed | killed |
+| R-N1 | `public_results.py` | `meeting.tick != case.meeting_tick` → `meeting.tick is None` | killed | killed |
+| R-N2 | `public_results.py` | `meeting.tick != case.meeting_tick` → `==` | killed | killed |
+| R-N3 | `public_results.py` | `case_turn is None` → `is not None` | killed | killed |
+| R-N4 | `public_results.py` | `observation is None` → `is not None` | killed | killed |
+| R-F1 | `public_results.py` | the `SawVentObservationView` filter on the turn's observations dropped | killed | killed |
+| R-B1 | `public_results.py` | the reference tuple's `!=` → `==` | killed | killed |
+| M-M1 | `MeetingView.tsx` | plural `victim` → `"p-4"` | killed | killed |
+| M-M2 | `MeetingView.tsx` | plural `killTick` → `"2"` | killed | killed |
+| M-M3 | `MeetingView.tsx` | plural `age` → `"3"` | killed | killed |
+| M-M4 | `MeetingView.tsx` | singular `victim` → `"p-4"` | killed | killed |
+| M-M5 | `MeetingView.tsx` | singular `killTick` → `"4"` | green | killed |
+| M-M6 | `MeetingView.tsx` | `opener` → `"p-1"` | killed | killed |
+| M-M7 | `MeetingView.tsx` | `accuser` → `"p-2"` | killed | killed |
+| M-M8 | `MeetingView.tsx` | routes lead `from` → `"0"` | killed | killed |
+| M-M9 | `MeetingView.tsx` | vent leg `room` → `"Labs"` | green | killed |
+| M-M10 | `MeetingView.tsx` | one-tick span `tick` → `"5"` | killed | killed |
+| M-M11 | `MeetingView.tsx` | span `from` → `"0"` | killed | killed |
+| M-M12 | `MeetingView.tsx` | span `to` → `"2"` | killed | killed |
+| M-N1 | `MeetingView.tsx` | `corpse.age === 1` → `!== 1` | killed | killed |
+| M-B1 | `MeetingView.tsx` | the answered and unanswered branches swapped | killed | killed |
+| N-K13 | `copy.ts` | the note's line → its first wording | killed | killed |
+| N-K14 | `copy.ts` | the note's line → `""` | killed | killed |
+| N-W15b | `MapView.tsx` | `{MAP_COPY.regroupNote}` → `{""}` | killed | killed |
+
+The "killed" entries for R-K7, R-K8, R-N2, R-N3, R-N4 and R-B1 are errors in the module's summary fixture: the
+real head summary is refused by name, which is a red suite.
+
+**Validation at `837c84d3`.** Nothing these commands read moved except the copy, the tests and this card.
+
+| command | result |
+|---|---|
+| `measure_featured_criterion.py --alternatives --list` | 0; the lists are unchanged |
+| `pytest tests/api/test_sets.py tests/api/test_public_results.py tests/scripts/test_build_demo_bundle.py tests/scripts/test_measure_featured_criterion.py tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py -n 6` | 0: 510 passed |
+| `npm run lint`, `tsc:check`, `test`, `build` (frontend) | 0; 0; 0: 25 files, 649 tests; 0 |
+| `verify_samples.sh` bare; `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i` | 0 (50 clean); 0 each (50, 50, 150, 50, 50) |
+| `build_sample_report.py --check`, the five sets | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `check_doc_facts.py`; `validate_task_docs.py` | 0; 0, re-run after this subsection |
+| `verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
+| `pytest -m campaign -n 6` | 0: 337 passed, re-run after this subsection |
+| `npm run e2e` (local, serial, `CI=1`) | 0: 14 passed, 3 skipped (the media spec's) |
+| bundle diff, `80d40422` against `837c84d3` | the same paths as "The bundle" above |
+| `bash scripts/check.sh`, once at the final pushed head | in the PR body |
+
+For the bundle diff, both bundles were rebuilt into scratch. In `data/4p1i/`, the three replay files and
+`replays.json` differ only in `created_at`, and `eval/summary.json` is byte-identical. The 9p2i summary differs
+only in `cases` and `source_url`. The note's new words ship in `assets/index-*.js`, one of the hashed chunks
+already listed.
+
+**Decisions.**
+1. The Codex P2 comment is valid and is answered as a finding. The note is qualified rather than hidden on
+   game-ending meetings, because it is a rule of the recording, not of one frame.
+2. The regroup Acceptance item and the earlier Results paragraphs (the write-first bullet, the 67-killed claim)
+   are corrected in place, each with a note, so no false number or wording stays live.
+3. The write-first legs are reported at two test revisions: `646810c4`, the one the first claim describes, and
+   `837c84d3`, this round's tests.
+
+**Limitations.**
+- The Playwright leg over the base ran with the `646810c4` e2e files only. The static-bundle failures there come
+  from the experiment's set-up, not from the specs.
+- The mutation pass is bounded to the spans above. A survivor of another class or span is outside it.
