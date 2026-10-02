@@ -132,6 +132,18 @@ have. `samples/4p1i` is 18/50, 2026-09-22.
 Each item names its enforcing mechanism and a planted or perturbed proof. Each new test is written first and
 fails at this card's base for the stated reason; Results quotes that run.
 
+- [x] Review correction (round 3): each era refusal of the recorder is held whole: the variable, the physical
+  path, the set and the declared file it found. A nested sample directory is refused as `AILIBI_SAMPLE_DIR`
+  with its own path. A nested manifest beside the set's own directory is refused as `AILIBI_MANIFEST` with the
+  manifest's path. A bare run is refused through whichever variable points into the set. A checkout missing
+  the declared file is refused through either variable, including when only the manifest reaches the set. In a
+  planted registry where the 4p1i sample's era declares its own file, every refusal names that set and that
+  file, not the promoted set's, and the set's own file passes there. Mechanism:
+  `tests/scripts/test_refresh_samples.py::test_each_era_refusal_names_the_variable_and_the_path_it_resolved`,
+  `test_a_missing_declared_config_is_refused_through_either_variable` and
+  `test_an_era_refusal_names_the_set_and_the_declared_file_it_found` (both variables). Proof: the verifiers'
+  Q2, Q3, Q6, Q4 and Q5 (R1, R5, R3, R8 and R9 in Results, Review corrections, round 3) pass the `80d40422`
+  suites (179 passed) and fail now.
 - [x] Review correction (round 2): the era registry's two cross-set refusals have planted cases. Two scratch
   copies of two switch-off 4p1i games are filed under one era id, one of them restamped in its MANIFEST so its
   games fold to a different key. They are refused with the fold-to-a-different-era error naming the restamped
@@ -997,5 +1009,108 @@ to V14, V16, V21, K2, K4, K5 and K7. Now every one is killed except the equivale
 | round 2's files at `23698a0f` (`candidates/stage-b-r2/9p2i` and its `experiment-config.json`) against `replays/samples/9p2i` at `85c8bbb0`, sha256 of each blob | 54 identical (50 replays, `MANIFEST.md`, `roster.json`, the report gz, the config at `0c02fa61...192b`); 0 differing, none missing or extra |
 | `git diff --stat 23698a0f` over `samples/4p1i`, both corpus sets, `training/`, `agents/tactical/learned/`, `tests/fixtures/` | empty |
 | `bash scripts/check.sh`, once at the pushed head | in the PR body (a card cannot carry the run of the commit that writes it) |
+
+Q1 and Q2 (round 1) stay open for the owner; this round adds no question.
+
+### Review corrections, round 3 (2026-10-02)
+
+A fix round from `80d40422` on the one verifier finding. Commits: `21c0684a` adds the tests, then a second
+commit records this subsection. Only `tests/scripts/test_refresh_samples.py` and this card change. No
+production line, recorded byte, fixture, golden, frontend file or front-door page moves, so every gate figure
+above stands. As in rounds 1 and 2, the validity gate, the recorder dry run and the bundle diff were not re-run,
+because nothing they read moved, and the PR's bundle diff is unchanged. No Codex review has run since the one
+at `4a36dc0`, which left no inline comment, so no Codex finding is open.
+
+**The recorder's era refusals, held whole (the finding).** At `80d40422`, the era rule's refusals were checked
+only by fragments that name neither the variable nor the path, and only the promoted 9p2i set declared a
+config. So the verifiers' mutants passed. Q2 named a nested manifest as `AILIBI_SAMPLE_DIR` in the
+below-the-set refusal. Q3 did the same in the missing-config refusal reached through the manifest. Q6 replaced
+the below-the-set refusal's path with a constant. Q4 and Q5 replaced the missing-config refusal's set and file
+with the promoted set's. Three cases are new in `tests/scripts/test_refresh_samples.py`. Each compares the whole
+refusal with a sentence written out in the test, not built from the production template:
+- `test_each_era_refusal_names_the_variable_and_the_path_it_resolved` runs on the real tree. Every target is
+  spelled through a symlink in a scratch directory, so a refusal must name the physical path. A nested sample
+  directory is refused as `AILIBI_SAMPLE_DIR` with its own path. A nested manifest beside the set's own
+  directory is refused as `AILIBI_MANIFEST` with the manifest's path. A bare run is refused as
+  `AILIBI_SAMPLE_DIR`, and, with a scratch sample directory, as `AILIBI_MANIFEST`. The era config passes at the
+  set's own directory through the same spelling.
+- `test_a_missing_declared_config_is_refused_through_either_variable` uses a scratch checkout with no declared
+  file. The sample directory inside the set is refused as `AILIBI_SAMPLE_DIR`. With a scratch sample directory
+  outside `replays/`, the manifest alone reaches the refusal, as `AILIBI_MANIFEST`.
+- `test_an_era_refusal_names_the_set_and_the_declared_file_it_found` runs once per variable. Its planted
+  registry gives `replays/samples/4p1i` an era that declares `replays/samples/4p1i/planted-config.json`; the
+  case asserts that the two declared sets are exactly 9p2i and 4p1i. Each refusal at the 4p1i set names that
+  set and that file, never the promoted set's: first the missing file, then a wrong sha256, then a nested
+  target. The set's own file passes there.
+
+The cases go red when the refusal text moves. Each era template had its closing sentence dropped, one at a time;
+this is craft rule 2's red proof, not a mutation class. Dropping the below-the-set sentence fails three of the
+four new cases, and so does dropping the missing-config sentence or the wrong-config sentence. In each run, the
+one case that passes is the one that never reaches that refusal. With the file restored, all four cases pass.
+
+**One bounded mutation pass**, over `era_target_problem`, the whole span the finding names. It used only the
+listed operator classes. Each mutant was applied alone, with the file restored from a copy and the checksums
+compared after the pass. The suites were `tests/scripts/test_refresh_samples.py` and
+`tests/scripts/test_candidate_sets.py`, run serially: several cases snapshot the real `replays/` tree, and two of
+them failed under `-n 8` at `80d40422` with no mutant applied. That was 179 tests with `80d40422`'s test file and
+183 now. A "survived" in the `80d40422` column is a probe that first came back green. The verifiers' Q2, Q3, Q4,
+Q5 and Q6 are R1, R5, R8, R9 and R3. Round 1's D1, D2 and D3 are R28, R30 and R23. The constants are the promoted
+set's: the path `replays/samples/9p2i`, the set `replays/samples/9p2i`, and the file
+`replays/samples/9p2i/experiment-config.json`.
+
+| id | class | span | at `80d40422` | now |
+|---|---|---|---|---|
+| R1 (Q2) | message argument to a constant | below-the-set refusal: the variable as `AILIBI_SAMPLE_DIR` | survived, 179 passed | killed, 2 failed |
+| R2 | message argument to a constant | below-the-set refusal: the variable as `AILIBI_MANIFEST` | survived, 179 passed | killed, 2 failed |
+| R3 (Q6) | message argument to a constant | below-the-set refusal: the path as the constant `replays/samples/9p2i` | survived, 179 passed | killed, 3 failed |
+| R4 | message argument to a constant | below-the-set refusal: the set as the promoted set | survived, 179 passed | killed, 2 failed |
+| R5 (Q3) | message argument to a constant | missing-config refusal: the variable as `AILIBI_SAMPLE_DIR` | survived, 179 passed | killed, 2 failed |
+| R6 | message argument to a constant | missing-config refusal: the variable as `AILIBI_MANIFEST` | survived, 179 passed | killed, 2 failed |
+| R7 | message argument to a constant | missing-config refusal: the path as the constant `replays/samples/9p2i` | survived, 179 passed | killed, 3 failed |
+| R8 (Q4) | message argument to a constant | missing-config refusal: the set as the promoted set | survived, 179 passed | killed, 2 failed |
+| R9 (Q5) | message argument to a constant | missing-config refusal: the file as the promoted set's | survived, 179 passed | killed, 2 failed |
+| R10 | message argument to a constant | wrong-config refusal: the variable as `AILIBI_SAMPLE_DIR` | survived, 179 passed | killed, 2 failed |
+| R11 | message argument to a constant | wrong-config refusal: the variable as `AILIBI_MANIFEST` | survived, 179 passed | killed, 2 failed |
+| R12 | message argument to a constant | wrong-config refusal: the path as the constant `replays/samples/9p2i` | killed, 3 failed | killed, 6 failed |
+| R13 | message argument to a constant | wrong-config refusal: the set as the promoted set | survived, 179 passed | killed, 2 failed |
+| R14 | message argument to a constant | wrong-config refusal: the file as the promoted set's | survived, 179 passed | killed, 2 failed |
+| R15 | None test to its inverse | `place is None` to `is not None` | killed, 32 failed | killed, 36 failed |
+| R16 | comparison to its inverse | `len(place) < 2` to `>= 2` | killed, 12 failed | killed, 16 failed |
+| R17 | comparison to its inverse | `place[0] != SAMPLES_TREE` to `==` | killed, 10 failed | killed, 14 failed |
+| R18 | comparison to its inverse | the registry lookup `item.path == set_path` to `!=` | killed, 7 failed | killed, 11 failed |
+| R19 | None test to its inverse | `entry is None` to `is not None` | killed, 15 failed | killed, 19 failed |
+| R20 | None test to its inverse | `entry.era.declared_config is None` to `is not None` | killed, 79 failed | killed, 84 failed |
+| R21 | comparison to its inverse | `len(directory) != 2` to `== 2` | killed, 9 failed | killed, 13 failed |
+| R22 | comparison to a None test | `len(directory) != 2` to `directory is None` | killed, 1 failed | killed, 4 failed |
+| R23 (D3) | comparison to a None test | `config_sha256 != expected` to `config_sha256 is None` | killed, 5 failed | killed, 7 failed |
+| R24 | comparison to its inverse | `config_sha256 != expected` to `==` | killed, 8 failed | killed, 11 failed |
+| R25 | swap adjacent branches | `place[:-1] if is_manifest else place`, arms swapped | killed, 9 failed | killed, 13 failed |
+| R26 | drop a filter on a collection | the registry lookup without its `item.path == set_path` filter | killed, 7 failed | killed, 11 failed |
+| R27 | swap one collection for a related one | the lookup over `COMMITTED_SETS` in place of `registry` | killed, 4 failed | killed, 6 failed |
+| R28 (D1) | loaded source to the canonical literal | the declared file's sha256 as round 2's literal | killed, 1 failed | killed, 3 failed |
+| R29 | loaded source to the canonical literal | `set_path` (read from the target's place) as `replays/samples/9p2i` | killed, 71 failed | killed, 73 failed |
+| R30 (D2) | loaded source to the canonical literal | `repo_root / declared` as `_REPO_ROOT / declared` | killed, 2 failed | killed, 5 failed |
+| R31 | loaded source to the canonical literal | `declared` (read from the registry) as the promoted set's file | survived, 179 passed | killed, 2 failed |
+
+Fourteen probes first came back green: R1 to R11, R13, R14 and R31. Now all 31 are killed, and none is named
+equivalent. Q4 and Q5 needed no production change. The function already takes its registry and checkout root as
+arguments, so the planted registry reaches it through `refuse_unsafe_target`.
+
+**Validation of this round**, on the tree of `21c0684a`. Its non-test bytes equal `80d40422`'s.
+
+| command | result |
+|---|---|
+| `test_refresh_samples.py` and `test_candidate_sets.py`, serially | 183 passed (179 at `80d40422`, plus the four new cases) |
+| `verify_samples.sh` bare and per set (`samples/9p2i`, `samples/4p1i`, both corpus sets, round 1) | exit 0 each; every replay clean (50 per set, 150 in `ml_corpus/9p2i`) |
+| `build_sample_report.py --check`, the five sets | exit 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `check_doc_facts.py`; `validate_task_docs.py` | 0; 0 (the task docs re-run after this subsection: 0) |
+| `verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 (unchanged) |
+| `pytest -m campaign` | 337 passed (as at `80d40422`) |
+| `git diff --stat 80d40422` | only `tests/scripts/test_refresh_samples.py` (then this card) |
+| `git diff --stat 23698a0f` over `samples/4p1i`, both corpus sets, `training/`, `agents/tactical/learned/`, `tests/fixtures/` | empty |
+| `bash scripts/check.sh`, once at the pushed head | in the PR body (a card cannot carry the run of the commit that writes it) |
+
+No frontend file changed, so vitest and the e2e were not run on their own; `check.sh` runs vitest.
 
 Q1 and Q2 (round 1) stay open for the owner; this round adds no question.
