@@ -243,7 +243,7 @@ describe("SPECTATOR_COPY", () => {
 describe("MAP_COPY", () => {
   it("carries the regroup note in plain words", () => {
     expect(MAP_COPY.regroupNote).toBe(
-      "On this recording every meeting ends with the survivors gathered in the meeting room and the bodies cleared, so the map jumps to where they stand on the next tick.",
+      "On this recording, whenever play resumes after a meeting, the survivors start from the meeting room with the bodies cleared, so the map jumps to where they stand on the next tick.",
     );
     expect(MAP_COPY.regroupNote).not.toMatch(/regroup/i);
   });

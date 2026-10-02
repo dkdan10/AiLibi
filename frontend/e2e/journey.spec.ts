@@ -971,11 +971,11 @@ test.describe("spectator journey", () => {
   });
 
   test("the regroup note shows only on a recording that regroups", async ({ page }) => {
-    // The served 9p2i head regroups its survivors after every meeting; the
-    // 4p1i recordings keep `preserve` and show nothing new.
+    // The served 9p2i head regroups its survivors after every meeting its game
+    // outlives; the 4p1i recordings keep `preserve` and show nothing new.
     await openFeaturedReplay(page);
     await expect(page.locator("[data-regroup-note]")).toContainText(
-      "every meeting ends with the survivors gathered in the meeting room",
+      "whenever play resumes after a meeting, the survivors start from the meeting room",
     );
     await openFeaturedReplay(page, null, "4p1i");
     await expect(page.locator("[data-regroup-note]")).toHaveCount(0);

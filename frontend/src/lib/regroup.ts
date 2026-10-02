@@ -28,8 +28,8 @@ export interface RegroupReplaySlice {
 }
 
 /**
- * Whether this recording regroups the survivors after each meeting. A missing
- * config is the historical default, `preserve`.
+ * Whether this recording regroups the survivors after each meeting its game
+ * outlives. A missing config is the historical default, `preserve`.
  */
 export function regroupsAfterMeetings(replay: RegroupReplaySlice): boolean {
   return replay.metadata.experiment_config?.meeting_reset === "hub_with_grace";

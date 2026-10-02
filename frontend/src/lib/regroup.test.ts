@@ -1,13 +1,14 @@
 // The regroup snap: a single step across a meeting's regroup does not tween.
 //
 // A recording that regroups (`meeting_reset = "hub_with_grace"`) gathers every
-// survivor in the meeting room between a meeting's frame and the next one, so
-// that step snaps; a `preserve` recording still tweens it, and so does every
+// survivor in the meeting room between a meeting's frame and the next one, when
+// the game outlives the meeting, so that step snaps; a `preserve` recording still tweens it, and so does every
 // other single step. The planted rule below drops the config check and fails
 // the same assertions, which is what proves they read the config.
 
 import { describe, expect, it } from "vitest";
 
+import { MAP_COPY } from "./copy";
 import { isRegroupStep, type RegroupReplaySlice, regroupsAfterMeetings, shouldTween } from "./regroup";
 import { readSkeleton, skeletonSet } from "./skeleton.testkit";
 
@@ -116,5 +117,54 @@ describe("the regroup steps in the committed sets", () => {
     expect(survived).toBe(102);
     expect(steps("9p2i")).toBe(survived);
     expect(steps("4p1i")).toBe(0);
+  });
+});
+
+describe("the regroup note against the committed sets", () => {
+  /** Every meeting no later frame follows: the game ended at it, so no regroup came. */
+  const endingMeetings = (name: string): string[] =>
+    skeletonSet(SKELETON, name).games.flatMap((game) =>
+      game.replay.meetings
+        .filter((meeting) => !game.replay.ticks.some((frame) => frame.tick > meeting.tick))
+        .map((meeting) => meeting.meeting_id),
+    );
+
+  /**
+   * The note may speak of the gathering only for the meetings play resumes
+   * from: a recording with a meeting that ends its game refutes a note that
+   * says every meeting ends in one.
+   */
+  function assertNoteHolds(note: string, ending: readonly string[]): void {
+    if (ending.length > 0 && /\b(every|each) meeting\b/i.test(note)) {
+      throw new Error(`the note claims every meeting, but ${ending.length} end the game with no frame after`);
+    }
+    if (!note.includes("whenever play resumes after a meeting")) {
+      throw new Error("the note does not limit itself to the meetings play resumes from");
+    }
+  }
+
+  it("speaks only of the meetings play resumes from", () => {
+    const ending = endingMeetings("9p2i");
+    // 117 meetings, 102 outlived (the step census above), 15 that end their
+    // game. The featured head's third meeting is one: its frame at tick 44 is
+    // the recording's last.
+    expect(ending).toHaveLength(15);
+    expect(ending).toContain("headless-seed-19:meeting-2");
+    const head = skeletonSet(SKELETON, "9p2i").games.find((game) => game.gameId === "headless-seed-19");
+    if (head === undefined) throw new Error("the featured head is not in the skeleton");
+    const third = head.replay.meetings.find((meeting) => meeting.meeting_id === "headless-seed-19:meeting-2");
+    expect(third?.tick).toBe(44);
+    expect(head.replay.ticks[head.replay.ticks.length - 1]?.tick).toBe(44);
+    expect(head.replay.ticks.filter((frame) => frame.tick > 44)).toHaveLength(0);
+    assertNoteHolds(MAP_COPY.regroupNote, ending);
+  });
+
+  it("would refute the earlier note that every meeting ends gathered", () => {
+    // Planted: the note as first shipped, which the 15 game-ending meetings falsify.
+    const earlier =
+      "On this recording every meeting ends with the survivors gathered in the meeting room and the bodies cleared, so the map jumps to where they stand on the next tick.";
+    expect(() => assertNoteHolds(earlier, endingMeetings("9p2i"))).toThrow(/claims every meeting, but 15 end/);
+    // A recording with no game-ending meeting could not refute it on that count.
+    expect(() => assertNoteHolds(earlier, [])).toThrow(/does not limit itself/);
   });
 });

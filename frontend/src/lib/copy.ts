@@ -440,10 +440,12 @@ export const SPECTATOR_COPY = Object.freeze({
 
   /** The map stage. */
   map: Object.freeze({
-    // Shown on a recording that regroups after each meeting, in both lenses: it
-    // is a rule of the game, which the players are told too.
+    // Shown on a recording that regroups after each meeting the game outlives,
+    // in both lenses: it is a rule of the game, which the players are told too.
+    // A meeting that ends the game is followed by no frame and no regroup, so
+    // the note speaks only of the meetings play resumes from.
     regroupNote:
-      "On this recording every meeting ends with the survivors gathered in the meeting room and the bodies cleared, so the map jumps to where they stand on the next tick.",
+      "On this recording, whenever play resumes after a meeting, the survivors start from the meeting room with the bodies cleared, so the map jumps to where they stand on the next tick.",
   }),
 
   /** One ballot card's private-reasoning block. */
