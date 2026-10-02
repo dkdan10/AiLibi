@@ -206,6 +206,13 @@ fails at this card's base for the stated reason; Results quotes that failing run
 through `SPECTATOR_COPY` or the picker data. It carries no task or audit ID, no unexplained jargon and no
 threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
 
+- [x] Review correction (round 2): the singular corpse line's victim is pinned by two values. At `17abded4` the
+  singular victim read as the constant p-3 passed, because the only singular case naming a victim reported p-3
+  and the p-4 singular case asserted only "killed at tick 4, one tick before this meeting." That case now asserts
+  the whole line, "The reported body is p-4's, killed at tick 4, one tick before this meeting." Mechanism:
+  `frontend/src/components/MeetingView.test.tsx`, "names one tick in the singular". Proof: the mutant
+  `victim: "p-3"` in the singular branch passes the `17abded4` suite (15 of 15) and fails now; with the other ten
+  corpse-line mutants of the round, 11 of 11 are killed (Results, Review corrections, round 2).
 - [x] Review correction (round 1): each tick fact of the supported case, and each case's meeting tick, is
   held by a planted case. Each of these is applied alone, every other fact as recorded: the turn's vent sighting
   retimed to tick 11; the cited reference's observation tick (11), scene tick (10), kind and subject; the
@@ -223,7 +230,9 @@ threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
   `frontend/src/components/MeetingView.test.tsx`, "reads the victim, the kill tick and the age off the
   recording, in both forms" and "names the room of each vent leg off the recording". Proof: the plural
   victim, kill tick and age (the age is the verifiers' mutant), the singular victim and kill tick, and the vent
-  room, each replaced by a constant, pass the `c43b457b` suite and fail now (M-M1 to M-M5 and M-M9).
+  room, each replaced by a constant, pass the `c43b457b` suite and fail now (M-M1 to M-M5 and M-M9). Review
+  round 2 found one more: the singular victim read as p-3 still passed at `17abded4`, and the round-2 item above
+  pins it (M-M13).
 - [x] Review correction (round 1, the Codex P2 comment on PR 496): the map note speaks only of the meetings
   play resumes from. A meeting that ends its game is followed by no frame and no regroup, because
   `orchestrator/game.py` returns the game-over state before it regroups. 15 of the promoted set's 117 meetings
@@ -790,6 +799,8 @@ p-3 is killed at tick 0 and reported at tick 5 ("killed at tick 0, 5 ticks befor
 it is killed at tick 2 and reported at tick 3 ("killed at tick 2, one tick before this meeting"). Neither render
 names p-4. "Names the room of each vent leg off the recording" adds a vent leg in Admin. The bounded pass found
 that the room argument read as "Labs" passed too. `MeetingView.test.tsx`: 13 passed at `c43b457b`, 15 now.
+Review round 2 found that the singular victim read as p-3 still passed at `17abded4`, because the p-4 singular
+case asserted no victim; Review corrections, round 2 pins it.
 
 **Finding 3: the map note (the Codex P2 comment, valid).** `orchestrator/game.py` returns the game-over state
 before `regroup_after_meeting`. So a meeting that ends its game is followed by no frame and no gathering, and no
@@ -848,7 +859,9 @@ a copy with its sha256 checked. The suites are `pytest tests/api/test_public_res
 `MeetingView.test.tsx`, or on `regroup.test.ts`, `copy.test.ts` and `MapView.wiring.test.ts` for the note.
 
 First run, with the first version of the corpse case: 28 killed and 3 green (R-K6, M-M5 and M-M9). The kind and
-subject projections, the second corpse meeting and the Admin vent leg answer them. Now: 31 of 31 killed. With the
+subject projections, the second corpse meeting and the Admin vent leg answer them. Now: 31 of 31 killed. That
+holds of those 31 only: review round 2 adds M-M13 to the table, which passed at `17abded4` and is killed from
+the round-2 head (Review corrections, round 2). With the
 `c43b457b` test files swapped in (and restored, sha256 checked), R-K1, R-K3, R-K4, R-N1, R-K6, M-M1 to M-M5 and
 M-M9 all pass. Those are the verifiers' four mutants and the seven that the earlier cases' values hid.
 
@@ -880,6 +893,7 @@ M-M9 all pass. Those are the verifiers' four mutants and the seven that the earl
 | M-M10 | `MeetingView.tsx` | one-tick span `tick` → `"5"` | killed | killed |
 | M-M11 | `MeetingView.tsx` | span `from` → `"0"` | killed | killed |
 | M-M12 | `MeetingView.tsx` | span `to` → `"2"` | killed | killed |
+| M-M13 | `MeetingView.tsx` | singular `victim` → `"p-3"` (added in review round 2) | not run | green at `17abded4`; killed in review round 2 |
 | M-N1 | `MeetingView.tsx` | `corpse.age === 1` → `!== 1` | killed | killed |
 | M-B1 | `MeetingView.tsx` | the answered and unanswered branches swapped | killed | killed |
 | N-K13 | `copy.ts` | the note's line → its first wording | killed | killed |
@@ -923,3 +937,80 @@ already listed.
 - The Playwright leg over the base ran with the `646810c4` e2e files only. The static-bundle failures there come
   from the experiment's set-up, not from the specs.
 - The mutation pass is bounded to the spans above. A survivor of another class or span is outside it.
+
+### Review corrections, round 2 (2026-10-02)
+
+A fix round from `17abded4` on one verifier finding (the docs lens). The other three round-1 repairs were not
+reopened. Commits: `d16acc9c` (the assertion), then the commit that records this subsection, then one that
+records the gate. The changed files are `frontend/src/components/MeetingView.test.tsx` (one assertion) and this card. No
+production line, recorded byte, fixture, DTO, audit row, front-door page or bundle input moves:
+`git diff --stat 17abded4` lists those two files only, and nothing imports a `*.test.tsx` file into the build.
+The promotion branch had not moved: `origin/work/promote-round-2` is still `2087821e`, which this branch already
+merged, so nothing was merged.
+
+**The gate at `17abded4`.** Round 1's worker ended its turn before `check.sh` finished, so the orchestrator ran
+`bash scripts/check.sh` in that worker's worktree at `17abded4`: exit 0, 10,045 passed, 20 skipped, 3 xfailed;
+vitest 25 files, 649 tests. Those numbers are as the orchestrator relayed them; the log is in its scratchpad, not
+committed. The PR body's row for that run says so. This round's own run is in the Validation table below.
+
+**Finding: the singular corpse line's victim.** At `17abded4`, `victim: corpse.victimId` in the
+`corpseAgeOneTick` branch of `MeetingView.tsx`, replaced by the constant `"p-3"`, passed `MeetingView.test.tsx`
+(15 of 15). Reproduced here before the fix. The only singular case naming a victim reported p-3. The p-4 singular
+case, "names one tick in the singular", asserted only "killed at tick 4, one tick before this meeting." So round 1's
+claim that each argument of the corpse line is read off the recording was false for this argument. That case now
+asserts the whole line: "The reported body is p-4's, killed at tick 4, one tick before this meeting." The old
+assertion is a substring of the new one, so no check was weakened. The mutant now fails that case. The round-1
+Acceptance item, its Finding 2 paragraph and its mutation table (row M-M13) carry a pointer here. The e2e checks
+only "killed at tick", as the finding notes; the unit case is the pin.
+
+**The bounded mutation pass.** It covers the span the finding names, the corpse line's two `fmt` calls and their
+guards in `MeetingView.tsx`, with only the listed classes: a message argument replaced by a constant (each
+argument by the value of the other planted case), a comparison replaced by a None test or its inverse, and
+adjacent branches swapped. There are 11 mutants. Each was applied alone by an anchored replace, and
+`npx vitest run src/components/MeetingView.test.tsx` was run in `frontend/`. The file was then restored from a
+scratch copy, and `cmp` confirmed it. The `17abded4` column is the same run with `git show
+17abded4:frontend/src/components/MeetingView.test.tsx` swapped in, then restored (sha256 checked).
+
+| id | mutant (old → new) | at `17abded4` | now | killing case |
+|---|---|---|---|---|
+| M-M13 | singular `victim` → `"p-3"` | green | killed | names one tick in the singular |
+| M-M4 | singular `victim` → `"p-4"` | killed | killed | reads the victim, the kill tick and the age |
+| M-M5 | singular `killTick` → `"4"` | killed | killed | reads the victim, the kill tick and the age |
+| M-M14 | singular `killTick` → `"2"` | killed | killed | names one tick in the singular |
+| M-M1 | plural `victim` → `"p-4"` | killed | killed | reads the victim, the kill tick and the age |
+| M-M15 | plural `victim` → `"p-3"` | killed | killed | states the corpse's age, the reply and each route |
+| M-M16 | plural `killTick` → `"0"` | killed | killed | states the corpse's age, the reply and each route |
+| M-M17 | plural `age` → `"5"` | killed | killed | states the corpse's age, the reply and each route |
+| M-N2 | `corpse.age === 1` → `corpse.age === null` | killed | killed | both singular cases |
+| M-B2 | the singular and plural branches swapped | killed | killed | three cases |
+| M-N3 | `corpse !== null` → `corpse === null` | killed | killed | five cases |
+
+At `17abded4`: 10 of 11 killed, M-M13 green. Now: 11 of 11 killed. No probe came back green after the fix.
+
+**Validation at this round's head.** Only a test assertion and this card moved, so the recorded-bytes legs are
+re-run as a check that nothing moved.
+
+| command | result |
+|---|---|
+| `measure_featured_criterion.py --alternatives --list` | 0 |
+| `pytest tests/api/test_sets.py tests/api/test_public_results.py tests/scripts/test_build_demo_bundle.py tests/scripts/test_measure_featured_criterion.py tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py -n 6` | 0: 510 passed |
+| `npm run lint`, `tsc:check`, `test`, `build` (frontend) | 0; 0; 0: 25 files, 649 tests; 0 |
+| `verify_samples.sh` bare; `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i` | 0 (50 clean); 0 each (50, 50, 150, 50, 50) |
+| `build_sample_report.py --check`, the five sets | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `check_doc_facts.py`; `validate_task_docs.py` | 0; 0 (92 work cards) |
+| `verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
+| `pytest -m campaign -n 6` | 0: 337 passed |
+| `wc -w README.md docs/reading-guide.md` | 1,569; 1,338 |
+| `npm run e2e` (local, serial, `CI=1`) | 0: 14 passed, 3 skipped (the media spec's) |
+| `bash scripts/check.sh`, once at the final pushed head | in the PR body |
+
+**Decisions.**
+1. The finding is repaired by asserting the whole singular line, as the finding asks, not by adding a third
+   corpse case. Each corpse argument is now pinned by two values, one per planted victim.
+2. The round-1 Acceptance item, its Finding 2 paragraph and its "31 of 31" sentence are annotated in place, so no
+   sentence claims more than the code delivered at `17abded4`.
+
+**Limitations.**
+- The pass is bounded to the corpse line's span. A survivor of another class or span is outside it.
+- The `17abded4` gate numbers rest on the orchestrator's relayed log, not on a committed file.
