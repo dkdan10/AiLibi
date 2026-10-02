@@ -99,9 +99,10 @@ export interface FeaturedGame {
 // typed vent-witness record. Each set therefore leads with a game whose FIRST
 // meeting, the one the viewer's auto-follow opens, ejects on such a flag: the
 // tour opens on a table that established something rather than on one that did
-// not. Among the eleven 9p2i games that qualify, seed 19 is the one whose
-// recording also shows both vent behaviours the map draws: a wait of three
-// ticks inside a vent, and a dive that a meeting's regroup closes.
+// not. Of the eleven 9p2i games that qualify, seed 19 is the one that shows
+// both vent behaviours the map draws before its first meeting, the stretch the
+// tour plays before it pauses: a wait of three ticks inside a vent, and a dive
+// that meeting's regroup closes.
 //
 // The second 9p2i card is a measured kind of game too: its first meeting
 // ejects an impostor while no flag is raised anywhere in the game and no vent
