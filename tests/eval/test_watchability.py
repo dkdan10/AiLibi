@@ -30,6 +30,7 @@ import math
 import statistics
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -827,7 +828,8 @@ def test_a_stage_pin_raised_by_one_numerator_fails_its_set(gauge: str) -> None:
         backed_conversion_converted=44,
     )
     assert evaluate_supply_floors(measured, floors)[0] is True
-    passed, rows = evaluate_supply_floors(measured, replace(floors, **{gauge: raised}))
+    changes: dict[str, Any] = {gauge: raised}
+    passed, rows = evaluate_supply_floors(measured, replace(floors, **changes))
     assert passed is False
     assert next(row for row in rows if row.name == gauge).passed is False
 

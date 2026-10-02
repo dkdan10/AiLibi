@@ -1062,7 +1062,9 @@ def test_the_census_refuses_sets_at_different_windows() -> None:
         source="replays/samples/4p1i",
     )
     four = replace(
-        six, source="replays/ml_corpus/4p1i", kill_cooldown_ticks=MAP.kill_cooldown_ticks
+        six,
+        source="replays/ml_corpus/4p1i",
+        kill_cooldown_ticks=MAP.kill_cooldown_ticks,
     )
     with pytest.raises(ValueError, match="sets ran at different kill cooldowns"):
         census_from_inputs([six, four])

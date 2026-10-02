@@ -95,7 +95,9 @@ class TestCorpusShape:
         assert (promoted.games, promoted.meetings) == (50, 117)
         assert (promoted.body_report_meetings, promoted.emergency_meetings) == (114, 3)
         for cells in (pooled, promoted):
-            assert cells.body_report_meetings + cells.emergency_meetings == cells.meetings
+            assert (
+                cells.body_report_meetings + cells.emergency_meetings == cells.meetings
+            )
 
     def test_the_reporter_is_a_crewmate_in_every_body_report(
         self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
@@ -120,7 +122,9 @@ class TestCorpusShape:
         assert pooled.impostor_ejections == 288  # was 369 over all four sets
         assert (promoted.ejections, promoted.innocent_ejections) == (66, 22)
         for cells in (pooled, promoted):
-            assert cells.ejections == cells.innocent_ejections + cells.impostor_ejections
+            assert (
+                cells.ejections == cells.innocent_ejections + cells.impostor_ejections
+            )
 
 
 class TestReporterExposure:
@@ -336,9 +340,7 @@ class TestCoDiscovery:
         assert pooled.co_discoverer_slots_crewmate == 54
         assert pooled.co_discoverer_slots_impostor == 54
         assert pooled.co_discoverer_slots == 108
-        assert pooled.co_discoverer_impostor_share == pytest.approx(
-            54 / 108, abs=1e-9
-        )
+        assert pooled.co_discoverer_impostor_share == pytest.approx(54 / 108, abs=1e-9)
         assert pooled.co_discoverer_impostor_share > 0.45
         # The promoted set, on its own.
         assert promoted.meetings_with_co_discoverer == 33

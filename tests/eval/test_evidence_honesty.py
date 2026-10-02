@@ -3406,9 +3406,12 @@ def test_the_grounded_lever_prices_the_prosecution_class(
         # A demotion rewrites the description and nothing else.
         assert (cell.new_flags, cell.structural_drift, cell.count_drift) == (0, 0, 0)
     # A count per era (was 455 over all four sets).
-    assert [
-        grounded[d].bands_off.get("vent_sighting:strong", 0) for d in sets
-    ] == [38, 317, 20, 28]
+    assert [grounded[d].bands_off.get("vent_sighting:strong", 0) for d in sets] == [
+        38,
+        317,
+        20,
+        28,
+    ]
     assert [
         grounded[d].bands_grounded.get("vent_sighting:strong", 0) for d in sets
     ] == [grounded[d].bands_off.get("vent_sighting:strong", 0) for d in sets]

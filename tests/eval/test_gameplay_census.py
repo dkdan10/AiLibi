@@ -23,7 +23,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType, ModuleType
-from typing import Any, get_args, get_origin
+from typing import Any, Final, get_args, get_origin
 
 import pytest
 from hypothesis import given
@@ -2908,9 +2908,6 @@ def test_the_constants_bound_from_a_source_follow_it(
     from agents.tactical import crewmate_policy
     from eval import balance_eval, eras
 
-    def eras_module_sets() -> tuple[eras.CommittedSet, ...]:
-        return census.REGISTERED_SETS
-
     class _Moved(RecordedExperimentConfig):
         vent_entry_policy: typing.Literal["any_body", "own_fresh_kill"] = (
             "own_fresh_kill"
@@ -2923,13 +2920,14 @@ def test_the_constants_bound_from_a_source_follow_it(
     )
     base = replace(_CURRENT_REPORT_WALK_CONFIG, supports_temporal_observations=False)
     monkeypatch.setattr(crewmate_policy, "EMERGENCY_COOLDOWN_TICKS", button)
+    registered = eras.COMMITTED_SETS  # the registry the loaded module bound
     monkeypatch.setattr(eras, "COMMITTED_SETS", sets)
     monkeypatch.setattr(experiment_config, "RecordedExperimentConfig", _Moved)
     monkeypatch.setattr(balance_eval, "_CURRENT_REPORT_WALK_CONFIG", base)
     again = _census_executed_again(monkeypatch)
     assert again.BUTTON_COOLDOWN_TICKS == button
     assert again.CENSUS_SETS == tuple(entry.path for entry in sets)
-    assert census.CENSUS_SETS == tuple(entry.path for entry in eras_module_sets())
+    assert census.CENSUS_SETS == tuple(entry.path for entry in registered)
     assert again.SETTING_DEFAULTS["vent_entry_policy"] == "own_fresh_kill"
     assert census.SETTING_DEFAULTS["vent_entry_policy"] == "any_body"
     assert again.setting_value({}, "vent_entry_policy") == "own_fresh_kill"

@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,9 +23,13 @@ from eval.gameplay_census import (
     recorded_game_eras,
     verify_era_registry,
 )
-from scripts._manifest_writer import parse_manifest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCRIPTS_DIR = _REPO_ROOT / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from _manifest_writer import parse_manifest  # noqa: E402
 
 #: The sha256 of candidate round 2's declared config (its record, section 1.4).
 _ROUND_2_CONFIG_SHA256 = (

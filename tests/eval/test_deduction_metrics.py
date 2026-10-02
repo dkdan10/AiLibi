@@ -2627,9 +2627,7 @@ def test_the_crew_omniscient_control_is_one_on_each_9p2i_set(
     Pinned so the prose and the bytes cannot drift again.
     """
 
-    assert (
-        samples_9p2i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 0
-    )
+    assert samples_9p2i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 0
     assert (
         corpus_9p2i.deduction.scaffold_leakage.crew_omniscient_control_ballots == 3
     )  # was 2
