@@ -35,7 +35,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import _declared_experiment as de
-from eval.eras import BASELINE_9, COMMITTED_SETS, CommittedSet
+from eval.eras import BASELINE_9, COMMITTED_SETS, CommittedSet, Era
 from api.replay_loader import ReplayLoader
 from meetings.evidence_profile import EXPERIMENT_ENV_NAMES
 from orchestrator.experiment_config import RecordedExperimentConfig
@@ -1930,6 +1930,199 @@ def test_the_era_verdict_follows_the_declared_file_on_disk(tmp_path: Path) -> No
     round_2 = hashlib.sha256(era_bytes).hexdigest()
     assert round_2 == "0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b"
     assert _ERA_REFUSAL in (verdict(round_2) or "")
+
+
+#: A second set whose era declares a config, for the planted registry below: an
+#: era refusal names the set and the declared file it found, not the promoted
+#: 9p2i set's.
+_PLANTED_ERA = Era(
+    id="planted-era",
+    record="audits/planted-record.md",
+    recorded_on="2026-10-02",
+    declared_config="replays/samples/4p1i/planted-config.json",
+)
+_PLANTED_REGISTRY = tuple(
+    CommittedSet(entry.path, _PLANTED_ERA)
+    if entry.path == "replays/samples/4p1i"
+    else entry
+    for entry in COMMITTED_SETS
+)
+
+
+def _era_depth_refusal(variable: str, path: Path, set_path: str) -> str:
+    """The era rule's whole refusal of a target below a declared-config set."""
+
+    return (
+        f"Refused: {variable} resolves to {path}, below the committed set "
+        f"{set_path}. A set with a declared config records only into its own "
+        "directory, with its manifest directly inside it. Nothing was staged."
+    )
+
+
+def _era_missing_refusal(variable: str, path: Path, set_path: str, config: str) -> str:
+    """The era rule's whole refusal when the set's declared file is gone."""
+
+    return (
+        f"Refused: {variable} resolves to {path}, inside the committed set "
+        f"{set_path}, whose era's declared config {config} is missing from this "
+        "checkout, so no config can be checked against it. Nothing was staged."
+    )
+
+
+def _era_config_refusal(variable: str, path: Path, set_path: str, config: str) -> str:
+    """The era rule's whole refusal of any config but the declared file."""
+
+    return (
+        f"Refused: {variable} resolves to {path}, inside the committed set "
+        f"{set_path}, whose recordings all carry its era's declared config "
+        f"{config}. Record it with exactly that file as --experiment-config, "
+        "unchanged. Nothing was staged."
+    )
+
+
+def test_each_era_refusal_names_the_variable_and_the_path_it_resolved(
+    tmp_path: Path,
+) -> None:
+    """Planted: the era refusals at the promoted set, whole, through each variable.
+
+    Every target is spelled through a symlink in a scratch directory, so a
+    refusal must name the physical path, not the spelling. A nested sample
+    directory is refused as ``AILIBI_SAMPLE_DIR``; a nested manifest beside the
+    set's own directory is refused as ``AILIBI_MANIFEST``; a bare run is refused
+    through whichever variable points into the set.
+    """
+
+    samples_9 = _REPO_ROOT / "replays" / "samples" / "9p2i"
+    physical = Path(os.path.realpath(samples_9))
+    spelled = tmp_path / "shown-set"
+    spelled.symlink_to(samples_9, target_is_directory=True)
+    assert spelled != physical
+    set_path = "replays/samples/9p2i"
+    config = "replays/samples/9p2i/experiment-config.json"
+    assert _ERA_CONFIG == _REPO_ROOT / config
+    scratch = tmp_path / "scratch-set"
+    # The set's own directory, with its manifest inside it, takes its own file.
+    assert _era_outcome(_ERA_CONFIG, spelled) is None
+    assert _era_outcome(_ERA_CONFIG, spelled / "nested") == _era_depth_refusal(
+        "AILIBI_SAMPLE_DIR", physical / "nested", set_path
+    )
+    assert _era_outcome(
+        _ERA_CONFIG, spelled, spelled / "nested" / "MANIFEST.md"
+    ) == _era_depth_refusal(
+        "AILIBI_MANIFEST", physical / "nested" / "MANIFEST.md", set_path
+    )
+    assert _era_outcome(None, spelled) == _era_config_refusal(
+        "AILIBI_SAMPLE_DIR", physical, set_path, config
+    )
+    assert _era_outcome(None, scratch, spelled / "MANIFEST.md") == (
+        _era_config_refusal(
+            "AILIBI_MANIFEST", physical / "MANIFEST.md", set_path, config
+        )
+    )
+    assert not scratch.exists()
+
+
+def test_a_missing_declared_config_is_refused_through_either_variable(
+    tmp_path: Path,
+) -> None:
+    """Planted: a checkout whose promoted set lost its declared file.
+
+    The sample directory inside the set is refused as ``AILIBI_SAMPLE_DIR``;
+    with the sample directory a scratch one outside ``replays/``, the manifest
+    alone reaches the refusal, as ``AILIBI_MANIFEST``.
+    """
+
+    repo = tmp_path / "repo"
+    target = repo / "replays" / "samples" / "9p2i"
+    target.mkdir(parents=True)
+    physical = Path(os.path.realpath(target))
+    scratch = tmp_path / "scratch-set"
+    set_path = "replays/samples/9p2i"
+    config = "replays/samples/9p2i/experiment-config.json"
+
+    def refusal(sample_dir: Path) -> str:
+        with pytest.raises(de.DeclaredExperimentError) as refused:
+            de.refuse_unsafe_target(
+                _TEST_CONFIG,
+                sample_dir=sample_dir,
+                manifest=target / "MANIFEST.md",
+                sample_dir_explicit=True,
+                repo_root=repo,
+                config_sha256="0" * 64,
+            )
+        return str(refused.value)
+
+    assert refusal(target) == _era_missing_refusal(
+        "AILIBI_SAMPLE_DIR", physical, set_path, config
+    )
+    assert refusal(scratch) == _era_missing_refusal(
+        "AILIBI_MANIFEST", physical / "MANIFEST.md", set_path, config
+    )
+    assert not scratch.exists()
+
+
+@pytest.mark.parametrize("variable", ["AILIBI_SAMPLE_DIR", "AILIBI_MANIFEST"])
+def test_an_era_refusal_names_the_set_and_the_declared_file_it_found(
+    variable: str, tmp_path: Path
+) -> None:
+    """Planted: a registry in which the 4p1i sample's era declares its own file too.
+
+    Each era refusal at the 4p1i set, reached through ``variable``, names that
+    set and its declared file, never the promoted 9p2i set's; the set's own file
+    passes there.
+    """
+
+    assert [
+        (entry.path, entry.era.declared_config)
+        for entry in _PLANTED_REGISTRY
+        if entry.era.declared_config is not None
+    ] == [
+        ("replays/samples/9p2i", "replays/samples/9p2i/experiment-config.json"),
+        ("replays/samples/4p1i", "replays/samples/4p1i/planted-config.json"),
+    ]
+    repo = tmp_path / "repo"
+    target = repo / "replays" / "samples" / "4p1i"
+    target.mkdir(parents=True)
+    scratch = tmp_path / "scratch-set"
+    set_path = "replays/samples/4p1i"
+    config = "replays/samples/4p1i/planted-config.json"
+
+    def verdict(sample_dir: Path, manifest: Path, sha: str) -> str | None:
+        try:
+            de.refuse_unsafe_target(
+                _TEST_CONFIG,
+                sample_dir=sample_dir,
+                manifest=manifest,
+                sample_dir_explicit=True,
+                repo_root=repo,
+                config_sha256=sha,
+                registry=_PLANTED_REGISTRY,
+            )
+        except de.DeclaredExperimentError as exc:
+            return str(exc)
+        return None
+
+    def aimed(directory: Path, sha: str) -> tuple[str | None, Path]:
+        """The verdict with ``variable`` alone aimed at ``directory``, and its path."""
+
+        physical = Path(os.path.realpath(directory))
+        if variable == "AILIBI_SAMPLE_DIR":
+            return verdict(directory, directory / "MANIFEST.md", sha), physical
+        outcome = verdict(scratch, directory / "MANIFEST.md", sha)
+        return outcome, physical / "MANIFEST.md"
+
+    outcome, path = aimed(target, "0" * 64)
+    assert outcome == _era_missing_refusal(variable, path, set_path, config)
+    planted = _TEST_CONFIG_JSON.encode()
+    (target / "planted-config.json").write_bytes(planted)
+    sha = hashlib.sha256(planted).hexdigest()
+    outcome, path = aimed(target, "0" * 64)
+    assert outcome == _era_config_refusal(variable, path, set_path, config)
+    outcome, path = aimed(target / "nested", sha)
+    assert outcome == _era_depth_refusal(variable, path, set_path)
+    # The set's own directory, with its manifest inside it, takes its own file.
+    assert verdict(target, target / "MANIFEST.md", sha) is None
+    assert not scratch.exists()
 
 
 def _era_dry_run(*extra: str) -> subprocess.CompletedProcess[str]:
