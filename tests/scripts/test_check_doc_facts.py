@@ -1746,6 +1746,43 @@ def test_the_d41c9006_front_door_fails_on_the_promoted_tree(doc_tree: Path) -> N
     )
 
 
+def test_samples_paragraph_dropping_only_the_promoted_sets_record_detected(
+    doc_tree: Path,
+) -> None:
+    # Planted: the samples paragraph keeps baseline 9's record link and drops
+    # only the promoted set's. Each set is linked to its own era's record, so
+    # the ladder tip's link never stands in for the 9p2i set's.
+    _substitute(doc_tree, _README, f" ([its record]({_PROMOTION_AUDIT}))", "")
+    paragraph = check_doc_facts.provenance_paragraph(_read(doc_tree, _README))
+    assert paragraph is not None
+    assert f"]({_LADDER_TIP_AUDIT})" in paragraph
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "does not link the 9p2i set's era, stage-b-r2" in errors[0]
+    assert f"({_PROMOTION_AUDIT})" in errors[0]
+
+
+def test_samples_paragraph_dropping_only_the_tips_record_detected(
+    doc_tree: Path,
+) -> None:
+    # Planted, the mirror case: the promoted set's record link kept, baseline
+    # 9's dropped. Only the 4p1i set, the one baseline-9 set the paragraph
+    # names, is reported; the 9p2i set's own link still holds.
+    _substitute(
+        doc_tree,
+        _README,
+        f"at [baseline 9]({_LADDER_TIP_AUDIT}),",
+        "at baseline 9,",
+    )
+    paragraph = check_doc_facts.provenance_paragraph(_read(doc_tree, _README))
+    assert paragraph is not None
+    assert f"]({_PROMOTION_AUDIT})" in paragraph
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "does not link the 4p1i set's era, baseline-9" in errors[0]
+    assert f"({_LADDER_TIP_AUDIT})" in errors[0]
+
+
 def test_four_set_figure_kept_as_the_current_figure_detected(doc_tree: Path) -> None:
     # Planted: the d41c9006 row, pooled over four sets of the baseline-9 era,
     # kept as the 9p2i set's current figure.

@@ -3,14 +3,16 @@
 Each committed set's games must fold to one census era key, the sets of one era
 id must share it and sets of different ids must not, and every game of an era
 with a declared config must have recorded exactly that config. The planted cases
-file ``samples/9p2i`` under the wrong era and edit one game's recorded config in
-a scratch copy; both are refused.
+file ``samples/9p2i`` under the wrong era, edit one game's recorded config in a
+scratch copy, file two scratch copies that fold to different keys under one era
+id, and file two that fold to one key under two ids; each is refused.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -153,3 +155,153 @@ def test_a_declared_config_no_game_recorded_is_refused(tmp_path: Path) -> None:
     (target / "experiment-config.json").write_text(json.dumps(declared) + "\n")
     with pytest.raises(GameplayCensusEraError, match="seed 0 recorded settings"):
         verify_era_registry(tmp_path, registry=_SCRATCH_REGISTRY)
+
+
+#: Two committed 4p1i games whose recordings hold a meeting, so their MANIFEST
+#: rows' prompt stamps are part of each game's key.
+_MEETING_SEEDS_4P1I = (1, 2)
+
+#: A second era id for the planted cases, recorded with every switch off.
+_TWIN_OF_BASELINE_9 = eras.Era(
+    id="baseline-9-twin",
+    record=eras.BASELINE_9.record,
+    recorded_on=eras.BASELINE_9.recorded_on,
+    declared_config=None,
+)
+
+
+def _scratch_4p1i(root: Path, relative: str, *, restamp: bool = False) -> Path:
+    """A scratch copy of two 4p1i sample games that held meetings, at ``relative``.
+
+    With ``restamp`` every MANIFEST row's first prompt stamp gains a suffix, so
+    the copy's games fold to a different recorded key from the committed set's
+    while still agreeing with one another.
+    """
+
+    source = _REPO_ROOT / "replays" / "samples" / "4p1i"
+    target = root / relative
+    target.mkdir(parents=True)
+    shutil.copy(source / "MANIFEST.md", target / "MANIFEST.md")
+    for seed in _MEETING_SEEDS_4P1I:
+        shutil.copy(
+            source / f"replay-seed-{seed}.jsonl", target / f"replay-seed-{seed}.jsonl"
+        )
+    stamps = recorded_game_eras(target)[_MEETING_SEEDS_4P1I[0]].prompt_stamps
+    assert stamps is not None
+    if restamp:
+        manifest = (target / "MANIFEST.md").read_text(encoding="utf-8")
+        assert manifest.count(stamps[0]) >= len(_MEETING_SEEDS_4P1I)
+        (target / "MANIFEST.md").write_text(
+            manifest.replace(stamps[0], f"{stamps[0]}_planted"), encoding="utf-8"
+        )
+    return target
+
+
+@pytest.mark.parametrize(
+    "era", (eras.BASELINE_9, _TWIN_OF_BASELINE_9), ids=lambda era: era.id
+)
+def test_two_sets_of_one_era_folding_to_different_keys_are_refused(
+    tmp_path: Path, era: eras.Era
+) -> None:
+    """Planted: one of two switch-off copies restamped, so it folds elsewhere."""
+
+    first = _scratch_4p1i(tmp_path, "replays/scratch/first")
+    _scratch_4p1i(tmp_path, "replays/scratch/same")
+    moved = _scratch_4p1i(tmp_path, "replays/scratch/moved", restamp=True)
+    assert set(recorded_game_eras(moved).values()).isdisjoint(
+        recorded_game_eras(first).values()
+    )
+    same_key = (
+        eras.CommittedSet("replays/scratch/first", era),
+        eras.CommittedSet("replays/scratch/same", era),
+    )
+    assert len(set(verify_era_registry(tmp_path, registry=same_key).values())) == 1
+    two_keys = (
+        eras.CommittedSet("replays/scratch/first", era),
+        eras.CommittedSet("replays/scratch/moved", era),
+    )
+    message = (
+        "replays/scratch/moved: its recordings fold to a different era from the "
+        f"other {era.id} sets"
+    )
+    with pytest.raises(GameplayCensusEraError, match=re.escape(message)):
+        verify_era_registry(tmp_path, registry=two_keys)
+
+
+@pytest.mark.parametrize(
+    ("kept", "second"),
+    (
+        (eras.BASELINE_9, _TWIN_OF_BASELINE_9),
+        (_TWIN_OF_BASELINE_9, eras.BASELINE_9),
+    ),
+    ids=("tip-first", "twin-first"),
+)
+def test_two_era_ids_folding_to_one_key_are_refused(
+    tmp_path: Path, kept: eras.Era, second: eras.Era
+) -> None:
+    """Planted: one recorded key filed under two era ids, in either order."""
+
+    _scratch_4p1i(tmp_path, "replays/scratch/first")
+    _scratch_4p1i(tmp_path, "replays/scratch/same")
+    _scratch_4p1i(tmp_path, "replays/scratch/moved", restamp=True)
+    two_ids_two_keys = (
+        eras.CommittedSet("replays/scratch/first", kept),
+        eras.CommittedSet("replays/scratch/moved", second),
+    )
+    keys = verify_era_registry(tmp_path, registry=two_ids_two_keys)
+    assert len(set(keys.values())) == 2
+    two_ids_one_key = (
+        eras.CommittedSet("replays/scratch/first", kept),
+        eras.CommittedSet("replays/scratch/same", second),
+    )
+    message = (
+        f"the {kept.id} and {second.id} eras fold to one recorded key; one "
+        "recorded era carries one id"
+    )
+    with pytest.raises(GameplayCensusEraError, match=re.escape(message)):
+        verify_era_registry(tmp_path, registry=two_ids_one_key)
+
+
+def test_a_switch_off_set_filed_under_a_declared_config_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Planted: two switch-off 4p1i games filed under the stage-b-r2 era."""
+
+    _scratch_4p1i(tmp_path, "replays/scratch/first")
+    declared = eras.STAGE_B_R2.declared_config
+    assert declared is not None
+    (tmp_path / declared).parent.mkdir(parents=True)
+    shutil.copy(_REPO_ROOT / declared, tmp_path / declared)
+    message = (
+        f"replays/scratch/first: seed {_MEETING_SEEDS_4P1I[0]} recorded settings "
+        "that differ from the stage-b-r2 era's declared config"
+    )
+    with pytest.raises(GameplayCensusEraError, match=re.escape(message)):
+        verify_era_registry(
+            tmp_path,
+            registry=(eras.CommittedSet("replays/scratch/first", eras.STAGE_B_R2),),
+        )
+
+
+def test_a_set_whose_games_fold_to_two_keys_is_refused_by_its_path(
+    tmp_path: Path,
+) -> None:
+    """Planted: one game's MANIFEST row restamped inside a switch-off copy."""
+
+    target = _scratch_4p1i(tmp_path, "replays/scratch/first")
+    seed = _MEETING_SEEDS_4P1I[-1]
+    stamps = recorded_game_eras(target)[seed].prompt_stamps
+    assert stamps is not None
+    lines = (target / "MANIFEST.md").read_text(encoding="utf-8").splitlines()
+    rows = [index for index, line in enumerate(lines) if line.startswith(f"| {seed} |")]
+    assert len(rows) == 1
+    lines[rows[0]] = lines[rows[0]].replace(stamps[0], f"{stamps[0]}_planted")
+    (target / "MANIFEST.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    games = recorded_game_eras(target)
+    assert games[seed] != games[_MEETING_SEEDS_4P1I[0]]
+    message = "replays/scratch/first: two eras differ in prompt stamps"
+    with pytest.raises(GameplayCensusEraError, match=re.escape(message)):
+        verify_era_registry(
+            tmp_path,
+            registry=(eras.CommittedSet("replays/scratch/first", eras.BASELINE_9),),
+        )
