@@ -1003,7 +1003,7 @@ re-run as a check that nothing moved.
 | `pytest -m campaign -n 6` | 0: 337 passed |
 | `wc -w README.md docs/reading-guide.md` | 1,569; 1,338 |
 | `npm run e2e` (local, serial, `CI=1`) | 0: 14 passed, 3 skipped (the media spec's) |
-| `bash scripts/check.sh`, once at the final pushed head | in the PR body |
+| `bash scripts/check.sh`, once at the pushed head `d16494f0`, exit code read directly | 0: 10,045 passed, 20 skipped, 3 xfailed; vitest 25 files, 649 tests; frontend build ok. The commit that records this row changes only this card |
 
 **Decisions.**
 1. The finding is repaired by asserting the whole singular line, as the finding asks, not by adding a third
