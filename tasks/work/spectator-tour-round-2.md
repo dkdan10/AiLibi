@@ -473,7 +473,8 @@ recorder or held-out generator ran.
 curated cases and the split source root; `1538ad5f` the map's vent trips and regroup snap, the omniscient
 annotations and the skeleton fixture; `646810c4` the browser legs; `8d07a340` the answers to the neuter and
 mutation passes; `ff79026f` the README media re-capture; `8a405d64` the strip comment's counts; `3a52c98f` the
-head's reason at the strength the recording gives; then the commit recording these Results.
+head's reason at the strength the recording gives; `84fdb67d` these Results; `3a205c5e` the planted front
+door's hunk; then the commit recording the `check.sh` run at `84fdb67d`.
 
 **Sections relied on.** This card; the decision memo `tasks/decision-2026-09-24-stage-b-wave.md` sections 0.1
 (ruling 11), 1 ("What adoption means later", items 2(b) and 8) and 7; `tasks/investigations-2026-09-24/partial_record.md`
@@ -665,7 +666,8 @@ part of the demo bundle.
 | `wc -w` | README 1,569 of 1,600; reading guide 1,338 of 1,350 |
 | `npm run e2e` (local, serial, `CI=1`) | 0: 14 passed, 3 skipped (the media spec's) |
 | bundle diff | above |
-| `bash scripts/check.sh`, once at the pushed head | in the PR body (a card cannot carry the run of the commit that writes it) |
+| `bash scripts/check.sh` at `84fdb67d` | 1: 1 failed, 10,031 passed, 20 skipped, 3 xfailed; the failure was `test_the_d41c9006_front_door_fails_on_the_promoted_tree`, whose planted hunk still carried the README samples sentence the media re-capture replaced; `3a205c5e` follows it (`test_check_doc_facts.py` 325 passed) |
+| `bash scripts/check.sh`, once at the final pushed head | in the PR body (a card cannot carry the run of the commit that writes it) |
 
 ### Decisions
 
