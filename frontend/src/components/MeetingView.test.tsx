@@ -13,6 +13,7 @@ import { MEETING_COPY } from "../lib/copy";
 import type { Perspective } from "../lib/playback";
 import type {
   AgentTickStateView,
+  ExperimentConfigView,
   MeetingView as MeetingDTO,
   PlayerView,
   ReplayView,
@@ -42,6 +43,22 @@ const players: PlayerView[] = [
   { agent_id: "p-3", display_name: "p-3", role: "CREWMATE", color: "#33aa55" },
   { agent_id: "p-4", display_name: "p-4", role: "CREWMATE", color: "#55aa33" },
 ];
+
+/** A recorded config with every field at its default. */
+const CONFIG: ExperimentConfigView = {
+  format_version: 1,
+  redistribution_policy: "lowest_id",
+  meeting_reset: "preserve",
+  crew_idle_policy: "hub_wait",
+  vent_exit_policy: "target_distance",
+  post_meeting_retarget: false,
+  self_report: false,
+  sabotage_threshold: "six_sevenths",
+  evidence_reasoning_version: null,
+  bounded_rebuttal_version: null,
+  public_account_version: null,
+  attributed_testimony_version: null,
+};
 
 const room = (id: string, name: string) => ({ id, name, position: { x: 0, y: 0 }, size: { width: 1, height: 1 } });
 
@@ -147,7 +164,6 @@ function render(perspective: Perspective, meeting: MeetingDTO = MEETING, ticks?:
 
 /** Every mark the record leaves in the DOM: its attributes and its wording. */
 const ENGINE_RECORD_MARKS = [
-  "data-engine-record",
   MEETING_COPY.engineRecordHeading,
   "killed at tick",
   "really was",
@@ -166,7 +182,12 @@ function assertNoEngineRecord(html: string): void {
 describe("the omniscient meeting record", () => {
   it("states the corpse's age, the reply and each accused player's true route", () => {
     const html = render({ mode: "omniscient" });
-    expect(html).toContain(MEETING_COPY.engineRecordHeading);
+    expect(html).toContain('aria-label="What the recording shows"');
+    expect(html).toContain(">What the recording shows</h3>");
+    expect(html).toContain("Shown in the omniscient view only, and read from the recording itself.");
+    expect(html).toContain(
+      "These are the map&#x27;s ticks; a player&#x27;s own account of the same moment is stamped one tick later.",
+    );
     expect(html).toContain("The reported body is p-4&#x27;s, killed at tick 2, 3 ticks before this meeting.");
     expect(html).toContain("p-1 opened this meeting and was accused by p-2, but did not speak again.");
     expect(html).toContain("Where each accused player really was, from tick 0 to this meeting.");
@@ -174,7 +195,7 @@ describe("the omniscient meeting record", () => {
     expect(html).toContain("p-1</span>: Admin, ticks 0–3 → Labs, ticks 4–5");
   });
 
-  it.each(["p-1", "p-2", "p-3"])("is absent from the DOM under %s's lens", (agentId) => {
+  it.each(players.map((player) => player.agent_id))("is absent from the DOM under %s's lens", (agentId) => {
     const html = render({ mode: "agent", agentId });
     expect(html).toContain("Resolution");
     assertNoEngineRecord(html);
@@ -193,6 +214,19 @@ describe("the omniscient meeting record", () => {
     expect(render({ mode: "omniscient" })).toContain("did not speak again");
   });
 
+  it("names whoever opened and whoever accused them", () => {
+    // Another opener and accuser than the planted meeting's, so the note reads
+    // them off the meeting rather than off a fixed pair.
+    const other: MeetingDTO = {
+      ...MEETING,
+      triggered_by: "p-3",
+      trigger_kind: "emergency",
+      turns: [turn(0, "p-3", "opening", "p-2"), turn(1, "p-1", "reply", "p-3")],
+    };
+    const html = render({ mode: "omniscient" }, other);
+    expect(html).toContain("p-3 opened this meeting and was accused by p-1, but did not speak again.");
+  });
+
   it("names one tick in the singular", () => {
     const fresh: TickView[] = [0, 1, 2, 3, 4, 5].map(frame).map((item) =>
       item.tick === 2
@@ -206,5 +240,40 @@ describe("the omniscient meeting record", () => {
 
   it("has nothing to read on a meeting fixture with no frames", () => {
     assertNoEngineRecord(render({ mode: "omniscient" }, MEETING, []));
+  });
+
+  it("lists no route when no one is accused, and no reply when the opener is not", () => {
+    const quiet: MeetingDTO = {
+      ...MEETING,
+      trigger_kind: "emergency",
+      turns: MEETING.turns.map((item) => ({ ...item, claims: [] })),
+    };
+    const html = render({ mode: "omniscient" }, quiet);
+    expect(html).toContain("What the recording shows");
+    expect(html).not.toContain("really was");
+    expect(html).not.toContain("speak again");
+    expect(html).not.toContain("killed at tick");
+  });
+
+  it("opens the routes after the last regroup on a recording that regroups", () => {
+    // A first meeting at tick 2, then this one at 5: under hub_with_grace the
+    // routes start on tick 3, the frame after the regroup.
+    const earlier: MeetingDTO = { ...MEETING, meeting_id: "planted:meeting-prior", tick: 2, trigger_kind: "emergency", turns: [] };
+    state.perspective = { mode: "omniscient" };
+    const base = replay(MEETING);
+    state.currentReplay = {
+      ...base,
+      meetings: [earlier, MEETING],
+      metadata: { ...base.metadata, experiment_config: { ...CONFIG, meeting_reset: "hub_with_grace" } },
+    };
+    const html = renderToStaticMarkup(<MeetingView />);
+    expect(html).toContain("Where each accused player really was, from tick 3 to this meeting.");
+    expect(html).toContain("p-1</span>: Admin, tick 3 → Labs, ticks 4–5");
+  });
+
+  it("raises on a route through a room the map does not carry", () => {
+    state.perspective = { mode: "omniscient" };
+    state.currentReplay = { ...replay(MEETING), map: { rooms: [room("ADMIN", "Admin")], vents: [], edges: [] } };
+    expect(() => renderToStaticMarkup(<MeetingView />)).toThrow(/no room LABS/);
   });
 });

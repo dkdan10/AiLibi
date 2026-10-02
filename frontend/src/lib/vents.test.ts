@@ -326,6 +326,13 @@ describe("ventTrips on hand-built frames", () => {
     ]);
   });
 
+  it("ends a dive its own frame never shows inside on its own tick", () => {
+    const trips = ventTrips([frame(4, [dive("p-2", 4, "LABS")], []), frame(5, [], [])]);
+    expect(trips).toEqual([
+      { actorId: "p-2", enterTick: 4, endTick: 4, fromRoomId: "LABS", toRoomId: "LABS", shape: "closed" },
+    ]);
+  });
+
   it("ends a trip still open at the last frame on that frame", () => {
     const trips = ventTrips([frame(5, [dive("p-1", 5, "LABS")], ["p-1"]), frame(6, [], ["p-1"])]);
     expect(trips).toEqual([
@@ -334,10 +341,13 @@ describe("ventTrips on hand-built frames", () => {
   });
 
   it("raises on bytes the engine cannot produce", () => {
-    expect(() => ventTrips([frame(1, [exit("p-1", 1, "LABS", "ADMIN")], [])])).toThrow(/never entered/);
+    // The messages name the actor and the tick.
+    expect(() => ventTrips([frame(3, [exit("p-2", 3, "LABS", "ADMIN")], [])])).toThrow(
+      /^p-2 left a vent at tick 3 it never entered$/,
+    );
     expect(() =>
-      ventTrips([frame(1, [dive("p-1", 1, "LABS")], ["p-1"]), frame(2, [dive("p-1", 2, "LABS")], ["p-1"])]),
-    ).toThrow(/still inside a vent/);
+      ventTrips([frame(1, [dive("p-2", 1, "LABS")], ["p-2"]), frame(2, [dive("p-2", 2, "LABS")], ["p-2"])]),
+    ).toThrow(/^p-2 dived at tick 2 while still inside a vent$/);
   });
 
   it("poses each shape on its window", () => {
@@ -356,6 +366,8 @@ describe("ventTrips on hand-built frames", () => {
     expect(IN_VENT_MARKER_SCALE).toBeLessThan(1);
     expect([...activeTrips([travel, { ...stay, actorId: "p-2", enterTick: 7, endTick: 8 }], 6).keys()]).toEqual(["p-1"]);
     expect([...activeTrips([travel], 1).keys()]).toEqual([]);
+    // The window includes the dive's own tick.
+    expect([...activeTrips([travel], 2).keys()]).toEqual(["p-1"]);
     expect([...activeTrips([travel], 7).keys()]).toEqual([]);
   });
 });

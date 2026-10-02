@@ -26,6 +26,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DASHBOARD_COPY,
+  MAP_COPY,
   PICKER_COPY,
   RUBRIC_SPOKES,
   SPECTATOR_COPY,
@@ -236,6 +237,15 @@ describe("SPECTATOR_COPY", () => {
       expect(filled, leaf.path).not.toContain("{");
       expect(dialectHits(filled), leaf.path).toEqual([]);
     }
+  });
+});
+
+describe("MAP_COPY", () => {
+  it("carries the regroup note in plain words", () => {
+    expect(MAP_COPY.regroupNote).toBe(
+      "On this recording every meeting ends with the survivors gathered in the meeting room and the bodies cleared, so the map jumps to where they stand on the next tick.",
+    );
+    expect(MAP_COPY.regroupNote).not.toMatch(/regroup/i);
   });
 });
 

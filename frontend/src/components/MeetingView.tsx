@@ -242,14 +242,13 @@ function EngineRecordPanel({ replay, meetingId }: { replay: ReplayView; meetingI
   return (
     <section
       aria-label={MEETING_COPY.engineRecordHeading}
-      data-engine-record
       className="rounded-lg border-2 border-ink-900 bg-paper-0 p-4 shadow-chrome-1"
     >
       <h3 className="text-base">{MEETING_COPY.engineRecordHeading}</h3>
       <p className="mb-2 font-mono text-3xs italic text-ink-600">{MEETING_COPY.engineRecordLead}</p>
       <div className="space-y-2 text-sm">
         {corpse !== null && (
-          <p data-engine-record-corpse>
+          <p>
             {corpse.age === 1
               ? fmt(MEETING_COPY.corpseAgeOneTick, {
                   victim: corpse.victimId,
@@ -263,7 +262,7 @@ function EngineRecordPanel({ replay, meetingId }: { replay: ReplayView; meetingI
           </p>
         )}
         {reply !== null && (
-          <p data-engine-record-reply={reply.answered ? "answered" : "unanswered"}>
+          <p>
             {fmt(reply.answered ? MEETING_COPY.openerAnswered : MEETING_COPY.openerUnanswered, {
               opener: reply.openerId,
               accuser: reply.accuserId,
@@ -271,7 +270,7 @@ function EngineRecordPanel({ replay, meetingId }: { replay: ReplayView; meetingI
           </p>
         )}
         {notes.routes.length > 0 && (
-          <div data-engine-record-routes>
+          <div>
             <p>{fmt(MEETING_COPY.routesLead, { from: String(notes.routesFrom) })}</p>
             <ul className="mt-1 space-y-1 font-mono text-2xs">
               {notes.routes.map((route) => (

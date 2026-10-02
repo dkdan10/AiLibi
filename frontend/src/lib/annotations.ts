@@ -20,7 +20,12 @@
 // counts of the same facts.
 
 import { regroupsAfterMeetings } from "./regroup";
-import type { ExperimentConfigView, TickEventView } from "../types/api";
+import type {
+  ExperimentConfigView,
+  KillEventView,
+  ReportBodyEventView,
+  TickEventView,
+} from "../types/api";
 
 /** The slice of one agent's frame state this module reads. */
 export interface AnnotationAgentSlice {
@@ -125,14 +130,14 @@ export function corpseAge(
   const report = frames
     .filter((frame) => frame.tick === meeting.tick)
     .flatMap((frame) => frame.events)
-    .find((event) => event.type === "report_body");
-  if (report === undefined || report.type !== "report_body") {
+    .find((event): event is ReportBodyEventView => event.type === "report_body");
+  if (report === undefined) {
     throw new Error(`${meeting.meeting_id}: a body meeting with no report on its frame`);
   }
   const kill = frames
     .flatMap((frame) => frame.events)
-    .find((event) => event.type === "kill" && event.victim_id === report.body_of);
-  if (kill === undefined || kill.type !== "kill") {
+    .find((event): event is KillEventView => event.type === "kill" && event.victim_id === report.body_of);
+  if (kill === undefined) {
     throw new Error(`${meeting.meeting_id}: the reported body ${report.body_of} joins no kill`);
   }
   return { victimId: report.body_of, killTick: kill.tick, age: meeting.tick - kill.tick };

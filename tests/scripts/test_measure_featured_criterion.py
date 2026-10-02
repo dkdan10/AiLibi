@@ -106,7 +106,11 @@ def test_the_list_names_the_candidates_on_the_promoted_bytes(
     assert _criterion.main(["--set", "9p2i", "--list"]) == 0
     lines = capsys.readouterr().out.splitlines()
     for expected in (
+        "    role_proof flag   24 ejections  24 role-correct",
+        "    other flag         2 ejections   0 role-correct",
+        "    no flag           40 ejections  20 role-correct",
         "  first meeting ejects on a role_proof flag: 11 of 50 games",
+        "  the games behind each count (seed:meeting)",
         "  first meeting ejects on a role_proof flag: seeds "
         "[3, 5, 6, 7, 10, 11, 19, 20, 27, 42, 49]",
         "  first meeting ejects an impostor, no flag anywhere and no vent at or "
@@ -138,6 +142,40 @@ def test_the_list_names_the_candidates_on_the_promoted_bytes(
     plain = capsys.readouterr().out
     assert "seeds [14, 44]" not in plain
     assert "(seed:meeting)" not in plain
+
+
+def test_the_list_flag_is_documented(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        _criterion.main(["--help"])
+    usage = " ".join(capsys.readouterr().out.split())  # argparse wraps its lines
+    assert "[--alternatives] [--list]" in usage
+    assert "also name the games behind each count and the two candidate lists" in usage
+    assert "the featured strip's five" in usage
+
+
+def test_the_list_follows_a_game_selection_and_the_other_set(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # --games with --list names only the selected games: the strip's two 9p2i
+    # cards land on one list each. The 4p1i set, whose games end in one meeting
+    # or none, has nobody on either new list (a game with no meeting is on no
+    # list, rather than an error).
+    assert _criterion.main(["--games", "9p2i:19", "9p2i:14", "--list"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert "  first meeting ejects on a role_proof flag: seeds [19]" in lines
+    assert (
+        "  first meeting ejects an impostor, no flag anywhere and no vent at or "
+        "before it: seeds [14]"
+    ) in lines
+    assert "  first meeting ejects a crewmate who did not open it: seeds []" in lines
+    assert _criterion.main(["--set", "4p1i", "--list"]) == 0
+    four = capsys.readouterr().out.splitlines()
+    assert (
+        "  first meeting ejects an impostor, no flag anywhere and no vent at or "
+        "before it: seeds []"
+    ) in four
+    assert "  first meeting ejects a crewmate who did not open it: seeds []" in four
+    assert "    other flag ejections: none" in four
 
 
 def _with_vent_at(replay: ReplayView, tick: int) -> ReplayView:

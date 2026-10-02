@@ -19,6 +19,7 @@ import api.public_results as public
 from api.main import ENV_REPLAY_DIR, create_app
 from api.replay_loader import ReplayLoader
 from api.schemas import (
+    AccusationClaimView,
     AgentMemoryView,
     MeetingView,
     PublicCaseView,
@@ -175,6 +176,50 @@ def test_the_kept_cases_sit_on_the_featured_head_and_pin_its_bytes() -> None:
         assert case.source_url == _ROOT_9P2I + "replay-seed-19.jsonl"
 
 
+def test_each_case_names_the_facts_its_check_holds() -> None:
+    # `_check_case` holds facts to the recording; this holds each sentence to
+    # name exactly those facts, so prose rewritten to say something else fails
+    # here even where the check still passes.
+    vent, weak = public._curated_cases()  # noqa: SLF001
+    assert vent.title == "A sighting the table can check"
+    assert vent.setup == (
+        "A body report opens the meeting, and another player then describes "
+        "seeing someone use a vent. Follow that observation into the ballots."
+    )
+    assert vent.explanation == (
+        "p-1's observation records p-6 venting in Engineering at tick 12, and "
+        "p-1's ballot cites it. Four other voters cite p-1's turn and vote for "
+        "p-6. The meeting carries role proof and ejects p-6. This is a supported "
+        "use of a certified observation; it does not demonstrate general social "
+        "deduction."
+    )
+    assert (vent.meeting_tick, vent.observer_id, vent.observation_id) == (
+        12,
+        "p-1",
+        "p-1:12:1",
+    )
+    assert vent.turn_id == "headless-seed-19:meeting-0:turn-2"
+    assert weak.title == "When accounts do not settle the question"
+    assert weak.setup == (
+        "A body reporter is accused, and the meeting raises no flag at all. Read "
+        "the accusations, the reporter's reply, and how the table handles "
+        "uncertainty."
+    )
+    assert weak.explanation == (
+        "Four speakers accuse the reporter, crewmate p-1, and no flag names "
+        "anyone. p-1 replies with an account of its own route. Four voters skip, "
+        "each saying it held nothing, and one votes for p-1, so no one is "
+        "ejected. Withholding a conviction is defensible on this evidence; this "
+        "example does not establish that skipping was the optimal game strategy."
+    )
+    assert (weak.meeting_tick, weak.observer_id, weak.observation_id) == (
+        31,
+        "p-1",
+        None,
+    )
+    assert weak.turn_id == "headless-seed-19:meeting-1:turn-5"
+
+
 # The two roots, typed here rather than imported, so a moved constant cannot
 # move its own check. The 9-player set's bytes landed in 148fa211 (the
 # promotion); the 4-player replays are unchanged since 9bae2b03.
@@ -302,6 +347,17 @@ def _an_accusation_withdrawn(replay: ReplayView) -> ReplayView:
     return _edit_turn(replay, _WEAK, turn_id, claims=claims)
 
 
+def _an_accusation_turned(replay: ReplayView) -> ReplayView:
+    # p-7 still accuses, but names p-9 instead of the reporter.
+    turn_id = "headless-seed-19:meeting-1:turn-3"
+    turn = next(t for t in _meeting(replay, _WEAK).turns if t.turn_id == turn_id)
+    claims = tuple(
+        c.model_copy(update={"against": "p-9"}) if c.type == "accusation" else c
+        for c in turn.claims
+    )
+    return _edit_turn(replay, _WEAK, turn_id, claims=claims)
+
+
 def _a_flag_raised(replay: ReplayView) -> ReplayView:
     flag = _meeting(replay, _VENT).contradictions[0]
     return _edit_meeting(replay, _WEAK, contradictions=(flag,))
@@ -311,6 +367,46 @@ def _the_reply_states_no_route(replay: ReplayView) -> ReplayView:
     turn = next(t for t in _meeting(replay, _WEAK).turns if t.turn_id == _WEAK_TURN)
     claims = tuple(c for c in turn.claims if c.type != "alibi")
     return _edit_turn(replay, _WEAK, _WEAK_TURN, claims=claims)
+
+
+def _another_voter_cites_it(replay: ReplayView) -> ReplayView:
+    """The witness's citation moved onto another voter's ballot for p-6."""
+
+    moved = _edit_ballot(replay, _VENT, "p-3", primary_reason_observation_id="p-1:12:1")
+    return _edit_ballot(moved, _VENT, "p-1", primary_reason_observation_id=None)
+
+
+def _the_flag_names_another(replay: ReplayView) -> ReplayView:
+    flags = tuple(
+        c.model_copy(update={"subjects": ("p-9",)})
+        for c in _meeting(replay, _VENT).contradictions
+    )
+    return _edit_meeting(replay, _VENT, contradictions=flags)
+
+
+def _the_route_is_about(replay: ReplayView, subject: str | None) -> ReplayView:
+    """The reply's stated route about ``subject``, or with no legs for ``None``."""
+
+    turn = next(t for t in _meeting(replay, _WEAK).turns if t.turn_id == _WEAK_TURN)
+    claims = tuple(
+        (
+            c.model_copy(update={"subject": subject})
+            if subject is not None
+            else c.model_copy(update={"route": ()})
+        )
+        if c.type == "alibi"
+        else c
+        for c in turn.claims
+    )
+    return _edit_turn(replay, _WEAK, _WEAK_TURN, claims=claims)
+
+
+def _a_sixth_ballot(replay: ReplayView) -> ReplayView:
+    meeting = _meeting(replay, _WEAK)
+    extra = meeting.ballots[0].model_copy(
+        update={"voter": "p-5", "target": "p-3", "grounding_label": "supported"}
+    )
+    return _edit_meeting(replay, _WEAK, ballots=(*meeting.ballots, extra))
 
 
 _PERTURBATIONS: dict[str, tuple[str, Callable[[ReplayView], ReplayView]]] = {
@@ -349,6 +445,7 @@ _PERTURBATIONS: dict[str, tuple[str, Callable[[ReplayView], ReplayView]]] = {
     ),
     "crewmate-p-1": ("weak-evidence", lambda r: _role(r, "p-1", "IMPOSTOR")),
     "four-speakers-accuse": ("weak-evidence", _an_accusation_withdrawn),
+    "four-speakers-accuse-p-1": ("weak-evidence", _an_accusation_turned),
     "no-flag-names-anyone": ("weak-evidence", _a_flag_raised),
     "p-1-replies": (
         "weak-evidence",
@@ -370,6 +467,80 @@ _PERTURBATIONS: dict[str, tuple[str, Callable[[ReplayView], ReplayView]]] = {
     "voters-choose-to-skip": (
         "weak-evidence",
         lambda r: _edit_ballot(r, _WEAK, "p-3", rewrite_reasons=("invalid_target",)),
+    ),
+    # Each conjunct alone, where the sentence families above change two facts.
+    "the-sighting-is-p-1s": (
+        "witnessed-vent",
+        lambda r: _edit_turn(r, _VENT, _VENT_TURN, speaker="p-3"),
+    ),
+    "role-proof-names-p-6": ("witnessed-vent", _the_flag_names_another),
+    "the-ballot-citing-it-is-p-1s": ("witnessed-vent", _another_voter_cites_it),
+    "p-1s-ballot-names-p-6": (
+        "witnessed-vent",
+        lambda r: _edit_ballot(r, _VENT, "p-1", target="p-9"),
+    ),
+    "reported-by-p-1": (
+        "weak-evidence",
+        lambda r: _edit_meeting(r, _WEAK, triggered_by="p-3"),
+    ),
+    "the-reply-is-p-1s": (
+        "weak-evidence",
+        lambda r: _edit_turn(r, _WEAK, _WEAK_TURN, speaker="p-3"),
+    ),
+    "after-an-accusation": (
+        "weak-evidence",
+        lambda r: _edit_turn(r, _WEAK, _WEAK_TURN, turn_index=0),
+    ),
+    "about-its-own-route": (
+        "weak-evidence",
+        lambda r: _the_route_is_about(r, "p-3"),
+    ),
+    "a-route-with-legs": ("weak-evidence", lambda r: _the_route_is_about(r, None)),
+    "the-meeting-skips": (
+        "weak-evidence",
+        lambda r: _edit_meeting(r, _WEAK, outcome="EJECTED"),
+    ),
+    "nobody-is-named-ejected": (
+        "weak-evidence",
+        lambda r: _edit_meeting(r, _WEAK, ejected_player_id="p-9"),
+    ),
+    "five-ballots": ("weak-evidence", _a_sixth_ballot),
+    "four-skips": (
+        "weak-evidence",
+        lambda r: _edit_ballot(r, _WEAK, "p-4", target="p-3"),
+    ),
+    "exactly-one-vote-for-p-1": (
+        "weak-evidence",
+        lambda r: _edit_ballot(r, _WEAK, "p-9", target="p-3"),
+    ),
+}
+
+# Facts the prose does not state, each changed alone: the check must still
+# pass, which is what shows a clause reads exactly its sentence.
+_CONTROLS: dict[str, tuple[str, Callable[[ReplayView], ReplayView]]] = {
+    # "Four OTHER voters": the witness's own ballot citing its own turn too.
+    "the-witness-also-cites-its-turn": (
+        "witnessed-vent",
+        lambda r: _edit_ballot(r, _VENT, "p-1", primary_reason_id=_VENT_TURN),
+    ),
+    # "replies": after the first accusation, even before the last one.
+    "the-reply-between-accusations": (
+        "weak-evidence",
+        lambda r: _edit_turn(r, _WEAK, _WEAK_TURN, turn_index=2),
+    ),
+    # "Four speakers accuse the reporter": the reporter naming itself is not one.
+    "the-reporter-names-itself": (
+        "weak-evidence",
+        lambda r: _edit_turn(
+            r,
+            _WEAK,
+            "headless-seed-19:meeting-1:turn-0",
+            claims=(
+                AccusationClaimView(
+                    type="accusation", against="p-1", confidence=0.5, reason=""
+                ),
+            ),
+        ),
     ),
 }
 
@@ -394,6 +565,14 @@ def test_a_case_sentence_the_recording_no_longer_shows_withholds_publication(
         ValueError, match=f"^Curated case no longer describes its source: {case_id}$"
     ):
         public._check_case(_case(case_id), perturb(head_replay), head_loader)  # noqa: SLF001
+
+
+@pytest.mark.parametrize("fact", sorted(_CONTROLS))
+def test_a_case_holds_through_a_fact_its_prose_does_not_state(
+    head_loader: ReplayLoader, head_replay: ReplayView, fact: str
+) -> None:
+    case_id, perturb = _CONTROLS[fact]
+    public._check_case(_case(case_id), perturb(head_replay), head_loader)  # noqa: SLF001
 
 
 def test_the_cited_observation_must_resolve_to_what_the_case_says(

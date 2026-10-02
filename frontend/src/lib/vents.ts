@@ -133,10 +133,10 @@ export function ventTrips(frames: readonly VentFrameSlice[]): VentTrip[] {
         shape: event.to_room_id === dive.fromRoomId ? "stay" : "travel",
       });
     }
-    for (const [actorId, dive] of open) {
-      if (venting.has(actorId)) {
-        dive.lastVentingTick = frame.tick;
-      }
+    // Every dive still open here was venting on this frame (the rest were
+    // closed above) or began on it.
+    for (const dive of open.values()) {
+      dive.lastVentingTick = frame.tick;
     }
   }
   for (const [actorId, dive] of [...open]) {

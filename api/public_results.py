@@ -177,10 +177,9 @@ def _check_case(case: PublicCaseView, replay: ReplayView, loader: ReplayLoader) 
         reporter = "p-1"
         # A body reporter whom four other speakers accuse, in a meeting that
         # raises no flag.
-        ordered = sorted(meeting.turns, key=lambda t: t.turn_index)
         accusers = [
             t
-            for t in ordered
+            for t in meeting.turns
             if t.speaker != reporter
             and any(
                 isinstance(c, AccusationClaimView) and c.against == reporter
@@ -200,7 +199,7 @@ def _check_case(case: PublicCaseView, replay: ReplayView, loader: ReplayLoader) 
         if not (
             case.observer_id == case_turn.speaker == reporter
             and case_turn.turn_kind == "reply"
-            and case_turn.turn_index > accusers[0].turn_index
+            and case_turn.turn_index > min(t.turn_index for t in accusers)
             and any(
                 isinstance(c, AlibiClaimView)
                 and c.subject == reporter

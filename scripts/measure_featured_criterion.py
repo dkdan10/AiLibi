@@ -196,7 +196,7 @@ def _measure_set(
     *,
     seeds: frozenset[int] | None = None,
     alternatives: bool = False,
-    listing: bool = False,
+    listing: bool,
 ) -> str:
     loader = SetLoaderRegistry(parent).get(set_name)
     every = sorted(loader.list_replays(), key=lambda meta: meta.seed)

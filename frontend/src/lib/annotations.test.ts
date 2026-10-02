@@ -97,9 +97,17 @@ describe("the opener's reply", () => {
     expect(openerReply(meeting([turn(0, "p-1")]))).toBeNull();
   });
 
+  it("reads only accusations among a turn's claims", () => {
+    const withAlibi = meeting([
+      turn(0, "p-1"),
+      { turn_index: 1, speaker: "p-2", claims: [{ type: "alibi" }, { type: "accusation", against: "p-1" }] },
+    ]);
+    expect(openerReply(withAlibi)).toEqual({ openerId: "p-1", accuserId: "p-2", answered: false });
+  });
+
   it("raises on an accusation that names nobody", () => {
     expect(() => openerReply(meeting([turn(0, "p-1"), { turn_index: 1, speaker: "p-2", claims: [{ type: "accusation" }] }]))).toThrow(
-      /names nobody/,
+      /^turn 1: an accusation names nobody$/,
     );
   });
 });
@@ -117,12 +125,32 @@ describe("the reported corpse's age", () => {
 
   it("is the meeting tick minus the reported victim's kill tick", () => {
     expect(corpseAge(body, [frameWith(4, [kill]), frameWith(9, [report])])).toEqual({ victimId: "p-2", killTick: 4, age: 5 });
+    // Another kill and a vent on the same frames do not stand in for them.
+    const other: TickEventView = { type: "kill", tick: 2, killer_id: "p-9", victim_id: "p-3", room_id: "LABS" };
+    const vent: TickEventView = {
+      type: "vent",
+      tick: 9,
+      actor_id: "p-9",
+      phase: "enter",
+      from_room_id: "LABS",
+      to_room_id: "LABS",
+      traversal_ticks: 0,
+    };
+    expect(corpseAge(body, [frameWith(2, [other]), frameWith(4, [kill]), frameWith(9, [vent, report])])).toEqual({
+      victimId: "p-2",
+      killTick: 4,
+      age: 5,
+    });
   });
 
   it("is absent for an emergency meeting and raises on a body meeting it cannot join", () => {
     expect(corpseAge(meeting([turn(0, "p-1")]), [frameWith(4, [kill])])).toBeNull();
-    expect(() => corpseAge(body, [frameWith(4, [kill]), frameWith(9, [])])).toThrow(/no report/);
-    expect(() => corpseAge(body, [frameWith(9, [report])])).toThrow(/joins no kill/);
+    expect(() => corpseAge(body, [frameWith(4, [kill]), frameWith(9, [])])).toThrow(
+      /^planted:meeting-0: a body meeting with no report on its frame$/,
+    );
+    expect(() => corpseAge(body, [frameWith(9, [report])])).toThrow(
+      /^planted:meeting-0: the reported body p-2 joins no kill$/,
+    );
     // A report on another frame is not this meeting's.
     expect(() => corpseAge(body, [frameWith(4, [kill]), frameWith(8, [report])])).toThrow(/no report/);
   });
@@ -210,6 +238,17 @@ describe("the accused player's true route", () => {
       { roomId: "ENGINEERING", fromTick: 11, toTick: 12, inVent: false },
     ]);
     expect(annotated.routes.map((route) => route.playerId)).toEqual(["p-5", "p-4", "p-6", "p-1"]);
+    // Served out of order, the turns are still read in turn order.
+    const reversed = {
+      ...seed19.replay,
+      meetings: seed19.replay.meetings.map((item) => ({ ...item, turns: [...item.turns].reverse() })),
+    };
+    expect(meetingAnnotations(reversed, "headless-seed-19:meeting-0").routes.map((route) => route.playerId)).toEqual([
+      "p-5",
+      "p-4",
+      "p-6",
+      "p-1",
+    ]);
     expect(annotated.corpse).toEqual({ victimId: "p-8", killTick: 9, age: 3 });
     expect(annotated.openerReply).toEqual({ openerId: "p-4", accuserId: "p-5", answered: true });
     expect(annotated.routesFrom).toBe(0);
@@ -220,6 +259,11 @@ describe("the accused player's true route", () => {
     const second = seed19.replay.meetings[1];
     if (second === undefined) throw new Error("seed 19 has a second meeting");
     expect(routeWindowStart(seed19.replay, second)).toBe(13);
+    // After two meetings the window opens after the later one.
+    const third = seed19.replay.meetings[2];
+    if (third === undefined) throw new Error("seed 19 has a third meeting");
+    expect(routeWindowStart(seed19.replay, third)).toBe(32);
+    expect(meetingAnnotations(seed19.replay, second.meeting_id).routesFrom).toBe(13);
     const preserved: AnnotationReplaySlice = { ...seed19.replay, metadata: { experiment_config: { meeting_reset: "preserve" } } };
     expect(routeWindowStart(preserved, second)).toBe(0);
     const unconfigured: AnnotationReplaySlice = { ...seed19.replay, metadata: { experiment_config: null } };
@@ -239,13 +283,13 @@ describe("the accused player's true route", () => {
     ];
     expect(recordedRoute(frames, "p-1", 0, 1)).toEqual([{ roomId: "ADMIN", fromTick: 0, toTick: 0, inVent: false }]);
     expect(recordedRoute(frames, "p-7", 0, 1)).toEqual([]);
-    const roomless = [{ tick: 0, events: [], agent_states: [{ agent_id: "p-1", room_id: null, is_alive: true, is_venting: false }] }];
-    expect(() => recordedRoute(roomless, "p-1", 0, 0)).toThrow(/no recorded room/);
+    const roomless = [{ tick: 4, events: [], agent_states: [{ agent_id: "p-3", room_id: null, is_alive: true, is_venting: false }] }];
+    expect(() => recordedRoute(roomless, "p-3", 0, 4)).toThrow(/^tick 4: living p-3 has no recorded room$/);
   });
 
   it("raises on a meeting the replay does not carry", () => {
     expect(() => meetingAnnotations(skeletonGame(NINE, "headless-seed-2").replay, "headless-seed-2:meeting-9")).toThrow(
-      /no meeting/,
+      /^no meeting headless-seed-2:meeting-9 in this replay$/,
     );
   });
 });

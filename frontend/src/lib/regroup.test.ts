@@ -41,6 +41,7 @@ function assertRegroupSteps(rule: StepRule): void {
   expect(rule(replay(null), MEETING_FRAME, MEETING_FRAME + 1), "unconfigured step").toBe(false);
   // A two-tick scrub across the regroup is not a step.
   expect(rule(reset, MEETING_FRAME - 1, MEETING_FRAME + 1), "two-tick scrub").toBe(false);
+  expect(rule(reset, MEETING_FRAME, MEETING_FRAME + 2), "two-tick scrub from the meeting").toBe(false);
 }
 
 describe("isRegroupStep", () => {
@@ -64,7 +65,9 @@ describe("isRegroupStep", () => {
 
   it("raises on a frame outside the replay", () => {
     expect(() => isRegroupStep(replay("hub_with_grace"), 7, 8)).toThrow(RangeError);
+    expect(() => isRegroupStep(replay("hub_with_grace"), 7, 8)).toThrow(/^frame 8 is outside this replay's 8 frames$/);
     expect(() => isRegroupStep(replay("hub_with_grace"), -1, 0)).toThrow(RangeError);
+    expect(() => isRegroupStep(replay("hub_with_grace"), 3.5, 4.5)).toThrow(RangeError);
   });
 
   it("reads the regroup off the recorded config", () => {
@@ -89,6 +92,7 @@ describe("shouldTween", () => {
     expect(shouldTween(reset, 1, 2, { sameReplay: true, reducedMotion: true })).toBe(false);
     expect(shouldTween(reset, 7, 8, MOTION)).toBe(false);
     expect(shouldTween(reset, -1, 0, MOTION)).toBe(false);
+    expect(shouldTween(reset, 1.5, 2.5, MOTION)).toBe(false);
   });
 });
 
