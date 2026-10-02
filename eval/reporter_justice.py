@@ -53,11 +53,17 @@ from typing import Any, Final
 from engine.entities import PlayerId, Role
 from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
 from meetings.schemas import AccusationClaim
+from orchestrator.experiment_config import normalize_experiment_config
 from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayEntry,
+    ReplayLogEntry,
     read_all_entries,
+    recorded_experiment_config,
 )
+
+#: A recorded setting value, as the recording serializes it.
+_SettingValue = str | int | bool | None
 
 #: Engine action types that open a meeting, mapped to the kind they open.
 _TRIGGER_ACTION_KINDS: Final[Mapping[str, str]] = {
@@ -127,10 +133,14 @@ class ReporterJusticeCells:
 
     Counts only -- every rate is derived by the properties below, so a caller
     reading the raw cells and a caller reading a rate can never disagree about
-    the denominator.
+    the denominator. ``recorded_settings`` is the one recorded experiment config
+    every game of the set carries, as its settings off their default (empty for
+    a set recorded with every switch off): the era identity
+    :func:`pool_reporter_justice` refuses to pool across.
     """
 
     set_name: str
+    recorded_settings: tuple[tuple[str, _SettingValue], ...]
     games: int
     meetings: int
     body_report_meetings: int
@@ -562,10 +572,12 @@ def compute_reporter_justice(sample_dir: Path) -> ReporterJusticeCells:
     )
 
     tallies = _Tallies()
+    settings: set[tuple[tuple[str, _SettingValue], ...]] = set()
     for seed in seeds:
         tallies.games += 1
         roles = per_seed_roles[seed]
         entries = read_all_entries(sample_dir / f"replay-seed-{seed}.jsonl")
+        settings.add(_recorded_settings(entries))
         ticks = [e for e in entries if isinstance(e, ReplayEntry)]
         for entry in entries:
             if not isinstance(entry, MeetingReplayEntry):
@@ -598,31 +610,71 @@ def compute_reporter_justice(sample_dir: Path) -> ReporterJusticeCells:
                 tallies=tallies,
             )
 
-    return ReporterJusticeCells(set_name=sample_dir.name, **vars(tallies))
+    if len(settings) != 1:
+        raise ReporterJusticeError(
+            f"{sample_dir}: its games recorded {len(settings)} different experiment "
+            "configs; one set is one recorded era"
+        )
+    return ReporterJusticeCells(
+        set_name=sample_dir.name, recorded_settings=settings.pop(), **vars(tallies)
+    )
+
+
+def _recorded_settings(
+    entries: Sequence[ReplayLogEntry],
+) -> tuple[tuple[str, _SettingValue], ...]:
+    """A recording's experiment settings off their default, sorted by field."""
+
+    config = normalize_experiment_config(recorded_experiment_config(entries))
+    if config is None:
+        return ()
+    defaults = type(config).model_fields
+    return tuple(
+        sorted(
+            (name, value)
+            for name, value in config.model_dump(mode="json").items()
+            if value != defaults[name].default
+        )
+    )
+
+
+#: The cells that are counts; every other field names the group.
+_IDENTITY_FIELDS: Final[frozenset[str]] = frozenset({"set_name", "recorded_settings"})
 
 
 def pool_reporter_justice(
     cells: Iterable[ReporterJusticeCells], *, set_name: str = "pooled"
 ) -> ReporterJusticeCells:
-    """Sum per-set cells into one pooled reading.
+    """Sum per-set cells into one pooled reading, inside one recorded era.
 
     Every cell is a count over disjoint games, so pooling is addition and the
     derived rates recompute from the pooled numerator and denominator rather
     than being averaged -- a small set cannot drag a rate the way a mean of
     rates would. Raises on an empty input: there is nothing to pool, and a
-    zeroed row would read as a measurement.
+    zeroed row would read as a measurement. Raises on rows whose recorded
+    experiment settings differ: two eras are never pooled.
     """
 
     rows = list(cells)
     if not rows:
         raise ReporterJusticeError("pool_reporter_justice: no sets to pool")
+    eras = {row.recorded_settings for row in rows}
+    if len(eras) != 1:
+        raise ReporterJusticeError(
+            "pool_reporter_justice: the sets recorded different experiment "
+            "settings; the reporter-justice cells never pool across eras"
+        )
     fields = [
-        name for name in ReporterJusticeCells.__dataclass_fields__ if name != "set_name"
+        name
+        for name in ReporterJusticeCells.__dataclass_fields__
+        if name not in _IDENTITY_FIELDS
     ]
     totals: dict[str, Any] = {
         name: sum(getattr(row, name) for row in rows) for name in fields
     }
-    return ReporterJusticeCells(set_name=set_name, **totals)
+    return ReporterJusticeCells(
+        set_name=set_name, recorded_settings=eras.pop(), **totals
+    )
 
 
 def render_reporter_justice(cells: ReporterJusticeCells) -> str:

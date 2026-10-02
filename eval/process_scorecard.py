@@ -87,11 +87,23 @@ provenance of the recordings it read for exactly that reason. Row 2 keeps readin
 the OLD bytes correctly after the weighing card drops the rendered trust column,
 because that card widens :data:`eval.meeting_quality._SUSPICION_GRAPH_ROW_RE`
 rather than re-scoring history.
+
+Since the promotion of candidate round 2 (2026-10-02) the committed sets span
+two eras, and the era registry (:mod:`eval.eras`) is what groups them: the
+baseline-9 era pools its three sets, and ``samples/9p2i`` is published as its
+own era, with no nine-player pool left. Its before column is that set's entry
+of ``docs/process-scorecard.json`` at ``d41c9006``, the last commit whose
+``samples/9p2i`` held the baseline-9 bytes. It is carried verbatim from
+:data:`BEFORE_COLUMNS_PATH`, whose sha256 :data:`BEFORE_COLUMNS_SHA256` pins;
+the publisher copies it and never recomputes it, so the column cannot drift
+with today's code. :func:`pool` refuses a group whose registered sets span two
+eras.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
@@ -109,6 +121,8 @@ from eval.alibi_fabrication import (
     compute_alibi_fabrication_rate,
 )
 from eval.balance_eval import load_tournament_report
+from eval.eras import COMMITTED_SETS as REGISTERED_SETS
+from eval.eras import CommittedSet, era_groups
 from eval.deduction_metrics import (
     _authored_target,
     _MarkerChain,
@@ -157,8 +171,10 @@ from orchestrator.experiment_config import ConfigLayer
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 
 #: Bumped only when the published JSON changes shape in a way an older reader
-#: cannot interpret. Version 1 is the first publication (2026-09-19).
-SCHEMA_VERSION: Final[int] = 1
+#: cannot interpret. Version 1 is the first publication (2026-09-19); version 2
+#: groups the sets by recorded era and carries a frozen before column
+#: (2026-10-02).
+SCHEMA_VERSION: Final[int] = 2
 
 #: The date D1 was accepted, stamped into every artifact so the demotion is
 #: dated wherever the scorecard is read.
@@ -581,8 +597,31 @@ class FifthRunAppendix(_FrozenModel):
     ballots_per_meeting: Mapping[str, int]
 
 
+class EraScorecard(_FrozenModel):
+    """One recorded era of the committed sets, as the era registry names it.
+
+    ``pooled`` adds the counts of the era's sets when it holds more than one,
+    and is ``None`` for a one-set era, whose per-set rows are its only reading.
+    """
+
+    era_id: str
+    record: str
+    recorded_on: str
+    sets: tuple[str, ...]
+    pooled: SetScorecard | None
+
+
+class BeforeColumn(_FrozenModel):
+    """A set's rows as published before its bytes were replaced; never recomputed."""
+
+    set: str
+    era_id: str
+    commit: str
+    scorecard: SetScorecard
+
+
 class ProcessScorecard(_FrozenModel):
-    """The published fold: per-set rows, two pooled groups and the appendix."""
+    """The published fold: per-era groups, per-set rows, before columns, appendix."""
 
     schema_version: int
     decision_date: str
@@ -593,9 +632,9 @@ class ProcessScorecard(_FrozenModel):
     row_definitions: Mapping[str, str]
     report_format_version: int
     recording_provenance: tuple[str, ...]
+    eras: tuple[EraScorecard, ...]
     sets: tuple[SetScorecard, ...]
-    pooled: SetScorecard
-    pooled_9p2i: SetScorecard
+    before: tuple[BeforeColumn, ...]
     appendix: FifthRunAppendix
 
     @model_validator(mode="after")
@@ -1773,7 +1812,11 @@ def scorecard_from_tally(
 
 
 def pool(
-    tallies: Sequence[ProcessTally], *, label: str, sources: Sequence[str]
+    tallies: Sequence[ProcessTally],
+    *,
+    label: str,
+    sources: Sequence[str],
+    registry: Sequence[CommittedSet] = REGISTERED_SETS,
 ) -> SetScorecard:
     """Pool disjoint groups by ADDING their counts, never by averaging rates.
 
@@ -1782,8 +1825,22 @@ def pool(
     cannot drag a rate the way a mean of rates would. The chance baseline pools
     the same way because it is carried as an exact sum of per-ballot shares plus
     the ballot count, not as a float mean.
+
+    Raises :class:`ValueError` when the sources ``registry`` names span two
+    eras: the scorecard never pools across a recorded boundary. A source the
+    registry does not name (a hand-built group) carries no era to check.
     """
 
+    registered = {entry.path for entry in registry}
+    eras = era_groups(
+        [source for source in sources if source in registered], registry=registry
+    )
+    if len(eras) > 1:
+        raise ValueError(
+            f"{label}: its sets span the "
+            + " and ".join(era.id for era, _ in eras)
+            + " eras; the scorecard never pools across eras"
+        )
     merged = ProcessTally()
     for tally in tallies:
         merged = _add(merged, tally)
@@ -1880,21 +1937,49 @@ def _relative_to_repo(path: Path) -> str:
 #: can refuse the DIRECTORY and not merely the files inside it at this moment.
 RECORDINGS_ROOT: Final[str] = "replays"
 
-#: The four committed sets, in publication order, and the two that carry the
-#: 9p2i pins the direction memo's sections 4 and 5 state.
-COMMITTED_SETS: Final[tuple[str, ...]] = (
-    "replays/ml_corpus/9p2i",
-    "replays/samples/9p2i",
-    "replays/ml_corpus/4p1i",
-    "replays/samples/4p1i",
-)
-NINE_PLAYER_SETS: Final[tuple[str, ...]] = (
-    "replays/ml_corpus/9p2i",
-    "replays/samples/9p2i",
-)
+#: The four committed sets, in publication order, from the era registry.
+COMMITTED_SETS: Final[tuple[str, ...]] = tuple(entry.path for entry in REGISTERED_SETS)
 
 #: The fifth run's archive, bound by the card: read, never written, never moved.
 FIFTH_RUN_ARCHIVE: Final[str] = "audits/deduction-candidate/run-2026-09-16"
+
+#: The frozen before columns: each replaced set's entry of
+#: ``docs/process-scorecard.json`` as published before its bytes moved. Today one
+#: block, ``samples/9p2i`` at ``d41c9006`` (baseline 9).
+BEFORE_COLUMNS_PATH: Final[str] = "docs/process-scorecard-before.json"
+
+#: The sha256 of :data:`BEFORE_COLUMNS_PATH`'s bytes. The publisher copies the
+#: file into every publication and never recomputes it; a byte that moves
+#: refuses the fold.
+BEFORE_COLUMNS_SHA256: Final[str] = (
+    "b6b8ecaa5ecdde48630a1cb5eec9628d799553fdd6911ab38efdb654e95e38a7"
+)
+
+
+class BeforeColumnsError(ValueError):
+    """The frozen before columns do not read as pinned."""
+
+
+def read_before_columns(root: Path) -> tuple[BeforeColumn, ...]:
+    """The pinned before columns, read and validated; any drift raises.
+
+    The file's sha256 must equal :data:`BEFORE_COLUMNS_SHA256`, so an edited
+    leaf refuses the fold rather than publishing a moved history column.
+    """
+
+    path = root / BEFORE_COLUMNS_PATH
+    data = path.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != BEFORE_COLUMNS_SHA256:
+        raise BeforeColumnsError(
+            f"{BEFORE_COLUMNS_PATH} reads sha256 {digest}, not the pinned "
+            f"{BEFORE_COLUMNS_SHA256}; a before column is history and is never "
+            "edited or recomputed"
+        )
+    payload = json.loads(data.decode("utf-8"))
+    if not isinstance(payload, list):
+        raise BeforeColumnsError(f"{BEFORE_COLUMNS_PATH} must hold one JSON list")
+    return tuple(BeforeColumn.model_validate(block) for block in payload)
 
 
 def scorecard_source_paths(root: Path) -> tuple[Path, ...]:
@@ -1913,23 +1998,47 @@ def compute_process_scorecard(root: Path) -> ProcessScorecard:
     """Fold the four committed sets plus the fifth run's archive into the suite.
 
     Zero model calls, on every path. The engine walk is state-hash-verified, the
-    roles come from the seeder, and nothing is written anywhere.
+    roles come from the seeder, and nothing is written anywhere. The sets are
+    grouped by the era registry and pooled only within an era; the before
+    columns are read, pinned, from :data:`BEFORE_COLUMNS_PATH`.
     """
 
+    before = read_before_columns(root)
+    unmatched = [block.set for block in before if block.set not in COMMITTED_SETS]
+    if unmatched:
+        raise BeforeColumnsError(
+            f"{BEFORE_COLUMNS_PATH} carries a before column for {unmatched}, which "
+            "the era registry does not name"
+        )
     game_map = load_canonical_map()
     inputs = [
         load_set_inputs(root / name, game_map=game_map) for name in COMMITTED_SETS
     ]
-    tallies = {item.label: fold_set(item) for item in inputs}
+    tallies = {item.source: fold_set(item) for item in inputs}
     sets = tuple(
         scorecard_from_tally(
-            tallies[item.label], label=item.label, sources=(item.source,)
+            tallies[item.source], label=item.label, sources=(item.source,)
         )
         for item in inputs
     )
-    nine_player = [
-        item for item in inputs if f"replays/{item.label}" in NINE_PLAYER_SETS
-    ]
+    eras = tuple(
+        EraScorecard(
+            era_id=era.id,
+            record=era.record,
+            recorded_on=era.recorded_on,
+            sets=members,
+            pooled=(
+                pool(
+                    [tallies[source] for source in members],
+                    label=f"pooled: the {era.id} sets",
+                    sources=members,
+                )
+                if len(members) > 1
+                else None
+            ),
+        )
+        for era, members in era_groups([item.source for item in inputs])
+    )
     return ProcessScorecard(
         schema_version=SCHEMA_VERSION,
         decision_date=DECISION_DATE,
@@ -1940,17 +2049,9 @@ def compute_process_scorecard(root: Path) -> ProcessScorecard:
         row_definitions=dict(ROW_DEFINITIONS),
         report_format_version=CURRENT_FORMAT_VERSION,
         recording_provenance=tuple(item.source for item in inputs),
+        eras=eras,
         sets=sets,
-        pooled=pool(
-            [tallies[item.label] for item in inputs],
-            label="pooled: all four committed sets",
-            sources=tuple(item.source for item in inputs),
-        ),
-        pooled_9p2i=pool(
-            [tallies[item.label] for item in nine_player],
-            label="pooled: the two 9p2i sets",
-            sources=tuple(item.source for item in nine_player),
-        ),
+        before=before,
         appendix=fold_fifth_run(root / FIFTH_RUN_ARCHIVE),
     )
 
@@ -1973,11 +2074,12 @@ __all__ = [
     "AGENT_CLOCK_OFFSET",
     "ALIBI_FLAG_KINDS",
     "APPENDIX_NOTE",
+    "BEFORE_COLUMNS_PATH",
+    "BEFORE_COLUMNS_SHA256",
     "COMMITTED_SETS",
     "DECISION_DATE",
     "FAITHFULNESS_LIMITS",
     "FIFTH_RUN_ARCHIVE",
-    "NINE_PLAYER_SETS",
     "NO_CONSUMER_NOTE",
     "RECORDINGS_ROOT",
     "ROLE_CORRECTNESS_NOTE",
@@ -1986,7 +2088,10 @@ __all__ = [
     "SCORECARD_THREADED_LAYERS",
     "AgentAuthoredRow",
     "ArgmaxIndependenceRow",
+    "BeforeColumn",
+    "BeforeColumnsError",
     "ContextCells",
+    "EraScorecard",
     "EvidenceQualityMixRow",
     "FifthRunAppendix",
     "FifthRunArm",
@@ -2004,6 +2109,7 @@ __all__ = [
     "fold_set",
     "load_set_inputs",
     "pool",
+    "read_before_columns",
     "scorecard_from_tally",
     "scorecard_source_paths",
     "serialize_scorecard",

@@ -253,17 +253,19 @@ def test_zero_conversion_with_backed_supply_also_fails() -> None:
 
 
 def test_fsm_baseline_sets_pass_at_exact_equality_under_the_reanchor() -> None:
-    """The committed default (baseline-9) sets clear their own DERIVED floor.
+    """The committed sample sets clear their own era's DERIVED floor.
 
-    At the baseline's own evidence density the supply ratio is exactly 1.0 and
-    the derived floor IS the pin — an exact float identity, not an approximate
-    one (the derivation multiplies the pin by the ratio, in that order, so
-    "the baseline passes at equality" survives the re-anchor bit-exact). Re-pinned
-    to the baseline-9 conversion cells (9p2i 79/112, 4p1i 20/37; baseline 8 read
-    81/128 and 20/33, baseline 7 84/132 and 20/34, baseline 6 78/136 and 9/30).
+    At a set's own evidence density the supply ratio is exactly 1.0 and the
+    derived floor IS the pin — an exact float identity, not an approximate one
+    (the derivation multiplies the pin by the ratio, in that order, so "the
+    baseline passes at equality" survives the re-anchor bit-exact). Each set is
+    scored against its own era's block by default (eval/eras.py): 9p2i against
+    the stage-b-r2 block at 44/94, 4p1i against baseline 9 at 20/37 (the
+    baseline-9 9p2i bytes read 79/112; baseline 8 read 81/128 and 20/33,
+    baseline 7 84/132 and 20/34, baseline 6 78/136 and 9/30).
     """
 
-    expected = {_NINE: 79 / 112, _FOUR: 20 / 37}  # was 81 / 128, 20 / 33
+    expected = {_NINE: 44 / 94, _FOUR: 20 / 37}  # was 79 / 112, 20 / 37
     for sample_dir, fraction in expected.items():
         report = compute_watchability(sample_dir)
         assert report.referee_passed is True, sample_dir.name

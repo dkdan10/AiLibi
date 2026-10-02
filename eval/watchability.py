@@ -355,6 +355,12 @@ from eval.validity import (
     roles_by_seed,
     seeds_on_disk,
 )
+from eval.eras import COMMITTED_SETS, LADDER_TIP_ERA, CommittedSet
+from eval.recorded_settings import (
+    READABLE_SETTINGS,
+    layers_read,
+    refuse_unread_settings,
+)
 from eval.replay_walk import (
     ReplayWalkConfig,
     TickAdvanced,
@@ -370,7 +376,7 @@ from meetings.schemas import (
     SawVentObservation,
 )
 from meetings.transcript import is_weak_contradiction, sighting_placement
-from orchestrator.replay import ReplayLog
+from orchestrator.replay import ReplayLog, read_all_entries, recorded_experiment_config
 
 # --------------------------------------------------------------------------- #
 # The geomean composition constants — promoted VERBATIM from the lab scorer    #
@@ -1115,18 +1121,51 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
             ),
         ),
     },
+    # A STAGE block, not a baseline: the shown 9-player set's era since the
+    # promotion of candidate round 2 (2026-10-02; eval/eras.py). The ladder tip
+    # stays at baseline 9, whose 9p2i entry above stays as history and as the ML
+    # selection floor (BAKEOFF_BASELINE_ID); the bytes it was measured on left
+    # replays/samples/9p2i at the promotion. Only a 9p2i entry: the other sets
+    # did not move. Measured on replays/samples/9p2i, the round-2 recording (the
+    # seven adopted gameplay arms, the kept vent exit, kill cooldown 6), through
+    # the referee's walk with the layers it declares (REFEREE_READS):
+    #   witnessed_event_rate        = 14/195 = 0.07179487179487179
+    #   flags_per_meeting           = 53/117 = 0.452991452991453 (38 recorded
+    #                                 vent flags + 15 recorded transcript flags)
+    #     transcript component      = 15/117 = 0.1282051282051282
+    #     persisted-vent component  = 38/117 = 0.3247863247863248
+    #   testimony_backed_conversion = 44/94 = 0.46808510638297873
+    #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
+    # TASK 16.11 derivation (population_relative_conversion=True): the set
+    # itself reads flags 53/117 -> ratio exactly 1.0 -> derived floor = pin;
+    # measured 44/94 -> PASS at exact equality (self-consistency).
+    "stage-b-r2": {
+        "9p2i": SupplyFloors(
+            witnessed_event_rate=FloorPin(value=0.07179487179487179, numerator=14),
+            flags_per_meeting=FloorPin(value=0.452991452991453, numerator=53),
+            testimony_backed_conversion=FloorPin(
+                value=0.46808510638297873, numerator=44
+            ),
+            population_relative_conversion=True,
+            transcript_flags_per_meeting=FloorPin(
+                value=0.1282051282051282, numerator=15
+            ),
+            persisted_vent_flags_per_meeting=FloorPin(
+                value=0.3247863247863248, numerator=38
+            ),
+        ),
+    },
 }
 
-# baseline 9 is the committed canonical SAMPLES set, so a bare
-# ``measure_baseline.py --watchability`` reads baseline 9's own floors — the
-# referee accepts the committed bytes at equality. (Baselines 3-8 moved here from
-# Tasks 15.7, 16.14, 16.17, 18.12 and the baseline-7 and baseline-8 records the
-# same way; their blocks above stay scoreable via an explicit --baseline-id, and
-# baseline 8's stays as history.) The training-side selection floors are keyed
-# separately, by ``training.bakeoff.harness.BAKEOFF_BASELINE_ID``: that id names
-# the baseline the ML fits are ground on, and it moves at a re-ground rather than
-# with this default.
-_DEFAULT_BASELINE_ID: Final[str] = "baseline-9"
+# The default block is per set (:func:`default_baseline_id`): each committed set
+# reads its own era's block, as the era registry names it, so a bare
+# ``measure_baseline.py --watchability`` scores every committed set against its
+# own recording at equality. (Baselines 3-8 were each the default in turn; their
+# blocks above stay scoreable via an explicit --baseline-id, and baseline 8's
+# stays as history.) The training-side selection floors are keyed separately, by
+# ``training.bakeoff.harness.BAKEOFF_BASELINE_ID``: that id names the baseline the
+# ML fits are ground on, and it moves at a re-ground rather than with this
+# default.
 
 
 @dataclass(frozen=True)
@@ -1539,6 +1578,31 @@ def _raise_integrity_breach(violation: WalkViolation) -> NoReturn:
     raise _IntegrityBreach
 
 
+#: The recorded settings the referee reads, after a per-layer review of what it
+#: consumes (2026-10-02, the promotion of candidate round 2). Its gauges, rules
+#: and scoring are unchanged; the review only declares what its walk may read.
+#:
+#: * engine (``vent_witness_rule``, ``kill_cooldown_ticks``,
+#:   ``redistribution_policy``): threaded into the seeding, every advance and
+#:   every applied meeting by ``engine_arguments``; the kill witnesses the
+#:   witnessed-event gauge reads are the engine's own events.
+#: * orchestrator (``meeting_reset``, ``report_body_handle_version``): the walk
+#:   applies the regroup reset to every applied meeting through the shared
+#:   helper, and the body handle changes only a report's trigger text, which no
+#:   gauge or dimension reads.
+#: * tactical (``vent_exit_policy``, ``vent_entry_policy``): they reach the walk
+#:   only as the recorded actions it replays; the referee re-runs no policy.
+#: * meeting (``bounded_rebuttal_version``, ``ballot_kill_row_version``,
+#:   ``impostor_ballot_version``): the referee reads the recorded meeting rows,
+#:   ballots, flags and transcript as recorded. A rebuttal is one more recorded
+#:   turn, read like any turn; the kill row adds an own-evidence row to a vote
+#:   prompt and the impostor ballot reframes an impostor's vote prompt, and the
+#:   suspicion-graph parse reads only the rendered suspicion block, which both
+#:   arms leave in place.
+#:
+#: Every other recorded setting stays refused (:func:`refuse_unread_referee_settings`).
+REFEREE_READS: Final[frozenset[str]] = READABLE_SETTINGS
+
 # The named Task 19.25 profile (see eval/replay_walk.py's drift record): the
 # referee-grade walk — every option ON, every violation the same bare breach.
 _REFEREE_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
@@ -1556,7 +1620,31 @@ _REFEREE_WALK_CONFIG: Final[ReplayWalkConfig] = ReplayWalkConfig(
     reject_trailing_rows=True,
     require_game_end_row=True,
     verify_recorded_outcome=True,
+    supports_experiments=True,
+    threaded_layers=layers_read(REFEREE_READS),
 )
+
+
+def refuse_unread_referee_settings(sample_dir: Path) -> None:
+    """Raise, naming the field, for a recorded setting the referee does not read.
+
+    Run before the fail-closed reconstruction, so an unread setting is a loud
+    refusal rather than a floored set: the referee measures a recording it has
+    been reviewed for, or it says why it will not. The fields read are
+    :data:`REFEREE_READS`, looked up at call time. A recording whose rows do not
+    parse is left to that reconstruction, which fails it closed.
+    """
+
+    for seed in seeds_on_disk(sample_dir):
+        try:
+            entries = read_all_entries(sample_dir / f"replay-seed-{seed}.jsonl")
+        except _MALFORMED_INPUT_ERRORS:
+            continue
+        refuse_unread_settings(
+            recorded_experiment_config(entries),
+            reader="the watchability referee",
+            reads=REFEREE_READS,
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -2344,8 +2432,9 @@ def _supply_gauge_values(
     array, split on kind, so nothing is counted twice and nothing is dropped.
     The merge exists because a vent-rich candidate's strongest evidence must
     not read as starvation. The split is far from academic on the committed
-    bytes: vent flags are 92 of the 144 on ``replays/samples/9p2i``, 20 of 20
-    on ``replays/samples/4p1i``, and 308 of 428 on ``replays/ml_corpus/9p2i``
+    bytes: vent flags are 38 of the 53 on ``replays/samples/9p2i``, 20 of 20
+    on ``replays/samples/4p1i``, and read 308 of 428 on the baseline-7
+    ``replays/ml_corpus/9p2i``
     — which is why :class:`SupplyFloors` gates each component as well as the
     merge (a candidate must not clear the evidence floor on vents alone).
 
@@ -2378,8 +2467,32 @@ def _supply_gauge_values(
     )
 
 
+#: The checkout the era registry's set paths are relative to.
+_CHECKOUT_ROOT: Final[Path] = Path(__file__).resolve().parents[1]
+
+
+def default_baseline_id(
+    sample_dir: Path, *, registry: Sequence[CommittedSet] = COMMITTED_SETS
+) -> str:
+    """The floor block a set is scored against when its caller names none.
+
+    A committed set reads its own era's block, as the era registry
+    (:mod:`eval.eras`) names it: ``replays/samples/4p1i`` reads ``baseline-9``
+    and ``replays/samples/9p2i`` reads ``stage-b-r2``. A directory the registry
+    does not name (a candidate round, a scratch copy, a training evaluation)
+    reads the ladder tip's block, ``baseline-9``; the training-side selection
+    floors pass ``BAKEOFF_BASELINE_ID`` explicitly and never reach this default.
+    """
+
+    resolved = sample_dir.resolve()
+    for entry in registry:
+        if (_CHECKOUT_ROOT / entry.path).resolve() == resolved:
+            return entry.era.id
+    return LADDER_TIP_ERA.id
+
+
 def compute_watchability(
-    sample_dir: Path, *, baseline_id: str = _DEFAULT_BASELINE_ID
+    sample_dir: Path, *, baseline_id: str | None = None
 ) -> WatchabilityReport:
     """Run the two-layer selection referee over ``sample_dir`` from committed bytes.
 
@@ -2399,7 +2512,11 @@ def compute_watchability(
     whose games produce structurally less evidence than the baseline, or whose
     bytes do not reconstruct, is REJECTED. Raises :class:`KeyError` if
     ``baseline_id`` / the resolved roster has no pinned floor block (no silent
-    fallback — an un-pinned baseline must not certify a champion).
+    fallback — an un-pinned baseline must not certify a champion). With no
+    ``baseline_id`` the set's own era names the block
+    (:func:`default_baseline_id`). A recorded setting the referee has not been
+    reviewed for raises :class:`ValueError` naming it
+    (:func:`refuse_unread_referee_settings`).
     """
 
     if not sample_dir.is_dir():
@@ -2407,6 +2524,9 @@ def compute_watchability(
     seeds = seeds_on_disk(sample_dir)
     if not seeds:
         raise ValueError(f"no replay-seed-*.jsonl found under {sample_dir}")
+    if baseline_id is None:
+        baseline_id = default_baseline_id(sample_dir)
+    refuse_unread_referee_settings(sample_dir)
 
     roster_key = _roster_key(sample_dir)
     baseline_floors = _BASELINE_SUPPLY_FLOORS.get(baseline_id)

@@ -1,16 +1,22 @@
 """The reporter-justice instrument, pinned over the corpus at THIS head.
 
-Every number below is a fresh walk over the four committed sets -- the bytes the
-baseline-9 process re-record wrote -- and NOT a copy of the Wave-0 register's
-figures, which were measured on the sets that record replaced. Where the two are
-comparable the register's cell is named beside the pin as a REFERENCE, so a
-reader can see which way the class moved without either number pretending to be
-the other.
+Every number below is a fresh walk over the committed sets, and NOT a copy of
+the Wave-0 register's figures, which were measured on the sets the baseline-9
+record replaced. Where the two are comparable the register's cell is named
+beside the pin as a REFERENCE, so a reader can see which way the class moved
+without either number pretending to be the other.
+
+The sets are read per recorded era (eval/eras.py) and never pooled across one:
+the three baseline-9 sets pool together, and samples/9p2i, the stage-b-r2 era
+since the promotion of 2026-10-02, is read on its own. Pooling across the two
+raises (``test_the_pool_refuses_two_eras``).
 
 Three independent cross-checks make the walk more than self-consistent: the
-pooled ejection ledger reproduces the record's own published 411 total and 42
-innocent (audits/audit-2026-09-22-process-rerecord.md §4.1 row 9 and §6.2)
-without reading that document,
+baseline-9 ejection ledger reproduces the baseline-9 record's own published
+per-set innocent cells summed over its three sets (32 + 0 + 1 = 33,
+audits/audit-2026-09-22-process-rerecord.md §6.2), the promoted set's ledger
+reproduces the promotion record's 22 innocent of 66 ejections
+(audits/audit-2026-10-01-stage-b-r2.md §9), each without reading the document,
 and the reporter role census reproduces the premise the whole class rests on --
 the reporter is a crewmate in every body-report meeting, so exculpating them
 launders nobody.
@@ -56,84 +62,117 @@ _SETS: tuple[Path, ...] = (
 
 @pytest.fixture(scope="module")
 def pooled() -> ReporterJusticeCells:
-    return pool_reporter_justice(compute_reporter_justice(path) for path in _SETS)
+    """The baseline-9 era: its three sets pooled (samples/9p2i is not among them)."""
+
+    return pool_reporter_justice(compute_reporter_justice(path) for path in _SETS[1:])
+
+
+@pytest.fixture(scope="module")
+def promoted() -> ReporterJusticeCells:
+    """The stage-b-r2 era: samples/9p2i, on its own."""
+
+    return compute_reporter_justice(_SETS[0])
+
+
+def test_the_pool_refuses_two_eras(promoted: ReporterJusticeCells) -> None:
+    # Planted: the promoted set beside a baseline-9 set is two eras, and the pool
+    # refuses it rather than blending them.
+    with pytest.raises(ReporterJusticeError, match="never pool across eras"):
+        pool_reporter_justice([promoted, compute_reporter_justice(_SETS[1])])
+    assert promoted.recorded_settings != ()
+    assert compute_reporter_justice(_SETS[1]).recorded_settings == ()
 
 
 class TestCorpusShape:
-    def test_the_meeting_census(self, pooled: ReporterJusticeCells) -> None:
+    def test_the_meeting_census(
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
+    ) -> None:
         # baseline-7 REFERENCE: 618 body report + 50 emergency over 668.
-        assert pooled.games == 300
-        assert pooled.meetings == 676  # was 672
-        assert pooled.body_report_meetings == 623  # was 620
-        assert pooled.emergency_meetings == 53  # was 52
-        assert (
-            pooled.body_report_meetings + pooled.emergency_meetings == pooled.meetings
-        )
+        assert pooled.games == 250  # was 300 over all four sets
+        assert pooled.meetings == 531  # was 676 over all four sets
+        assert pooled.body_report_meetings == 488  # was 623 over all four sets
+        assert pooled.emergency_meetings == 43  # was 53 over all four sets
+        assert (promoted.games, promoted.meetings) == (50, 117)
+        assert (promoted.body_report_meetings, promoted.emergency_meetings) == (114, 3)
+        for cells in (pooled, promoted):
+            assert cells.body_report_meetings + cells.emergency_meetings == cells.meetings
 
     def test_the_reporter_is_a_crewmate_in_every_body_report(
-        self, pooled: ReporterJusticeCells
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
     ) -> None:
         # The premise the whole class rests on, re-derived rather than assumed:
         # an impostor that reported its own kill would turn the exculpation into
         # a laundering channel. baseline-7 REFERENCE: 618/618 CREWMATE.
-        assert pooled.reporter_impostor_meetings == 0
-        assert pooled.reporter_crewmate_meetings == pooled.body_report_meetings == 623
+        for cells in (pooled, promoted):
+            assert cells.reporter_impostor_meetings == 0
+        assert pooled.reporter_crewmate_meetings == pooled.body_report_meetings == 488
+        assert promoted.reporter_crewmate_meetings == 114
 
     def test_the_ejection_ledger_reproduces_the_records_published_totals(
-        self, pooled: ReporterJusticeCells
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
     ) -> None:
-        # An independent arrival at the two cells the baseline-9 record published
-        # (audits/audit-2026-09-22-process-rerecord.md §4.1 row 9 and §6.2): 411
-        # ejections of which 42 are innocent. Read off the recorded bytes here,
-        # never off that document.
-        assert pooled.ejections == 411  # was 429
-        assert pooled.innocent_ejections == 42  # was 46
-        assert pooled.impostor_ejections == 369  # was 383
-        assert pooled.ejections == pooled.innocent_ejections + pooled.impostor_ejections
+        # Independent arrivals at the cells each era's record published, read off
+        # the recorded bytes here and never off the documents: 33 innocent of the
+        # baseline-9 sets' ejections (32 + 0 + 1, audit-2026-09-22 §6.2), and 22
+        # innocent of the promoted set's 66 (audit-2026-10-01-stage-b-r2 §9).
+        assert pooled.ejections == 321  # was 411 over all four sets
+        assert pooled.innocent_ejections == 33  # was 42 over all four sets
+        assert pooled.impostor_ejections == 288  # was 369 over all four sets
+        assert (promoted.ejections, promoted.innocent_ejections) == (66, 22)
+        for cells in (pooled, promoted):
+            assert cells.ejections == cells.innocent_ejections + cells.impostor_ejections
 
 
 class TestReporterExposure:
     def test_the_reporters_share_of_the_innocent_ejections(
-        self, pooled: ReporterJusticeCells
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
     ) -> None:
         # The cell the record did NOT re-derive, and the reason this module
         # exists. baseline-7 REFERENCE: 30 of 42 = 71.4%.
-        assert pooled.reporter_ejections == 37  # was 34
-        # Every reporter ejected on this corpus was a crewmate, so exposure and
+        assert pooled.reporter_ejections == 30  # was 37 over all four sets
+        # Every reporter ejected on these sets was a crewmate, so exposure and
         # WRONGFUL ejection coincide here -- stated rather than assumed, because
         # the share below divides only the innocent half.
-        assert pooled.reporter_innocent_ejections == 37  # was 34
+        assert pooled.reporter_innocent_ejections == 30
         assert pooled.reporter_share_of_innocent_ejections == pytest.approx(
-            37 / 42, abs=1e-9
-        )  # was 34 / 46
+            30 / 33, abs=1e-9
+        )  # was 37 / 42 over all four sets
+        assert promoted.reporter_innocent_ejections == promoted.reporter_ejections == 17
+        assert promoted.reporter_share_of_innocent_ejections == pytest.approx(
+            17 / 22, abs=1e-9
+        )
 
     def test_the_per_slot_rates_and_the_relative_risk(
-        self, pooled: ReporterJusticeCells
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
     ) -> None:
         # baseline-7 REFERENCE: reporter 30/618 = 4.85%, innocent non-reporter
         # 12/1844 = 0.65%, relative risk 7.46x.
-        assert (pooled.reporter_ejections, pooled.reporter_slots) == (
-            37,
-            623,
-        )  # was (34, 620)
+        assert (pooled.reporter_ejections, pooled.reporter_slots) == (30, 488)
         assert (
             pooled.innocent_non_reporter_ejections,
             pooled.innocent_non_reporter_slots,
-        ) == (4, 1841)  # was (12, 1859)
-        assert (pooled.impostor_slot_ejections, pooled.impostor_slots) == (
-            318,
-            863,
-        )  # was (331, 856)
-        assert pooled.reporter_ejection_rate == pytest.approx(37 / 623, abs=1e-9)
+        ) == (2, 1390)
+        assert (pooled.impostor_slot_ejections, pooled.impostor_slots) == (247, 669)
+        # was (37, 623), (4, 1841) and (318, 863) over all four sets
+        assert pooled.reporter_ejection_rate == pytest.approx(30 / 488, abs=1e-9)
         assert pooled.innocent_non_reporter_ejection_rate == pytest.approx(
-            4 / 1841, abs=1e-9
+            2 / 1390, abs=1e-9
         )
         assert pooled.reporter_relative_risk == pytest.approx(
-            (37 / 623) / (4 / 1841), abs=1e-9
+            (30 / 488) / (2 / 1390), abs=1e-9
         )
         assert pooled.reporter_relative_risk == pytest.approx(
-            27.334, abs=5e-3
-        )  # was 8.495
+            42.725, abs=5e-3
+        )  # was 27.334 over all four sets
+        assert (promoted.reporter_ejections, promoted.reporter_slots) == (17, 114)
+        assert (
+            promoted.innocent_non_reporter_ejections,
+            promoted.innocent_non_reporter_slots,
+        ) == (5, 367)
+        assert (promoted.impostor_slot_ejections, promoted.impostor_slots) == (41, 195)
+        assert promoted.reporter_relative_risk == pytest.approx(
+            (17 / 114) / (5 / 367), abs=1e-9
+        )
 
     def test_an_undefined_relative_risk_is_never_reported_as_zero(self) -> None:
         # replays/ml_corpus/4p1i ejects 1 reporter and 0 innocent non-reporters.
@@ -158,72 +197,102 @@ class TestReporterExposure:
         assert "undefined" in render_reporter_justice(cells)
 
     def test_the_slot_classes_partition_the_living_roster(
-        self, pooled: ReporterJusticeCells
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
     ) -> None:
         # Every living participant of a body-report meeting is exactly one of
         # reporter / innocent non-reporter / impostor, so the slot total is the
         # ballot total. A double-counted seat would deflate every rate above.
-        assert (
-            pooled.reporter_slots
-            + pooled.innocent_non_reporter_slots
-            + pooled.impostor_slots
-            == pooled.crew_ballots + pooled.impostor_ballots
-        )
+        for cells in (pooled, promoted):
+            assert (
+                cells.reporter_slots
+                + cells.innocent_non_reporter_slots
+                + cells.impostor_slots
+                == cells.crew_ballots + cells.impostor_ballots
+            )
 
 
 class TestAimAtTheReporter:
-    def test_speech_shares(self, pooled: ReporterJusticeCells) -> None:
+    def test_speech_shares(
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
+    ) -> None:
         # baseline-7 REFERENCE: impostor 521/737 = 70.7%, crew 540/1513 = 35.7%.
         # The impostor half is flat; the crew half fell well outside its interval.
         assert (
             pooled.impostor_accusations_at_reporter,
             pooled.impostor_accusations,
-        ) == (553, 771)  # was (520, 739)
+        ) == (423, 598)  # was (553, 771) over all four sets
         assert (pooled.crew_accusations_at_reporter, pooled.crew_accusations) == (
-            582,
-            2228,
-        )  # was (521, 2129)
+            436,
+            1707,
+        )  # was (582, 2228) over all four sets
         assert pooled.impostor_accusation_at_reporter_share == pytest.approx(
-            553 / 771, abs=1e-9
+            423 / 598, abs=1e-9
         )
         assert pooled.crew_accusation_at_reporter_share == pytest.approx(
-            582 / 2228, abs=1e-9
+            436 / 1707, abs=1e-9
+        )
+        assert (
+            promoted.impostor_accusations_at_reporter,
+            promoted.impostor_accusations,
+        ) == (130, 197)
+        assert (promoted.crew_accusations_at_reporter, promoted.crew_accusations) == (
+            134,
+            517,
         )
 
-    def test_ballot_shares(self, pooled: ReporterJusticeCells) -> None:
+    def test_ballot_shares(
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
+    ) -> None:
         # The follow-through half: what the table SAYS about the reporter and
         # what it VOTES are different numbers, and only the second convicts.
         assert (pooled.crew_ballots_at_reporter, pooled.crew_ballots) == (
-            239,
-            2464,
-        )  # was (160, 2479)
+            180,
+            1878,
+        )  # was (239, 2464) over all four sets
         assert (pooled.impostor_ballots_at_reporter, pooled.impostor_ballots) == (
-            108,
-            863,
-        )  # was (103, 856)
+            82,
+            669,
+        )  # was (108, 863) over all four sets
         assert pooled.crew_ballot_at_reporter_share == pytest.approx(
-            239 / 2464, abs=1e-9
+            180 / 1878, abs=1e-9
         )
         assert pooled.impostor_ballot_at_reporter_share == pytest.approx(
-            108 / 863, abs=1e-9
+            82 / 669, abs=1e-9
         )
+        assert (promoted.crew_ballots_at_reporter, promoted.crew_ballots) == (59, 481)
+        assert (
+            promoted.impostor_ballots_at_reporter,
+            promoted.impostor_ballots,
+        ) == (71, 195)
 
 
 class TestInvocation:
     def test_the_exculpation_is_rendered_far_more_often_than_it_is_used(
-        self, pooled: ReporterJusticeCells
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
     ) -> None:
-        # Every one of the 3,327 body-report ballots CARRIES the exculpation.
-        # baseline-7 REFERENCE (a different, implicit hinge list -- NOT
-        # like-for-like): 113/3312 = 3.41% mentioning, 28 = 0.85% with a hinge,
-        # 8 = 0.24% speech turns and 0 by the reporter.
-        assert pooled.ballot_rationales == 3327  # was 3335
-        assert pooled.ballot_rationales_mentioning_report == 61  # was 82
-        assert pooled.ballot_rationales_with_hinge == 7  # was 13
-        assert pooled.speech_turns == 3327  # was 3335
-        assert pooled.speech_turns_mentioning_report == 296  # was 309
-        assert pooled.speech_turns_with_hinge == 8  # was 5
-        assert pooled.speech_turns_with_hinge_by_reporter == 0  # was 1
+        # Every one of the baseline-9 sets' 2,547 body-report ballots CARRIES the
+        # exculpation. baseline-7 REFERENCE (a different, implicit hinge list --
+        # NOT like-for-like): 113/3312 = 3.41% mentioning, 28 = 0.85% with a
+        # hinge, 8 = 0.24% speech turns and 0 by the reporter.
+        assert pooled.ballot_rationales == 2547  # was 3327 over all four sets
+        assert pooled.ballot_rationales_mentioning_report == 44  # was 61
+        assert pooled.ballot_rationales_with_hinge == 3  # was 7
+        assert pooled.speech_turns == 2547  # was 3327
+        assert pooled.speech_turns_mentioning_report == 233  # was 296
+        assert pooled.speech_turns_with_hinge == 6  # was 8
+        assert pooled.speech_turns_with_hinge_by_reporter == 0
+        # The promoted set: the one reply adds speech turns, so its turns
+        # outnumber its ballot rationales.
+        assert (promoted.ballot_rationales, promoted.speech_turns) == (676, 790)
+        assert (
+            promoted.ballot_rationales_mentioning_report,
+            promoted.ballot_rationales_with_hinge,
+        ) == (22, 4)
+        assert (
+            promoted.speech_turns_mentioning_report,
+            promoted.speech_turns_with_hinge,
+            promoted.speech_turns_with_hinge_by_reporter,
+        ) == (55, 1, 1)
 
     def test_the_hinge_list_is_stated_data_and_a_hinge_is_a_ceiling(self) -> None:
         # The register's own filing was off fourfold because its hinge list was
@@ -234,20 +303,23 @@ class TestInvocation:
         assert len(set(EXCULPATORY_HINGE_TERMS)) == len(EXCULPATORY_HINGE_TERMS)
 
     def test_a_hinge_is_only_counted_alongside_a_report_mention(
-        self, pooled: ReporterJusticeCells
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
     ) -> None:
         # The co-mention is the link that makes a generic exculpatory phrase a
         # probable base-rate invocation, so the hinge count can never exceed the
         # mention count.
-        assert (
-            pooled.ballot_rationales_with_hinge
-            <= pooled.ballot_rationales_mentioning_report
-        )
-        assert pooled.speech_turns_with_hinge <= pooled.speech_turns_mentioning_report
+        for cells in (pooled, promoted):
+            assert (
+                cells.ballot_rationales_with_hinge
+                <= cells.ballot_rationales_mentioning_report
+            )
+            assert cells.speech_turns_with_hinge <= cells.speech_turns_mentioning_report
 
 
 class TestCoDiscovery:
-    def test_the_split_by_role(self, pooled: ReporterJusticeCells) -> None:
+    def test_the_split_by_role(
+        self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
+    ) -> None:
         # The measurement that REJECTED the filed fix. baseline-7 REFERENCE:
         # 121/618 meetings, 89 CREWMATE / 51 IMPOSTOR = 36.4% impostor. The
         # meeting count sits inside its interval; the impostor SHARE is well
@@ -259,14 +331,21 @@ class TestCoDiscovery:
         # near the trigger tick: the tick-only predicate counted a speaker who
         # found a different body a tick earlier and inflated this class by
         # roughly a third (173 meetings / 223 slots).
-        assert pooled.meetings_with_co_discoverer == 122  # was 118
-        assert pooled.co_discoverer_slots_crewmate == 72  # was 74
-        assert pooled.co_discoverer_slots_impostor == 76  # was 71
-        assert pooled.co_discoverer_slots == 148  # was 145
+        # The baseline-9 sets (was 122 meetings, 72 / 76 over all four sets):
+        assert pooled.meetings_with_co_discoverer == 90
+        assert pooled.co_discoverer_slots_crewmate == 54
+        assert pooled.co_discoverer_slots_impostor == 54
+        assert pooled.co_discoverer_slots == 108
         assert pooled.co_discoverer_impostor_share == pytest.approx(
-            76 / 148, abs=1e-9
-        )  # was 71 / 145
+            54 / 108, abs=1e-9
+        )
         assert pooled.co_discoverer_impostor_share > 0.45
+        # The promoted set, on its own.
+        assert promoted.meetings_with_co_discoverer == 33
+        assert (
+            promoted.co_discoverer_slots_crewmate,
+            promoted.co_discoverer_slots_impostor,
+        ) == (23, 18)
 
 
 class TestPerSetShape:
@@ -283,11 +362,11 @@ class TestPerSetShape:
     ) -> None:
         text = render_reporter_justice(pooled)
         for fragment in (
-            "body report 623",
-            "37 reporter (37 of them innocent, 88.1% of the innocent total)",
-            "37/623",
-            "4/1841",
-            "76 IMPOSTOR",
+            "body report 488",
+            "30 reporter (30 of them innocent, 90.9% of the innocent total)",
+            "30/488",
+            "2/1390",
+            "54 IMPOSTOR",
         ):
             assert fragment in text, fragment
 

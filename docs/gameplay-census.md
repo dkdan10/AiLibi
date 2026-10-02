@@ -65,232 +65,247 @@ Every recorded setting field, and how this census uses it:
 | `impostor_ballot_version` | not read: an instructed ballot framing; the tally does not enforce it, so no cell is forced by it |
 | `kill_cooldown_ticks` | read as a value by: the length of the grace window, and the value the kill cooldown cell checks every cooldown write against |
 
-Named windows, in ticks:
+## Eras
 
-* `button_cooldown_ticks`: 6
-* `fresh_kill_window_ticks`: 3
-* `grace_window_ticks`: 4
-* `in_vent_cap_ticks`: 4
-* `short_window_ticks`: 2
+The committed sets are grouped by the era registry (`eval/eras.py`), and a count is pooled only with the other sets of its own era. Each era's settings below are derived from its recordings themselves rather than stated, and the named windows follow its recorded kill cooldown.
 
-## One era
+### baseline-9
 
-Every set below pooled, so every game shares one era, derived from the recordings themselves rather than stated:
+Sets: `ml_corpus/9p2i`, `ml_corpus/4p1i`, `samples/4p1i`, recorded 2026-09-22. Declared config: none, every experimental switch off.
 
 * recorded experiment settings: none beyond the historical defaults;
 * temporal observations: not delivered;
 * substrate flags on: absence_prior, citation_gate, coalesced_memory_render, evidence_quality_lift, grounded_prosecution, hard_evidence_gate, map_aware_arbitration, meeting_outcome_memory, movement_claim_shape, movement_perception, observation_id_rendering, reporter_exculpation, roll_call_round, self_location_trail, structured_turn_markers, task_completion_from_events, testimony_as_content, unfreeze_memory, vent_placement_contradictions, whereabouts_interior_flags, witnessed_kill_evidence; off: corroboration_discipline, impostor_roll_call, reporter_reasoning, temporal_observations, testimony_shapes;
-* prompt stamps, read from the MANIFEST rows of games that held a meeting: `accusation_round.qwen3_6_27b.v6`, `crewmate_report.qwen3_6_27b.v6`, `impostor_report.qwen3_6_27b.v6`, `vote_ballot.qwen3_6_27b.v8`.
+* prompt stamps, read from the MANIFEST rows of games that held a meeting: `accusation_round.qwen3_6_27b.v6`, `crewmate_report.qwen3_6_27b.v6`, `impostor_report.qwen3_6_27b.v6`, `vote_ballot.qwen3_6_27b.v8`;
+* named windows, in ticks: `button_cooldown_ticks` 6, `fresh_kill_window_ticks` 3, `grace_window_ticks` 4, `in_vent_cap_ticks` 4, `short_window_ticks` 2.
+
+### stage-b-r2
+
+Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2i/experiment-config.json`.
+
+* recorded experiment settings: `ballot_kill_row_version = 1`, `bounded_rebuttal_version = 1`, `impostor_ballot_version = 1`, `kill_cooldown_ticks = 6`, `meeting_reset = hub_with_grace`, `report_body_handle_version = 1`, `vent_entry_policy = own_fresh_kill`, `vent_exit_policy = look_and_wait`, `vent_witness_rule = physical`;
+* temporal observations: not delivered;
+* substrate flags on: absence_prior, citation_gate, coalesced_memory_render, evidence_quality_lift, grounded_prosecution, hard_evidence_gate, map_aware_arbitration, meeting_outcome_memory, movement_claim_shape, movement_perception, observation_id_rendering, reporter_exculpation, roll_call_round, self_location_trail, structured_turn_markers, task_completion_from_events, testimony_as_content, unfreeze_memory, vent_placement_contradictions, whereabouts_interior_flags, witnessed_kill_evidence; off: corroboration_discipline, impostor_roll_call, reporter_reasoning, temporal_observations, testimony_shapes;
+* prompt stamps, read from the MANIFEST rows of games that held a meeting: `accusation_round.qwen3_6_27b.v6`, `crewmate_report.qwen3_6_27b.v6`, `impostor_report.qwen3_6_27b.v6`, `vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1+vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1`;
+* named windows, in ticks: `button_cooldown_ticks` 6, `fresh_kill_window_ticks` 3, `grace_window_ticks` 6, `in_vent_cap_ticks` 4, `short_window_ticks` 2.
 
 ## The counts
 
 ### Witnesses
 
-| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| Kills a crewmate saw | 20/849 (2.4%) | 19/725 (2.6%) | 16/550 (2.9%) | 3/175 (1.7%) | 0/58 (0.0%) | 1/66 (1.5%) |
-| Vent entries a crewmate saw | 73/587 (12.4%) | 64/501 (12.8%) | 45/396 (11.4%) | 19/105 (18.1%) | 4/42 (9.5%) | 5/44 (11.4%) |
-| Vent exits a crewmate saw | 313/512 (61.1%) | 271/435 (62.3%) | 209/350 (59.7%) | 62/85 (72.9%) | 24/38 (63.2%) | 18/39 (46.2%) |
-| Vent exits seen from the room surfaced into | 251/512 (49.0%) | 226/435 (52.0%) | 173/350 (49.4%) | 53/85 (62.4%) | 17/38 (44.7%) | 8/39 (20.5%) |
-| Vent exits seen only from the room left | 62/512 (12.1%) | 45/435 (10.3%) | 36/350 (10.3%) | 9/85 (10.6%) | 7/38 (18.4%) | 10/39 (25.6%) |
-| Impostors seen venting, then ejected | 330/355 (93.0%) | 284/304 (93.4%) | 214/227 (94.3%) | 70/77 (90.9%) | 26/28 (92.9%) | 20/23 (87.0%) |
-| Impostors who vented unseen, then ejected | 13/89 (14.6%) | 13/56 (23.2%) | 10/48 (20.8%) | 3/8 (37.5%) | 0/14 (0.0%) | 0/19 (0.0%) |
-| Impostors who never vented, then ejected | 26/56 (46.4%) | 25/40 (62.5%) | 17/25 (68.0%) | 8/15 (53.3%) | 1/8 (12.5%) | 0/8 (0.0%) |
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Kills a crewmate saw | 17/674 (2.5%) | 16/550 (2.9%) | 0/58 (0.0%) | 1/66 (1.5%) | 14/195 (7.2%) |
+| Vent entries a crewmate saw | 54/482 (11.2%) | 45/396 (11.4%) | 4/42 (9.5%) | 5/44 (11.4%) | 16/140 (11.4%) |
+| Vent exits a crewmate saw | 251/427 (58.8%) | 209/350 (59.7%) | 24/38 (63.2%) | 18/39 (46.2%) | 8/72 (11.1%) |
+| Vent exits seen from the room surfaced into | 198/427 (46.4%) | 173/350 (49.4%) | 17/38 (44.7%) | 8/39 (20.5%) | 8/72 (11.1%) |
+| Vent exits seen only from the room left | 53/427 (12.4%) | 36/350 (10.3%) | 7/38 (18.4%) | 10/39 (25.6%) | 0/72 by construction |
+| Impostors seen venting, then ejected | 260/278 (93.5%) | 214/227 (94.3%) | 26/28 (92.9%) | 20/23 (87.0%) | 24/24 (100.0%) |
+| Impostors who vented unseen, then ejected | 10/81 (12.3%) | 10/48 (20.8%) | 0/14 (0.0%) | 0/19 (0.0%) | 12/52 (23.1%) |
+| Impostors who never vented, then ejected | 18/41 (43.9%) | 17/25 (68.0%) | 1/8 (12.5%) | 0/8 (0.0%) | 8/24 (33.3%) |
 
 ### Vent trips and surfacings
 
-| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| Vent entries not after the impostor's own fresh kill | 103/587 (17.5%) | 101/501 (20.2%) | 88/396 (22.2%) | 13/105 (12.4%) | 0/42 (0.0%) | 2/44 (4.5%) |
-| Surfacings before the cap with someone in view | 299/512 (58.4%) | 264/435 (60.7%) | 212/350 (60.6%) | 52/85 (61.2%) | 18/38 (47.4%) | 17/39 (43.6%) |
-| Vent trips longer than the cap | n/a | n/a | n/a | n/a | n/a | n/a |
-| Surfacings at the cap | n/a | n/a | n/a | n/a | n/a | n/a |
-| Vent exits into a room a crewmate stood in | 250/512 (48.8%) | 226/435 (52.0%) | 173/350 (49.4%) | 53/85 (62.4%) | 15/38 (39.5%) | 9/39 (23.1%) |
-| Vent exits into a room the impostor could see a crewmate in | 134/512 (26.2%) | 122/435 (28.0%) | 91/350 (26.0%) | 31/85 (36.5%) | 8/38 (21.1%) | 4/39 (10.3%) |
-| Vent exits while a crewmate stood in the room left | 24/512 (4.7%) | 18/435 (4.1%) | 17/350 (4.9%) | 1/85 (1.2%) | 2/38 (5.3%) | 4/39 (10.3%) |
-| Surfacings in place with a crewmate arriving before the walk-out | n/a | n/a | n/a | n/a | n/a | n/a |
-| Kills soon after the killer surfaced | 11/849 (1.3%) | 11/725 (1.5%) | 8/550 (1.5%) | 3/175 (1.7%) | 0/58 (0.0%) | 0/66 (0.0%) |
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Vent entries not after the impostor's own fresh kill | 90/482 (18.7%) | 88/396 (22.2%) | 0/42 (0.0%) | 2/44 (4.5%) | 0/140 by construction |
+| Surfacings before the cap with someone in view | 247/427 (57.8%) | 212/350 (60.6%) | 18/38 (47.4%) | 17/39 (43.6%) | 0/72 by construction |
+| Vent trips longer than the cap | n/a | n/a | n/a | n/a | 0/66 by construction |
+| Surfacings at the cap | n/a | n/a | n/a | n/a | 5/72 (6.9%) |
+| Vent exits into a room a crewmate stood in | 197/427 (46.1%) | 173/350 (49.4%) | 15/38 (39.5%) | 9/39 (23.1%) | 0/72 (0.0%) |
+| Vent exits into a room the impostor could see a crewmate in | 103/427 (24.1%) | 91/350 (26.0%) | 8/38 (21.1%) | 4/39 (10.3%) | 0/72 (0.0%) |
+| Vent exits while a crewmate stood in the room left | 23/427 (5.4%) | 17/350 (4.9%) | 2/38 (5.3%) | 4/39 (10.3%) | 0/72 (0.0%) |
+| Surfacings in place with a crewmate arriving before the walk-out | n/a | n/a | n/a | n/a | 2/44 (4.5%) |
+| Kills soon after the killer surfaced | 8/674 (1.2%) | 8/550 (1.5%) | 0/58 (0.0%) | 0/66 (0.0%) | 0/195 (0.0%) |
 
 **Ticks inside per surfaced vent trip.**
 
-| row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | 512 | 435 | 350 | 85 | 38 | 39 |
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 427 | 350 | 38 | 39 | 49 |
+| 2 | 0 | 0 | 0 | 0 | 3 |
+| 3 | 0 | 0 | 0 | 0 | 15 |
+| 4 | 0 | 0 | 0 | 0 | 5 |
 
 ### Vent proof at meetings
 
-| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| Meetings with vent proof | 330/676 (48.8%) | 285/594 (48.0%) | 215/449 (47.9%) | 70/145 (48.3%) | 26/43 (60.5%) | 19/39 (48.7%) |
-| Impostor ejections in the vent band | 326/369 (88.3%) | 281/322 (87.3%) | 211/241 (87.6%) | 70/81 (86.4%) | 26/27 (96.3%) | 19/20 (95.0%) |
-| Crewmate ejections in the vent band | 0/42 (0.0%) | 0/41 (0.0%) | 0/32 (0.0%) | 0/9 (0.0%) | 0/1 (0.0%) | n/a |
-| Impostor ejections without vent proof | 43/369 (11.7%) | 41/322 (12.7%) | 30/241 (12.4%) | 11/81 (13.6%) | 1/27 (3.7%) | 1/20 (5.0%) |
-| Vent-band ejections resting only on the room left | 50/326 (15.3%) | 37/281 (13.2%) | 29/211 (13.7%) | 8/70 (11.4%) | 6/26 (23.1%) | 7/19 (36.8%) |
-| Meetings without vent proof that ejected | 83/346 (24.0%) | 80/309 (25.9%) | 60/234 (25.6%) | 20/75 (26.7%) | 2/17 (11.8%) | 1/20 (5.0%) |
-| Ejections without vent proof that removed an impostor | 43/83 (51.8%) | 41/80 (51.2%) | 30/60 (50.0%) | 11/20 (55.0%) | 1/2 (50.0%) | 1/1 (100.0%) |
-| Button meetings with vent proof | 53/53 (100.0%) | 43/43 (100.0%) | 33/33 (100.0%) | 10/10 (100.0%) | 7/7 (100.0%) | 3/3 (100.0%) |
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Meetings with vent proof | 260/531 (49.0%) | 215/449 (47.9%) | 26/43 (60.5%) | 19/39 (48.7%) | 24/117 (20.5%) |
+| Impostor ejections in the vent band | 256/288 (88.9%) | 211/241 (87.6%) | 26/27 (96.3%) | 19/20 (95.0%) | 24/44 (54.5%) |
+| Crewmate ejections in the vent band | 0/33 (0.0%) | 0/32 (0.0%) | 0/1 (0.0%) | n/a | 0/22 (0.0%) |
+| Impostor ejections without vent proof | 32/288 (11.1%) | 30/241 (12.4%) | 1/27 (3.7%) | 1/20 (5.0%) | 20/44 (45.5%) |
+| Vent-band ejections resting only on the room left | 42/256 (16.4%) | 29/211 (13.7%) | 6/26 (23.1%) | 7/19 (36.8%) | 0/24 by construction |
+| Meetings without vent proof that ejected | 63/271 (23.2%) | 60/234 (25.6%) | 2/17 (11.8%) | 1/20 (5.0%) | 42/93 (45.2%) |
+| Ejections without vent proof that removed an impostor | 32/63 (50.8%) | 30/60 (50.0%) | 1/2 (50.0%) | 1/1 (100.0%) | 20/42 (47.6%) |
+| Button meetings with vent proof | 43/43 (100.0%) | 33/33 (100.0%) | 7/7 (100.0%) | 3/3 (100.0%) | 3/3 (100.0%) |
 
 **Which vent moment the vent band rests on.**
 
-| row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| both | 10 | 10 | 8 | 2 | 0 | 0 |
-| entry only | 63 | 54 | 37 | 17 | 4 | 5 |
-| exit only | 253 | 217 | 166 | 51 | 22 | 14 |
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| both | 8 | 8 | 0 | 0 | 0 |
+| entry only | 46 | 37 | 4 | 5 | 16 |
+| exit only | 202 | 166 | 22 | 14 | 8 |
 
 ### Corpses and the state play resumes in
 
-| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| Stale report meetings | 167/623 (26.8%) | 167/551 (30.3%) | 124/416 (29.8%) | 43/135 (31.9%) | 0/36 (0.0%) | 0/36 (0.0%) |
-| Meetings opening with another unreported corpse | 335/676 (49.6%) | 325/594 (54.7%) | 251/449 (55.9%) | 74/145 (51.0%) | 7/43 (16.3%) | 3/39 (7.7%) |
-| Play resumes with an impostor in a vent | 30/486 (6.2%) | 30/452 (6.6%) | 20/345 (5.8%) | 10/107 (9.3%) | 0/15 (0.0%) | 0/19 (0.0%) |
-| Play resumes with a corpse on the floor | 263/486 (54.1%) | 263/452 (58.2%) | 203/345 (58.8%) | 60/107 (56.1%) | 0/15 (0.0%) | 0/19 (0.0%) |
-| Kills soon after a meeting | 135/389 (34.7%) | 129/363 (35.5%) | 101/276 (36.6%) | 28/87 (32.2%) | 3/12 (25.0%) | 3/14 (21.4%) |
-| Meetings opening with an impostor in a vent | 101/676 (14.9%) | 92/594 (15.5%) | 63/449 (14.0%) | 29/145 (20.0%) | 4/43 (9.3%) | 5/39 (12.8%) |
-| Impostors able to kill when a meeting opened | 326/943 (34.6%) | 301/861 (35.0%) | 238/651 (36.6%) | 63/210 (30.0%) | 12/43 (27.9%) | 13/39 (33.3%) |
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Stale report meetings | 124/488 (25.4%) | 124/416 (29.8%) | 0/36 (0.0%) | 0/36 (0.0%) | 0/114 by construction |
+| Meetings opening with another unreported corpse | 261/531 (49.2%) | 251/449 (55.9%) | 7/43 (16.3%) | 3/39 (7.7%) | 48/117 (41.0%) |
+| Play resumes with an impostor in a vent | 20/379 (5.3%) | 20/345 (5.8%) | 0/15 (0.0%) | 0/19 (0.0%) | 0/102 by construction |
+| Play resumes with a corpse on the floor | 203/379 (53.6%) | 203/345 (58.8%) | 0/15 (0.0%) | 0/19 (0.0%) | 0/102 by construction |
+| Kills soon after a meeting | 107/302 (35.4%) | 101/276 (36.6%) | 3/12 (25.0%) | 3/14 (21.4%) | 0/109 (0.0%) |
+| Meetings opening with an impostor in a vent | 72/531 (13.6%) | 63/449 (14.0%) | 4/43 (9.3%) | 5/39 (12.8%) | 66/117 (56.4%) |
+| Impostors able to kill when a meeting opened | 263/733 (35.9%) | 238/651 (36.6%) | 12/43 (27.9%) | 13/39 (33.3%) | 54/200 (27.0%) |
 
 **Corpse age at report.**
 
-| row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | 56 | 55 | 41 | 14 | 0 | 1 |
-| 2 | 103 | 87 | 65 | 22 | 8 | 8 |
-| 3 | 108 | 88 | 65 | 23 | 11 | 9 |
-| 4 | 140 | 121 | 91 | 30 | 11 | 8 |
-| 5 | 40 | 35 | 24 | 11 | 1 | 4 |
-| 6 | 53 | 45 | 31 | 14 | 4 | 4 |
-| 7 | 30 | 28 | 21 | 7 | 1 | 1 |
-| 8 | 13 | 12 | 10 | 2 | 0 | 1 |
-| 9 | 14 | 14 | 12 | 2 | 0 | 0 |
-| 10 | 7 | 7 | 7 | 0 | 0 | 0 |
-| 11 | 17 | 17 | 14 | 3 | 0 | 0 |
-| 12 | 11 | 11 | 9 | 2 | 0 | 0 |
-| 13 | 6 | 6 | 5 | 1 | 0 | 0 |
-| 14 | 2 | 2 | 2 | 0 | 0 | 0 |
-| 16 | 4 | 4 | 3 | 1 | 0 | 0 |
-| 17 | 2 | 2 | 2 | 0 | 0 | 0 |
-| 18 | 1 | 1 | 1 | 0 | 0 | 0 |
-| 19 | 6 | 6 | 6 | 0 | 0 | 0 |
-| 20 | 3 | 3 | 2 | 1 | 0 | 0 |
-| 23 | 3 | 3 | 3 | 0 | 0 | 0 |
-| 25 | 1 | 1 | 1 | 0 | 0 | 0 |
-| 26 | 1 | 1 | 0 | 1 | 0 | 0 |
-| 29 | 1 | 1 | 0 | 1 | 0 | 0 |
-| 32 | 1 | 1 | 1 | 0 | 0 | 0 |
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 42 | 41 | 0 | 1 | 19 |
+| 2 | 81 | 65 | 8 | 8 | 13 |
+| 3 | 85 | 65 | 11 | 9 | 33 |
+| 4 | 110 | 91 | 11 | 8 | 30 |
+| 5 | 29 | 24 | 1 | 4 | 6 |
+| 6 | 39 | 31 | 4 | 4 | 6 |
+| 7 | 23 | 21 | 1 | 1 | 2 |
+| 8 | 11 | 10 | 0 | 1 | 2 |
+| 9 | 12 | 12 | 0 | 0 | 0 |
+| 10 | 7 | 7 | 0 | 0 | 2 |
+| 11 | 14 | 14 | 0 | 0 | 1 |
+| 12 | 9 | 9 | 0 | 0 | 0 |
+| 13 | 5 | 5 | 0 | 0 | 0 |
+| 14 | 2 | 2 | 0 | 0 | 0 |
+| 16 | 3 | 3 | 0 | 0 | 0 |
+| 17 | 2 | 2 | 0 | 0 | 0 |
+| 18 | 1 | 1 | 0 | 0 | 0 |
+| 19 | 6 | 6 | 0 | 0 | 0 |
+| 20 | 2 | 2 | 0 | 0 | 0 |
+| 23 | 3 | 3 | 0 | 0 | 0 |
+| 25 | 1 | 1 | 0 | 0 | 0 |
+| 32 | 1 | 1 | 0 | 0 | 0 |
 
 ### After a regroup
 
-| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| Kills in the grace window after a regroup | n/a | n/a | n/a | n/a | n/a | n/a |
-| Reported corpses older than the last regroup | n/a | n/a | n/a | n/a | n/a | n/a |
-| Vent trips ended by a regroup | n/a | n/a | n/a | n/a | n/a | n/a |
-| Kill witnesses pressing the button soon after a regroup | n/a | n/a | n/a | n/a | n/a | n/a |
-| Sabotage active at a regroup | n/a | n/a | n/a | n/a | n/a | n/a |
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Kills in the grace window after a regroup | n/a | n/a | n/a | n/a | 0/109 by construction |
+| Reported corpses older than the last regroup | n/a | n/a | n/a | n/a | 0/64 by construction |
+| Vent trips ended by a regroup | n/a | n/a | n/a | n/a | 47/140 (33.6%) |
+| Kill witnesses pressing the button soon after a regroup | n/a | n/a | n/a | n/a | 0/3 (0.0%) |
+| Sabotage active at a regroup | n/a | n/a | n/a | n/a | 5/102 (4.9%) |
 
 **Trigger-tick movement and task events a regroup drops.**
 
-| row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| (none) | n/a | n/a | n/a | n/a | n/a | n/a |
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Moved | n/a | n/a | n/a | n/a | 46 |
+| TaskCompleted | n/a | n/a | n/a | n/a | 10 |
+| TaskProgressed | n/a | n/a | n/a | n/a | 22 |
 
 ### The kill cooldown
 
-| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| Kill cooldowns that differ from the recorded value | 0/1349 by construction | 0/1125 by construction | 0/850 by construction | 0/275 by construction | 0/108 by construction | 0/116 by construction |
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Kill cooldowns that differ from the recorded value | 0/1074 by construction | 0/850 by construction | 0/108 by construction | 0/116 by construction | 0/447 by construction |
 
 **Kill cooldown writes by writer.**
 
-| row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| after_kill | 849 | 725 | 550 | 175 | 58 | 66 |
-| round_start | 500 | 400 | 300 | 100 | 50 | 50 |
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| after_kill | 674 | 550 | 58 | 66 | 195 |
+| regroup | 0 | 0 | 0 | 0 | 152 |
+| round_start | 400 | 300 | 50 | 50 | 100 |
 
 ### Meeting structure
 
-| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| The first reply accuses the opener | 521/676 (77.1%) | 448/594 (75.4%) | 328/449 (73.1%) | 120/145 (82.8%) | 36/43 (83.7%) | 37/39 (94.9%) |
-| Someone accuses the opener | 561/676 (83.0%) | 487/594 (82.0%) | 362/449 (80.6%) | 125/145 (86.2%) | 37/43 (86.0%) | 37/39 (94.9%) |
-| The opener speaks a second time | 0/676 (0.0%) | 0/594 (0.0%) | 0/449 (0.0%) | 0/145 (0.0%) | 0/43 (0.0%) | 0/39 (0.0%) |
-| An accused opener answers | 0/561 by construction | 0/487 by construction | 0/362 by construction | 0/125 by construction | 0/37 by construction | 0/37 by construction |
-| Meetings where someone spoke twice | 0/676 by construction | 0/594 by construction | 0/449 by construction | 0/145 by construction | 0/43 by construction | 0/39 by construction |
-| Meetings with two repeat-speaker turns | 0/676 by construction | 0/594 by construction | 0/449 by construction | 0/145 by construction | 0/43 by construction | 0/39 by construction |
-| Meetings opened by an impostor | 0/676 by construction | 0/594 by construction | 0/449 by construction | 0/145 by construction | 0/43 by construction | 0/39 by construction |
-| Report openings that name the kill tick in the body handle | 623/623 (100.0%) | 551/551 (100.0%) | 416/416 (100.0%) | 135/135 (100.0%) | 36/36 (100.0%) | 36/36 (100.0%) |
-| Openers among ejected crewmates | 38/42 (90.5%) | 37/41 (90.2%) | 30/32 (93.8%) | 7/9 (77.8%) | 1/1 (100.0%) | n/a |
-| Report meetings that skipped | 264/623 (42.4%) | 230/551 (41.7%) | 175/416 (42.1%) | 55/135 (40.7%) | 15/36 (41.7%) | 19/36 (52.8%) |
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| The first reply accuses the opener | 401/531 (75.5%) | 328/449 (73.1%) | 36/43 (83.7%) | 37/39 (94.9%) | 80/117 (68.4%) |
+| Someone accuses the opener | 436/531 (82.1%) | 362/449 (80.6%) | 37/43 (86.0%) | 37/39 (94.9%) | 105/117 (89.7%) |
+| The opener speaks a second time | 0/531 (0.0%) | 0/449 (0.0%) | 0/43 (0.0%) | 0/39 (0.0%) | 87/117 (74.4%) |
+| An accused opener answers | 0/436 by construction | 0/362 by construction | 0/37 by construction | 0/37 by construction | 87/105 (82.9%) |
+| Meetings where someone spoke twice | 0/531 by construction | 0/449 by construction | 0/43 by construction | 0/39 by construction | 117/117 (100.0%) |
+| Meetings with two repeat-speaker turns | 0/531 by construction | 0/449 by construction | 0/43 by construction | 0/39 by construction | 0/117 by construction |
+| Meetings opened by an impostor | 0/531 by construction | 0/449 by construction | 0/43 by construction | 0/39 by construction | 0/117 by construction |
+| Report openings that name the kill tick in the body handle | 488/488 (100.0%) | 416/416 (100.0%) | 36/36 (100.0%) | 36/36 (100.0%) | 0/114 by construction |
+| Openers among ejected crewmates | 31/33 (93.9%) | 30/32 (93.8%) | 1/1 (100.0%) | n/a | 17/22 (77.3%) |
+| Report meetings that skipped | 209/488 (42.8%) | 175/416 (42.1%) | 15/36 (41.7%) | 19/36 (52.8%) | 51/114 (44.7%) |
 
 **Meetings by trigger.**
 
-| row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| emergency | 53 | 43 | 33 | 10 | 7 | 3 |
-| report | 623 | 551 | 416 | 135 | 36 | 36 |
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| emergency | 43 | 33 | 7 | 3 | 3 |
+| report | 488 | 416 | 36 | 36 | 114 |
 
 **Ejected crewmate openers by trigger.**
 
-| row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| emergency | 1 | 1 | 1 | 0 | 0 | 0 |
-| report | 37 | 36 | 29 | 7 | 1 | 0 |
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| emergency | 1 | 1 | 0 | 0 | 0 |
+| report | 30 | 29 | 1 | 0 | 17 |
 
 **Actions thrown away on trigger ticks.**
 
-| row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| do_task | 745 | 718 | 513 | 205 | 13 | 14 |
-| emergency | 16 | 15 | 13 | 2 | 1 | 0 |
-| kill | 39 | 37 | 30 | 7 | 1 | 1 |
-| move | 809 | 754 | 566 | 188 | 26 | 29 |
-| repair_sabotage | 4 | 4 | 3 | 1 | 0 | 0 |
-| report | 96 | 96 | 70 | 26 | 0 | 0 |
-| sabotage | 1 | 1 | 1 | 0 | 0 | 0 |
-| vent | 121 | 112 | 80 | 32 | 4 | 5 |
-| wait | 358 | 329 | 260 | 69 | 13 | 16 |
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| do_task | 540 | 513 | 13 | 14 | 129 |
+| emergency | 14 | 13 | 1 | 0 | 0 |
+| kill | 32 | 30 | 1 | 1 | 3 |
+| move | 621 | 566 | 26 | 29 | 134 |
+| repair_sabotage | 3 | 3 | 0 | 0 | 0 |
+| report | 70 | 70 | 0 | 0 | 25 |
+| sabotage | 1 | 1 | 0 | 0 | 0 |
+| vent | 89 | 80 | 4 | 5 | 11 |
+| wait | 289 | 260 | 13 | 16 | 156 |
 
 ### Rebuttals
 
-| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| Rebuttals the selector would not have chosen | n/a | n/a | n/a | n/a | n/a | n/a |
-| Rebuttals carrying an alibi | n/a | n/a | n/a | n/a | n/a | n/a |
-| Rebuttals carrying a whereabouts claim | n/a | n/a | n/a | n/a | n/a | n/a |
-| Rebuttals carrying a sighting | n/a | n/a | n/a | n/a | n/a | n/a |
-| Rebuttals that only redirect | n/a | n/a | n/a | n/a | n/a | n/a |
-| Rebuttal accusations against players who already spoke | n/a | n/a | n/a | n/a | n/a | n/a |
-| Opener rebuttals answering the charged tick | n/a | n/a | n/a | n/a | n/a | n/a |
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Rebuttals the selector would not have chosen | n/a | n/a | n/a | n/a | 0/117 by construction |
+| Rebuttals carrying an alibi | n/a | n/a | n/a | n/a | 89/117 (76.1%) |
+| Rebuttals carrying a whereabouts claim | n/a | n/a | n/a | n/a | 89/117 (76.1%) |
+| Rebuttals carrying a sighting | n/a | n/a | n/a | n/a | 79/117 (67.5%) |
+| Rebuttals that only redirect | n/a | n/a | n/a | n/a | 27/117 (23.1%) |
+| Rebuttal accusations against players who already spoke | n/a | n/a | n/a | n/a | 116/116 (100.0%) |
+| Opener rebuttals answering the charged tick | n/a | n/a | n/a | n/a | 17/18 (94.4%), 69 not evaluable |
 
 **Who received the rebuttal, and who had accused them.**
 
-| row | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| (none) | n/a | n/a | n/a | n/a | n/a | n/a |
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| another crewmate, answering a crewmate | n/a | n/a | n/a | n/a | 1 |
+| another crewmate, answering an impostor | n/a | n/a | n/a | n/a | 1 |
+| another impostor, answering a crewmate | n/a | n/a | n/a | n/a | 28 |
+| the opener, answering a crewmate | n/a | n/a | n/a | n/a | 28 |
+| the opener, answering an impostor | n/a | n/a | n/a | n/a | 59 |
 
 ### Ballots
 
-| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| Impostor ballots that skip | 760/943 (80.6%) | 694/861 (80.6%) | 530/651 (81.4%) | 164/210 (78.1%) | 33/43 (76.7%) | 33/39 (84.6%) |
-| Impostor ballots that name a player | 183/943 (19.4%) | 167/861 (19.4%) | 121/651 (18.6%) | 46/210 (21.9%) | 10/43 (23.3%) | 6/39 (15.4%) |
-| Impostor ballots naming a player with a supported label | 178/183 (97.3%) | 164/167 (98.2%) | 120/121 (99.2%) | 44/46 (95.7%) | 8/10 (80.0%) | 6/6 (100.0%) |
-| Impostor ballots recorded against a teammate | 0/943 by construction | 0/861 by construction | 0/651 by construction | 0/210 by construction | 0/43 by construction | 0/39 by construction |
-| Impostor ballots written against a teammate | 13/943 (1.4%) | 13/861 (1.5%) | 12/651 (1.8%) | 1/210 (0.5%) | 0/43 (0.0%) | 0/39 (0.0%) |
-| Ejections whose confidence floor only impostors met | 0/411 (0.0%) | 0/363 (0.0%) | 0/273 (0.0%) | 0/90 (0.0%) | 0/28 (0.0%) | 0/20 (0.0%) |
-| Own-kill ballot rows naming a teammate or held by a non-witness | n/a | n/a | n/a | n/a | n/a | n/a |
-| Own-kill ballot rows their holder cited | n/a | n/a | n/a | n/a | n/a | n/a |
-| Kills a crewmate saw, held by a living witness at the next meeting | 20/20 (100.0%) | 19/19 (100.0%) | 16/16 (100.0%) | 3/3 (100.0%) | n/a | 1/1 (100.0%) |
-| Held kills whose witness voted the killer | 19/20 (95.0%) | 18/19 (94.7%) | 15/16 (93.8%) | 3/3 (100.0%) | n/a | 1/1 (100.0%) |
-| Held kills whose killer was ejected | 12/20 (60.0%) | 12/19 (63.2%) | 10/16 (62.5%) | 2/3 (66.7%) | n/a | 0/1 (0.0%) |
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Impostor ballots that skip | 596/733 (81.3%) | 530/651 (81.4%) | 33/43 (76.7%) | 33/39 (84.6%) | 89/200 (44.5%) |
+| Impostor ballots that name a player | 137/733 (18.7%) | 121/651 (18.6%) | 10/43 (23.3%) | 6/39 (15.4%) | 111/200 (55.5%) |
+| Impostor ballots naming a player with a supported label | 134/137 (97.8%) | 120/121 (99.2%) | 8/10 (80.0%) | 6/6 (100.0%) | 111/111 (100.0%) |
+| Impostor ballots recorded against a teammate | 0/733 by construction | 0/651 by construction | 0/43 by construction | 0/39 by construction | 0/200 by construction |
+| Impostor ballots written against a teammate | 12/733 (1.6%) | 12/651 (1.8%) | 0/43 (0.0%) | 0/39 (0.0%) | 16/200 (8.0%) |
+| Ejections whose confidence floor only impostors met | 0/321 (0.0%) | 0/273 (0.0%) | 0/28 (0.0%) | 0/20 (0.0%) | 0/66 (0.0%) |
+| Own-kill ballot rows naming a teammate or held by a non-witness | n/a | n/a | n/a | n/a | 0/23 by construction |
+| Own-kill ballot rows their holder cited | n/a | n/a | n/a | n/a | 21/23 (91.3%) |
+| Kills a crewmate saw, held by a living witness at the next meeting | 17/17 (100.0%) | 16/16 (100.0%) | n/a | 1/1 (100.0%) | 14/14 (100.0%) |
+| Held kills whose witness voted the killer | 16/17 (94.1%) | 15/16 (93.8%) | n/a | 1/1 (100.0%) | 13/14 (92.9%) |
+| Held kills whose killer was ejected | 10/17 (58.8%) | 10/16 (62.5%) | n/a | 0/1 (0.0%) | 6/14 (42.9%) |
 
 ### Reported beside the counts
 
-| cell | all four sets | the two nine-player sets | ml_corpus/9p2i | samples/9p2i | ml_corpus/4p1i | samples/4p1i |
-| --- | --- | --- | --- | --- | --- | --- |
-| Games the impostors won | 88/300 (29.3%) | 56/200 (28.0%) | 45/150 (30.0%) | 11/50 (22.0%) | 14/50 (28.0%) | 18/50 (36.0%) |
-| Ejections that removed an impostor | 369/411 (89.8%) | 322/363 (88.7%) | 241/273 (88.3%) | 81/90 (90.0%) | 27/28 (96.4%) | 20/20 (100.0%) |
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Games the impostors won | 77/250 (30.8%) | 45/150 (30.0%) | 14/50 (28.0%) | 18/50 (36.0%) | 24/50 (48.0%) |
+| Ejections that removed an impostor | 288/321 (89.7%) | 241/273 (88.3%) | 27/28 (96.4%) | 20/20 (100.0%) | 44/66 (66.7%) |
 
 ## Definitions
 

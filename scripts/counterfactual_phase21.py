@@ -3,9 +3,11 @@
 Two modes over one machine, because the same three levers have to be read on
 bytes recorded BOTH ways.
 
-``--sets`` is the committed-record mode: the four committed replay sets, whose
-bytes were recorded with every lever OFF. ``--recording <dir> --recorded-slate
-on`` is the LEVER-ON mode: one directory of ``replay-seed-*.jsonl`` recorded with
+``--sets`` is the committed-record mode: the baseline-9 era's three committed
+replay sets, whose bytes were recorded with every lever OFF (``samples/9p2i``
+moved to the stage-b-r2 era on 2026-10-02 and is refused by name).
+``--recording <dir> --recorded-slate on`` is the LEVER-ON mode: one directory
+of ``replay-seed-*.jsonl`` recorded with
 the Wave-2 slate up -- 21.23's smoke and 21.24's record write exactly that, into
 a scratch directory outside this repository -- and it reads the ratified
 pre-registration's seven tripwire predicates off those bytes. The two modes share
@@ -14,8 +16,9 @@ is and therefore which direction the second render runs in.
 
 One command, one shipping slate, one table. It prices the three Wave-2 levers --
 ``reporter_reasoning``, ``corroboration_discipline``, ``testimony_shapes`` -- over
-the four committed replay sets and prints, per set and pooled with a numerator and
-a denominator on every cell, what the recorded bytes can say about them offline.
+the baseline-9 era's committed replay sets and prints, per set and pooled with a
+numerator and a denominator on every cell, what the recorded bytes can say about
+them offline.
 
 Three columns, in this order, because the third is only worth reading once the
 first two agree:
@@ -152,6 +155,7 @@ from meetings.corroboration import (  # noqa: E402
     TestimonySupport,
     build_testimony_ledger,
 )
+from eval.eras import BASELINE_9, era_of  # noqa: E402
 from meetings.render_contract import ReporterContext  # noqa: E402
 from meetings.manager import (  # noqa: E402
     MeetingParticipant,
@@ -201,12 +205,14 @@ from tests.meetings.test_prompt_byte_golden import (  # noqa: E402
 # The slate.                                                                   #
 # --------------------------------------------------------------------------- #
 
-# The four committed sets, in the record audit's order.
-CANONICAL_SETS: Final[tuple[str, ...]] = (
-    "samples/9p2i",
-    "ml_corpus/9p2i",
-    "samples/4p1i",
-    "ml_corpus/4p1i",
+# The committed sets of the baseline-9 era, in the record audit's order. The
+# counterfactual reads recordings made with every lever OFF on the baseline-9
+# substrate; samples/9p2i left that era at the promotion of candidate round 2
+# (2026-10-02, eval/eras.py) and is refused by name.
+CANONICAL_SETS: Final[tuple[str, ...]] = tuple(
+    label
+    for label in ("samples/9p2i", "ml_corpus/9p2i", "samples/4p1i", "ml_corpus/4p1i")
+    if era_of(f"replays/{label}") == BASELINE_9
 )
 
 # The THREE Wave-2 levers this memo prices, in registration order.
@@ -259,28 +265,30 @@ _TURN_KINDS: Final[tuple[str, ...]] = (
 # join, not a finding about the bytes.
 COMMITTED_INNOCENT_EJECTIONS: Final[Mapping[str, int]] = MappingProxyType(
     {
-        "samples/9p2i": 9,  # was 13
+        # samples/9p2i read 9 here until its bytes moved to the stage-b-r2 era.
         "ml_corpus/9p2i": 32,  # was 29
         "samples/4p1i": 0,  # was 4
         "ml_corpus/4p1i": 1,  # was 0
     }
 )
 
-# The four corroboration cells over the pooled four-set walk. Task 21.19 shipped
-# a walk that PRINTS them and deliberately asserts no figure; this script is where
-# they first become an assertion. The ledger's grounding semantics are the ones
-# audits/audit-phase-21-counterfactual.md Errata E.2 republished: a placement is
-# tested against BOTH of the speaker's own record channels, and the
-# walkable-transit clause reads movement-shaped placements. Re-derived by this
-# script's own walk over the baseline-9 bytes and published in
-# audits/audit-2026-09-22-process-rerecord.md §6.3; the baseline-8 cells were
-# (460, 1525), (10, 425), (33, 429) and (79, 429).
+# The four corroboration cells over the pooled walk of the baseline-9 era's THREE
+# sets. Task 21.19 shipped a walk that PRINTS them and deliberately asserts no
+# figure; this script is where they first become an assertion. The ledger's
+# grounding semantics are the ones audits/audit-phase-21-counterfactual.md Errata
+# E.2 republished: a placement is tested against BOTH of the speaker's own record
+# channels, and the walkable-transit clause reads movement-shaped placements.
+# Re-derived by this script's own walk over the three sets when samples/9p2i left
+# the era (2026-10-02) and published in audits/audit-2026-10-01-stage-b-r2.md §9;
+# the four-set baseline-9 cells were (529, 1516), (16, 409), (36, 411) and
+# (69, 411), and the baseline-8 cells (460, 1525), (10, 425), (33, 429) and
+# (79, 429).
 COMMITTED_CORROBORATION_CELLS: Final[Mapping[str, tuple[int, int]]] = MappingProxyType(
     {
-        "accused_without_a_first_hand_source": (529, 1516),
-        "ejected_without_a_first_hand_source": (16, 409),
-        "ejected_on_an_answering_turn": (36, 411),
-        "ejected_with_a_walkable_pair": (69, 411),
+        "accused_without_a_first_hand_source": (422, 1192),
+        "ejected_without_a_first_hand_source": (12, 321),
+        "ejected_on_an_answering_turn": (29, 321),
+        "ejected_with_a_walkable_pair": (56, 321),
     }
 )
 
@@ -4378,8 +4386,25 @@ ADVISORY_INNOCENT_EJECTIONS: Final[int] = 5
 def run(
     set_names: Sequence[str], *, withhold: str = "testimony_shapes"
 ) -> dict[str, object]:
-    """Compute the whole table for the named sets, plus the pooled column."""
+    """Compute the whole table for the named sets, plus the pooled column.
 
+    A committed set outside the baseline-9 era is refused by name before any
+    walk: the slate is priced on recordings made with every lever OFF on that
+    substrate, and the pooled column never crosses an era.
+    """
+
+    for set_name in set_names:
+        if set_name in CANONICAL_SETS:
+            continue
+        try:
+            era = era_of(f"replays/{set_name}")
+        except ValueError:
+            continue
+        raise SystemExit(
+            f"{set_name} is a committed set of the {era.id} era; this "
+            f"counterfactual reads the {BASELINE_9.id} era's sets only "
+            f"({', '.join(CANONICAL_SETS)})"
+        )
     _assert_slate_is_the_three_wave_2_keys()
     _assert_live_slate("at start")
     if withhold not in WAVE_2_LEVERS:
@@ -5018,7 +5043,7 @@ def _reporter_payload(cells: ReporterJusticeCells) -> dict[str, object]:
     return {
         name: getattr(cells, name)
         for name in type(cells).__dataclass_fields__
-        if name != "set_name"
+        if name not in ("set_name", "recorded_settings")
     }
 
 
@@ -5026,9 +5051,9 @@ def _corroboration_pin_check(walks: Sequence[_SetWalk]) -> dict[str, object]:
     """The four corroboration cells against the records that published them.
 
     Task 21.19 shipped a walk that PRINTS these and deliberately asserts no
-    figure, so this is where they first become an assertion. Only a full
-    four-set run can be compared: a subset has a different population by
-    construction and is reported unchecked rather than failed.
+    figure, so this is where they first become an assertion. Only a full run
+    over :data:`CANONICAL_SETS` can be compared: a subset has a different
+    population by construction and is reported unchecked rather than failed.
     """
 
     totals: Counter[str] = Counter()
@@ -5054,8 +5079,8 @@ def _corroboration_pin_check(walks: Sequence[_SetWalk]) -> dict[str, object]:
     if disagreeing:
         raise SystemExit(
             "the corroboration ledger cells disagree with the pins re-derived on "
-            "the baseline-9 bytes (audits/audit-2026-09-22-process-rerecord.md "
-            f"§6.3, under the counterfactual audit's Errata E.2 rule): {disagreeing}. "
+            "the baseline-9 era's three sets (audits/audit-2026-10-01-stage-b-r2.md "
+            f"§9, under the counterfactual audit's Errata E.2 rule): {disagreeing}. "
             "This is a DEFECT IN THIS SCRIPT's walk, not a finding about the "
             "committed bytes; this script is where those four cells FIRST become "
             "a pin, so fix the walk before reading any ON number"
@@ -5399,8 +5424,9 @@ def main(argv: list[str] | None = None) -> int:
         "--sets",
         default="all",
         help=(
-            "'all' for the four committed sets in the record audit's order, or "
-            "one set name under replays/ (e.g. samples/4p1i) for iteration"
+            "'all' for the baseline-9 era's three committed sets in the record "
+            "audit's order, or one set name under replays/ (e.g. samples/4p1i) "
+            "for iteration; a committed set of another era is refused"
         ),
     )
     parser.add_argument(
