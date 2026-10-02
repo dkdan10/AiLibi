@@ -83,6 +83,107 @@ def test_the_pool_refuses_two_eras(promoted: ReporterJusticeCells) -> None:
     assert compute_reporter_justice(_SETS[1]).recorded_settings == ()
 
 
+#: The promoted set's in-tree declared config (its era's, eval/eras.py).
+_ERA_CONFIG = _SETS[0] / "experiment-config.json"
+#: That config's nine settings off their default, sorted by field: the era
+#: identity every promoted game records (``format_version`` 1 is the default).
+_ERA_SETTINGS: tuple[tuple[str, object], ...] = (
+    ("ballot_kill_row_version", 1),
+    ("bounded_rebuttal_version", 1),
+    ("impostor_ballot_version", 1),
+    ("kill_cooldown_ticks", 6),
+    ("meeting_reset", "hub_with_grace"),
+    ("report_body_handle_version", 1),
+    ("vent_entry_policy", "own_fresh_kill"),
+    ("vent_exit_policy", "look_and_wait"),
+    ("vent_witness_rule", "physical"),
+)
+
+
+def test_the_promoted_set_records_exactly_its_eras_off_default_settings(
+    promoted: ReporterJusticeCells,
+) -> None:
+    # The literal is the declared file's switched-on settings, read here from the
+    # file itself; the fold must return exactly those nine, no default-valued
+    # field beside them and none missing.
+    declared = json.loads(_ERA_CONFIG.read_text(encoding="utf-8"))
+    assert declared.pop("format_version") == 1
+    assert tuple(sorted(declared.items())) == _ERA_SETTINGS
+    assert promoted.recorded_settings == _ERA_SETTINGS
+
+
+def _promoted_copy(
+    target: Path, *, games: int = 1, vent_exit_policy: tuple[str | None, ...] = ()
+) -> Path:
+    """A scratch set of the promoted set's first ``games`` games that hold a meeting.
+
+    ``vent_exit_policy[i]``, when given and not ``None``, rewrites game ``i``'s
+    recorded config (every tick row and its terminal row) to that vent exit, so
+    a set records the same switched-on fields as the era with one value moved.
+    """
+
+    source = _SETS[0]
+    target.mkdir(parents=True)
+    shutil.copy(source / "roster.json", target / "roster.json")
+    chosen: list[tuple[Path, _Rows]] = []
+    for replay in sorted(source.glob("replay-seed-*.jsonl")):
+        rows = [json.loads(line) for line in replay.read_text().splitlines() if line]
+        if any(row.get("kind") == "meeting" for row in rows):
+            chosen.append((replay, rows))
+        if len(chosen) == games:
+            break
+    assert len(chosen) == games
+    for index, (replay, rows) in enumerate(chosen):
+        policy = vent_exit_policy[index] if index < len(vent_exit_policy) else None
+        if policy is not None:
+            moved = 0
+            for row in rows:
+                config = row.get("experiment_config")
+                if isinstance(config, dict):
+                    config["vent_exit_policy"] = policy
+                    moved += 1
+            assert moved > 1
+        (target / replay.name).write_text(
+            "".join(json.dumps(row) + "\n" for row in rows)
+        )
+    return target
+
+
+def test_the_pool_refuses_two_eras_that_switch_the_same_fields(tmp_path: Path) -> None:
+    # Planted: one game of the promoted set, and the same game recorded with the
+    # vent exit moved to another switched-on value. Both switch on the same nine
+    # fields, so only the VALUE tells the eras apart; the pool must refuse them.
+    era = compute_reporter_justice(_promoted_copy(tmp_path / "era"))
+    moved = compute_reporter_justice(
+        _promoted_copy(tmp_path / "moved", vent_exit_policy=("observed_risk",))
+    )
+    assert era.recorded_settings == _ERA_SETTINGS
+    # The identity follows the recorded source: the moved value, nothing else.
+    assert moved.recorded_settings == tuple(
+        sorted({**dict(_ERA_SETTINGS), "vent_exit_policy": "observed_risk"}.items())
+    )
+    with pytest.raises(ReporterJusticeError, match="never pool across eras"):
+        pool_reporter_justice([era, moved])
+    # Control: the same era pools, and keeps its identity.
+    again = compute_reporter_justice(_promoted_copy(tmp_path / "again"))
+    assert pool_reporter_justice([era, again]).recorded_settings == _ERA_SETTINGS
+
+
+def test_a_set_whose_games_recorded_two_configs_fails_loud(tmp_path: Path) -> None:
+    # Planted: two promoted games, the second recorded with its vent exit moved;
+    # one set is one recorded era, so the fold refuses rather than mixing them.
+    mixed = _promoted_copy(
+        tmp_path / "mixed", games=2, vent_exit_policy=(None, "observed_risk")
+    )
+    with pytest.raises(
+        ReporterJusticeError, match="recorded 2 different experiment configs"
+    ):
+        compute_reporter_justice(mixed)
+    # Control: the same two games, unmoved, fold as one era.
+    same = compute_reporter_justice(_promoted_copy(tmp_path / "same", games=2))
+    assert same.recorded_settings == _ERA_SETTINGS
+
+
 class TestCorpusShape:
     def test_the_meeting_census(
         self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells

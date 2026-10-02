@@ -20,6 +20,7 @@ layers, mirroring :mod:`tests.eval.test_gate_metrics`:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from collections import Counter
@@ -116,6 +117,30 @@ _W1_BASELINE_FIXTURE = (
 _W2_BASELINE_FIXTURE = (
     _REPO_ROOT / "tests" / "fixtures" / "phase10" / "corrected_w2_baseline.json"
 )
+# The whole corrected baseline the operator command re-derives from the promoted
+# samples/9p2i bytes (its seven blocks and ``sample_dir``), as the sha256 of its
+# serialized bytes, and its 44-site channel map as the sha256 of the map's
+# sorted-key JSON. Before the promotion the re-derivation was byte-equal to
+# corrected_w2_baseline.json, whose bytes and 81-site map digest to the _W2_*
+# values (held by the W2 anchor test).
+_PROMOTED_BASELINE_SHA256 = (
+    "3a556a56c0f9c76d5838169bc357cbe760dc4a5d17c55d246b9c0f6172eb10e0"
+)
+_PROMOTED_CHANNEL_MAP_SHA256 = (
+    "52ab23881ed37f687bd5e8c5b4c5bfbaa798d0fb06fcdb00f22a9ac490b90dec"
+)
+_W2_BASELINE_SHA256 = "a472a70d820d0ad61d51140c1b12734910ebe662d73db9dd598b1ad54542fb5d"
+_W2_CHANNEL_MAP_SHA256 = (
+    "2d54603723aeb76f2c3ede44fa8e15740dbb9e536ba783b8f2ae55d2c36cb6ed"
+)
+
+
+def _channel_map_sha256(channels_by_site: Mapping[str, object]) -> str:
+    """The sha256 of a site-to-channels map's sorted-key JSON."""
+
+    return hashlib.sha256(
+        json.dumps(channels_by_site, sort_keys=True).encode("utf-8")
+    ).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -944,6 +969,9 @@ class TestCommittedW2GateSpecPins:
             if (channels := decompose_ejection_channels(game, index)) is not None
         }
         assert len(channels_by_site) == 44  # was 81
+        # The whole map, every site's channel set (was _W2_CHANNEL_MAP_SHA256,
+        # the 81-site map equal to the W2 fixture's).
+        assert _channel_map_sha256(channels_by_site) == _PROMOTED_CHANNEL_MAP_SHA256
         counts = Counter(
             channel for channels in channels_by_site.values() for channel in channels
         )
@@ -992,18 +1020,20 @@ class TestCommittedW2GateSpecPins:
         assert gauges.accused_impostor_meetings == 105  # was 111
         assert gauges.over_gate_listener_rows == 242  # was 421
 
-    def test_the_corrected_baseline_rederivation_is_deterministic(
+    def test_the_corrected_baseline_rederivation_is_pinned_whole(
         self, committed_9p2i_report: TournamentEvalReport
     ) -> None:
         # The operator command
         #   scripts/build_sample_report.py --sample-dir replays/samples/9p2i
         #     --baseline-out <path>
-        # re-derives a corrected baseline from the committed bytes. Two
-        # derivations here are byte-identical, so the whole derivation chain —
-        # detector, predicate, metrics — is deterministic end to end, and the
-        # derived block reads the promoted set's own cells. The committed
-        # corrected_w2_baseline.json describes the baseline-9 bytes and is a
-        # frozen anchor now (content pinned below), never re-derived.
+        # re-derives a corrected baseline from the committed bytes. Its whole
+        # serialized output — all seven blocks and sample_dir — is pinned by
+        # sha256 (was: byte-equal to corrected_w2_baseline.json, sha256
+        # _W2_BASELINE_SHA256), so any one block moving fails here; two
+        # derivations are byte-identical, so the whole derivation chain —
+        # detector, predicate, metrics — is deterministic end to end. The
+        # committed corrected_w2_baseline.json describes the baseline-9 bytes and
+        # is a frozen anchor now (content pinned below), never re-derived.
         def derive() -> str:
             return serialize_corrected_baseline(
                 corrected_baseline_from_report(
@@ -1013,7 +1043,25 @@ class TestCommittedW2GateSpecPins:
 
         rederived = derive()
         assert rederived == derive()
+        assert (
+            hashlib.sha256(rederived.encode("utf-8")).hexdigest()
+            == _PROMOTED_BASELINE_SHA256
+        )
         payload = json.loads(rederived)
+        assert sorted(payload) == [
+            "conversion_per_meeting",
+            "effective_deflection",
+            "genuine_class_conversion",
+            "impostor_ejection_channels",
+            "indistinguishability",
+            "multi_signal_conversion",
+            "sample_dir",
+            "supply_gauges",
+        ]
+        assert (
+            _channel_map_sha256(payload["impostor_ejection_channels"])
+            == _PROMOTED_CHANNEL_MAP_SHA256
+        )
         assert payload["conversion_per_meeting"] == {
             "conversion_per_meeting": 44 / 117,
             "impostor_ejections": 44,
@@ -1026,7 +1074,14 @@ class TestCommittedW2GateSpecPins:
         # rows the samples-9p2i bytes re-derived to until the promotion of
         # 2026-10-02. Pinned by content so the anchor cannot silently drift to a
         # later era — mirrors the W0 and W1 anchor tests.
-        baseline = json.loads(_W2_BASELINE_FIXTURE.read_text(encoding="utf-8"))
+        raw = _W2_BASELINE_FIXTURE.read_bytes()
+        # The pre-promotion pins, held: the rederivation's old bytes and map.
+        assert hashlib.sha256(raw).hexdigest() == _W2_BASELINE_SHA256
+        baseline = json.loads(raw)
+        assert (
+            _channel_map_sha256(baseline["impostor_ejection_channels"])
+            == _W2_CHANNEL_MAP_SHA256
+        )
         assert baseline["sample_dir"] == "9p2i"
         assert baseline["conversion_per_meeting"]["impostor_ejections"] == 81
         assert baseline["conversion_per_meeting"]["resolved_meetings"] == 145

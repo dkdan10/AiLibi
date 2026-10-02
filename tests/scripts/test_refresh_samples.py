@@ -1894,6 +1894,44 @@ def test_a_set_whose_declared_config_is_missing_refuses_by_name(
     )
 
 
+def test_the_era_verdict_follows_the_declared_file_on_disk(tmp_path: Path) -> None:
+    """Planted: a checkout whose promoted set declares different valid bytes.
+
+    The rule reads the declared file's sha256 from disk, never a remembered
+    value: with the scratch file's own sha256 the run passes, and with round 2's
+    sha256 (the committed file's) the same run is refused.
+    """
+
+    repo = tmp_path / "repo"
+    target = repo / "replays" / "samples" / "9p2i"
+    target.mkdir(parents=True)
+    era_bytes = _ERA_CONFIG.read_bytes()
+    moved = era_bytes.replace(b'"look_and_wait"', b'"observed_risk"')
+    assert moved != era_bytes
+    (target / "experiment-config.json").write_bytes(moved)
+    config = RecordedExperimentConfig.model_validate_json(moved)
+    assert config.vent_exit_policy == "observed_risk"
+
+    def verdict(sha: str) -> str | None:
+        try:
+            de.refuse_unsafe_target(
+                config,
+                sample_dir=target,
+                manifest=target / "MANIFEST.md",
+                sample_dir_explicit=True,
+                repo_root=repo,
+                config_sha256=sha,
+            )
+        except de.DeclaredExperimentError as exc:
+            return str(exc)
+        return None
+
+    assert verdict(hashlib.sha256(moved).hexdigest()) is None
+    round_2 = hashlib.sha256(era_bytes).hexdigest()
+    assert round_2 == "0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b"
+    assert _ERA_REFUSAL in (verdict(round_2) or "")
+
+
 def _era_dry_run(*extra: str) -> subprocess.CompletedProcess[str]:
     env = _clean_env()
     env.update(
