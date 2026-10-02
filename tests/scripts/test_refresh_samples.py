@@ -35,6 +35,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import _declared_experiment as de
+from eval.eras import BASELINE_9, COMMITTED_SETS, CommittedSet
 from api.replay_loader import ReplayLoader
 from meetings.evidence_profile import EXPERIMENT_ENV_NAMES
 from orchestrator.experiment_config import RecordedExperimentConfig
@@ -1256,8 +1257,15 @@ def test_fake_refresh_refuses_a_replays_target(relative_target: str) -> None:
         AILIBI_SAMPLE_DIR=target,
         AILIBI_MANIFEST=f"{target}/MANIFEST.md",
     )
+    # The promoted 9p2i set records only its era's declared config, so the run
+    # declares it: the era rule passes and the provider gate is what refuses.
+    era = (
+        ("--experiment-config", str(_ERA_CONFIG))
+        if relative_target == "replays/samples/9p2i"
+        else ()
+    )
     with _replays_tree_restored():
-        proc = _run("--seeds", "0", env=env, timeout=300)
+        proc = _run("--seeds", "0", *era, env=env, timeout=300)
         out = proc.stdout + proc.stderr
         assert proc.returncode != 0
         assert "may not write into the repository's replays/ tree" in out
@@ -1776,6 +1784,154 @@ _SEVEN_FLAG_LINE = (
 )
 _NOTHING_STAGED = "Nothing was staged."
 
+#: The promoted 9p2i set's era config, the one file a run into that set may carry.
+_ERA_CONFIG = _REPO_ROOT / "replays" / "samples" / "9p2i" / "experiment-config.json"
+#: Candidate round 1's config, a real switched-on config of another round.
+_ROUND_1_CONFIG = (
+    _REPO_ROOT / "replays" / "candidates" / "stage-b-r1" / "experiment-config.json"
+)
+#: The era rule's refusal, as it names the promoted set.
+_ERA_REFUSAL = "inside the committed set replays/samples/9p2i, whose recordings"
+#: The era registry with no declared config anywhere: the planted repositories
+#: below exercise the canonical-tree rule alone, and the era rule has its own
+#: cases (``test_a_committed_set_records_only_its_eras_declared_config``).
+_CANONICAL_RULE_ONLY = tuple(
+    CommittedSet(entry.path, BASELINE_9) for entry in COMMITTED_SETS
+)
+
+
+def _era_outcome(
+    config_path: Path | None, target: Path, manifest: Path | None = None
+) -> str | None:
+    """The real repository's verdict on a run carrying ``config_path`` into ``target``."""
+
+    config = (
+        None
+        if config_path is None
+        else RecordedExperimentConfig.model_validate_json(config_path.read_bytes())
+    )
+    sha = (
+        None
+        if config_path is None
+        else hashlib.sha256(config_path.read_bytes()).hexdigest()
+    )
+    try:
+        de.refuse_unsafe_target(
+            config,
+            sample_dir=target,
+            manifest=manifest if manifest is not None else target / "MANIFEST.md",
+            sample_dir_explicit=True,
+            config_sha256=sha,
+        )
+    except de.DeclaredExperimentError as exc:
+        return str(exc)
+    return None
+
+
+def test_a_committed_set_records_only_its_eras_declared_config(
+    tmp_path: Path,
+) -> None:
+    """Planted: every config but the era's own is refused at the promoted set.
+
+    The era's declared file passes there and nowhere else committed; a bare run,
+    round 1's config and the era config with one byte changed are refused by
+    the era rule, and the era config aimed at the 4p1i sample or the corpus is
+    refused by the canonical-tree rule.
+    """
+
+    samples_9 = _REPO_ROOT / "replays" / "samples" / "9p2i"
+    assert _era_outcome(_ERA_CONFIG, samples_9) is None
+    for refused in (None, _ROUND_1_CONFIG):
+        outcome = _era_outcome(refused, samples_9) or ""
+        assert _ERA_REFUSAL in outcome, refused
+        assert outcome.endswith(_NOTHING_STAGED)
+    changed = tmp_path / "experiment-config.json"
+    era_bytes = _ERA_CONFIG.read_bytes()
+    changed.write_bytes(
+        era_bytes.replace(b'"format_version": 1', b'"format_version":1')
+    )
+    assert changed.read_bytes() != era_bytes
+    assert RecordedExperimentConfig.model_validate_json(
+        changed.read_bytes()
+    ) == RecordedExperimentConfig.model_validate_json(era_bytes)
+    assert _ERA_REFUSAL in (_era_outcome(changed, samples_9) or "")
+    assert "inside replays/samples/" in (
+        _era_outcome(_ERA_CONFIG, _REPO_ROOT / "replays" / "samples" / "4p1i") or ""
+    )
+    assert "inside replays/ml_corpus/" in (
+        _era_outcome(_ERA_CONFIG, _REPO_ROOT / "replays" / "ml_corpus" / "9p2i") or ""
+    )
+    # Its own directory only, with its manifest directly inside it.
+    assert "below the committed set replays/samples/9p2i" in (
+        _era_outcome(_ERA_CONFIG, samples_9 / "nested") or ""
+    )
+    assert "below the committed set replays/samples/9p2i" in (
+        _era_outcome(_ERA_CONFIG, samples_9, samples_9 / "nested" / "MANIFEST.md") or ""
+    )
+    # A scratch directory outside replays/ keeps the candidate rules.
+    scratch = tmp_path / "scratch-set"
+    assert _era_outcome(_ERA_CONFIG, scratch) is None
+
+
+def test_a_set_whose_declared_config_is_missing_refuses_by_name(
+    tmp_path: Path,
+) -> None:
+    """Planted: a checkout whose promoted set lost its declared file."""
+
+    target = tmp_path / "repo" / "replays" / "samples" / "9p2i"
+    target.mkdir(parents=True)
+    with pytest.raises(de.DeclaredExperimentError) as refused:
+        de.refuse_unsafe_target(
+            _TEST_CONFIG,
+            sample_dir=target,
+            manifest=target / "MANIFEST.md",
+            sample_dir_explicit=True,
+            repo_root=tmp_path / "repo",
+            config_sha256="0" * 64,
+        )
+    assert "declared config replays/samples/9p2i/experiment-config.json is missing" in (
+        str(refused.value)
+    )
+
+
+def _era_dry_run(*extra: str) -> subprocess.CompletedProcess[str]:
+    env = _clean_env()
+    env.update(
+        AILIBI_SAMPLE_DIR="replays/samples/9p2i",
+        AILIBI_MANIFEST="replays/samples/9p2i/MANIFEST.md",
+        AILIBI_NUM_PLAYERS="9",
+        AILIBI_NUM_IMPOSTORS="2",
+        AILIBI_TASKS_PER_CREWMATE="2",
+    )
+    return _run("--dry-run", "--seeds", "0", "--expect-levers", "", *extra, env=env)
+
+
+def test_the_era_config_passes_the_dry_run_into_the_promoted_set() -> None:
+    before = _git_status()
+    proc = _era_dry_run("--experiment-config", str(_ERA_CONFIG))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    sha = hashlib.sha256(_ERA_CONFIG.read_bytes()).hexdigest()
+    lines = proc.stdout.splitlines()
+    assert f"[dry-run] Experiment config: {_ERA_CONFIG} (sha256 {sha})" in lines
+    # The rubric step skips an era the extractor does not read, by name.
+    assert any(
+        line.startswith("[dry-run] interestingness rubric: would skip it")
+        and "ships no rubric" in line
+        for line in lines
+    )
+    assert not any("would regenerate" in line and "rubric" in line for line in lines)
+    assert _git_status() == before
+
+
+def test_a_bare_dry_run_into_the_promoted_set_is_refused() -> None:
+    before = _git_status()
+    proc = _era_dry_run()
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert _ERA_REFUSAL in proc.stderr
+    assert _NOTHING_STAGED in proc.stderr
+    assert "[dry-run]" not in proc.stdout
+    assert _git_status() == before
+
 
 def _test_config(tmp_path: Path, text: str = _TEST_CONFIG_JSON) -> Path:
     path = tmp_path / "experiment-config.json"
@@ -1971,7 +2127,7 @@ def _refused_target_env(
     if case == "default target":
         return env, "needs an explicit AILIBI_SAMPLE_DIR"
     targets = {
-        "samples 9p2i": (replays / "samples" / "9p2i", "inside replays/samples/"),
+        "samples 9p2i": (replays / "samples" / "9p2i", _ERA_REFUSAL),
         "ml_corpus 9p2i": (replays / "ml_corpus" / "9p2i", "inside replays/ml_corpus/"),
         "a .. alias into samples": (
             Path(f"{_REPO_ROOT}/scripts/../replays/samples/4p1i"),
@@ -1992,7 +2148,7 @@ def _refused_target_env(
         ),
         "a case-variant spelling of samples": (
             _REPO_ROOT / "REPLAYS" / "Samples" / "9p2i",
-            "inside replays/samples/",
+            _ERA_REFUSAL,
         ),
         "a case-variant ancestor into ml_corpus": (
             _REPO_ROOT.parent
@@ -2004,7 +2160,7 @@ def _refused_target_env(
         ),
         "a firmlink into samples": (
             Path(f"{_DATA_VOLUME}{_REPO_ROOT}") / "replays" / "samples" / "9p2i",
-            "inside replays/samples/",
+            _ERA_REFUSAL,
         ),
     }
     if case == "a scratch dir with a committed manifest":
@@ -2462,6 +2618,7 @@ def _target_outcome(repo: Path, target: Path, manifest: Path) -> str | None:
             manifest=manifest,
             sample_dir_explicit=True,
             repo_root=repo,
+            registry=_CANONICAL_RULE_ONLY,
         )
     except de.DeclaredExperimentError as exc:
         return str(exc)
@@ -2657,6 +2814,7 @@ def test_the_target_rule_resolves_the_repository_itself(tmp_path: Path) -> None:
                 manifest=target / "MANIFEST.md",
                 sample_dir_explicit=True,
                 repo_root=root,
+                registry=_CANONICAL_RULE_ONLY,
             )
     candidate = repo / "replays" / "candidates" / "r1" / "9p2i"
     de.refuse_unsafe_target(
@@ -2665,6 +2823,7 @@ def test_the_target_rule_resolves_the_repository_itself(tmp_path: Path) -> None:
         manifest=candidate / "MANIFEST.md",
         sample_dir_explicit=True,
         repo_root=linked,
+        registry=_CANONICAL_RULE_ONLY,
     )
     # The candidate depth is not enough on its own: the family must be candidates.
     records = repo / "replays" / "records" / "r1" / "9p2i"
@@ -2675,6 +2834,7 @@ def test_the_target_rule_resolves_the_repository_itself(tmp_path: Path) -> None:
             manifest=records / "MANIFEST.md",
             sample_dir_explicit=True,
             repo_root=repo,
+            registry=_CANONICAL_RULE_ONLY,
         )
 
 

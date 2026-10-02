@@ -44,6 +44,9 @@ MANIFEST="${AILIBI_MANIFEST:-$SAMPLE_DIR/MANIFEST.md}"
 # AILIBI_SAMPLE_DIR/AILIBI_MANIFEST:
 #   AILIBI_NUM_PLAYERS=9 AILIBI_NUM_IMPOSTORS=2 AILIBI_TASKS_PER_CREWMATE=2 \
 #   AILIBI_SAMPLE_DIR=replays/samples/9p2i AILIBI_MANIFEST=replays/samples/9p2i/MANIFEST.md
+# and pass that set's era config, --experiment-config
+# replays/samples/9p2i/experiment-config.json: a committed sample set records
+# only its own era's declared config (scripts/_declared_experiment.py, eval/eras.py).
 NUM_PLAYERS="${AILIBI_NUM_PLAYERS:-4}"
 NUM_IMPOSTORS="${AILIBI_NUM_IMPOSTORS:-1}"
 TASKS_PER_CREWMATE="${AILIBI_TASKS_PER_CREWMATE:-1}"
@@ -579,6 +582,11 @@ if [[ "$dry_run" -eq 1 ]]; then
   fi
   echo "[dry-run] manifest: $MANIFEST"
   echo "[dry-run] eval report: would rebuild $SAMPLE_DIR/tournament-eval-report.json.gz from the refreshed replays (scripts/build_sample_report.py; \$0, no provider)"
+  if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" && -n "$experiment_config" ]]; then
+    echo "[dry-run] interestingness rubric: would skip it, because the set is recorded with the declared experiment config $experiment_config and the gameplay-facts extractor reads only recordings made without experiment settings; the set ships no rubric"
+  elif [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
+    echo "[dry-run] interestingness rubric: would regenerate $SAMPLE_DIR/results-rubric-score.json (\$0, no provider)"
+  fi
   echo "[dry-run] no API calls made; no files written."
   if ! substrate_lever_preflight; then
     exit 1
@@ -1122,7 +1130,13 @@ uv run python "$REPO_ROOT/scripts/build_sample_report.py" --sample-dir "$SAMPLE_
 # already written above (preserved on disk), but a regen FAILURE exits non-zero:
 # the refresh is not "complete" — and must not be committed — while the rubric
 # is stale, so the operator re-runs it rather than shipping a drifted surface.
-if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
+#
+# The gameplay-facts extractor reads only recordings made without experiment
+# settings, so a set recorded under a declared config (an era the extractor does
+# not read; eval/eras.py) skips this step with one named line and ships no rubric.
+if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" && -n "$experiment_config" ]]; then
+  echo "Skipping the interestingness rubric: $SAMPLE_DIR is recorded with the declared experiment config $experiment_config, and the gameplay-facts extractor reads only recordings made without experiment settings, so the set ships no rubric."
+elif [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
   echo "Regenerating the per-set interestingness rubric (9p2i) ..."
   # Run from the repo root in a subshell: the extractor reads its hardcoded 9p2i
   # set + writes facts to this predictable temp path (no sys.path bootstrap, so
