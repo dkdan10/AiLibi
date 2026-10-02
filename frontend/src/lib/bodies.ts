@@ -2,9 +2,13 @@
 // each one reads.
 //
 // PRESENCE IS ENGINE TRUTH. Every body comes from the served `TickView.bodies`,
-// which projects `WorldState.bodies` — and `orchestrator/game.py` DELETES the
-// corpse that triggered a body-report meeting when that meeting resolves. So a
-// body leaves the map on the frame the engine drops it, and nothing is
+// which projects `WorldState.bodies`, and the engine removes corpses at a
+// meeting's close in one of two ways, by the recording's `meeting_reset`. Under
+// `preserve`, `orchestrator/game.py` deletes only the corpse that triggered a
+// body-report meeting, and every unreported body stays on the floor. Under
+// `hub_with_grace` the regroup (`engine/meeting_reset.py`) clears every corpse,
+// reported or not, so the first frame after such a meeting carries none. Either
+// way a body leaves the map on the frame the engine drops it, and nothing is
 // accumulated client-side.
 //
 // ATTRIBUTION IS SERVED. `killedBy` is read straight off `TickView.bodies[]

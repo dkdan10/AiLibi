@@ -29,8 +29,9 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
+import { type RouteLeg, meetingAnnotations } from "../lib/annotations";
 import { OBSERVATION_EVENT_SEGMENTS } from "../lib/contradictions";
-import { MEETING_COPY } from "../lib/copy";
+import { MEETING_COPY, fmt } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { tokens } from "../tokens";
@@ -40,6 +41,7 @@ import type {
   GateView,
   MeetingView as MeetingViewDTO,
   PlayerView,
+  ReplayView,
   TurnView,
 } from "../types/api";
 import { EvidenceLink, EvidencePanel } from "./EvidencePanel";
@@ -212,6 +214,79 @@ function gateReadout(
     return `plurality leader ${gate.leader}, top ballot ${conf} ≥ ${thr} threshold → EJECTED`;
   }
   return `plurality leader ${gate.leader}, top ballot ${conf} < ${thr} threshold → SKIPPED`;
+}
+
+// The omniscient-only record of a meeting (`lib/annotations.ts`): the reported
+// body's age, where each accused player really was, and whether an accused
+// opener spoke again. The caller mounts it only when `perspective.mode ===
+// "omniscient"`, so no agent lens can render any of it.
+function EngineRecordPanel({ replay, meetingId }: { replay: ReplayView; meetingId: string }) {
+  const notes = meetingAnnotations(replay, meetingId);
+  const roomName = (roomId: string): string => {
+    const room = replay.map.rooms.find((candidate) => candidate.id === roomId);
+    if (room === undefined) throw new Error(`no room ${roomId} on this map`);
+    return room.name;
+  };
+  const legText = (leg: RouteLeg): string => {
+    const place = leg.inVent
+      ? fmt(MEETING_COPY.routeInVent, { room: roomName(leg.roomId) })
+      : roomName(leg.roomId);
+    const span =
+      leg.fromTick === leg.toTick
+        ? fmt(MEETING_COPY.routeSpanOneTick, { tick: String(leg.fromTick) })
+        : fmt(MEETING_COPY.routeSpanTicks, { from: String(leg.fromTick), to: String(leg.toTick) });
+    return `${place}, ${span}`;
+  };
+  const corpse = notes.corpse;
+  const reply = notes.openerReply;
+  return (
+    <section
+      aria-label={MEETING_COPY.engineRecordHeading}
+      data-engine-record
+      className="rounded-lg border-2 border-ink-900 bg-paper-0 p-4 shadow-chrome-1"
+    >
+      <h3 className="text-base">{MEETING_COPY.engineRecordHeading}</h3>
+      <p className="mb-2 font-mono text-3xs italic text-ink-600">{MEETING_COPY.engineRecordLead}</p>
+      <div className="space-y-2 text-sm">
+        {corpse !== null && (
+          <p data-engine-record-corpse>
+            {corpse.age === 1
+              ? fmt(MEETING_COPY.corpseAgeOneTick, {
+                  victim: corpse.victimId,
+                  killTick: String(corpse.killTick),
+                })
+              : fmt(MEETING_COPY.corpseAgeTicks, {
+                  victim: corpse.victimId,
+                  killTick: String(corpse.killTick),
+                  age: String(corpse.age),
+                })}
+          </p>
+        )}
+        {reply !== null && (
+          <p data-engine-record-reply={reply.answered ? "answered" : "unanswered"}>
+            {fmt(reply.answered ? MEETING_COPY.openerAnswered : MEETING_COPY.openerUnanswered, {
+              opener: reply.openerId,
+              accuser: reply.accuserId,
+            })}
+          </p>
+        )}
+        {notes.routes.length > 0 && (
+          <div data-engine-record-routes>
+            <p>{fmt(MEETING_COPY.routesLead, { from: String(notes.routesFrom) })}</p>
+            <ul className="mt-1 space-y-1 font-mono text-2xs">
+              {notes.routes.map((route) => (
+                <li key={route.playerId}>
+                  <span className="font-bold text-ink-900">{route.playerId}</span>
+                  {": "}
+                  {route.legs.map(legText).join(" → ")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 // The dark resolution panel: tally, the real vote-gate readout, a role-neutral
@@ -716,6 +791,11 @@ export function MeetingView() {
               omniscient={omniscient}
               observerId={perspective.mode === "agent" ? perspective.agentId : null}
             />
+            {/* A replay that carries no frames (an isolated meeting fixture)
+                has no record to read; every served replay carries them. */}
+            {omniscient && replay.ticks.length > 0 && (
+              <EngineRecordPanel replay={replay} meetingId={meeting.meeting_id} />
+            )}
           </div>
         </div>
       </div>

@@ -411,10 +411,39 @@ export const SPECTATOR_COPY = Object.freeze({
     costColGames: "Games",
   }),
 
-  /** The meeting dialog's Resolution card. */
+  /** The meeting dialog's Resolution card, and its omniscient-only record. */
   meeting: Object.freeze({
     resolutionGateBadge: "vote gate",
     resolutionGateLead: "How the vote resolved",
+    // Three facts the omniscient view adds to a meeting (`lib/annotations.ts`).
+    // None renders under a player's lens: the kill tick is withheld from every
+    // player at the table, and the rooms are the engine's record of where each
+    // accused player stood, not anyone's account of it.
+    engineRecordHeading: "What the recording shows",
+    engineRecordLead: "Shown in the omniscient view only, and read from the recording itself.",
+    corpseAgeOneTick:
+      "The reported body is {victim}'s, killed at tick {killTick}, one tick before this meeting.",
+    corpseAgeTicks:
+      "The reported body is {victim}'s, killed at tick {killTick}, {age} ticks before this meeting.",
+    openerAnswered: "{opener} opened this meeting, was accused by {accuser}, and spoke again afterwards.",
+    openerUnanswered:
+      "{opener} opened this meeting and was accused by {accuser}, but did not speak again.",
+    // The map's clock, not a player's: an account stamped tick N describes the
+    // map at N−1, so the lead says so rather than letting a one-tick offset read
+    // as a lie.
+    routesLead:
+      "Where each accused player really was, from tick {from} to this meeting. These are the map's ticks; a player's own account of the same moment is stamped one tick later.",
+    routeInVent: "inside a vent in {room}",
+    routeSpanOneTick: "tick {tick}",
+    routeSpanTicks: "ticks {from}–{to}",
+  }),
+
+  /** The map stage. */
+  map: Object.freeze({
+    // Shown on a recording that regroups after each meeting, in both lenses: it
+    // is a rule of the game, which the players are told too.
+    regroupNote:
+      "On this recording every meeting ends with the survivors gathered in the meeting room and the bodies cleared, so the map jumps to where they stand on the next tick.",
   }),
 
   /** One ballot card's private-reasoning block. */
@@ -493,6 +522,7 @@ export const SPECTATOR_COPY = Object.freeze({
 
 export const BALLOT_COPY = SPECTATOR_COPY.ballot;
 export const DASHBOARD_COPY = SPECTATOR_COPY.dashboard;
+export const MAP_COPY = SPECTATOR_COPY.map;
 export const MEETING_COPY = SPECTATOR_COPY.meeting;
 export const PICKER_COPY = SPECTATOR_COPY.picker;
 export const TRANSPORT_COPY = SPECTATOR_COPY.transport;

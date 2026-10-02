@@ -4,7 +4,7 @@
 // in two different places:
 //
 //   1. VALUES — every string in `SPECTATOR_COPY` is clean.
-//   2. DISK   — the eight component sources, read off disk with comments
+//   2. DISK   — the nine component sources, read off disk with comments
 //               stripped, carry no dialect either. This is the leg that catches
 //               a NEW literal typed straight into JSX, which leg 1 cannot see.
 //
@@ -58,6 +58,9 @@ const IN_SCOPE_SOURCES: readonly { readonly file: string; readonly rendered: str
     { file: "ReplayControls.tsx", rendered: "Next key moment" },
     { file: "MetricCaveat.tsx", rendered: "note" },
     { file: "TurnCard.tsx", rendered: "accuses" },
+    // The map stage renders the regroup note through `MAP_COPY` and its one
+    // literal fallback inline.
+    { file: "MapView.tsx", rendered: "Select a replay to view the map." },
   ];
 
 // EMPTY, and staying that way is the point: every in-scope surface — TurnCard.tsx
@@ -315,7 +318,7 @@ describe("the in-scope surfaces on disk", () => {
 // claim gets its own check: on that file, the props that CARRY copy must all be
 // expressions, never quoted literals.
 //
-// Only that one file. The other seven keep prose inline by design (the contract
+// Only that one file. The other eight keep prose inline by design (the contract
 // scopes `TurnCard.tsx` to a single string, and the transport's button titles
 // are not this task's), and none of them claims otherwise in its header.
 
