@@ -1361,6 +1361,7 @@ _RETIRED_GUARD_PINS: Final[Mapping[str, tuple[int, int, int, int]]] = {
     "samples/9p2i": (145, 845, 0, 0),  # was (151, 869, 23, 14)
     "samples/4p1i": (39, 117, 0, 0),  # was (39, 117, 1, 1)
     "candidates/stage-b-r1/9p2i": (124, 717, 0, 0),
+    "candidates/stage-b-r2/9p2i": (117, 691, 0, 0),
 }
 
 

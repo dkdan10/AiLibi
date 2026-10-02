@@ -395,6 +395,14 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   events, and reads the round beside the shipped numbers for the same seeds,
   never pooled with them. It gives no verdict and adopts nothing; each
   switch's next step is the owner's.
+- [audit-2026-10-01-stage-b-r2.md](audit-2026-10-01-stage-b-r2.md) —
+  candidate round 2, the balance round: the same 50 seeds recorded once more
+  with the adopted switches and the kept vent exit, and one change, a longer
+  impostor kill cooldown. It opens with the readings fixed before the first
+  seed, then records the spend against the owner's ceilings, the gates and the
+  operating events, and reads the round in three columns, the shipped numbers,
+  the first round and this one, never pooled. It gives no verdict and adopts
+  nothing; the step its balance rule names, and any adoption, are the owner's.
 
 ## Cleanup measurements
 
