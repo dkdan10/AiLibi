@@ -132,6 +132,43 @@ have. `samples/4p1i` is 18/50, 2026-09-22.
 Each item names its enforcing mechanism and a planted or perturbed proof. Each new test is written first and
 fails at this card's base for the stated reason; Results quotes that run.
 
+- [x] Review correction: the corrected-baseline re-derivation is pinned whole again. The operator command's
+  serialized output on the promoted bytes (all seven blocks and `sample_dir`) is held to a sha256 literal, and
+  its 44-site channel map to a sha256 of the map's sorted-key JSON; the old values ride beside them (the
+  fixture's bytes and its 81-site map, each held by the W2 anchor test). Mechanism:
+  `tests/eval/test_gate_spec_metrics.py::TestCommittedW2GateSpecPins::test_the_corrected_baseline_rederivation_is_pinned_whole`
+  and `test_committed_ejections_decompose_into_channels`. Proof: probes G1 (`effective_deflection` built from
+  the indistinguishability tally) and G2 (`supply_gauges` emptied) in `scripts/build_sample_report.py` pass at
+  `4a36dc03` (30 passed) and fail now (1 failed each); `tests/fixtures/` is untouched.
+- [x] Review correction: the reporter-justice era identity is held to its source. The promoted set's
+  `recorded_settings` equals the exact nine off-default settings of `replays/samples/9p2i/experiment-config.json`
+  (the literal is checked against the file); two scratch sets switching on the same nine fields with one value
+  moved (`vent_exit_policy` to `observed_risk`) are refused by `pool_reporter_justice`, and the moved set's
+  identity follows its recording; a set whose games recorded two configs is refused by
+  `compute_reporter_justice`, with same-era controls passing. Mechanism: `tests/eval/test_reporter_justice.py`
+  (`test_the_promoted_set_records_exactly_its_eras_off_default_settings`,
+  `test_the_pool_refuses_two_eras_that_switch_the_same_fields`,
+  `test_a_set_whose_games_recorded_two_configs_fails_loud`). Proof: mutants J1 (the off-default filter
+  dropped), J2 (its comparison inverted) and J3x (the per-set refusal disabled) pass at `4a36dc03` (31 passed)
+  and fail now.
+- [x] Review correction: the recorder's era verdict follows the declared file on disk. A scratch checkout whose
+  `replays/samples/9p2i/experiment-config.json` holds different valid bytes passes with that file's sha256 and
+  refuses round 2's. Mechanism:
+  `tests/scripts/test_refresh_samples.py::test_the_era_verdict_follows_the_declared_file_on_disk`. Proof: mutant
+  D1 (the sha read replaced by round 2's literal sha) passes the head's suites and fails now.
+- [x] Review correction: the champion-flip comparator is the owner's question, not this card's decision. The
+  comparator reading sits in `scripts/regen_test_goldens.py`, outside Expected scope, and feeds three golden
+  fields; it is held at its `d41c9006` reading (11 of 50), so no ML figure moves, while the owner rules.
+  Mechanism: the open question in Results (Review corrections, round 1) and in the PR's Questions, marked
+  blocking; `tests/scripts/test_champion_flip_ruling.py` holds the golden unchanged.
+- [x] Review correction: the commit-trailer deviation is the owner's to rule on at merge. The twelve commits
+  `148fa211` to `4a36dc03` carry the Opus 5.5 line, pushed and not rewritten; every later commit carries the
+  card's Fable 5.1 line. Mechanism: the open question in Results and the PR's Questions; `git log
+  --format=%B 4a36dc03..HEAD` shows the Fable 5.1 line on each fix commit.
+- [x] Review correction: the reporter-justice comparison inversion (verifier docs' finding) is killed by the
+  same planted pair as the filter: under `value == default`, the era and the moved config fold to the same
+  identity and the pool would accept them; the planted case requires the refusal. Mechanism and proof as the
+  reporter-justice correction above (J2).
 - [x] **The bytes move, identically.** `git mv` round 2's 50 replays, `MANIFEST.md`, `roster.json` and report
   gz over `replays/samples/9p2i`, and its `experiment-config.json` to `replays/samples/9p2i/experiment-config.json`
   (the era's declared config, in-tree); delete `results-rubric-score.json` with the baseline-9 bytes. Mechanism:
@@ -692,6 +729,9 @@ the pass. One pass, as ruled; neither is reworked here.
 
 ### Decisions
 
+Decisions 1 to 6 record the orchestrator's rulings of 2026-10-02 on the card's open points, each as
+the card proposed it.
+
 1. The referee's walk declares the Stage-B layers after the per-layer review above; gauges, rules and scoring
    are frozen.
 2. The gameplay-facts extractor keeps refusing the new era: `samples/9p2i` ships no `results-rubric-score.json`,
@@ -701,8 +741,9 @@ the pass. One pass, as ruled; neither is reworked here.
 5. The era config lives at `replays/samples/9p2i/experiment-config.json`, byte-identical to round 2's; readers
    accept or ignore it.
 6. The holding edit on the tour surfaces is this card's; the tour card replaces it.
-7. The champion-flip FSM comparator stays at its `d41c9006` value (11, 50) so no ML figure moves; ML-table tests
-   assert their refusal on `samples/9p2i` and run on `ml_corpus/9p2i`, as this card's sweep clause names.
+7. ML-table tests assert their refusal on `samples/9p2i` and run on `ml_corpus/9p2i`, as this card's sweep
+   clause names. The champion-flip FSM comparator, first settled here, is an open owner question (Review
+   corrections, round 1).
 8. The verdict check scopes the proof set's small conviction populations to lines naming 9p2i, so an unrelated
    twenty-of-something sample is not taken for its cell, and reports the pooled reads itself now that the
    proof row reads one set.
@@ -729,6 +770,117 @@ the pass. One pass, as ruled; neither is reworked here.
 
 ### Deviations
 
-- Commit trailers carry `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`, the model that wrote them,
-  in place of the card's Fable 5.1 line.
+- The twelve commits `148fa211` to `4a36dc03` carry `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
+  in place of the card's Fable 5.1 line. They are pushed and are not rewritten; every later commit carries the
+  card's line, and the deviation is an open question for the owner at merge (Review corrections, round 1).
 - `tasks/README.md` has no index line naming this card; only the inventory sentence is re-derived.
+
+### Review corrections, round 1 (2026-10-02)
+
+A fix round from `4a36dc03` on the six verifier findings (commits: `833b7ce6` the tests, then the commit
+recording this subsection). Only tests and this card change: no production
+line, recorded byte, fixture, golden or front-door page moves, so every gate figure above stands.
+
+**The corrected-baseline pin (finding 1).** At `d41c9006`, `test_corrected_w2_baseline_matches_a_rederivation`
+held the whole serialized re-derivation byte-equal to `corrected_w2_baseline.json`. The promotion reduced it
+to determinism plus one block, and reduced the 44-site channel map to per-channel counts. Now
+`test_the_corrected_baseline_rederivation_is_pinned_whole` pins the operator command's whole output on the
+promoted bytes (seven blocks and `sample_dir`) at sha256 `3a556a56c0f9c76d5838169bc357cbe760dc4a5d17c55d246b9c0f6172eb10e0`,
+and `test_committed_ejections_decompose_into_channels` pins the map's sorted-key JSON at
+`52ab23881ed37f687bd5e8c5b4c5bfbaa798d0fb06fcdb00f22a9ac490b90dec`. The old values sit beside them and the W2
+anchor test holds both: the fixture's bytes at `a472a70d820d0ad61d51140c1b12734910ebe662d73db9dd598b1ad54542fb5d`
+and its 81-site map at `2d54603723aeb76f2c3ede44fa8e15740dbb9e536ba783b8f2ae55d2c36cb6ed`. `tests/fixtures/` is
+untouched. Each new value was computed through the production path (`corrected_baseline_from_report`, then
+`serialize_corrected_baseline` on `replays/samples/9p2i`). The values are digests, so nothing is printed.
+
+**The reporter-justice era identity (findings 2 and 6).** Three tests are new in `tests/eval/test_reporter_justice.py`:
+- `test_the_promoted_set_records_exactly_its_eras_off_default_settings` holds `recorded_settings` to the nine
+  off-default settings. The literal is checked against `replays/samples/9p2i/experiment-config.json`, whose
+  `format_version` 1 is the default.
+- `test_the_pool_refuses_two_eras_that_switch_the_same_fields` builds two one-game scratch sets: the promoted
+  game, and the same game recorded with `vent_exit_policy` moved to `observed_risk` on every tick row and its
+  terminal row. The moved set's identity follows its recording, the pool refuses the pair, and a same-era pair
+  still pools.
+- `test_a_set_whose_games_recorded_two_configs_fails_loud` is the planted case for the per-set refusal: two
+  games, one moved, are refused by `compute_reporter_justice`, and the unmoved pair folds as one era.
+
+**The recorder's era sha (finding 3).** `tests/scripts/test_refresh_samples.py::test_the_era_verdict_follows_the_declared_file_on_disk`
+uses a scratch checkout whose `replays/samples/9p2i/experiment-config.json` holds the era config with
+`vent_exit_policy` moved. `refuse_unsafe_target` passes with that file's sha256 and refuses with round 2's
+sha256 (`0c02fa61...192b`, asserted), so the verdict follows the file on disk.
+
+**The ML figure keyed to `samples/9p2i` (finding 4).** The card's stop rule names this case: any ML figure keyed
+to the set's bytes stops the card and goes to the owner. The promotion settled one on the card's own authority
+(Decision 7, now split), in `scripts/regen_test_goldens.py`, a file outside Expected scope. It is now an open
+owner question (Q1 below). The code keeps the hold, which moves no figure, until the owner rules.
+
+**The commit trailers (finding 5).** The twelve commits `148fa211` to `4a36dc03` carry the Opus 5.5 line in
+place of the card's Fable 5.1 line. Pushed commits are not rewritten. This round's commits carry the card's
+line, and the deviation goes to the owner (Q2 below). The PR's Decisions no longer ratify it.
+
+**Open owner questions; the merge waits on both.**
+- **Q1, the champion-flip FSM comparator.** `scripts/regen_test_goldens.py::fsm_comparator_win_rate` read the
+  `samples/9p2i` MANIFEST's impostor wins at `d41c9006`. It now returns `FSM_COMPARATOR_AT_D41C9006 = (11, 50)`,
+  and `tests/scripts/test_champion_flip_ruling.py` holds an independent `(11, 50)` with an era tripwire. The
+  golden fields keyed to it, in `tests/scripts/_goldens/champion_flip_ruling.json` (unchanged), are:
+  `fsm_comparator_win_rate` (0.22), `finalists.utility-es.win_edge_vs_fsm` (0.30000000000000004) and
+  `finalists.policy-es.win_edge_vs_fsm` (-0.2). The `p18` block reads its own comparator row and is not keyed
+  to it. The options:
+  - (a) hold the `d41c9006` reading until a ladder-tip re-record, as now;
+  - (b) re-derive it from the promoted MANIFEST, 24/50, giving 0.48, 0.04 and -0.46. This is a cross-era
+    comparison; the ruling's shape holds (utility-es keeps the edge and fails the referee, policy-es passes it
+    and loses the edge);
+  - (c) another ruling.
+- **Q2, the trailer deviation.** Accept the twelve commits as they are, or rule otherwise at merge. No pushed
+  commit is rewritten under either answer.
+
+**One bounded mutation pass**, over the spans the findings name and the spans this round tests. Only the
+listed operator classes, plus J3x: J3x disables the per-set refusal outright and is the planted-case proof
+that craft rule 2 asks of that gate. Each mutant was applied alone, its targeted suite was run, and the file
+was restored from a copy. The column "at `4a36dc03`" runs that head's test files, so a SURVIVED there is a
+probe that first came back green.
+
+| id | class | span | at `4a36dc03` | now |
+|---|---|---|---|---|
+| G1 | swap one collection for a related one | `build_sample_report.py`: `effective_deflection` from the indistinguishability tally | survived, 30 passed | killed, 1 failed |
+| G2 | replace a read with a constant | `build_sample_report.py`: `supply_gauges` as `{}` | survived, 30 passed | killed, 1 failed |
+| J1 | drop a filter on a collection | `_recorded_settings`: the off-default filter | survived, 31 passed | killed, 3 failed |
+| J2 | comparison to its inverse | `_recorded_settings`: `!=` to `==` | survived, 31 passed | killed, 3 failed |
+| J3 | comparison to its inverse | per-set refusal `len(settings) != 1` to `== 1` | not run | killed, 15 failed, 14 errors |
+| J3x | gate disabled (planted proof) | per-set refusal `and False` | survived, 31 passed | killed, 1 failed |
+| J4 | None test to its inverse | `if config is None` to `is not None` | not run | killed, 19 failed, 12 errors |
+| J5 | drop one member of a tuple of kinds | `_IDENTITY_FIELDS` without `recorded_settings` | not run | killed, 1 failed, 12 errors |
+| J6 | swap one collection for a related one | `pool_reporter_justice`: the era set as a list | not run | killed, 1 failed, 12 errors |
+| J7 | replace a read with a constant | the pooled identity `eras.pop()` as `()` | not run | killed, 1 failed |
+| D1 | read of a loaded source to the canonical literal | `era_target_problem`: the declared file's sha256 as round 2's literal | survived, 45 passed | killed, 1 failed |
+| D2 | read of a loaded source to the canonical literal | `repo_root / declared` as `_REPO_ROOT / declared` | not run | killed, 2 failed |
+| D3 | comparison to a None test | `config_sha256 != expected` to `config_sha256 is None` | not run | killed, 2 failed |
+
+The targeted suites:
+- G: `tests/eval/test_gate_spec_metrics.py`.
+- J: `tests/eval/test_reporter_justice.py`.
+- D: `tests/scripts/test_refresh_samples.py` and `tests/scripts/test_candidate_sets.py`, selected by
+  `-k "era or declared or committed or candidate"` (46 tests) and run serially.
+
+The pass leaves no survivor. The verifiers' wider runs at `4a36dc03` agree on the head column: J1 survived 222
+tests, and D1 survived 656 tests over ten files.
+
+**Validation of this round.** Everything ran on the fix tree. Its non-test, non-card bytes equal `4a36dc03`'s.
+
+| command | result |
+|---|---|
+| the three changed test files and `test_champion_flip_ruling.py`, serially | 224 passed |
+| `verify_samples.sh` per set (`samples/9p2i`, `samples/4p1i`, both corpus sets, round 1) and bare | exit 0 each; every replay clean (50 per set, 150 in `ml_corpus/9p2i`) |
+| `build_sample_report.py --check`, the five sets | exit 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `check_doc_facts.py`; `validate_task_docs.py` | 0; 0 |
+| `verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 (unchanged) |
+| `pytest -m campaign` | 337 passed (as at `4a36dc03`) |
+| `npm --prefix frontend test`; `npm run e2e` | 562 passed; 13 passed, 3 skipped |
+| round 2's 54 files at `23698a0f` against `replays/samples/9p2i` at the fix tree (git blobs, then sha256 of each file's bytes) | 54 identical, 0 differing, none missing or extra |
+| `git diff --stat 23698a0f` over `samples/4p1i`, both corpus sets, `training/`, `agents/tactical/learned/`, `tests/fixtures/` | empty |
+| `bash scripts/check.sh`, once at the pushed head | in the PR body (a card cannot carry the run of the commit that writes it) |
+
+One observation, outside this round. `test_a_switched_on_config_is_refused_at_every_unsafe_target[a hidden round name]`
+failed once under `-n 4` beside `test_candidate_sets.py`, with no mutant applied. It passed alone, serially and
+in every later run. The case snapshots the real `replays/` tree, and this card leaves the case unchanged.
