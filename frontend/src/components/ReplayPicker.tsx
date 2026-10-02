@@ -85,8 +85,9 @@ export interface FeaturedGame {
   readonly label: string;
 }
 
-// WHICH games are here is editorial, independent of the pacing rubric, and two
-// of the five are drawn from measured lists. Labels state countable facts and
+// WHICH games are here is independent of the pacing rubric: three of the five
+// (each set's head and the 9p2i second card) are drawn from measured lists, and
+// the other two 4p1i cards are hand-picked. Labels state countable facts and
 // a setup or question, never an ending, a player, an ejection or a vote tally.
 // A lack of detector flags says nothing about how much evidence the agents
 // hold. Countable claims are checked against the recordings by
@@ -105,8 +106,10 @@ export interface FeaturedGame {
 // The second 9p2i card is a measured kind of game too: its first meeting
 // ejects an impostor while no flag is raised anywhere in the game and no vent
 // event happens at or before that meeting (two games qualify; seed 14 records
-// no vent event at all). The three 4p1i cards behind that set's head are
-// editorial. Reproduce the bands, the eligible openers and both lists with
+// no vent event at all). The two 4p1i cards behind that set's head are
+// editorial. Both criteria read the ejected player's recorded role; that read
+// is curation: it describes the strip and gates no record, instrument or
+// adoption. Reproduce the bands, the eligible openers and both lists with
 //   uv run python scripts/measure_featured_criterion.py --list
 // and see tests/api/test_sets.py, which pins EACH SET'S head and the 9p2i
 // second card against these criteria rather than against seeds — per set
