@@ -1,9 +1,13 @@
 # Game shape
 
-Five rules shape every game the default configuration plays. Each section names
-the code that enforces its rule. An experiment can change one of them only
-through a recorded experiment field, and none of those experiments has been
-adopted. [The architecture note](architecture.md) links here;
+Five rules shape every game the default configuration plays, which is every
+game of the baseline-9 era: the 4-player set and the ML corpus. Each section
+names the code that enforces its rule. An experiment can change one of them only
+through a recorded experiment field, and no default has moved. The shown
+9-player set is a later era (`eval/eras.py`), recorded under one declared config
+(`replays/samples/9p2i/experiment-config.json`) that changes two of these rules,
+as the sections below say; the other three hold there too.
+[The architecture note](architecture.md) links here;
 [the observation contract](observation-contract.md) defines what each player is
 entitled to see.
 
@@ -17,6 +21,12 @@ speaker's own witness record becomes a public `vent_sighting`
 [flag](glossary.md#flag-minting-stamping-a-contradiction-into-the-transcript)
 (`meetings.transcript.detect_contradictions`). A vent claim with no matching
 record raises no flag.
+
+In the shown 9-player set the declared config sets `vent_witness_rule =
+physical`: an exit into a different room is witnessed only by the living
+occupants of the room the impostor surfaces into, never by those it left. Its
+impostors also vent only away from their own fresh kill (`vent_entry_policy`)
+and look before leaving a vent (`vent_exit_policy`).
 
 ## Impostors never report
 
@@ -36,15 +46,20 @@ cooldowns, sabotage timers and task progress) do not run.
 
 ## Meetings pause the world
 
-Until the coherent meeting-reset experiment (`meeting_reset`, default
-`preserve`) is adopted, a meeting changes the map in two ways only: it removes
-the reported body and, on an ejection, the ejected player.
+Under the default (`meeting_reset = preserve`), a meeting changes the map in two
+ways only: it removes the reported body and, on an ejection, the ejected player.
 `orchestrator.game.apply_meeting_result` removes only the body that was
 reported, so every other corpse stays where it fell, and players resume where
 they stood.
 Kill cooldowns do not count down across a meeting: `engine.tick._decrement_cooldowns`
 runs only among the end-of-tick updates of a play tick, which neither the tick
 that opened the meeting nor the meeting itself runs.
+
+The shown 9-player set records a reset instead (`meeting_reset =
+hub_with_grace`, [the full meeting reset](glossary.md#regroup-the-full-meeting-reset)):
+after a meeting that does not end the game, every living player stands in the
+meeting room, every corpse is cleared, and each living impostor's kill cooldown
+restarts at its full value, six ticks in that set (`kill_cooldown_ticks`).
 
 ## Crewmates see one room
 

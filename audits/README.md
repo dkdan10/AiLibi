@@ -403,6 +403,9 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   operating events, and reads the round in three columns, the shipped numbers,
   the first round and this one, never pooled. It gives no verdict and adopts
   nothing; the step its balance rule names, and any adoption, are the owner's.
+  Its dated section 9 records the owner's promotion of the round on 2026-10-02:
+  its bytes are now `replays/samples/9p2i`, the shown 9-player set, in its own
+  era, with the reporter flag stated and the ladder tip still at baseline 9.
 
 ## Cleanup measurements
 

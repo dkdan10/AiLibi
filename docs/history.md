@@ -224,7 +224,18 @@ The phase closed on 2026-09-05 behind that finding.
 
 ## Where the sample sets came from
 
-The 100 committed replays under `replays/samples/` are reference recording 9,
+The 100 committed replays under `replays/samples/` sit in two eras, named in
+`eval/eras.py`. On 2026-10-02 the owner promoted candidate round 2 as the shown
+9-player set: `replays/samples/9p2i` holds its fifty games, recorded 2026-10-01
+under one declared config that switches on the seven adopted gameplay settings,
+the kept vent exit and a six-tick kill cooldown, with that config beside the
+replays. The ladder tip stays at baseline 9, because no substrate setting moved.
+Baseline 10 is reserved for the full re-record. The set's previous games remain
+at `d41c9006`
+([`audits/audit-2026-10-01-stage-b-r2.md`](../audits/audit-2026-10-01-stage-b-r2.md)
+§9).
+
+The 4-player set and both corpus sets are reference recording 9,
 made 2026-09-22. It re-recorded the same four sets at the same seeds after three
 repairs the owner accepted as a set on 2026-09-19: an alibi is stated as a route
 rather than one room, an abstention names what it weighed, and a ballot sees the

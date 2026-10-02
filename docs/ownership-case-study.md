@@ -105,9 +105,9 @@ You are working on AiLibi. Before starting, read AGENTS.md, the architecture rou
 
 The maintenance recording measured proof-free accuracy at 50/96 = 0.5208 and
 46 innocent ejections across four recorded sets. It registered no fresh adoption
-bars and does not retroactively validate the override. In the canonical 9-player
-set, 68 of 82 correct ejections involve direct vent evidence; without it, only
-14 of 27 ejections target impostors. [The reading guide](reading-guide.md)
+bars and does not retroactively validate the override. In that recording's
+9-player set, 68 of 82 correct ejections involved direct vent evidence; without
+it, only 14 of 27 ejections targeted impostors. [The reading guide](reading-guide.md)
 separates those denominators and explains why general social deduction remains
 unproven.
 
@@ -122,6 +122,5 @@ The portfolio evidence is the ability to frame a question, preserve an unfavorab
 measurement, make a named judgment, and leave enough implementation and review
 material to challenge it. It is not an assertion that the judgment was inevitable
 or that AI-written tests establish the right game design. Open the
-[three replay cases](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament)
-to inspect where the system uses evidence well, where persuasive reasoning fails,
-and where the agents leave a question unresolved.
+[published results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament)
+to inspect the figures behind these judgments, set by set.

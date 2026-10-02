@@ -41,6 +41,20 @@ A numbered reference recording: one recording of the sample sets under a stated
 set of behavioural settings, which everything afterwards is measured against.
 Nine exist; the newest — the ladder tip — is baseline 9, recorded 2026-09-22
 ([`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md)).
+Since 2026-10-02 the shown 9-player set sits in a later era, recorded with the
+adopted gameplay changes, while the 4-player set and the ML corpus stay at
+baseline 9.
+
+### era (recordings that share one recorded identity)
+
+A group of committed recordings made under one identity: the same settings,
+prompts and temporal delivery. Instruments read an era's sets together and
+never pool two eras. [`eval/eras.py`](../eval/eras.py) names two: baseline 9's
+owns the 4-player set and the ML corpus, and a later one owns the shown
+9-player set, recorded 2026-10-01 with the adopted gameplay changes switched on
+by one declared config
+([`audits/audit-2026-10-01-stage-b-r2.md`](../audits/audit-2026-10-01-stage-b-r2.md)
+§9).
 
 ### adopting record (the recording that adopts a change)
 
@@ -56,7 +70,9 @@ Where the substrate currently stands. "The ladder tip stands at baseline 9"
 ([`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md)); the
 phrase is checked against that audit by
 [`scripts/check_doc_facts.py`](../scripts/check_doc_facts.py), so no document
-can quietly name a different one.
+can quietly name a different one. The shown 9-player set moved to a later era
+on 2026-10-02 without moving the tip: no substrate setting changed, and
+baseline 10 is reserved for a full re-record.
 
 ### graduated lever (a setting deleted into the default)
 
