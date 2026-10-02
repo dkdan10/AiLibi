@@ -27,8 +27,8 @@ import { tokens } from "../tokens";
 const SEEN_KEY = "ailibi.guidedTourSeen.v1";
 const OPEN_EVENT = "ailibi:open-guided-tour";
 // 9p2i is the curated spectator set (and, since Task 19.9, the server default);
-// 4p1i is the fast fixture — at most one meeting per game, no rubric. Teach on
-// 9p2i so the walkthrough lands on a game with meetings in it.
+// 4p1i is the fast fixture — at most one meeting per game. Teach on 9p2i so the
+// walkthrough lands on a game with meetings in it.
 const TARGET_SET = "9p2i";
 
 /** Re-open the guided tour from anywhere in the shell (the header "Tour" button). */
@@ -179,7 +179,7 @@ const STEPS: readonly Step[] = [
           and voting. Movement is rule-based; models deliberate at meetings.
         </p>
         <p className="mb-2 text-sm text-ink-700">
-          Start at <strong>Results &amp; cases</strong> for three decisions to investigate.
+          Start at <strong>Results &amp; cases</strong> for each set's figures and any decisions to investigate.
           A ballot citation opens its exact source, scene, and meeting memory.
           Missing evidence is labelled; a real citation can still be irrelevant.
           Ground truth is solid; attributed belief is ghosted.

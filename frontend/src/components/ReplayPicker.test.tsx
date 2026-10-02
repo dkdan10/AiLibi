@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ReplayBrowserView, type ReplayBrowserViewProps } from "./ReplayPicker";
 import { EMPTY_FILTERS } from "./ReplayFilters";
+import { DASHBOARD_COPY } from "../lib/copy";
 
 const props: ReplayBrowserViewProps = {
   view: "replays", status: "ready", error: null,
@@ -42,5 +43,31 @@ describe("rubric provenance in replay cards", () => {
     expect(absent).toContain("Browse all replays");
     expect(absent).not.toContain("9p2i, is scored");
     expect(absent).not.toContain("Earlier scores");
+  });
+  it("words an unscored 9p2i set without naming another set as the unscored one", () => {
+    // Since 2026-10-02 the served 9p2i default ships no rubric either, so the
+    // copy that renders for an unscored set must be true on any set: it names
+    // no set as the expected unscored one, claims no rubric elsewhere, and
+    // states no per-set count, revealed or not.
+    const assertSetNeutral = (text: string) => {
+      expect(text).not.toContain("4p1i");
+      expect(text).not.toMatch(/fixture/i);
+      expect(text).not.toMatch(/ships one|which ships|is scored|default 9p2i/i);
+      expect(text).not.toMatch(/\b\d+ of (?:its )?\d+\b/);
+      expect(text).not.toMatch(/median \d+ ticks/);
+    };
+    for (const view of ["replays", "highlights"] as const) {
+      for (const reveal of [false, true]) {
+        const html = renderToStaticMarkup(
+          <ReplayBrowserView {...props} view={view} rubricMissing set="9p2i" reveal={reveal} />,
+        );
+        expect(html).toContain("ships no");
+        expect(html).toContain("9p2i");
+        assertSetNeutral(html);
+      }
+    }
+    expect(DASHBOARD_COPY.interestingnessAbsentLead).toContain("ships no rubric");
+    assertSetNeutral(DASHBOARD_COPY.interestingnessAbsentLead);
+    expect(DASHBOARD_COPY.interestingnessAbsentLead).not.toContain("9p2i");
   });
 });

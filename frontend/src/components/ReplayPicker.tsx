@@ -16,9 +16,9 @@
 // switches to the workspace at tick 0.
 //
 // Firewall: identity ≠ guilt, outcomes role-neutral — the card keys on drama /
-// score, never on who won. The 4p1i set (an explicit `?set=4p1i`, no longer the
-// server default — Task 19.9) ships no rubric, so the unscored / zero-meeting
-// state is a first-class path here: 11 of its 50 games hold no meeting at all.
+// score, never on who won. No committed set ships a rubric since 2026-10-02
+// (the extractor does not read the shown 9-player set's recordings), so the
+// unscored state is a first-class path here, and its copy names no set.
 //
 // Curation (Task 19.9; audits/audit-phase-19-triage.md §7 item 10): a hand-picked
 // FEATURED strip leads the browser. The interestingness rubric is an internal
@@ -31,10 +31,8 @@
 // store's `revealOutcome` and threads it down as a plain `reveal` prop — the
 // cards and the filter bar stay presentational. While it is off, the cards emit
 // no outcome DOM, the three outcome filter criteria go inert (see
-// `matchesFilters`), and the rubric-missing empty state withholds its aggregate
-// ending-mechanism clause (an outcome statistic, gated like the win-shape
-// options); the filter bar carries the one spoiler-warned affordance that turns
-// it on. The editorial copy is otherwise untouched, and the curated FEATURED
+// `matchesFilters`); the filter bar carries the one spoiler-warned affordance
+// that turns it on. The editorial copy is otherwise untouched, and the curated FEATURED
 // strip entirely so — its blurbs are spoiler-audited prose, not outcome-derived
 // data, so the gate does not (and cannot) cover them.
 //
@@ -87,11 +85,14 @@ export interface FeaturedGame {
   readonly label: string;
 }
 
-// WHICH games are here is editorial, independent of the pacing rubric: seven
-// hand-picked recordings. Labels name a setup or question, never an ending,
-// ejection or vote tally. A lack of detector flags says nothing about how much
-// evidence the agents hold. Countable claims are checked against the recordings
-// by tests/api/test_sets.py and the browser tests.
+// WHICH games are here is editorial, independent of the pacing rubric: three
+// hand-picked 4p1i recordings and, for the 9p2i set, one head the criterion
+// below chose from the recordings that set holds since 2026-10-02 (the
+// first eligible opener in seed order), until that strip is re-curated. Labels
+// name a setup or question, never an ending, ejection or vote tally. A lack of
+// detector flags says nothing about how much evidence the agents hold.
+// Countable claims are checked against the recordings by tests/api/test_sets.py
+// and the browser tests.
 //
 // The ORDER is measured, not editorial, and only the head of each set carries
 // the measurement. A grounded ejection is one where the ejected player carries a
@@ -109,27 +110,9 @@ export interface FeaturedGame {
 export const FEATURED_GAMES: readonly FeaturedGame[] = [
   {
     set: "9p2i",
-    seed: 23,
+    seed: 3,
     label:
-      "Four meetings, twenty-six spoken turns. A player reports seeing someone use a vent. Read which each ballot cites, and who else its voter weighed.",
-  },
-  {
-    set: "9p2i",
-    seed: 0,
-    label:
-      "Three meetings, twenty-one spoken turns. A player reports seeing someone use a vent, and a later meeting's only flags are weak signals. Compare what each ballot cites in the two.",
-  },
-  {
-    set: "9p2i",
-    seed: 29,
-    label:
-      "Four meetings, twenty spoken turns. Reported vent sightings, and a meeting whose flags are contradictions instead. Follow how the table turns sightings and statements into accusations.",
-  },
-  {
-    set: "9p2i",
-    seed: 2,
-    label:
-      "One meeting, no flagged contradictions. What can the players establish from their observations and each other's accounts?",
+      "Four meetings, twenty-three spoken turns. Read which each ballot cites, and who else its voter weighed.",
   },
   {
     set: "4p1i",
@@ -160,7 +143,7 @@ export function featuredForSet(set: string | null): readonly FeaturedGame[] {
 
 /** Whether a card passes the active filters. Rubric-derived filters exclude
  *  unscored cards (you cannot match a score/shape/ejection a game has no rubric
- *  for) — which is exactly why the 4p1i set lands in the empty state.
+ *  for) — which is exactly why an unscored set lands in the empty state.
  *
  *  `reveal` (Task 19.10) makes the three OUTCOME criteria — winner, win shape,
  *  ejection — inert while outcomes are hidden. ReplayFilters hides those three
@@ -316,7 +299,7 @@ export interface ReplayBrowserViewProps {
   set: string | null;
   /** The rubric cannot be verified against the set's current source bytes. */
   stale: boolean;
-  /** Highlights view, but the served set ships no rubric (the 4p1i case). */
+  /** The served set ships no rubric (no committed set ships one). */
   rubricMissing: boolean;
   /** The curated featured games for the served set, joined to their replays
    *  (Task 19.9). Empty for an uncurated set, or before the list loads. */
@@ -388,20 +371,13 @@ export function ReplayBrowserView({
   } else if (isHighlights && rubricMissing) {
     body = (
       <EmptyState title="No interestingness rubric for this set">
+        {/* Set-neutral: it names no set as the unscored one, claims no rubric
+            elsewhere and states no per-set count, so it reads true on any set
+            served without a rubric, revealed or not. */}
         <p>
           The served set{set !== null ? ` (${setOptionLabel(set)})` : ""} ships no
-          rubric — expected for 4p1i, the fast technical fixture: median 12 ticks,
-          at most one meeting (39 of its 50 games hold exactly one, 11 hold none)
-          {/* The ending-mechanism count is OUTCOME data — "23 of 50 decided by
-              the task timer rather than by an ejection" states, in aggregate,
-              how the set's games end — so it renders only behind the same
-              reveal gate as the win-shape filter options (Task 19.10 review):
-              the structural facts (ticks, meeting counts) stay, the endings
-              clause waits for reveal. */}
-          {reveal
-            ? ", and 23 of 50 decided by the task timer rather than by an ejection"
-            : ""}
-          . Browse Replays to inspect this set without highlight scores.
+          interestingness rubric, so its games carry no highlight scores. Browse
+          Replays to inspect this set without them.
         </p>
         <button type="button" onClick={onBrowseReplays} className={EMPTY_ACTION_BTN}>
           Browse all replays
@@ -434,13 +410,11 @@ export function ReplayBrowserView({
     body = (
       <>
         {/* One banner for an unscored set (Task 12.13): hoists the per-card "Not
-            scored" note (the 4p1i case) up to a single line. */}
+            scored" note up to a single line. */}
         {!isHighlights && rubricMissing && (
           <Banner tone="caveat">
             This set{set !== null ? ` (${setOptionLabel(set)})` : ""} ships no
-            interestingness rubric — its games are unscored. 4p1i is a fast
-            technical fixture (median 12 ticks, at most one meeting per game), not
-            the spectator set.
+            interestingness rubric — its games are unscored.
           </Banner>
         )}
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -625,7 +599,7 @@ export function ReplayPicker() {
   }, [loadSets]);
 
   // Re-fetch the rubric for the ACTIVE set, live, whenever the set changes — no
-  // reload. 404 → "absent" (the set ships none, e.g. 4p1i) is a first-class empty
+  // reload. 404 → "absent" (the set ships none) is a first-class empty
   // state, NOT an error. Skipped until a set is resolved (seedSet !== null).
   useEffect(() => {
     if (seedSet === null) {

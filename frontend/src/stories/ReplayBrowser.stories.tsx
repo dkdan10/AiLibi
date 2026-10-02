@@ -4,8 +4,8 @@
 // + URL wiring, which Storybook can't host — with mock DTOs in the served shape so
 // every required state is visible in isolation:
 //   • loading / list / empty / error (the contract's state set);
-//   • the first-class empty / zero-meeting paths (the 4p1i set ships no rubric, so
-//     "no rubric" + zero-meeting cards are common, not edges);
+//   • the first-class empty / zero-meeting paths (no committed set ships a
+//     rubric, so "no rubric" + zero-meeting cards are common, not edges);
 //   • the staleness banner (git_head mismatch) and the role-neutral cards.
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
@@ -68,9 +68,8 @@ const WIN_SHAPES = [
   "stopwatch-some-eject",
 ];
 
-// The 4p1i browser: replays with NO rubric (unscored cards). Reached by an
-// explicit set switch, not by default — Task 19.9 flipped the served default to
-// the curated 9p2i, which ships a rubric.
+// An unscored browser: replays with NO rubric (unscored cards), which every
+// committed set serves since 2026-10-02.
 const UNSCORED_CARDS: HighlightCardData[] = [
   card(0, "CREWMATES", null, 510),
   card(1, "CREWMATES", null, 488),
@@ -118,7 +117,7 @@ export const Loading: Story = {
   args: { status: "loading", cards: [], totalCount: 0 },
 };
 
-// EMPTY (no rubric) — the 4p1i common case: the set ships no rubric, so the reel
+// EMPTY (no rubric) — the common case: the set ships no rubric, so the reel
 // shows a real, explanatory empty state, not a broken panel.
 export const EmptyNoRubric: Story = {
   args: {

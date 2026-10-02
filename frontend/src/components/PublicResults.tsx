@@ -16,6 +16,8 @@ function BehaviorIdentity({ group }: { group: ReportProvenanceGroupView }) {
   if (config?.report_body_handle_version) mechanisms.push("body reports without the time of death");
   if (config?.ballot_kill_row_version) mechanisms.push("witnessed kills listed on the voter's ballot");
   if (config?.impostor_ballot_version) mechanisms.push("impostor ballots cast by strategy");
+  // A missing or null cooldown is the map's own value; any recorded value is named.
+  if (config?.kill_cooldown_ticks != null) mechanisms.push(`a kill cooldown of ${config.kill_cooldown_ticks} tick${config.kill_cooldown_ticks === 1 ? "" : "s"} set for these recordings`);
   // Older payloads omit vent_entry_policy; a missing key is the default.
   if (config && (config.crew_idle_policy !== "hub_wait" || config.vent_exit_policy !== "target_distance" || (config.vent_entry_policy ?? "any_body") !== "any_body" || config.post_meeting_retarget || config.self_report || config.sabotage_threshold !== "six_sevenths")) mechanisms.push("experimental movement or action policies");
   if (config && (config.meeting_reset !== "preserve" || config.redistribution_policy !== "lowest_id")) mechanisms.push("experimental round or task rules");
@@ -82,7 +84,7 @@ export function PublicResultsView({ results }: { results: PublicResultsDTO }) {
       <p className="max-w-3xl text-xs leading-relaxed">Each fraction counts impostors among ejected players in that group. “Role proof” here is certified witnessed venting about the ejectee. Only impostors can vent, so this group is 100% by construction when present; it does not measure deduction quality. The {results.proof_free_ejections} ejections without role proof are the informative split for decisions under uncertainty. Proof appearing in a meeting does not establish that it caused the vote. These groups describe this recording set; they are not a controlled comparison or a general measure of model reasoning.</p>
     </div>
     {results.cases.length > 0 ? <div>
-      <h3 className="mb-3 text-xl">Three decisions to investigate</h3>
+      <h3 className="mb-3 text-xl">Decisions to investigate</h3>
       <div className="grid gap-4 lg:grid-cols-3">{results.cases.map((example) => <CaseCard key={example.case_id} example={example} setName={results.set_name} />)}</div>
     </div> : <p className="text-sm">No source-matched editorial cases are published for this set.</p>}
     <details className="rounded-lg border border-ink-300 bg-paper-0 p-4">

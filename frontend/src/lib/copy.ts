@@ -374,7 +374,7 @@ export const SPECTATOR_COPY = Object.freeze({
     interestingnessLoading: "Loading the interestingness rubric…",
     interestingnessAbsentTitle: "No interestingness rubric.",
     interestingnessAbsentLead:
-      "The selected set ships no rubric — expected for 4p1i, the fast technical fixture (median 12 ticks, at most one meeting per game). Switch back to the default 9p2i set, which ships one, or run",
+      "The selected set ships no rubric, so its games carry no interestingness score. To score them, run",
     interestingnessAbsentTail: "over this set to populate the histogram.",
     interestingnessError: "Couldn't load the rubric:",
     interestingnessEmpty: "The rubric is present but scored no games for this set.",
@@ -422,7 +422,7 @@ export const SPECTATOR_COPY = Object.freeze({
     // The recorded weighing artefact: who this voter wrote down while choosing.
     // The heading deliberately claims NOTHING about who those are — an earlier
     // "Also weighed" said the OTHER players, and the bytes falsify that. Over
-    // `replays/samples/9p2i`, 24 of 845 ballots list the voter ITSELF (measured
+    // `replays/samples/9p2i`, 28 of 691 ballots list the voter ITSELF (measured
     // by `scripts/measure_featured_criterion.py --alternatives`); none lists the
     // target the vote applied to, which the ballot schema still admits, and the
     // recordings also admit an id no longer in the game and the literal `SKIP`.

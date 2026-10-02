@@ -30,14 +30,16 @@ from fastapi.testclient import TestClient
 
 import build_demo_bundle as bdb
 from api.main import ENV_REPLAY_DIR, create_app
-from api.replay_loader import DEFAULT_SET
+from api.replay_loader import DEFAULT_SET, ReplayLoader
+from api.schemas import PublicResultsView
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES = _REPO_ROOT / "replays" / "samples"
 _CLIENT_TS = _REPO_ROOT / "frontend" / "src" / "api" / "client.ts"
 
-# One curated 9p2i game: a scored set (so the rubric path is exercised) with
-# meetings in it (so the meeting + memory mirrors are non-empty).
+# One 9p2i game with meetings in it (so the meeting + memory mirrors are
+# non-empty). No committed set ships a rubric since 2026-10-02, so the rubric
+# path is exercised on a scratch set carrying a synthetic one.
 _ONE_9P2I = (bdb.FeaturedGame(set_name="9p2i", seed=2),)
 
 
@@ -273,26 +275,102 @@ def test_baked_bytes_are_the_bytes_the_live_api_serves(
     assert _read(agent) == live_memory.json()
 
 
-def test_rubric_is_trimmed_to_the_baked_seeds(tmp_path: Path, api: TestClient) -> None:
+def _synthetic_rubric_facts(set_dir: Path, seeds: tuple[int, ...]) -> dict[str, object]:
+    """Gameplay facts scoring ``seeds`` of ``set_dir``, keyed to its recordings."""
+
+    from orchestrator.recording_fingerprint import recording_fingerprint
+
+    return {
+        "source_fingerprint": recording_fingerprint(set_dir),
+        "seedset": set_dir.name,
+        "git_head": "ignored-rest-stamped",
+        "games": [
+            {
+                "seed": seed,
+                "reason": "CREWMATE_EJECT",
+                "roles": {"p-1": "IMPOSTOR", "p-2": "CREWMATE"},
+                "deaths": [],
+                "meetings": [
+                    {
+                        "ejected_player_id": "p-1",
+                        "ejected_role": "IMPOSTOR",
+                        "n_contradictions": 1,
+                        "accusations": [{"speaker": "p-2", "accused": "p-1"}],
+                        "contradictions_by_subject": {},
+                    }
+                ],
+            }
+            for seed in seeds
+        ],
+    }
+
+
+def test_rubric_is_trimmed_to_the_baked_seeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Everything but ``per_game`` passes through; ``per_game`` is subsetted.
 
-    The committed rubric was regenerated on the baseline-9 bytes, so it is fresh
-    and the bake keeps exactly the baked seed's row out of the full set. The
-    stale branch, which suppresses every row, is covered by the source-bound
-    controls in test_public_recording_provenance.py.
+    No committed set ships a rubric since the promotion of candidate round 2
+    (2026-10-02): the gameplay-facts extractor does not read the shown 9p2i
+    set's era. So the bake path runs on a scratch samples directory holding two
+    of that set's games, its manifest and roster, and a synthetic rubric
+    stamped with the manifest's own key (fresh): the bake keeps exactly the
+    baked seed's row out of the scored two. The stale branch, which suppresses
+    every row, is covered by the source-bound controls in
+    test_public_recording_provenance.py.
     """
 
-    bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
-    baked = _read(tmp_path / "data" / "9p2i" / "eval" / "rubric.json")
-    live = api.get("/eval/rubric", params={"set": "9p2i"}).json()
+    import importlib
+    import shutil
+    import sys
+
+    lab = _REPO_ROOT / "experiments" / "lab"
+    if str(lab) not in sys.path:
+        sys.path.insert(0, str(lab))
+    rubric_score = importlib.import_module("rubric_score")
+
+    samples = tmp_path / "samples"
+    scratch = samples / "9p2i"
+    scratch.mkdir(parents=True)
+    source = _SAMPLES / "9p2i"
+    for name in (
+        "roster.json",
+        "MANIFEST.md",
+        "replay-seed-2.jsonl",
+        "replay-seed-3.jsonl",
+    ):
+        shutil.copyfile(source / name, scratch / name)
+    rubric_score.regen_for_set(_synthetic_rubric_facts(scratch, (2, 3)), scratch)
+
+    out = tmp_path / "out"
+    bdb.bake_data(out, games=_ONE_9P2I, samples_dir=samples)
+    baked = _read(out / "data" / "9p2i" / "eval" / "rubric.json")
+    with monkeypatch.context() as patch:
+        patch.setenv(ENV_REPLAY_DIR, str(samples))
+        live = TestClient(create_app()).get("/eval/rubric", params={"set": "9p2i"})
+    assert live.status_code == 200
+    served = live.json()
 
     assert isinstance(baked, dict)
-    assert baked["stale"] is False  # was True on the baseline-8 rubric
-    assert len(live["per_game"]) == 50
+    assert baked["stale"] is False
+    assert [row["seed"] for row in served["per_game"]] == [2, 3]
     assert [row["seed"] for row in baked["per_game"]] == [2]
-    assert baked["per_game"] == [row for row in live["per_game"] if row["seed"] == 2]
+    assert baked["per_game"] == [row for row in served["per_game"] if row["seed"] == 2]
     for field in ("seedset", "git_head", "manifest_sha", "stale", "viewModelVersion"):
-        assert baked[field] == live[field], field
+        assert baked[field] == served[field], field
+
+
+def test_the_committed_sets_bake_no_rubric(tmp_path: Path, api: TestClient) -> None:
+    """No committed set ships one, so neither baked set carries a rubric file."""
+
+    bdb.bake_data(
+        tmp_path,
+        games=(*_ONE_9P2I, bdb.FeaturedGame(set_name="4p1i", seed=29)),
+        samples_dir=_SAMPLES,
+    )
+    for name in ("9p2i", "4p1i"):
+        assert not (tmp_path / "data" / name / "eval" / "rubric.json").exists(), name
+        assert api.get("/eval/rubric", params={"set": name}).status_code == 404
 
 
 def test_an_unscored_set_bakes_no_rubric(tmp_path: Path) -> None:
@@ -713,24 +791,49 @@ def test_the_repository_url_is_not_read_as_a_host_path() -> None:
 
 
 def test_summary_covers_full_validated_set_but_links_only_baked_cases(
-    tmp_path: Path, api: TestClient
+    tmp_path: Path, api: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    bdb.bake_data(
-        tmp_path,
-        games=tuple(
-            bdb.FeaturedGame(set_name="9p2i", seed=seed) for seed in (0, 23, 29)
-        ),
-        samples_dir=_SAMPLES,
-    )
+    # Since 2026-10-02 the source check withholds every curated case on the
+    # promoted 9p2i bytes, so the baked summary is the live one over all fifty
+    # games with no case in it.
+    head = (bdb.FeaturedGame(set_name="9p2i", seed=3),)
+    bdb.bake_data(tmp_path, games=head, samples_dir=_SAMPLES)
     path = tmp_path / "data/9p2i/eval/summary.json"
     summary = json.loads(path.read_text())
     response = api.get("/eval/summary", params={"set": "9p2i"})
     assert response.status_code == 200
     assert summary == response.json()
-    assert summary["games"] == 50 and len(summary["cases"]) == 3
+    assert summary["games"] == 50 and summary["cases"] == []
     assert path.stat().st_size < 50 * 1024
-    for case in summary["cases"]:
-        base = tmp_path / "data/9p2i/replays" / case["game_id"] / "meetings"
+
+    # Planted: the same summary carrying a case on the baked game and one on a
+    # game the bundle does not bake keeps only the first, and its meeting and
+    # the observer's memory are baked beside it.
+    import api.public_results as public
+
+    real = public.build_public_results
+    curated = public._curated_cases()  # noqa: SLF001
+    planted_cases = (
+        curated[0].model_copy(
+            update={
+                "game_id": "headless-seed-3",
+                "meeting_id": "headless-seed-3:meeting-0",
+                "observer_id": "p-1",
+            }
+        ),
+        curated[1].model_copy(update={"game_id": "headless-seed-4"}),
+    )
+
+    def planted(loader: ReplayLoader) -> PublicResultsView:
+        return real(loader).model_copy(update={"cases": planted_cases})
+
+    monkeypatch.setattr(bdb, "build_public_results", planted)
+    out = tmp_path / "planted"
+    bdb.bake_data(out, games=head, samples_dir=_SAMPLES)
+    baked = json.loads((out / "data/9p2i/eval/summary.json").read_text())
+    assert [case["game_id"] for case in baked["cases"]] == ["headless-seed-3"]
+    for case in baked["cases"]:
+        base = out / "data/9p2i/replays" / case["game_id"] / "meetings"
         mid = bdb._file_segment(case["meeting_id"])
         assert (base / f"{mid}.json").is_file()
         assert (base / mid / "memory" / f"{case['observer_id']}.json").is_file()

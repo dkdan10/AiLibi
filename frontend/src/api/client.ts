@@ -365,9 +365,9 @@ export function getTournamentReport(
 
 // The per-set interestingness rubric served by the eval surface (Task 12.2,
 // DESIGN.md §3.1, §7). The rubric is per served set and staleness-guarded; a set
-// with no co-located `results-rubric-score.json` — 4p1i, the fast fixture, which
-// an omitted `set` no longer resolves to (Task 19.9: the default is 9p2i, which
-// ships one) — yields a 404, surfaced as `ApiError` with `status === 404` so the
+// with no co-located `results-rubric-score.json` — every committed set since
+// 2026-10-02, the default 9p2i included — yields a 404, surfaced as `ApiError`
+// with `status === 404` so the
 // Highlights reel can render its first-class "no rubric" empty state rather than
 // an error. The score itself is an internal pacing/structure heuristic, not a
 // human rating: render it labelled, and never as a watchability ranking.
