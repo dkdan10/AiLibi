@@ -235,7 +235,9 @@ describe("the omniscient meeting record", () => {
           ? { ...item, events: [{ type: "kill", tick: 4, killer_id: "p-2", victim_id: "p-4", room_id: "LABS" }] }
           : item,
     );
-    expect(render({ mode: "omniscient" }, MEETING, fresh)).toContain("killed at tick 4, one tick before this meeting.");
+    expect(render({ mode: "omniscient" }, MEETING, fresh)).toContain(
+      "The reported body is p-4&#x27;s, killed at tick 4, one tick before this meeting.",
+    );
   });
 
   it("reads the victim, the kill tick and the age off the recording, in both forms", () => {
