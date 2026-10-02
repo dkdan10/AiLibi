@@ -58,11 +58,38 @@ class _LowestTiedTauFo6(Fo6Logistic):
 pytestmark = pytest.mark.campaign
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
 # The committed 15.12 corpus — the population the GO bar is measured on, and the
 # one the FO-6 tau curve below is pinned against.
 _CORPUS = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
+# The baseline-9 era's nine-player set, which the frozen table reads: the 9p2i
+# property cases below run on it. They ran on samples/9p2i until its baseline-9
+# bytes moved out at the promotion of candidate round 2 (2026-10-02,
+# eval/eras.py); the table refuses that set by name
+# (``test_the_table_refuses_the_promoted_nine_player_set``).
+_NINE = _CORPUS
+_PROMOTED_NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
+
+
+def _kfold(table: MeetingTable) -> MeetingTable:
+    """``table`` without its committed split, so the harness folds every game.
+
+    The corpus ships a ``splits.json``; the cases that read the 5-fold path (every
+    game tested once) drop it rather than pin a different population.
+    """
+
+    return table.model_copy(update={"splits": None})
+
+
+def test_the_table_refuses_the_promoted_nine_player_set() -> None:
+    """The fidelity harness's table reads baseline recordings only, by name."""
+
+    with pytest.raises(
+        ValueError,
+        match="^frozen surrogate meeting table does not support experimental "
+        "recordings$",
+    ):
+        build_meeting_table(_PROMOTED_NINE)
 
 
 # --------------------------------------------------------------------------- #
@@ -79,7 +106,7 @@ def test_by_game_cv_never_splits_a_games_meetings_across_folds() -> None:
     train and test.
     """
 
-    table = build_meeting_table(_NINE)
+    table = _kfold(build_meeting_table(_NINE))
     all_seeds = set(table.game_seeds())
     fold_pairs = _game_folds(table, folds=5)
 
@@ -159,7 +186,7 @@ def test_ceiling_is_measured_over_the_scored_population() -> None:
     achieved top-1 vs the ceiling reads one distribution (Codex review).
     """
 
-    table = build_meeting_table(_NINE)
+    table = _kfold(build_meeting_table(_NINE))
     kfold = fo6_rebaseline(table)
     assert kfold.honest_ceiling.ejections_total == kfold.ejection_meetings
 
@@ -354,8 +381,8 @@ def test_recon_respects_the_production_render_ceiling() -> None:
                 ceiled_cases += 1
                 assert view.recon_suspicion[cand] == pytest.approx(bound)
     # The bound must actually bind somewhere on the committed bytes — the
-    # pinned-prior+flag shape the 14.10 audit pinned persists on the committed
-    # baseline-5 set.
+    # pinned-prior+flag shape the 14.10 audit pinned persists on the baseline-9
+    # corpus (239 candidate cells).
     assert ceiled_cases > 0
 
 
@@ -386,7 +413,7 @@ def test_recorded_ballot_confidence_calibration_is_reported() -> None:
     voters' calibration rather than only the post-tally number.
     """
 
-    table = build_meeting_table(_NINE)
+    table = _kfold(build_meeting_table(_NINE))
     report = fo6_rebaseline(table)
     non_skip = sum(1 for r in table.rows if r.ballot_target != "SKIP")
     assert report.ballot_rows == non_skip  # 5-fold covers every game once
@@ -396,45 +423,48 @@ def test_recorded_ballot_confidence_calibration_is_reported() -> None:
 
 
 def test_fo6_rebaseline_collapses_to_always_skip_on_the_big_set() -> None:
-    """The re-run FO-6 decision head degenerates to always-SKIP on 9p2i (§5.2).
+    """The re-run FO-6 decision head degenerates toward always-SKIP on 9p2i (§5.2).
 
-    Its binary decision head almost never predicts an ejection — on the baseline-9
-    samples it skips 86 of the 90 true ejection meetings (it skipped all 95 on
-    baseline 8, all 101 on the Task-18.12 baseline-6 re-record and 99 of 100 on
-    baseline 5). On the baseline-3/4 bytes that trivial
+    Its binary decision head skips most true ejection meetings: 164 of the 273 on
+    the baseline-9 corpus, read 5-fold, since 2026-10-02 (the baseline-9 samples
+    skipped 86 of 90; it skipped all 95 on baseline 8, all 101 on the Task-18.12
+    baseline-6 re-record and 99 of 100 on baseline 5). On the baseline-3/4 bytes
+    that trivial
     policy was also WORSE than the always-eject constant (eject-majority meeting mix),
     which is what ``degenerates_to_skip`` encodes; the baseline-5 close record flipped
     the mix to skip-majority so always-skip briefly BEAT always-eject and the flag
-    read False. Baselines 6 through 9 hold the mix at eject-majority (90 EJECT of the
-    145 resolved meetings here — the graduated meeting layer convicts more often), so
-    always-skip stays WORSE than always-eject and the eject-era flag reads True.
+    read False. Baselines 6 through 9 hold the mix at eject-majority (273 EJECT of
+    the corpus's 449 resolved meetings; 90 of 145 on the baseline-9 samples — the
+    graduated meeting layer convicts more often), so always-skip stays WORSE than
+    always-eject and the eject-era flag reads True.
 
     Task-18.12 finding (the record documents it, audits/audit-phase-18-baseline-6.md
     §9): the physical rank's residual signal NO LONGER collapses to the per-candidate
     base rate. On the baseline-5 bytes top-1 fell to ~0.11 (at/below ~1/9); on the
     vent-widening re-record it rose to 20/101 = 0.198, on the baseline-8 samples it
-    held at 19/95 = 0.200, and on the baseline-9 samples it is 25/90 = 0.278, ABOVE
-    the 1/9 = 0.111 base rate — the widened trajectories leave the six raw physical
-    counts slightly more predictive of the ejected candidate. This is a rank
-    observation only: it remains far under the honest reachability ceiling (0.811
-    here, guarded by ``test_honest_ceiling_bounds_the_fo6_top1``), and the
+    held at 19/95 = 0.200, on the baseline-9 samples it read 25/90 = 0.278, and on
+    the baseline-9 corpus it is 142/273 = 0.520, ABOVE the 1/9 = 0.111 base rate —
+    the widened trajectories leave the six raw physical counts more predictive of
+    the ejected candidate. This is a rank observation only: it remains under the
+    honest reachability ceiling (203/273 = 0.744 here, guarded by
+    ``test_honest_ceiling_bounds_the_fo6_top1``), and the
     BEHAVIORAL collapse — the load-bearing claim of this test — holds, though it is
     no longer total. The surrogate stays prior-substrate-anchored by design
     (audits/audit-phase-16-close.md §8 — Phase 17 re-grounds before any training
     read).
     """
 
-    report = fo6_rebaseline(build_meeting_table(_NINE))
+    report = fo6_rebaseline(_kfold(build_meeting_table(_NINE)))
     assert report.model_name == "fo6-physical-logistic"
     # The physical rank's residual signal stays ABOVE the per-candidate base rate
-    # (the 18.12 flip, re-derived on the baseline-9 samples): top-1 = 25/90,
-    # pinned exactly. It stays far below the honest reachability ceiling
+    # (the 18.12 flip, re-derived on the baseline-9 corpus): top-1 = 142/273,
+    # pinned exactly. It stays below the honest reachability ceiling
     # (test_honest_ceiling_bounds_the_fo6_top1).
-    assert report.top1 == pytest.approx(25 / 90)  # was 19/95 on baseline 8
+    assert report.top1 == pytest.approx(142 / 273)  # was 25/90 on the samples
     assert report.top1 > 1.0 / 9.0  # still beats the base rate
-    # Almost never ejects: SKIP on 86 of the 90 true ejection meetings.
-    assert report.ejection_meetings == 90  # was 95
-    assert report.ejection_predicted_skips == 86  # was 95
+    # Mostly skips: SKIP on 164 of the 273 true ejection meetings.
+    assert report.ejection_meetings == 273  # was 90 on the samples
+    assert report.ejection_predicted_skips == 164  # was 86 on the samples
     assert 2 * report.ejection_predicted_skips > report.ejection_meetings
     # The substrate-contingent halves, re-pinned at their baseline-6 truth: the
     # meeting mix is eject-majority again, so the all-skip head scores BELOW the
@@ -623,7 +653,7 @@ def test_honest_ceiling_bounds_the_fo6_top1() -> None:
     measured ceiling — the ceiling is the maximum achievable, not a target.
     """
 
-    report = fo6_rebaseline(build_meeting_table(_NINE))
+    report = fo6_rebaseline(_kfold(build_meeting_table(_NINE)))
     assert report.top1 <= report.honest_ceiling.max_achievable_top1
 
 

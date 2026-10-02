@@ -338,7 +338,9 @@ class TestGuardAndGraderCannotDisagree:
                         "none_held",
                         "uncited",
                     }
-        assert compared == 545, compared  # was 578 on baseline 8
+        # Both sample sets, across their two eras since 2026-10-02 (samples/9p2i
+        # holds candidate round 2's bytes): was 545 on the baseline-9 bytes.
+        assert compared == 459, compared  # was 578 on baseline 8
         # PLANTED would be silent on a set the rule never bites: it bites here.
         assert off_target > 0, off_target
 
@@ -410,7 +412,8 @@ class TestGuardAndGraderCannotDisagree:
         """The case above is not hypothetical: committed prompts render it.
 
         A voter's tenth observation within one tick is what mints the pair, and
-        the committed sample prompts hold 212 of them (244 on baseline 8). The
+        the committed sample prompts hold 224 of them (212 on the baseline-9 bytes,
+        244 on baseline 8; both sample sets, across their two eras). The
         count is pinned the way this module pins ``compared``: over bytes that
         move only when a card deliberately moves them.
         """
@@ -428,7 +431,7 @@ class TestGuardAndGraderCannotDisagree:
                     for other in ids
                 ):
                     colliding += 1
-        assert colliding == 212, colliding  # was 244 on baseline 8
+        assert colliding == 224, colliding  # was 212 on the baseline-9 bytes
 
 
 class TestTheCompositionIsShared:

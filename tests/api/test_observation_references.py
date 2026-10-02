@@ -34,11 +34,13 @@ def loader() -> ReplayLoader:
         "scene",
     ),
     [
-        (23, 0, "p-5", "p-5:8:1", "saw_vent", "p-6", 8, 7),
-        # Seed 4 M0 carries a move and a co-present sighting, the pair seed 46 M3
-        # carried on baseline 8 (its meeting cites neither on baseline 9).
-        (4, 0, "p-5", "p-5:7:1", "saw_player_move", "p-1", 7, 6),
-        (4, 0, "p-1", "p-1:7:1", "saw_player", "p-3", 7, 6),
+        # Re-read on the promoted bytes (candidate round 2, 2026-10-02); on the
+        # baseline-9 bytes these were seed 23 M0 (the vent) and seed 4 M0 (the
+        # move and the co-present sighting).
+        (5, 1, "p-2", "p-2:35:1", "saw_vent", "p-3", 35, 34),
+        # Seed 12 M0 carries a move and a co-present sighting in one meeting.
+        (12, 0, "p-1", "p-1:12:3", "saw_player_move", "p-2", 12, 11),
+        (12, 0, "p-2", "p-2:8:1", "saw_player", "p-7", 8, 7),
     ],
 )
 def test_genuine_citations_keep_source_identity_and_separate_scene_time(
@@ -66,10 +68,10 @@ def test_genuine_citations_keep_source_identity_and_separate_scene_time(
     assert reference.scene_tick == scene
     assert reference.provenance == "observed"
     if kind == "saw_player":
-        assert reference.text == "p-1 saw p-3 in EAST_HALL with p-9."
+        assert reference.text == "p-2 saw p-7 in MEDBAY with p-9."
         assert reference.from_room is reference.to_room is None
     elif kind == "saw_player_move":
-        assert (reference.from_room, reference.to_room) == ("ENGINEERING", "EAST_HALL")
+        assert (reference.from_room, reference.to_room) == ("EAST_HALL", "ENGINEERING")
     else:
         assert reference.room == "ENGINEERING"
     replay = loader.load_replay(f"headless-seed-{seed}")
@@ -81,18 +83,23 @@ def test_foreign_or_missing_citation_is_explicitly_unresolved(
     tmp_path: Path,
     forged: str,
 ) -> None:
-    path = tmp_path / "replay-seed-46.jsonl"
+    # Seed 0 M1, where p-3 cites one observation of its own on the promoted
+    # bytes (seed 46 M3 on the baseline-9 bytes).
+    path = tmp_path / "replay-seed-0.jsonl"
     shutil.copyfile(_SAMPLES / path.name, path)
     shutil.copyfile(_SAMPLES / "roster.json", tmp_path / "roster.json")
     rows = [json.loads(line) for line in path.read_text().splitlines()]
+    forged_ballots = 0
     for row in rows:
-        if row.get("kind") == "meeting" and row["meeting_id"].endswith("meeting-3"):
+        if row.get("kind") == "meeting" and row["meeting_id"].endswith("meeting-1"):
             for ballot in row["ballots"]:
                 if ballot["voter"] == "p-3":
                     ballot["primary_reason_observation_id"] = forged
+                    forged_ballots += 1
+    assert forged_ballots == 1
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
     view = ReplayLoader(tmp_path).get_meeting_memory(
-        "headless-seed-46", "headless-seed-46:meeting-3", "p-3"
+        "headless-seed-0", "headless-seed-0:meeting-1", "p-3"
     )
     (reference,) = view.observation_references
     assert reference.observation_id == forged

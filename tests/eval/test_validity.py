@@ -29,6 +29,7 @@ from eval import balance_eval, replay_walk, validity
 from eval.balance_eval import run_tournament_eval
 from eval.replay_walk import ReplayWalkConfig, WalkViolation
 from eval.report_schema import GameReport, MeetingReport, TournamentReport
+from eval.eras import era_of
 from eval.validity import (
     TRUNCATED_REPLAY_REASON,
     VALIDITY_THREADED_LAYERS,
@@ -76,6 +77,11 @@ from orchestrator.replay_integrity import ReplayIntegrityError
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
+# samples/9p2i's era declares the config every one of its games recorded
+# (eval/eras.py), so a gate run over it, or over a copy of its games, declares it.
+_NINE_ERA_CONFIG = RecordedExperimentConfig.model_validate_json(
+    (_REPO_ROOT / str(era_of("replays/samples/9p2i").declared_config)).read_bytes()
+)
 
 
 @pytest.fixture(scope="module")
@@ -275,7 +281,7 @@ def test_meeting_rate_passes_on_committed(nine_report: TournamentReport) -> None
     check = check_meeting_rate_and_resolution(nine_report)
     assert check.passed
     assert check.facts["meeting_rate"] == 1.0
-    assert check.facts["resolved_meetings"] == 145  # was 151
+    assert check.facts["resolved_meetings"] == 117  # was 145
 
 
 def test_meeting_rate_fails_below_floor(nine_report: TournamentReport) -> None:
@@ -319,7 +325,7 @@ def test_meeting_resolution_fails_on_unresolved_meeting(
 def test_no_duplicate_meeting_rows_passes(nine_report: TournamentReport) -> None:
     check = check_no_duplicate_meeting_rows(nine_report)
     assert check.passed
-    assert int(check.facts["meetings_total"]) == 145  # type: ignore[arg-type]  # was 151
+    assert int(check.facts["meetings_total"]) == 117  # type: ignore[arg-type]  # was 145
 
 
 def test_no_duplicate_meeting_rows_fails(nine_report: TournamentReport) -> None:
@@ -684,7 +690,11 @@ def _substrate_by_seed(sample_dir: Path) -> dict[int, dict[str, bool] | None]:
 
 
 def test_provenance_passes_on_committed(nine_report: TournamentReport) -> None:
-    check = check_cost_and_provenance(nine_report, _substrate_by_seed(_NINE))
+    check = check_cost_and_provenance(
+        nine_report,
+        _substrate_by_seed(_NINE),
+        expected_experiment_config=_NINE_ERA_CONFIG,
+    )
     assert check.passed
     assert check.facts["model"] == "Qwen/Qwen3.6-27B"
 
@@ -739,9 +749,17 @@ def test_provenance_fails_on_negative_per_call_tokens(
 def test_provenance_exact_model_pins(nine_report: TournamentReport) -> None:
     subs = _substrate_by_seed(_NINE)
     assert check_cost_and_provenance(
-        nine_report, subs, expected_model="Qwen/Qwen3.6-27B"
+        nine_report,
+        subs,
+        expected_model="Qwen/Qwen3.6-27B",
+        expected_experiment_config=_NINE_ERA_CONFIG,
     ).passed
-    wrong = check_cost_and_provenance(nine_report, subs, expected_model="WrongModel")
+    wrong = check_cost_and_provenance(
+        nine_report,
+        subs,
+        expected_model="WrongModel",
+        expected_experiment_config=_NINE_ERA_CONFIG,
+    )
     assert not wrong.passed
     assert any("expected" in v for v in wrong.violations)
 
@@ -751,10 +769,16 @@ def test_provenance_exact_prompt_versions_pin(nine_report: TournamentReport) -> 
     game = _first_game_with_meeting(nine_report)
     real_versions = dict(game.prompt_versions)
     assert check_cost_and_provenance(
-        nine_report, subs, expected_prompt_versions=real_versions
+        nine_report,
+        subs,
+        expected_prompt_versions=real_versions,
+        expected_experiment_config=_NINE_ERA_CONFIG,
     ).passed
     wrong = check_cost_and_provenance(
-        nine_report, subs, expected_prompt_versions={"accusation_round": "v0.wrong"}
+        nine_report,
+        subs,
+        expected_prompt_versions={"accusation_round": "v0.wrong"},
+        expected_experiment_config=_NINE_ERA_CONFIG,
     )
     assert not wrong.passed
     assert any("prompt-version provenance" in v for v in wrong.violations)
@@ -786,13 +810,21 @@ def test_provenance_fails_on_stripped_prompt_versions(
 def test_provenance_require_zero_cost(nine_report: TournamentReport) -> None:
     subs = _substrate_by_seed(_NINE)
     # The committed Featherless baseline is $0, so the pin passes.
-    assert check_cost_and_provenance(nine_report, subs, require_zero_cost=True).passed
+    assert check_cost_and_provenance(
+        nine_report,
+        subs,
+        require_zero_cost=True,
+        expected_experiment_config=_NINE_ERA_CONFIG,
+    ).passed
     # A game with positive spend fails the pin.
     game = nine_report.games[0]
     paid = game.cost.model_copy(update={"total_cost_usd": 1.5})
     bad_game = game.model_copy(update={"cost": paid})
     check = check_cost_and_provenance(
-        _replace_first_game(nine_report, bad_game), subs, require_zero_cost=True
+        _replace_first_game(nine_report, bad_game),
+        subs,
+        require_zero_cost=True,
+        expected_experiment_config=_NINE_ERA_CONFIG,
     )
     assert not check.passed
     assert any("--require-zero-cost" in v for v in check.violations)
@@ -957,13 +989,19 @@ def test_seeds_on_disk_still_raises_on_a_mistyped_replay(tmp_path: Path) -> None
 
 
 def test_run_validity_gate_reproduces_9p2i_close() -> None:
-    report = run_validity_gate(_NINE)
+    report = run_validity_gate(_NINE, expected_experiment_config=_NINE_ERA_CONFIG)
     assert report.passed
     assert report.games_total == 50
     assert report.failing_checks() == ()
     facts = {c.name: c.facts for c in report.checks}
     assert facts["meeting_rate_and_resolution"]["meeting_rate"] == 1.0
-    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 145  # was 151
+    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 117  # was 145
+
+
+def test_the_9p2i_gate_refuses_it_without_its_era_config() -> None:
+    # The historical default (no declared config) is not this set's era.
+    report = run_validity_gate(_NINE)
+    assert report.failing_checks() == ("cost_and_provenance_exact",)
 
 
 def test_run_validity_gate_reproduces_4p1i_close() -> None:
@@ -980,7 +1018,7 @@ def test_run_validity_gate_rejects_a_truncated_replay(tmp_path: Path) -> None:
     # verifier. The remaining validity checks stay green.
     mini = _mini_set(tmp_path, seeds=(12,))
     _truncate_tick_stream(mini / "replay-seed-12.jsonl")
-    report = run_validity_gate(mini)
+    report = run_validity_gate(mini, expected_experiment_config=_NINE_ERA_CONFIG)
     assert not report.passed
     assert report.failing_checks() == (
         "all_games_reach_game_over",
@@ -1041,7 +1079,7 @@ def test_run_validity_gate_rejects_a_record_after_the_game_over_row(
     lines.append(appended.model_dump_json())
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    report = run_validity_gate(mini)
+    report = run_validity_gate(mini, expected_experiment_config=_NINE_ERA_CONFIG)
     assert not report.passed
     assert report.failing_checks() == (
         "all_games_reach_game_over",
@@ -1054,7 +1092,9 @@ def test_run_validity_gate_rejects_a_record_after_the_game_over_row(
 def test_run_validity_gate_passes_the_untruncated_fixture(tmp_path: Path) -> None:
     # The same one-game set, unedited: the truncation rejection above is not the
     # fixture merely being unacceptable to the gate.
-    assert run_validity_gate(_mini_set(tmp_path, seeds=(12,))).passed
+    assert run_validity_gate(
+        _mini_set(tmp_path, seeds=(12,)), expected_experiment_config=_NINE_ERA_CONFIG
+    ).passed
 
 
 def test_run_validity_gate_never_crashes_on_corrupt_input(tmp_path: Path) -> None:
@@ -1465,13 +1505,18 @@ def test_the_opt_in_declarations_need_the_inventory(
 def test_the_committed_sample_sets_satisfy_every_declaration_with_no_config(
     nine_report: TournamentReport,
 ) -> None:
-    """The historical default holds on every committed sample game."""
+    """Every committed sample game records its era's config: none, or the declared one."""
 
     for sample_dir in (_NINE, _FOUR):
         inventory = read_set_inventory(sample_dir)
         assert recording_sha_violations(inventory) == []
         assert seed_set_violations(inventory, frozenset(range(50))) == []
-    assert experiment_config_violations(nine_report.games, None) == []
+    four_games = assemble_tournament_report(_FOUR).games
+    assert experiment_config_violations(four_games, None) == []
+    assert experiment_config_violations(nine_report.games, _NINE_ERA_CONFIG) == []
+    # Planted: the other era's declaration fails each set, game by game.
+    assert len(experiment_config_violations(nine_report.games, None)) == 50
+    assert len(experiment_config_violations(four_games, _NINE_ERA_CONFIG)) == 50
 
 
 def _gate_cli() -> ModuleType:
@@ -1806,10 +1851,10 @@ def test_a_declared_config_of_historical_defaults_is_the_same_as_none(
 ) -> None:
     """Both sides are normalized: a default config object equals no config."""
 
-    assert (
-        experiment_config_violations(nine_report.games, RecordedExperimentConfig())
-        == []
-    )
+    # The 4p1i games recorded no config (the baseline-9 era); samples/9p2i's
+    # games record their era's declared config.
+    four_games = assemble_tournament_report(_FOUR).games
+    assert experiment_config_violations(four_games, RecordedExperimentConfig()) == []
     carrying_default = nine_report.games[0].model_copy(
         update={"experiment_config": RecordedExperimentConfig()}
     )

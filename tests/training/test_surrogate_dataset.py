@@ -90,9 +90,32 @@ _COMMITTED_SETS: Final[tuple[Path, ...]] = (
 #: the marker parser cannot define away a kind by failing to recognise it.
 _BRACKETED: Final[re.Pattern[str]] = re.compile(r"\[[^\]]*\]")
 
+#: The committed sets the frozen surrogate table reads: those recorded with
+#: every experiment off, the baseline-9 era's three. samples/9p2i holds
+#: candidate round 2's bytes since 2026-10-02 (eval/eras.py) and the table
+#: refuses it by name (``test_the_table_refuses_the_promoted_nine_player_set``).
+_TABLE_SETS: Final[tuple[Path, ...]] = tuple(
+    path for path in _COMMITTED_SETS if path != Path("replays/samples/9p2i")
+)
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
+#: The baseline-9 era's nine-player set, which the table reads and the 9p2i
+#: property cases below run on. They ran on samples/9p2i until its baseline-9
+#: bytes moved out (2026-10-02).
+_NINE = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
+_PROMOTED_NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
+
+
+def test_the_table_refuses_the_promoted_nine_player_set() -> None:
+    """The frozen table reads baseline recordings only, and says so by name."""
+
+    with pytest.raises(
+        ValueError,
+        match="^frozen surrogate meeting table does not support experimental "
+        "recordings$",
+    ):
+        build_meeting_table(_PROMOTED_NINE)
 
 
 def _report_totals(sample_dir: Path) -> tuple[int, int, int, int]:
@@ -1180,8 +1203,9 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
     redaction is a replacement BODY rather than a prefix, so the census counts it
     and the parser does not claim it.
 
-    The two totals agree at this head: 39 bracketed annotations, 39 claimed
-    labels on the baseline-9 bytes. On the baseline-8 bytes they once read 127
+    The two totals agree at this head: 65 bracketed annotations, 65 claimed
+    labels over the four sets across their two eras (39 and 39 while all four
+    held the baseline-9 bytes). On the baseline-8 bytes they once read 127
     against 120, because every ballot in that 7-annotation gap carried a
     citation-nulling marker (``invalid_reason_id`` / ``invalid_observation_id``)
     BEHIND the target-guard marker named by the recorded ``guard_rewrite_reason``
@@ -1221,37 +1245,39 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
             marked_games += int(game_marked)
         per_set_rewritten.append(rewritten)
 
-    # was (300, 3631, 127, 70)
-    assert (games, len(ballots), annotations, marked_games) == (300, 3630, 39, 26)
-    # under_gate_redirect (was 83), invalid_reason_id (was 5) and uncited_coerced
-    # (was 6) no longer occur on these bytes; invalid_counter_reason_id is new.
+    # Counts what the tree holds across both eras since 2026-10-02 (samples/9p2i
+    # holds candidate round 2's bytes); each ``was`` is the four baseline-9 sets.
+    # was (300, 3630, 39, 26), and (300, 3631, 127, 70) on baseline 8
+    assert (games, len(ballots), annotations, marked_games) == (300, 3476, 65, 37)
+    # under_gate_redirect (83 on baseline 8), invalid_reason_id (5) and
+    # uncited_coerced (6) no longer occur on these bytes.
     assert dict(kinds) == {
-        "invalid_observation_id": 1,  # was 15
-        "teammate_coerced": 13,  # was 7
-        "rationale_redaction": 13,  # was 7
-        "invalid_counter_reason_id": 4,  # was 0
-        "invalid_target": 8,  # was 4
+        "invalid_observation_id": 1,  # was 1
+        "teammate_coerced": 28,  # was 13
+        "rationale_redaction": 28,  # was 13
+        "invalid_counter_reason_id": 2,  # was 4
+        "invalid_target": 6,  # was 8
     }
-    # Reconciled with the annotation total above: 39 == 39 (see the docstring).
-    assert sum(kinds.values()) == annotations == 39  # was 127
+    # Reconciled with the annotation total above: 65 == 65 (see the docstring).
+    assert sum(kinds.values()) == annotations == 65  # was 39
     # samples-9p2i, ml_corpus-9p2i, samples-4p1i, ml_corpus-4p1i.
-    assert per_set_rewritten == [4, 17, 0, 0]  # was [27, 70, 1, 2]
-    assert sum(per_set_rewritten) == 21  # was 100
-    # None of those 21 carries the J2 marker, so the J2-only rule would have let
-    # all 21 ride into the fit as the voter's own choice before this rule widened.
-    assert kinds["uncited_coerced"] == 0  # was 6
+    assert per_set_rewritten == [17, 17, 0, 0]  # was [4, 17, 0, 0]
+    assert sum(per_set_rewritten) == 34  # was 21
+    # None of those 34 carries the J2 marker, so the J2-only rule would have let
+    # all 34 ride into the fit as the voter's own choice before this rule widened.
+    assert kinds["uncited_coerced"] == 0
     # Task 21.2 wired the structured field, so every target rewrite now records
     # its own reason — the marker table above stays load-bearing because the
     # field holds ONE reason per ballot while the chain can carry more.
-    assert sum(b.guard_rewrite_reason is not None for b in ballots) == 21  # was 100
+    assert sum(b.guard_rewrite_reason is not None for b in ballots) == 34  # was 21
 
 
 @pytest.mark.slow
 def test_the_reporter_column_is_an_exclusion_oracle_the_fit_may_not_read() -> None:
     """Why ``is_reporter`` is masked: a head on it separates the roles perfectly.
 
-    The census first — over every candidate cell of the four committed sets, a
-    reporter is a CREWMATE without exception. Then the head: restore the feature
+    The census first — over every candidate cell of the committed sets the
+    table reads, a reporter is a CREWMATE without exception. Then the head: restore the feature
     into the fit-side vector, fit the one-feature logistic on it against the
     IMPOSTOR label, and it calls every reporter cell crewmate with no error. That
     is roles ground truth reached through a feature column, not a ballot signal
@@ -1263,20 +1289,22 @@ def test_the_reporter_column_is_an_exclusion_oracle_the_fit_may_not_read() -> No
     reporter_roles: Counter[str] = Counter()
     features: list[float] = []
     labels: list[float] = []
-    for set_dir in _COMMITTED_SETS:
+    for set_dir in _TABLE_SETS:
         for row in build_meeting_table(set_dir).rows:
             for feat in row.candidates:
                 if feat.is_reporter:
                     reporter_roles[feat.role] += 1
                 features.append(float(feat.is_reporter))
                 labels.append(float(feat.is_impostor))
-    assert reporter_roles == Counter({"CREWMATE": 3630})  # was 3631
+    # The three sets the table reads; with samples/9p2i's baseline-9 bytes the
+    # four read 3630 (3631 before them).
+    assert reporter_roles == Counter({"CREWMATE": 2785})
     assert reporter_roles["IMPOSTOR"] == 0
 
     # The fit-side vector never sees it: every built view writes the constant.
     served = {
         cell["is_reporter"]
-        for row in build_meeting_table(_COMMITTED_SETS[3]).rows
+        for row in build_meeting_table(_TABLE_SETS[2]).rows
         for cell in ballot_features_from_row(row).features.values()
     }
     assert served == {MASKED_IS_REPORTER}

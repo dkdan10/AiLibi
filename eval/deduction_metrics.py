@@ -69,8 +69,8 @@ report. Denominator: all of them (``flags_total``). Weakness comes from
 re-implemented, so the marker predicate stays single-sourced beside the marker
 writer. ``meetings_with_any_flag`` counts meetings carrying >= 1 flag of ANY
 category — deliberately a different name from partition A's ``flagged_meetings``
-(role proof only), because on ``replays/samples/9p2i`` the two differ (76 vs
-70) and one name for two predicates is how a cross-tab gets mis-cited.
+(role proof only), because on ``replays/samples/9p2i`` the two differ (33 vs
+24) and one name for two predicates is how a cross-tab gets mis-cited.
 *Does NOT measure*: whether anybody READ a flag, whether a flag was true, or
 whether the two sides of a cross-statement conflict are equally credible.
 
@@ -84,7 +84,7 @@ flag status and by the ejected player's role.
 * ``flagged_meetings`` + ``unflagged_meetings`` == ``meetings_total``.
 * ``unflagged_meeting_accuracy`` = ``unflagged_ejections_impostor`` /
   (``unflagged_ejections_impostor`` + ``unflagged_ejections_innocent``) — the
-  triage's 10/31 = 32.3% on ``replays/samples/9p2i``.
+  triage's 10/31 = 32.3% on the baseline-6 ``replays/samples/9p2i``.
 
 *Does NOT measure*: whether the proof named the player who was ejected (that is
 partition B, and the two denominators are NOT interchangeable); nor whether the
@@ -97,7 +97,7 @@ that ejected them*.
 
 * ``proof_present_ejections`` + ``non_direct_ejections`` == ``ejections_total``.
 * ``non_direct_accuracy`` = ``non_direct_impostor`` / ``non_direct_ejections`` —
-  the triage's 10/33 = 30.3% on ``replays/samples/9p2i``, 35/89 = 39.3% on the
+  the triage's 10/33 = 30.3% on the baseline-6 ``replays/samples/9p2i``, 35/89 = 39.3% on the
   corpus twin.
 
 *Does NOT measure*: how many meetings had proof available (partition A);
@@ -106,7 +106,7 @@ cell is co-occurrence at meeting granularity, which is precisely why it is
 labelled "proof-present", not "proof-driven".
 
 The two partitions share only ``ejections_total``. Their splits differ by
-construction: on ``replays/samples/9p2i`` partition A puts 70 ejections in
+construction: on the baseline-6 ``replays/samples/9p2i`` partition A puts 70 ejections in
 flagged meetings and 31 in unflagged ones, while partition B puts 68 on
 ejectee-specific proof and 33 without it. Both are correct; a sentence that
 divides one's numerator by the other's denominator is not.
@@ -143,7 +143,7 @@ implementation hint) and the vote guard.
   otherwise the guard's choice would be charged to the agent, and the same
   rewrite would be counted twice — once here as "inconsistency" and once,
   correctly, in the separate redirect census (metric 7). On
-  ``replays/samples/9p2i`` 16 of the 777 scored ballots are unwound and all 16
+  the baseline-6 ``replays/samples/9p2i`` 16 of the 777 scored ballots are unwound and all 16
   change bucket; on the corpus 46 of 2,186 are unwound and 44 change bucket
   (twice the authored AND rewritten targets were both legal players outside
   the voter's accused set, so "inconsistent-other" held). Not a hypothetical
@@ -160,8 +160,8 @@ implementation hint) and the vote guard.
 * ``inconsistent_other_target_ballots``: the authored target is a VOTABLE player
   the voter never accused.
 * ``inconsistent_invalid_target_ballots``: the authored target is not in the
-  voter's LEGAL set — a hallucinated id, or the voter themselves (3 on
-  ``replays/samples/9p2i``, 0 elsewhere). It is its own bucket because the voter
+  voter's LEGAL set — a hallucinated id, or the voter themselves (3 on the
+  baseline-6 ``replays/samples/9p2i``, 0 elsewhere). It is its own bucket because the voter
   neither voted their accusation nor voted anyone else; folding it into either
   neighbour would misdescribe what happened.
 * ``excluded_no_votable_target_ballots``: accusing ballots where NO accused
@@ -184,7 +184,7 @@ recount are the SAME bytes under different estimators (verify-then-fix — see t
 provenance note below):
 
 * ``*_pooled_coverage`` — pooled over turns (the headline; 120/245 = 49.0%
-  impostor on ``replays/samples/9p2i``).
+  impostor on the baseline-6 ``replays/samples/9p2i``).
 * ``*_macro_average_coverage`` — the unweighted per-meeting macro-average
   (45.45% impostor on the same bytes: the triage's "45.5%").
 
@@ -256,8 +256,8 @@ pins say so.
   UNION (a ballot can hit several nets, so the union is not their sum).
   ``crew_partner_naming_ballots`` and ``crew_omniscient_control_ballots`` are
   the false-positive CONTROLS. Re-derived over the committed reports the partner
-  control is 0 on all four sets and the omniscient control is **1** on
-  ``samples/9p2i``, **0** on ``samples/4p1i``, **2** on ``ml_corpus/9p2i`` and
+  control is 0 on all four sets and the omniscient control is **0** on
+  ``samples/9p2i``, **0** on ``samples/4p1i``, **3** on ``ml_corpus/9p2i`` and
   **0** on ``ml_corpus/4p1i`` — a small, non-zero base rate a reader of the leak
   cells must know about. Recompute both with
   ``uv run python scripts/build_sample_report.py --sample-dir replays/<set>
@@ -347,7 +347,7 @@ bytes here, and the RECOUNT is the pin:
   named cells rather than one contested number, matching Task 19.8's disclosure
   byte for byte.
 * **The "13 engine-redirected under-gate ejects".** Recount: exactly 13
-  redirect-marked ballots on ``replays/samples/9p2i``, all 13 recorded as ejects
+  redirect-marked ballots on the baseline-6 ``replays/samples/9p2i``, all 13 recorded as ejects
   and none coerced to SKIP. The source claim reproduces.
 
 One source cell did NOT reproduce and is corrected here rather than carried:
@@ -1109,7 +1109,7 @@ class EvidenceTaxonomyCensus(_FrozenModel):
     ``meetings_with_any_flag`` is deliberately NOT named ``flagged_meetings``:
     :class:`MeetingFlagCrossTab` owns that name for a DIFFERENT predicate
     (a meeting carrying >= 1 ``role_proof`` flag), and on
-    ``replays/samples/9p2i`` the two differ — 100 meetings carry some flag, 70
+    ``replays/samples/9p2i`` the two differ — 33 meetings carry some flag, 24
     carry role proof. One name, two predicates, is how a cross-tab gets
     mis-cited; the rename removes the collision at the source.
 
@@ -1420,7 +1420,7 @@ class TurnBallotConsistencyCells(_FrozenModel):
     guard's redirect to the agent would both misattribute it and double-count
     it against the redirect census (:class:`RedirectedBallotCells`).
     ``guard_rewritten_ballots_unwound`` publishes how many scored ballots that
-    unwind touched (16 of 777 on ``replays/samples/9p2i``).
+    unwind touched (16 of 777 on the baseline-6 ``replays/samples/9p2i``).
 
     Denominator ``accusing_ballots``: (meeting, voter) pairs where the voter
     cast a ballot, spoke >= 1 accusing turn, and accused >= 1 VOTABLE player
@@ -1437,8 +1437,8 @@ class TurnBallotConsistencyCells(_FrozenModel):
     authored target is not in the voter's legal set — a hallucinated id, or the
     voter themselves — so they neither voted their accusation nor voted anyone
     else. It is its own bucket rather than folded into either neighbour, because
-    both foldings would misdescribe it (3 on ``replays/samples/9p2i``, 0
-    elsewhere).
+    both foldings would misdescribe it (3 on the baseline-6
+    ``replays/samples/9p2i``, 0 elsewhere).
 
     ``excluded_no_votable_target_ballots`` is the SKIP-tolerance clause made
     visible: accusing ballots whose every accused player was non-votable are
@@ -1703,8 +1703,8 @@ class ScaffoldLeakageCells(_FrozenModel):
       guard-side cell below is scoped against.
     * ``crew_partner_naming_ballots`` / ``crew_omniscient_control_ballots`` —
       the false-positive CONTROLS over ``crew_ballots``. Re-derived over the
-      committed reports: partner 0 on all four sets, omniscient 1 on
-      ``samples/9p2i``, 0 on ``samples/4p1i``, 2 on ``ml_corpus/9p2i`` and 0 on
+      committed reports: partner 0 on all four sets, omniscient 0 on
+      ``samples/9p2i``, 0 on ``samples/4p1i``, 3 on ``ml_corpus/9p2i`` and 0 on
       ``ml_corpus/4p1i`` (``uv run python scripts/build_sample_report.py
       --sample-dir replays/<set> --check``).
     * ``player_visible_leak_turns`` — the partner net over player-visible
@@ -2218,7 +2218,7 @@ class DeductionMetricsReport(_FrozenModel):
         # granularities, and each flagged meeting contributes >= 1 such flag. So
         # the two headline views cannot contradict each other about whether role
         # proof exists — without this, the committed 9p2i payload still
-        # validates with role_proof_flags zeroed and flagged_meetings left at 70.
+        # validates with role_proof_flags zeroed and flagged_meetings left at 24.
         flagged = self.meeting_flag_cross_tab.flagged_meetings
         if flagged > self.evidence_taxonomy.role_proof_flags:
             raise ValueError(
@@ -2448,7 +2448,7 @@ def _model_authored_bodies(meeting: MeetingReport) -> dict[PlayerId, str]:
     from the parsed JSON rather than scanned raw, because the raw envelope
     carries ``"confidence": 0.NN`` — which the machinery-quotation net would
     otherwise read as the model quoting its own scoring grid (850 false
-    positives against 39 real ones on ``replays/samples/9p2i``).
+    positives against 39 real ones on the baseline-6 ``replays/samples/9p2i``).
 
     A response that does not parse, or carries no such field, is simply absent
     here; the caller falls back to the recorded rationale and COUNTS the

@@ -7,6 +7,7 @@ import json
 import math
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Final, NoReturn
 
 import pytest
 from pydantic import TypeAdapter
@@ -29,10 +30,14 @@ from agents.tactical.features import (
     weights_to_hex_json,
 )
 from engine.actions import Action
-from engine.events import MeetingTriggeredEvent
-from engine.tick import advance_tick
 from engine.world import load_canonical_map
-from meetings.schemas import MeetingResult
+from eval.recorded_settings import READABLE_SETTINGS, layers_read
+from eval.replay_walk import (
+    ReplayWalkConfig,
+    TickAdvanced,
+    WalkViolation,
+    walk_replay,
+)
 from observation.packet import (
     AudibleEvent,
     BodyView,
@@ -44,13 +49,6 @@ from observation.packet import (
 )
 from observation.public_map import PublicMapView
 from orchestrator.boundary import public_map_from_engine_map
-from orchestrator.game import apply_meeting_result
-from orchestrator.replay import (
-    MeetingReplayEntry,
-    ReplayEntry,
-    read_all_entries,
-)
-from orchestrator.seeder import seed_initial_state
 from observation.service import ObservationService
 
 _ACTION_ADAPTER: TypeAdapter[Action] = TypeAdapter(Action)
@@ -406,17 +404,40 @@ def test_moved_players_optional_is_total() -> None:
     assert all(value == 0.0 or 0.0 <= value <= 1.0 for value in vector)
 
 
+def _raise_walk_violation(violation: WalkViolation) -> NoReturn:
+    raise AssertionError(
+        f"{violation.game_id}: {violation.kind} at tick {violation.tick}"
+    )
+
+
+#: The sweep's walk: every recorded tick hash verified, so a walk that diverged
+#: from the recording fails here instead of feeding the encoder packets nobody
+#: played. A recording's own settings are threaded as the engine ran them (the
+#: promoted 9p2i set carries its era's declared config); the walk reads only the
+#: engine state, and the recorded actions already embody every other layer.
+_SWEEP_WALK: Final[ReplayWalkConfig] = ReplayWalkConfig(
+    profile="feature-encoder-sweep",
+    on_violation=_raise_walk_violation,
+    verify_tick_hashes=True,
+    missing_meeting_row="violation",
+    verify_meeting_post_hashes=True,
+    supports_experiments=True,
+    threaded_layers=layers_read(READABLE_SETTINGS),
+)
+
+
 def _iter_committed_packets(
     set_name: str,
 ) -> Iterator[tuple[ObservationPacket, PublicMapView, AgentMemory]]:
     """Reconstruct one committed set and yield (packet, memory) per living agent.
 
-    Mirrors the ``training.rollout.reconstruct_episode`` walk (re-seed, advance
-    over recorded actions, apply meetings) but ALSO builds each living agent's
-    packet + perception memory at every PLAY tick, so the encoder sees the exact
-    packet distribution the committed bytes produced. Belief state is
-    perception-only (the meeting belief-fold enrichment is not replayed here) —
-    totality over that memory shape is exactly what we test.
+    Walks each recording through the shared replay walk (re-seed, advance over
+    recorded actions under the recording's own settings, apply meetings, every
+    state hash verified) and builds each living agent's packet + perception
+    memory at every PLAY tick, so the encoder sees the exact packet distribution
+    the committed bytes produced. Belief state is perception-only (the meeting
+    belief-fold enrichment is not replayed here) — totality over that memory
+    shape is exactly what we test.
     """
 
     set_dir = _SAMPLES_DIR / set_name
@@ -424,68 +445,36 @@ def _iter_committed_packets(
     game_map = load_canonical_map()
     public_map = public_map_from_engine_map(game_map)
     for replay_path in sorted(set_dir.glob("replay-seed-*.jsonl")):
-        entries = read_all_entries(replay_path)
-        meeting_by_tick = {
-            entry.tick: entry
-            for entry in entries
-            if isinstance(entry, MeetingReplayEntry)
-        }
-        state = seed_initial_state(
-            seed=int(replay_path.stem.rsplit("-", 1)[1]),
-            game_map=game_map,
-            num_players=roster["num_players"],
-            num_impostors=roster["num_impostors"],
-            tasks_per_crewmate=roster["tasks_per_crewmate"],
-        )
-        memories: dict[str, AgentMemory] = {pid: AgentMemory() for pid in state.players}
+        memories: dict[str, AgentMemory] = {}
         audit_path = replay_path.parent / f"_sweep_audit_{replay_path.stem}.jsonl"
         service = ObservationService(game_map=game_map, audit_log_path=audit_path)
         try:
-            for entry in entries:
-                if not isinstance(entry, ReplayEntry):
+            for step in walk_replay(
+                replay_path,
+                seed=int(replay_path.stem.rsplit("-", 1)[1]),
+                num_players=roster["num_players"],
+                num_impostors=roster["num_impostors"],
+                tasks_per_crewmate=roster["tasks_per_crewmate"],
+                game_map=game_map,
+                config=_SWEEP_WALK,
+            ):
+                if not isinstance(step, TickAdvanced):
                     continue
-                actions = [
-                    _ACTION_ADAPTER.validate_python(dict(raw)) for raw in entry.actions
-                ]
-                state, events = advance_tick(state, actions, game_map=game_map)
-                for pid, player in state.players.items():
+                for pid, player in step.state.players.items():
                     if not player.alive:
                         continue
+                    memory = memories.setdefault(pid, AgentMemory())
                     packet = service.build_packet(
-                        world_state=state, agent_id=pid, engine_events=events
+                        world_state=step.state,
+                        agent_id=pid,
+                        engine_events=list(step.events),
                     )
                     ingest_packet(
                         packet=packet,
-                        memory=memories[pid].episodic,
-                        beliefs=memories[pid].beliefs,
+                        memory=memory.episodic,
+                        beliefs=memory.beliefs,
                     )
-                    yield packet, public_map, memories[pid]
-                if state.phase == "GAME_OVER":
-                    break
-                if state.phase != "MEETING":
-                    continue
-                trigger = next(
-                    e for e in events if isinstance(e, MeetingTriggeredEvent)
-                )
-                meeting_entry = meeting_by_tick[entry.tick]
-                result = MeetingResult(
-                    meeting_id=meeting_entry.meeting_id,
-                    triggered_by=meeting_entry.triggered_by,
-                    trigger_tick=meeting_entry.tick,
-                    outcome=meeting_entry.outcome,
-                    ejected_player_id=meeting_entry.ejected_player_id,
-                    ballots=meeting_entry.ballots,
-                    contradictions=meeting_entry.contradictions,
-                    transcript=meeting_entry.transcript,
-                )
-                state, _ = apply_meeting_result(
-                    state,
-                    result,
-                    game_map=game_map,
-                    triggering_body_id=trigger.body_id,
-                )
-                if state.phase == "GAME_OVER":
-                    break
+                    yield packet, public_map, memory
         finally:
             service.close()
             audit_path.unlink(missing_ok=True)

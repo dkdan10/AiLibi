@@ -232,10 +232,10 @@ def get_rubric(loader: _LoaderDep) -> RubricView:
     # ``results-rubric-score.json`` → 404, which the frontend renders as a
     # first-class empty/zero-rubric state. Task 19.14 sweep: that used to read
     # "(the 4p1i default)", which Task 19.9's flip to the curated 9p2i default
-    # (``api.replay_loader.DEFAULT_SET``) falsified twice over — the DEFAULT set
-    # is now 9p2i and 9p2i is the set that DOES ship a rubric. The 404 branch is
-    # reached by the unscored sets (``replays/samples/4p1i`` and both
-    # ``replays/ml_corpus`` sets), never by the default.
+    # (``api.replay_loader.DEFAULT_SET``) falsified. Since 2026-10-02 no
+    # committed set ships a rubric (the extractor does not read the promoted
+    # 9p2i set's era), so the 404 branch is reached by every committed set,
+    # the default included.
     try:
         return loader.rubric()
     except FileNotFoundError:

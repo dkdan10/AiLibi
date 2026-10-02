@@ -689,10 +689,12 @@ _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _COMMITTED_SPLIT: Final[
     Mapping[str, tuple[tuple[float, int], tuple[float, int], tuple[float, int]]]
 ] = {
+    # The promoted stage-b-r2 bytes; the baseline-9 bytes read (0.3031, 750),
+    # crew (0.1896, 567) and impostor (0.6746, 183).
     "replays/samples/9p2i": (
-        (0.3031066666666665, 750),  # was (0.2977642276422763, 738)
-        (0.18955908289241633, 567),  # was (0.17509090909090924, 550)
-        (0.6745901639344266, 183),  # was (0.6757978723404261, 188)
+        (0.28727770177838546, 731),  # was (0.3031066666666665, 750)
+        (0.1690340909090909, 528),  # was (0.18955908289241633, 567)
+        (0.6687192118226603, 203),  # was (0.6745901639344266, 183)
     ),
     "replays/ml_corpus/9p2i": (
         (0.28633187772925806, 2290),  # was (0.27847654435671193, 2153)
@@ -917,8 +919,10 @@ def test_the_4p1i_impostor_curves_are_honestly_low_power() -> None:
     """Three or four populated bins under the five-bin power bar is signal, not a bug.
 
     A single-impostor roster gives the impostor accuser few lawful confidences
-    to spread, so the conditioned curve legitimately flags. The 9p2i curves,
-    with two impostors accusing, do not.
+    to spread, so the conditioned curve legitimately flags. The corpus 9p2i
+    curve, with two impostors accusing, does not; the promoted samples 9p2i
+    curve does too, its 203 impostor accusations falling in four bins (the
+    baseline-9 bytes populated five).
     """
 
     for sample_dir, populated in (
@@ -929,9 +933,15 @@ def test_the_4p1i_impostor_curves_are_honestly_low_power() -> None:
         assert curve.populated_bins == populated
         assert curve.populated_bins < MIN_POPULATED_BINS_FOR_POWER
         assert curve.low_power is True
-    for sample_dir in ("replays/samples/9p2i", "replays/ml_corpus/9p2i"):
-        curve = _committed_calibration(sample_dir).accusation_claim_impostor_accuser
-        assert curve.low_power is False
+    promoted = _committed_calibration(
+        "replays/samples/9p2i"
+    ).accusation_claim_impostor_accuser
+    assert promoted.populated_bins == 4  # was at least 5
+    assert promoted.low_power is True  # was False
+    curve = _committed_calibration(
+        "replays/ml_corpus/9p2i"
+    ).accusation_claim_impostor_accuser
+    assert curve.low_power is False
 
 
 def test_the_split_is_a_partition_on_constructed_data() -> None:

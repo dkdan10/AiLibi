@@ -16,9 +16,8 @@ from orchestrator.replay import (
     substrate_flag_snapshot,
 )
 
-_COMMITTED_9P2I_DIR = (
-    Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
-)
+_COMMITTED_SAMPLES = Path(__file__).resolve().parents[2] / "replays" / "samples"
+_COMMITTED_9P2I_DIR = _COMMITTED_SAMPLES / "9p2i"
 #: A stamp naming a lever this build's registry does not have — the shape a
 #: recording made by a NEWER build carries. Nothing here can reproduce it.
 _UNKNOWN_LEVER_STAMP = {
@@ -109,8 +108,24 @@ def test_substrate_mismatch_serves_a_500_naming_the_game_and_the_divergence(
     assert "a_lever_from_the_future" in body["detail"]
 
 
+@pytest.mark.parametrize(
+    ("set_name", "differing"),
+    (
+        # A scripted-factory recording stamps no policy and reads as the FSM
+        # default, so the claim diverges on its id alone.
+        ("4p1i", ["policy_id"]),
+        # The promoted 9p2i recording (candidate round 2) was made by the
+        # experimental factory, which stamps no policy the loader can read as
+        # the FSM default, so the divergence is the missing stamp itself. Its
+        # baseline-9 bytes, scripted, read ["policy_id"].
+        ("9p2i", ["unrecorded_policy"]),
+    ),
+)
 def test_policy_mismatch_serves_a_500_naming_the_game_and_the_divergence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    set_name: str,
+    differing: list[str],
 ) -> None:
     # This error is unreachable from HTTP on a normally-served set:
     # ``SetLoaderRegistry._build_loader`` constructs every served loader bare, so
@@ -118,8 +133,8 @@ def test_policy_mismatch_serves_a_500_naming_the_game_and_the_divergence(
     # made by a caller, so the test makes one — via the same dependency override
     # the loader tests use — rather than pretending the guard is live.
     _delete_ailibi_env(monkeypatch)
-    set_dir = tmp_path / "samples" / "9p2i"
-    shutil.copytree(_COMMITTED_9P2I_DIR, set_dir)
+    set_dir = tmp_path / "samples" / set_name
+    shutil.copytree(_COMMITTED_SAMPLES / set_name, set_dir)
     learned_claim = fsm_default_tactical_policy_stamp().model_copy(
         update={"policy_id": "learned-mover-v1"}
     )
@@ -135,7 +150,7 @@ def test_policy_mismatch_serves_a_500_naming_the_game_and_the_divergence(
     assert response.headers["content-type"].startswith("application/json")
     body = response.json()
     assert body["game_id"] == "headless-seed-0"
-    assert body["differing_fields"] == ["policy_id"]
+    assert body["differing_fields"] == differing
     assert "learned-mover-v1" in body["detail"]
 
 

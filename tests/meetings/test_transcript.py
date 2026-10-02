@@ -2233,7 +2233,8 @@ class TestCommittedBytesArtifactCollapse:
     It holds for every kind, the grounded vent kinds and the movement-read
     pairings included, because the re-derivation threads the three private
     channels production threaded: every recorded flag re-derives byte-for-byte,
-    nothing is removed and nothing is added, on all 145 committed meetings.
+    nothing is removed and nothing is added, on all 117 committed meetings (145
+    on the baseline-9 bytes the promoted set replaced on 2026-10-02).
     """
 
     def test_the_true_channels_re_derive_every_recorded_flag(self) -> None:
@@ -2242,7 +2243,7 @@ class TestCommittedBytesArtifactCollapse:
         # was a vent-kind exclusion: a bare re-derivation minted no vent flag
         # was _NAMED_UNCLASSIFIED_DIVERGENCES, a seed-41 meeting-2 flag of baseline 8
         meetings = committed_meetings(SAMPLES_9P2I)
-        assert len(meetings) == 145
+        assert len(meetings) == 117  # was 145
         recorded_total = 0
         rederived_total = 0
         removed: list[str] = []
@@ -2268,8 +2269,9 @@ class TestCommittedBytesArtifactCollapse:
         assert removed == []
         assert added == []
         assert reordered == []
-        # was 15 recorded vs 39 re-derived, vent kinds excluded and no move channel
-        assert recorded_total == rederived_total == 107
+        # was 15 recorded vs 39 re-derived, vent kinds excluded and no move channel;
+        # 107 on the baseline-9 bytes
+        assert recorded_total == rederived_total == 53
 
     def test_dropping_the_movement_channel_diverges_at_the_named_meetings(
         self,
@@ -2290,7 +2292,7 @@ class TestCommittedBytesArtifactCollapse:
             if name.startswith("samples/9p2i:")
         }
         assert diverged == named
-        assert len(diverged) == 17
+        assert len(diverged) == 16  # was 17 on the baseline-9 bytes
 
     def test_surviving_endpoint_flags_are_weak_banded(self) -> None:
         # The endpoint class survives ONLY weak-banded (the 10.1 decision:
@@ -2377,10 +2379,11 @@ class TestCommittedBytesSeedPins:
     def test_recorded_conflict_flag_census(self) -> None:
         # On the Task 18.12 baseline-6 re-record (the CREW-ONLY graduation slate)
         # the alibi_conflict surface carried exactly EIGHT recorded flags, ALL
-        # WEAK. On the baseline-9 re-record it carries NONE here (baseline 8:
-        # 21, all weak), so the strong-site check below holds vacuously on this
-        # set. The baseline-1 lone-STRONG cross-speaker deception conflict remains
-        # GONE. The STRONG-conflict tripwire stays armed (rule 3): if a future
+        # WEAK. The baseline-9 re-record carried NONE here (baseline 8: 21, all
+        # weak); the promoted set (candidate round 2) carries TWO, both weak
+        # (seed 17 m0 on p-9, seed 32 m2 on p-8), so the strong-site check below
+        # reads them and finds none. The baseline-1 lone-STRONG cross-speaker
+        # deception conflict remains GONE. The STRONG-conflict tripwire stays armed (rule 3): if a future
         # re-record surfaces a STRONG conflict here, that is a new
         # deception-surface signal to review.
         conflict_sites: list[tuple[int, int, tuple[str, ...]]] = []
@@ -2393,7 +2396,7 @@ class TestCommittedBytesSeedPins:
                     conflict_sites.append((seed, index, flag.subjects))
                     if not is_weak_contradiction(flag):
                         strong_sites.append((seed, index, flag.subjects))
-        assert len(conflict_sites) == 0  # was 21
+        assert sorted(conflict_sites) == [(17, 0, ("p-9",)), (32, 2, ("p-8",))]
         assert sorted(strong_sites) == []
 
     @pytest.mark.parametrize(
@@ -3268,13 +3271,14 @@ class TestCommittedBytes106Pins:
     def test_strong_flags_surface_under_the_wave_e_substrate(self) -> None:
         # The Task 18.12 baseline-6 re-record (the CREW-ONLY graduation slate, with
         # the whereabouts-interior and vent-placement levers now UNCONDITIONAL)
-        # lit a RICHER R7 detector surface. On the baseline-9 re-record it is 96
-        # strong flags across the committed meetings, all legitimate detector
-        # kinds (vent_sighting 90, alibi_vs_physical 6) — no forbidden leak shape,
-        # no strong alibi_vs_sighting, and NO strong alibi_conflict (the
-        # lone-STRONG cross-speaker conflict of baseline 1 stays gone with the
-        # railroad elimination). The weak band holds 11 flags — ALIVE (gated,
-        # not killed).
+        # lit a RICHER R7 detector surface. On the promoted set (candidate round
+        # 2) it is 40 strong flags across the committed meetings, all legitimate
+        # detector kinds (vent_sighting 38, alibi_vs_physical 2) — no forbidden
+        # leak shape, no strong alibi_vs_sighting, and NO strong alibi_conflict
+        # (the lone-STRONG cross-speaker conflict of baseline 1 stays gone with
+        # the railroad elimination). The weak band holds 13 flags — ALIVE (gated,
+        # not killed). The baseline-9 bytes read 96 strong (vent_sighting 90,
+        # alibi_vs_physical 6) and 11 weak.
         weak = strong = 0
         for seed in range(50):
             for entry in _committed_meetings(seed):
@@ -3283,17 +3287,16 @@ class TestCommittedBytes106Pins:
                         weak += 1
                     else:
                         strong += 1
-        assert (
-            strong == 96
-        )  # the R7 detector surface (vent + graduated levers)  # was 97
-        assert weak == 11  # the weak band stays alive (gated, not killed)  # was 50
+        assert strong == 40  # the R7 detector surface (vent + graduated levers)
+        assert weak == 13  # the weak band stays alive (gated, not killed)
 
     def test_seed2_m0_surviving_corroborations_are_interior_tick(self) -> None:
         # Audit C-C-3: at W0 a kill-scene sighting at seed 6 m1 was relevance-
         # gated to ZERO corroborations. Re-pointed to the Task 16.14 baseline-4
         # re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v1 prompts, all six substrate
         # levers ON): seed 2 m0 is a meeting whose corroborations DO survive the
-        # gate (5 pairs). Assert every one is backed by an interior-tick sighting,
+        # gate (9 pairs on the promoted bytes, candidate round 2; 5 on the
+        # baseline-9 bytes). Assert every one is backed by an interior-tick sighting,
         # so no kill-scene / spawn-window evidence-free pair leaks through (the same
         # property the set-wide pin below enforces across all 50 seeds).
         entry = _committed_meetings(2)[0]
@@ -3330,14 +3333,15 @@ class TestCommittedBytes106Pins:
                         f"spawn-window corroboration survived: seed {seed}, "
                         f"{pair.sighting_event_id}"
                     )
-        # 246 pairs survive the gate on the baseline-9 re-record. EVERY surviving
+        # 352 pairs survive the gate on the promoted bytes (246 on the baseline-9
+        # re-record). EVERY surviving
         # pair still passes the per-pair spawn-window leak assert above (tick >
         # SPAWN_WINDOW_LAST_TICK), so the no-spawn-window-leak firewall holds;
         # the count moved with the
         # substrate's saw_player supply. The over-suppression tripwire: a future
         # change driving this to 0 means the channel died, which the audit ranks as
         # bad as the artifacts. Well above zero: gated, not killed.
-        assert surviving == 246  # was 194
+        assert surviving == 352  # was 246
 
 
 class TestCommittedBytes1010Pins:
@@ -4104,8 +4108,9 @@ class TestCommittedBytes107VoicePins:
         # two-witness fold never sees it and a bare pile-on cannot convert. On
         # baseline-3 no bare pile-on existed (every multi-accuser subject was
         # voiced); the leaner Qwen3.6-27B substrate emits fewer observation-backed
-        # accusations, so bare pile-ons RE-APPEAR (27 of them on the baseline-9
-        # re-record, pinned below). The mechanism
+        # accusations, so bare pile-ons RE-APPEAR (44 of them on the promoted
+        # bytes, candidate round 2 since 2026-10-02, pinned below; 27 on the
+        # baseline-9 re-record). The mechanism
         # correctly denies EVERY ONE a voice -- that is the whole list of unvoiced
         # multi-accuser subjects, and each is safe (no voice => no conversion). The
         # census is the tripwire: if a future re-record makes one of these bare
@@ -4139,65 +4144,88 @@ class TestCommittedBytes107VoicePins:
         # The STOP tripwire: these are EXACTLY the bare pile-ons (multi-accuser,
         # no observation-backed accuser), and the mechanism denies every one a
         # voice -- so none can convert via the two-witness fold.
-        # was 37 rows: (1,0,p-7) (1,3,p-8) (4,1,p-9) (4,3,p-7) (5,1,p-1) (5,2,p-4)
+        # was 37 rows on baseline 8: (1,0,p-7) (1,3,p-8) (4,1,p-9) (4,3,p-7) (5,1,p-1) (5,2,p-4)
         # (8,0,p-1) (8,1,p-5) (9,1,p-7) (13,1,p-2) (13,2,p-2) (14,2,p-9) (17,0,p-1)
         # (17,3,p-4) (19,2,p-4) (19,2,p-7) (25,1,p-3) (26,1,p-1) (26,2,p-5) (27,1,p-9)
         # (30,0,p-5) (30,1,p-1) (30,2,p-1) (32,0,p-7) (35,0,p-6) (35,0,p-1) (36,0,p-2)
         # (38,1,p-2) (39,0,p-1) (39,1,p-2) (40,0,p-4) (40,1,p-1) (40,2,p-9) (41,2,p-8)
         # (41,2,p-2) (44,0,p-9) (47,1,p-8)
+        # was 27 rows on the baseline-9 bytes: (1,0,p-7) (1,2,p-8) (4,2,p-9) (8,0,p-1)
+        # (8,2,p-7) (8,3,p-5) (8,4,p-4) (10,2,p-3) (10,2,p-9) (14,0,p-6) (17,0,p-1)
+        # (17,1,p-8) (19,3,p-1) (21,1,p-1) (23,2,p-1) (24,0,p-1) (25,2,p-6) (30,0,p-5)
+        # (30,2,p-1) (35,1,p-2) (36,1,p-1) (37,0,p-1) (38,1,p-1) (38,3,p-4) (40,0,p-4)
+        # (41,4,p-9) (44,1,p-1)
         assert multi_accuser_unvoiced == [
-            (1, 0, "p-7"),
-            (1, 2, "p-8"),
-            (4, 2, "p-9"),
-            (8, 0, "p-1"),
-            (8, 2, "p-7"),
-            (8, 3, "p-5"),
-            (8, 4, "p-4"),
-            (10, 2, "p-3"),
-            (10, 2, "p-9"),
-            (14, 0, "p-6"),
-            (17, 0, "p-1"),
-            (17, 1, "p-8"),
-            (19, 3, "p-1"),
-            (21, 1, "p-1"),
-            (23, 2, "p-1"),
-            (24, 0, "p-1"),
-            (25, 2, "p-6"),
-            (30, 0, "p-5"),
-            (30, 2, "p-1"),
-            (35, 1, "p-2"),
-            (36, 1, "p-1"),
-            (37, 0, "p-1"),
-            (38, 1, "p-1"),
-            (38, 3, "p-4"),
-            (40, 0, "p-4"),
-            (41, 4, "p-9"),
-            (44, 1, "p-1"),
+            (0, 1, "p-4"),
+            (0, 1, "p-7"),
+            (0, 3, "p-8"),
+            (1, 1, "p-1"),
+            (3, 1, "p-1"),
+            (3, 3, "p-8"),
+            (8, 0, "p-8"),
+            (8, 2, "p-2"),
+            (9, 0, "p-6"),
+            (13, 0, "p-8"),
+            (13, 1, "p-3"),
+            (14, 0, "p-5"),
+            (15, 2, "p-2"),
+            (15, 2, "p-5"),
+            (16, 0, "p-1"),
+            (17, 0, "p-7"),
+            (17, 2, "p-4"),
+            (17, 2, "p-6"),
+            (21, 0, "p-7"),
+            (24, 0, "p-7"),
+            (24, 2, "p-6"),
+            (28, 1, "p-6"),
+            (30, 0, "p-3"),
+            (31, 0, "p-1"),
+            (32, 1, "p-5"),
+            (32, 1, "p-3"),
+            (32, 2, "p-6"),
+            (34, 0, "p-1"),
+            (35, 1, "p-4"),
+            (36, 1, "p-4"),
+            (36, 1, "p-6"),
+            (37, 2, "p-5"),
+            (38, 2, "p-6"),
+            (38, 3, "p-7"),
+            (39, 1, "p-5"),
+            (39, 2, "p-7"),
+            (40, 1, "p-6"),
+            (42, 0, "p-9"),
+            (43, 1, "p-3"),
+            (44, 0, "p-1"),
+            (47, 1, "p-2"),
+            (47, 3, "p-1"),
+            (47, 3, "p-7"),
+            (48, 1, "p-3"),
         ]
         # Non-vacuous: multi-accuser subjects DO occur across the committed set.
         assert multi_accuser_total > 20
 
-    def test_seed16_m2_derives_two_voices_for_p4(self) -> None:
-        # Yield-pin (re-anchored to the Task 18.12 baseline-6 re-record -- the
-        # CREW-ONLY graduation slate): seed-16 m2 p-9 takes a multi-voice pre-vote
-        # fold -- on the baseline-9 bytes three observation-backed voices under
-        # echo-dedup.
-        entry = _committed_meetings(16)[2]
+    def test_seed1_m0_derives_three_voices_for_p4(self) -> None:
+        # Yield-pin (re-anchored on the promoted bytes, candidate round 2): seed-1
+        # m0 p-4 takes a multi-voice pre-vote fold -- three observation-backed
+        # voices under echo-dedup. Was seed-16 m2 p-9 with (p-2, p-4, p-8) on the
+        # baseline-9 bytes.
+        entry = _committed_meetings(1)[0]
         voices = independent_voices(entry.transcript, roster=_living_roster(entry))
 
-        assert voices.get("p-9") == ("p-2", "p-4", "p-8")  # was ("p-8",)
+        assert voices.get("p-4") == ("p-1", "p-5", "p-9")
 
-    def test_seed8_m0_derives_multiple_voices_for_p1(self) -> None:
-        # The richer yield shape (re-anchored to the Task 18.12 baseline-6 re-record
-        # -- the CREW-ONLY graduation slate): seed-0 m0 p-6 takes a deep pre-vote
-        # fold (voices p-1/p-3/p-4/p-5/p-7/p-8/p-9) -- an observation-backed
-        # accuser plus aligned corroborations, the richest multi-voice fold in the
-        # set on this substrate. (The property is "the mechanism derives a
-        # multi-voice fold", not the exact width.)
-        entry = _committed_meetings(0)[0]
+    def test_seed49_m0_derives_the_widest_fold_for_p7(self) -> None:
+        # The richer yield shape (re-anchored on the promoted bytes, candidate
+        # round 2): seed-49 m0 p-7 takes a deep pre-vote fold (voices
+        # p-1/p-3/p-4/p-5/p-6/p-8/p-9) -- an observation-backed accuser plus
+        # aligned corroborations, the richest multi-voice fold in the set on these
+        # bytes. Was seed-0 m0 p-6 at the same width on the baseline-9 bytes. (The
+        # property is "the mechanism derives a multi-voice fold", not the exact
+        # width.)
+        entry = _committed_meetings(49)[0]
         voices = independent_voices(entry.transcript, roster=_living_roster(entry))
 
-        assert voices.get("p-6") == ("p-1", "p-3", "p-4", "p-5", "p-7", "p-8", "p-9")
+        assert voices.get("p-7") == ("p-1", "p-3", "p-4", "p-5", "p-6", "p-8", "p-9")
 
 
 class TestSightingPlacement:

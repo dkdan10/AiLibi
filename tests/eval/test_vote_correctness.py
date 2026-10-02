@@ -1874,23 +1874,24 @@ _COMMITTED_9P2I_REPORT = report_path(
 
 
 def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
-    """The shipped 9p/2i report carries the recorded baseline-9 values exactly.
+    """The shipped 9p/2i report carries the recorded values exactly.
 
-    Re-anchored to the baseline-9 re-record (model Qwen/Qwen3.6-27B, prompt set
-    qwen3_6_27b with accusation_round, crewmate_report and impostor_report at
-    v6 and vote_ballot at v8). ejection_accuracy 81/90 = 0.900, impostor-accused
-    conversion 81/111 = 0.730, missed_skip 77.
+    Re-anchored to the promoted stage-b-r2 recording (model Qwen/Qwen3.6-27B,
+    prompt set qwen3_6_27b with accusation_round, crewmate_report and
+    impostor_report at v6 and vote_ballot at v8 with the two ballot arms).
+    ejection_accuracy 44/66 = 0.667, impostor-accused conversion 44/105 = 0.419,
+    missed_skip 44 (the baseline-9 bytes read 81/90, 81/111 and 77).
 
-    threshold_inversions reads 27 on this substrate (the crew discretionary
+    threshold_inversions reads 29 on these bytes (the crew discretionary
     remainder — crew voters shown a met threshold over a living target that SKIP
-    without a by-design excuse). The missed_skip partition holds exactly: 77 =
-    48 impostor-voter (sanctioned in-character declines) + 2 invalid-target + 27
-    threshold_inversions; the one teammate-coerced SKIP sits inside the
+    without a by-design excuse). The missed_skip partition holds exactly: 44 =
+    14 impostor-voter (sanctioned in-character declines) + 1 invalid-target + 29
+    threshold_inversions; the five teammate-coerced SKIPs sit inside the
     impostor-voter class. No citation-gate coercion prefix is recorded on these
     bytes (citation_coerced_skip_ballots is 0).
 
-    The sentinel reads the recorded truth: 76 of the 81 impostor ejections are
-    transcript-evidence-backed (vote_correctness_rate 76/81 = 0.938).
+    The sentinel reads the recorded truth: 35 of the 44 impostor ejections are
+    transcript-evidence-backed (vote_correctness_rate 35/44 = 0.795).
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -1898,32 +1899,32 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     )
     conversion = report.conversion
 
-    assert conversion.total_ejections == 90  # was 95
-    assert conversion.impostor_ejections == 81  # was 82
-    assert conversion.ejection_accuracy == pytest.approx(81 / 90)  # was 82 / 95
-    assert conversion.impostor_accused_meetings == 111  # was 118
-    assert conversion.impostor_accused_conversions == 81  # was 82
+    assert conversion.total_ejections == 66  # was 90
+    assert conversion.impostor_ejections == 44  # was 81
+    assert conversion.ejection_accuracy == pytest.approx(44 / 66)  # was 81 / 90
+    assert conversion.impostor_accused_meetings == 105  # was 111
+    assert conversion.impostor_accused_conversions == 44  # was 81
     assert conversion.impostor_accused_conversion_rate == pytest.approx(
-        81 / 111
-    )  # was 82 / 118
-    assert conversion.skip_ballots == 349  # was 342
-    assert conversion.correct_skip_ballots == 272  # was 262
-    assert conversion.missed_skip_ballots == 77  # was 80
+        44 / 105
+    )  # was 81 / 111
+    assert conversion.skip_ballots == 281  # was 349
+    assert conversion.correct_skip_ballots == 237  # was 272
+    assert conversion.missed_skip_ballots == 44  # was 77
     assert conversion.unclassified_skip_ballots == 0
-    assert conversion.missed_skip_impostor_voters == 48  # was 42
-    assert conversion.missed_skip_teammate_coerced == 1
-    assert conversion.missed_skip_invalid_target == 2  # was 1
-    # The missed_skip partition holds exactly: 77 = 48 impostor-voter + 2
-    # invalid-target + 27 threshold_inversions (the crew discretionary remainder).
-    assert conversion.threshold_inversions == 27  # was 37
+    assert conversion.missed_skip_impostor_voters == 14  # was 48
+    assert conversion.missed_skip_teammate_coerced == 5  # was 1
+    assert conversion.missed_skip_invalid_target == 1  # was 2
+    # The missed_skip partition holds exactly: 44 = 14 impostor-voter + 1
+    # invalid-target + 29 threshold_inversions (the crew discretionary remainder).
+    assert conversion.threshold_inversions == 29  # was 27
 
-    # The sentinel reads the recorded truth: 76 of the 81 impostor ejections are
+    # The sentinel reads the recorded truth: 35 of the 44 impostor ejections are
     # transcript-evidence-backed (see docstring).
     assert report.vote_correctness.vote_correctness_rate == pytest.approx(
-        76 / 81
-    )  # was 75 / 82
-    assert report.vote_correctness.evidence_backed_impostor_ejections == 76  # was 75
-    assert report.vote_correctness.impostor_ejections == 81  # was 82
+        35 / 44
+    )  # was 76 / 81
+    assert report.vote_correctness.evidence_backed_impostor_ejections == 35  # was 76
+    assert report.vote_correctness.impostor_ejections == 44  # was 81
     # The wrapper mirrors, never re-derives: the two surfaces agree exactly.
     assert conversion.ejection_accuracy == report.vote_correctness.ejection_accuracy
 
@@ -1931,9 +1932,9 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
     # pulling the raw report sees the published metric surface, gp-2's ask).
     raw = json.loads(read_report_text(_COMMITTED_9P2I_REPORT))
     assert raw["conversion"]["ejection_accuracy"] == pytest.approx(
-        81 / 90, abs=1e-4
-    )  # was 82 / 95
-    assert raw["conversion"]["missed_skip_ballots"] == 77  # was 80
+        44 / 66, abs=1e-4
+    )  # was 81 / 90
+    assert raw["conversion"]["missed_skip_ballots"] == 44  # was 77
 
 
 # ---------------------------------------------------------------------------
@@ -1943,31 +1944,41 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
 
 # The impostor ejections on the committed 9p2i set that fail
 # ``_has_real_evidence``: (seed, meeting id, tick, ejected player).
-# Re-pinned at the baseline-9 re-record: seven rows became five. The previous
-# (baseline-8) identities were (4, meeting-1, 13, p-3), (11, meeting-1, 13, p-7),
-# (13, meeting-2, 17, p-4), (35, meeting-1, 17, p-5), (39, meeting-2, 15, p-6),
-# (40, meeting-2, 15, p-9), (46, meeting-2, 20, p-8).
+# Re-pinned at the promotion of candidate round 2 (2026-10-02): five rows became
+# nine. The baseline-9 identities were (6, meeting-3, 43, p-9), (27, meeting-1,
+# 15, p-7), (38, meeting-3, 25, p-4), (40, meeting-2, 15, p-9), (47, meeting-0,
+# 7, p-1).
 _UNBACKED_9P2I: tuple[tuple[int, str, int, PlayerId], ...] = (
-    (6, "headless-seed-6:meeting-3", 43, "p-9"),
-    (27, "headless-seed-27:meeting-1", 15, "p-7"),
-    (38, "headless-seed-38:meeting-3", 25, "p-4"),
-    (40, "headless-seed-40:meeting-2", 15, "p-9"),
-    (47, "headless-seed-47:meeting-0", 7, "p-1"),
+    (8, "headless-seed-8:meeting-0", 11, "p-5"),
+    (14, "headless-seed-14:meeting-0", 11, "p-1"),
+    (16, "headless-seed-16:meeting-1", 22, "p-9"),
+    (20, "headless-seed-20:meeting-1", 26, "p-2"),
+    (24, "headless-seed-24:meeting-0", 9, "p-4"),
+    (34, "headless-seed-34:meeting-0", 11, "p-3"),
+    (38, "headless-seed-38:meeting-1", 22, "p-4"),
+    (40, "headless-seed-40:meeting-1", 28, "p-6"),
+    (41, "headless-seed-41:meeting-0", 11, "p-1"),
 )
 
 # The impostor ejections carrying no naming ``ContradictionRef`` that the
 # kill-witness disjunct nevertheless backs — the gap between the two
 # populations.
-# Re-pinned at the baseline-9 re-record: six rows became five. The previous
-# (baseline-8) identities were (8, meeting-2, 18, p-5), (17, meeting-3, 29, p-4),
-# (25, meeting-2, 18, p-6), (29, meeting-1, 9, p-8), (30, meeting-2, 14, p-6),
-# (44, meeting-0, 10, p-5).
+# Re-pinned at the promotion of candidate round 2 (2026-10-02): five rows
+# became eleven. The baseline-9 identities were (14, meeting-0, 7, p-1), (17,
+# meeting-3, 29, p-4), (25, meeting-2, 18, p-6), (26, meeting-0, 6, p-3), (44,
+# meeting-0, 10, p-5).
 _KILL_WITNESS_ONLY_9P2I: tuple[tuple[int, str, int, PlayerId], ...] = (
-    (14, "headless-seed-14:meeting-0", 7, "p-1"),
-    (17, "headless-seed-17:meeting-3", 29, "p-4"),
-    (25, "headless-seed-25:meeting-2", 18, "p-6"),
-    (26, "headless-seed-26:meeting-0", 6, "p-3"),
+    (0, "headless-seed-0:meeting-3", 52, "p-8"),
+    (1, "headless-seed-1:meeting-1", 29, "p-7"),
+    (1, "headless-seed-1:meeting-2", 41, "p-6"),
+    (7, "headless-seed-7:meeting-1", 28, "p-7"),
+    (9, "headless-seed-9:meeting-2", 33, "p-4"),
+    (17, "headless-seed-17:meeting-0", 7, "p-2"),
+    (19, "headless-seed-19:meeting-2", 44, "p-9"),
+    (32, "headless-seed-32:meeting-1", 26, "p-5"),
+    (37, "headless-seed-37:meeting-2", 40, "p-5"),
     (44, "headless-seed-44:meeting-0", 10, "p-5"),
+    (47, "headless-seed-47:meeting-3", 57, "p-1"),
 )
 
 
@@ -2023,7 +2034,7 @@ def _has_detector_material(meeting: MeetingReport, subject: PlayerId) -> bool:
     proxy claims would mean reimplementing ``detect_contradictions`` inside a
     test and getting it subtly wrong. Excluding them makes the rule
     CONSERVATIVE: it can only under-report "detector miss", never invent one.
-    The census below does not lean on that margin — none of the five ejectees is
+    The census below does not lean on that margin — none of the nine ejectees is
     placed by any alibi or whereabouts claim at all, proxy or self, which the
     census asserts directly.
 
@@ -2076,20 +2087,20 @@ def _has_detector_material(meeting: MeetingReport, subject: PlayerId) -> bool:
 
 
 def test_committed_9p2i_censuses_the_unbacked_impostor_ejections() -> None:
-    """Which of the 81 impostor ejections the predicate cannot account for.
+    """Which of the 44 impostor ejections the predicate cannot account for.
 
-    ``vote_correctness_rate`` reads 76/81 on the committed set. These are the
-    other five, seed by seed, so the shortfall is an inventory a reader can
+    ``vote_correctness_rate`` reads 35/44 on the committed set. These are the
+    other nine, seed by seed, so the shortfall is an inventory a reader can
     open rather than an anomaly they must re-derive. Each is a real ejection
-    of a real impostor; none is a recording fault. (Baseline 8 read 75/82 with
-    seven unbacked.)
+    of a real impostor; none is a recording fault. (The baseline-9 bytes read
+    76/81 with five unbacked; baseline 8 75/82 with seven.)
     """
 
     report = TournamentEvalReport.model_validate_json(
         read_report_text(_COMMITTED_9P2I_REPORT)
     )
     rows = _impostor_ejections(report)
-    assert len(rows) == report.vote_correctness.impostor_ejections == 81  # was 82
+    assert len(rows) == report.vote_correctness.impostor_ejections == 44  # was 81
 
     unbacked = tuple(
         (seed, meeting.meeting_id, meeting.tick, ejected)
@@ -2097,7 +2108,7 @@ def test_committed_9p2i_censuses_the_unbacked_impostor_ejections() -> None:
         if not _has_real_evidence(meeting, ejected)
     )
     assert unbacked == _UNBACKED_9P2I
-    assert len(rows) - len(unbacked) == 76  # was 75
+    assert len(rows) - len(unbacked) == 35  # was 76
 
 
 def test_committed_9p2i_zero_flag_population_is_wider_than_the_unbacked() -> None:
@@ -2105,10 +2116,11 @@ def test_committed_9p2i_zero_flag_population_is_wider_than_the_unbacked() -> Non
 
     ``_has_real_evidence`` is a disjunction, so an ejection the contradiction
     detector never flagged can still be evidence-backed through the second
-    disjunct — a kill-witness chain. Ten of the 81 impostor ejections carry
-    no naming ``ContradictionRef``; five of those ten are rescued by the
-    chain, leaving the five above. Conflating the two counts is the confusion
-    this census exists to prevent. (Baseline 8: thirteen of 82, six rescued.)
+    disjunct — a kill-witness chain. Twenty of the 44 impostor ejections carry
+    no naming ``ContradictionRef``; eleven of those twenty are rescued by the
+    chain, leaving the nine above. Conflating the two counts is the confusion
+    this census exists to prevent. (The baseline-9 bytes: ten of 81, five
+    rescued; baseline 8: thirteen of 82, six rescued.)
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -2121,7 +2133,7 @@ def test_committed_9p2i_zero_flag_population_is_wider_than_the_unbacked() -> Non
         for seed, meeting, ejected in rows
         if not _has_naming_contradiction(meeting, ejected)
     )
-    assert len(zero_flag) == 10  # was 13
+    assert len(zero_flag) == 20  # was 10
     assert set(zero_flag) == set(_UNBACKED_9P2I) | set(_KILL_WITNESS_ONLY_9P2I)
 
     kill_witness_only = tuple(
@@ -2133,8 +2145,8 @@ def test_committed_9p2i_zero_flag_population_is_wider_than_the_unbacked() -> Non
     assert kill_witness_only == _KILL_WITNESS_ONLY_9P2I
 
 
-def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
-    """Each of the five, classified under one rule decidable from the bytes.
+def test_committed_9p2i_unbacked_ejections_are_classified() -> None:
+    """Each of the nine, classified under one rule decidable from the bytes.
 
     **Detector miss** iff the meeting's transcript carries the structured
     material the contradiction detector is specified to prosecute against the
@@ -2147,18 +2159,19 @@ def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
     miss, and the table convicted on argument.
 
     The verdict does not rest on the rule's edges. The assertion below is the
-    blunt one: not one of the five ejectees is placed by ANY alibi or
+    blunt one: not one of the nine ejectees is placed by ANY alibi or
     whereabouts claim in their meeting — nobody, themselves included, put them
     anywhere on the public record — so there is no placement for any detector
     rule to prosecute, however the proxy cases are resolved.
 
-    All five fall on the rhetoric-only side, for one recorded reason: in every
-    one of them the ejectee's single reply turn carries no observations and no
-    whereabouts claim, so they volunteered nothing the detector could
-    prosecute. The citation gate still passed the eject ballots because each
-    cites a transcript turn or a private observation id. Whichever way a
-    re-record splits them, the split is a finding — this test is the place it
-    is recorded.
+    Eight fall on the rhetoric-only side, and one, seed 16's meeting 1, is a
+    detector miss by the rule's vent half: a speaker named the ejectee in a
+    spoken vent sighting the detector did not ground against a private witness
+    record, so no ``vent_sighting`` flag was minted. (The baseline-9 bytes put
+    all five on the rhetoric-only side.) The citation gate still passed the
+    eject ballots because each cites a transcript turn or a private observation
+    id. Whichever way a re-record splits them, the split is a finding — this
+    test is the place it is recorded.
     """
 
     report = TournamentEvalReport.model_validate_json(
@@ -2175,12 +2188,16 @@ def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
     }
 
     assert classified == {
-        (seed, meeting_id): "rhetoric-only conviction"
+        (seed, meeting_id): (
+            "detector miss"
+            if (seed, meeting_id) == (16, "headless-seed-16:meeting-1")
+            else "rhetoric-only conviction"
+        )
         for seed, meeting_id, _, _ in _UNBACKED_9P2I
     }
 
     # The blunt fact the verdict rests on, independent of any proxy-retargeting
-    # subtlety: nobody placed these five anywhere on the public record, so there
+    # subtlety: nobody placed these nine anywhere on the public record, so there
     # was no placement for the detector to prosecute.
     for seed, meeting, ejected in _impostor_ejections(report):
         if _has_real_evidence(meeting, ejected):
@@ -2202,7 +2219,7 @@ def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
             f"({len(placements)} claims) — re-read the classification"
         )
 
-    # The other half of "legal, not a bug": every eject ballot behind these five
+    # The other half of "legal, not a bug": every eject ballot behind these nine
     # cites something. An uncited zero-flag eject would have been coerced to
     # SKIP, so a recording that loses a citation — or carries a dangling turn
     # id — must fail here rather than pass as the expected rhetoric-only
@@ -2230,8 +2247,8 @@ def test_committed_9p2i_unbacked_ejections_are_all_rhetoric_only() -> None:
                 "cites neither a transcript turn nor an observation id"
             )
     counts = Counter(classified.values())
-    assert counts["rhetoric-only conviction"] == 5  # was 7
-    assert counts["detector miss"] == 0
+    assert counts["rhetoric-only conviction"] == 8  # was 5
+    assert counts["detector miss"] == 1  # was 0
 
 
 def _census_turn(
@@ -3088,19 +3105,20 @@ def test_successor_model_validators_fail_loud() -> None:
 
 
 def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
-    """The successor's committed-bytes cells on the baseline-9 9p2i set.
+    """The successor's committed-bytes cells on the 9p2i sample set.
 
-    Re-anchored to the baseline-9 re-record (model Qwen/Qwen3.6-27B, prompt set
-    qwen3_6_27b, vote_ballot at v8 and the three report/round templates at v6);
-    NOT immutable — the next re-record regenerates the report and updates these
-    pins, the standard re-record pattern.
+    Re-anchored to the promoted stage-b-r2 recording (model Qwen/Qwen3.6-27B,
+    prompt set qwen3_6_27b, vote_ballot at v8 with the two ballot arms and the
+    three report/round templates at v6); NOT immutable — the next re-record
+    regenerates the report and updates these pins, the standard re-record
+    pattern.
 
-    The substrate supplies the successor 74 deduped (meeting, impostor) pairs
-    across three channels: 74 witnessed-vent pairs (70 converted), 0 sighting-
-    contradiction pairs, and 1 whereabouts-lie pair (not converted) that is the
-    same pair as a witnessed-vent one, for 70 conversions overall (rate
-    ~0.946). The legacy alibi-anchored cell reads 0/0 — the record carries no
-    CANON-interior alibi lie on this set.
+    The substrate supplies the successor 25 deduped (meeting, impostor) pairs
+    across three channels: 24 witnessed-vent pairs (24 converted), 0 sighting-
+    contradiction pairs, and 1 whereabouts-lie pair (not converted), for 24
+    conversions overall (rate 0.96; the baseline-9 bytes read 70 of 74). The
+    legacy alibi-anchored cell reads 0/0 — the record carries no CANON-interior
+    alibi lie on this set.
 
     Task 19.5 wires this cell onto ``GateMetricsReport``; the STORED block is
     pinned against the recompute below, and the two now AGREE on every column —
@@ -3112,15 +3130,15 @@ def test_committed_9p2i_report_pins_the_successor_instrument() -> None:
     )
     result = compute_supplied_channel_conversion(report.report)
 
-    assert result.supplied == 74  # was 75
-    assert result.converted == 70  # was 69
-    assert result.conversion_rate == pytest.approx(70 / 74)  # was 69 / 75
-    assert result.witnessed_vent_supplied == 74  # was 73
-    assert result.witnessed_vent_converted == 70  # was 68
+    assert result.supplied == 25  # was 74
+    assert result.converted == 24  # was 70
+    assert result.conversion_rate == pytest.approx(24 / 25)  # was 70 / 74
+    assert result.witnessed_vent_supplied == 24  # was 74
+    assert result.witnessed_vent_converted == 24  # was 70
     assert result.sighting_contradiction_supplied == 0
     assert result.sighting_contradiction_converted == 0
-    assert result.whereabouts_lie_supplied == 1  # was 2
-    assert result.whereabouts_lie_converted == 0  # was 1
+    assert result.whereabouts_lie_supplied == 1
+    assert result.whereabouts_lie_converted == 0
 
     # The legacy alibi-anchored cell: preserved, labeled, and now starved on
     # these bytes — the record carries no CANON-interior alibi_vs_sighting flag

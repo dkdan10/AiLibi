@@ -637,43 +637,43 @@ def test_9p2i_pooling_reads_the_live_roll_call_channel(
     # channel is now populated (non-zero claims, defined coverage), and the lie
     # rate is DEFINED (not None) — lies detected over claims placed.
     assert nine_pooling.games_total == 50
-    assert nine_pooling.meetings_total == 145  # was 151
-    assert nine_pooling.whereabouts_claims_total == 789  # was 766
-    assert nine_pooling.roll_call_meetings == 145  # was 151
+    # Re-pinned on the promoted stage-b-r2 9p2i bytes.
+    assert nine_pooling.meetings_total == 117  # was 145
+    assert nine_pooling.whereabouts_claims_total == 754  # was 789
+    assert nine_pooling.roll_call_meetings == 117  # was 145
     assert nine_pooling.roll_call_coverage_mean == pytest.approx(
-        0.8674384236453202
-    )  # was 0.8659255755282245
-    assert nine_pooling.whereabouts_lies_detected == 8  # was 26
+        0.8526251526251526
+    )  # was 0.8674384236453202
+    assert nine_pooling.whereabouts_lies_detected == 5  # was 8
     assert nine_pooling.whereabouts_lie_detection_rate == pytest.approx(
-        0.010139416983523447
-    )  # was 0.033942558746736295
+        0.006631299734748011
+    )  # was 0.010139416983523447
 
 
 def test_9p2i_pooling_reproduces_baseline_5_exactly(
     nine_pooling: PoolingFunnelReport,
 ) -> None:
     # Vouching and the unplaced share on committed bytes. Re-derived from the
-    # committed baseline-9 9p2i bytes via eval.funnel.
-    assert nine_pooling.vouch_observations_total == 824  # was 868
+    # committed 9p2i bytes (the promoted stage-b-r2 recording) via eval.funnel.
+    assert nine_pooling.vouch_observations_total == 829  # was 824
     assert nine_pooling.vouch_rate_mean == pytest.approx(
-        0.5539655172413793
-    )  # was 0.5973588773257648
+        0.5626984126984127
+    )  # was 0.5539655172413793
     assert nine_pooling.grounded_vouch_rate_mean == pytest.approx(
-        0.47598522167487683
-    )  # was 0.5170293282876064
+        0.43848188848188846
+    )  # was 0.47598522167487683
     assert nine_pooling.grounded_vouch_share == pytest.approx(
-        0.8609406952965235
-    )  # was 0.8634615384615385
+        0.80440097799511
+    )  # was 0.8609406952965235
     assert nine_pooling.absence_set_size_mean == pytest.approx(
-        0.38620689655172413
-    )  # was 0.31788079470198677
+        0.4358974358974359
+    )  # was 0.38620689655172413
     assert nine_pooling.absence_set_size_median == pytest.approx(0.0)
     assert dict(nine_pooling.absence_set_size_histogram) == {
-        0: 90,
-        1: 54,
-        2: 1,
-    }  # was {0: 103, 1: 48}
-    assert len(nine_pooling.per_meeting) == 145  # was 151
+        0: 66,
+        1: 51,
+    }  # was {0: 90, 1: 54, 2: 1}
+    assert len(nine_pooling.per_meeting) == 117  # was 145
 
 
 def test_4p1i_pooling_reproduces_baseline_5_exactly(
@@ -712,13 +712,14 @@ def test_9p2i_pooling_roll_call_breakdown_reproduces_baseline_5(
     nine_pooling: PoolingFunnelReport,
 ) -> None:
     # Task 17.4 per-role / per-surface / answered-asked breakdown. Re-derived
-    # from the committed baseline-9 9p2i bytes via eval.funnel — the breakdown
-    # DECOMPOSES the aggregate coverage (0.863 at the phase-16 close,
-    # audits/audit-phase-16-close.md §6), it moves no existing cell: the role
-    # split shows the answer rate is STRUCTURED (crew 1.0 vs impostor 0.466 —
-    # impostors refuse by prompt design), not uniform silence.
-    assert nine_pooling.roll_call_placed_crew_total == 635  # was 651
-    assert nine_pooling.roll_call_placed_impostor_total == 104  # was 106
+    # from the committed 9p2i bytes (the promoted stage-b-r2 recording) via
+    # eval.funnel — the breakdown DECOMPOSES the aggregate coverage (0.863 at
+    # the phase-16 close, audits/audit-phase-16-close.md §6), it moves no
+    # existing cell: the role split shows the answer rate is STRUCTURED (crew
+    # 1.0 vs impostor 0.487 — impostors refuse by prompt design), not uniform
+    # silence.
+    assert nine_pooling.roll_call_placed_crew_total == 491  # was 635
+    assert nine_pooling.roll_call_placed_impostor_total == 106  # was 104
     # The placed split totals partition the answered total exactly.
     assert (
         nine_pooling.roll_call_placed_crew_total
@@ -727,11 +728,11 @@ def test_9p2i_pooling_roll_call_breakdown_reproduces_baseline_5(
     )
     assert nine_pooling.roll_call_coverage_crew_mean == pytest.approx(1.0)
     assert nine_pooling.roll_call_coverage_impostor_mean == pytest.approx(
-        0.46551724137931033
-    )  # was 0.45364238410596025
-    assert nine_pooling.whereabouts_claims_opening_total == 157  # was 153
-    assert nine_pooling.whereabouts_claims_reply_total == 69  # was 79
-    assert nine_pooling.whereabouts_claims_opt_in_total == 563  # was 534
+        0.48717948717948717
+    )  # was 0.46551724137931033
+    assert nine_pooling.whereabouts_claims_opening_total == 126  # was 157
+    assert nine_pooling.whereabouts_claims_reply_total == 172  # was 69
+    assert nine_pooling.whereabouts_claims_opt_in_total == 456  # was 563
     # The surface split totals partition the set-wide claims total exactly.
     assert (
         nine_pooling.whereabouts_claims_opening_total
@@ -739,11 +740,11 @@ def test_9p2i_pooling_roll_call_breakdown_reproduces_baseline_5(
         + nine_pooling.whereabouts_claims_opt_in_total
         == nine_pooling.whereabouts_claims_total
     )
-    assert nine_pooling.roll_call_asked_total == 845  # was 869
-    assert nine_pooling.roll_call_answered_total == 739  # was 757
+    assert nine_pooling.roll_call_asked_total == 691  # was 845
+    assert nine_pooling.roll_call_answered_total == 597  # was 739
     assert nine_pooling.roll_call_answer_rate == pytest.approx(
-        0.8745562130177514
-    )  # was 0.8711162255466053
+        0.8639652677279306
+    )  # was 0.8745562130177514
 
 
 def test_4p1i_pooling_roll_call_breakdown_reproduces_baseline_5(

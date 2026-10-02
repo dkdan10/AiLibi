@@ -1385,7 +1385,7 @@ class FinaleAgentRecapView(_FrozenView):
     choice — the recorded rationale can explicitly oppose it — so
     ``final_vote_named_impostor`` is ``None`` for a rewritten ballot: judging
     "did they name an impostor" against a target the engine chose would invert
-    the agent's actual reasoning (e.g. the committed 9p2i seed 22, where p-5's
+    the agent's actual reasoning (e.g. the baseline-6 9p2i seed 22, where p-5's
     intended target was redirected). Citation-only rewrites (a nulled reason /
     observation id) leave the authored target intact and do NOT set this flag.
     """
@@ -1730,9 +1730,8 @@ class RubricGameView(_FrozenView):
 class RubricView(_FrozenView):
     """The per-set rubric surface served at ``/eval/rubric`` (DESIGN.md §3.1, §7).
 
-    The rubric is **per-set** (the default 9p2i target set carries one; the 4p1i
-    fast technical fixture, served only via an explicit ``?set=4p1i``, ships none
-    → 404 / empty state) and **staleness-guarded**: ``git_head`` is the commit
+    The rubric is **per-set** (a set that ships none answers 404 / empty state;
+    since 2026-10-02 no committed set ships one) and **staleness-guarded**: ``git_head`` is the commit
     the rubric was scored at, ``manifest_sha`` is the commit the served set's
     replays were recorded at (read from its ``MANIFEST.md``), and
     ``stale`` is ``True`` when they disagree (the rubric was scored against a

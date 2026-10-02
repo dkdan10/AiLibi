@@ -69,10 +69,12 @@ _CORPUS_SETS: Final[tuple[str, ...]] = (
 # classification change (which is the thing this pin exists to surface).
 # Baseline 6 read 96/64/26, 11/2/3, 313/204/90 and 20/1/0; the record that
 # followed closed the cross-statement column (64 -> 2, 204 -> 10) and it stays
-# closed here (6 and 13, baseline 9).
+# closed here (6 and 13 at baseline 9; the promoted samples/9p2i reads 2).
 _EXPECTED_COUNTS: Final[dict[str, dict[EvidenceCategory, int]]] = {
-    # was 90/7/50, 20/0/0, 315/8/126 and 28/0/1.
-    "samples/9p2i": {"role_proof": 90, "cross_statement": 6, "weak_signal": 11},
+    # was 90/7/50, 20/0/0, 315/8/126 and 28/0/1 on baseline 8. samples/9p2i
+    # read 90/6/11 on the baseline-9 bytes; since 2026-10-02 it holds candidate
+    # round 2's bytes.
+    "samples/9p2i": {"role_proof": 38, "cross_statement": 2, "weak_signal": 13},
     "samples/4p1i": {"role_proof": 20, "cross_statement": 0, "weak_signal": 0},
     "ml_corpus/9p2i": {"role_proof": 317, "cross_statement": 13, "weak_signal": 44},
     "ml_corpus/4p1i": {"role_proof": 28, "cross_statement": 0, "weak_signal": 0},
@@ -282,12 +284,14 @@ def test_corpus_wide_totals() -> None:
         for flag in flags:
             totals[_served(flag).category] += 1
 
-    assert dict(totals) == {  # was 453 / 177 / 15
-        "role_proof": 455,
-        "weak_signal": 55,
-        "cross_statement": 19,
+    # Counts what the tree holds, across both recorded eras. Was 455 / 55 / 19
+    # (529) with four baseline-9 sets, and 453 / 177 / 15 (645) on baseline 8.
+    assert dict(totals) == {
+        "role_proof": 403,
+        "weak_signal": 57,
+        "cross_statement": 15,
     }
-    assert sum(totals.values()) == flag_count == 529  # was 645
+    assert sum(totals.values()) == flag_count == 475
 
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)
@@ -340,10 +344,12 @@ def test_served_dto_carries_the_category() -> None:
     cross-statement flags against a truthful witness plus the self-linked
     ``vent_sighting`` naming the actual venter -- and ejected the witness. The
     baseline-7 record closed the cross-statement pair: what is served now is the
-    role proof alone, and the ejection follows it.
+    role proof alone, and the ejection follows it. Seed 17 carried it through
+    the baseline-9 bytes; on the promoted set (candidate round 2) seed 7's first
+    meeting is the same shape.
     """
 
-    replay = ReplayLoader(_SAMPLES / "9p2i").load_replay("headless-seed-17")
+    replay = ReplayLoader(_SAMPLES / "9p2i").load_replay("headless-seed-7")
     meeting = replay.meetings[0]
     assert [flag.category for flag in meeting.contradictions] == ["role_proof"]
     (proof,) = meeting.contradictions
@@ -432,9 +438,11 @@ def test_endpoint_render_classes() -> None:
         for flag in flags:
             counts[_endpoint_class(flag)] += 1
 
-    # was {"self_linked": 453, "two_turns": 126, "same_turn": 66}
-    assert dict(counts) == {"self_linked": 455, "two_turns": 70, "same_turn": 4}
-    assert sum(counts.values()) == 529  # was 645
+    # was {"self_linked": 453, "two_turns": 126, "same_turn": 66} (645) on
+    # baseline 8, and {"self_linked": 455, "two_turns": 70, "same_turn": 4} (529)
+    # with four baseline-9 sets; both eras since 2026-10-02.
+    assert dict(counts) == {"self_linked": 403, "two_turns": 64, "same_turn": 8}
+    assert sum(counts.values()) == 475
     # Every self-linked flag is role proof; the same-turn class is the
     # self-stated pair the "within …" reading exists for.
     assert counts["unresolvable"] == 0

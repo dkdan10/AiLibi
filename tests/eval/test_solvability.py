@@ -389,17 +389,21 @@ def test_the_profile_rejects_a_doubled_meeting_row(tmp_path: Path) -> None:
 
 
 def test_emergency_meetings_are_excluded_from_the_census() -> None:
-    """Seed 0 of samples/9p2i holds 2 body meetings and 1 emergency meeting."""
+    """Seed 37 of samples/9p2i holds 2 body meetings and 1 emergency meeting.
+
+    (Seed 0 held that shape on the baseline-9 bytes; on the promoted bytes its
+    four meetings are all body reports.)
+    """
 
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(_SAMPLES_9P2I)
     game_map = load_canonical_map()
-    replay_path = _SAMPLES_9P2I / "replay-seed-0.jsonl"
+    replay_path = _SAMPLES_9P2I / "replay-seed-37.jsonl"
 
     opened = [
         event
         for event in walk_replay(
             replay_path,
-            seed=0,
+            seed=37,
             num_players=num_players,
             num_impostors=num_impostors,
             tasks_per_crewmate=tasks_per_crewmate,
@@ -418,10 +422,10 @@ def test_emergency_meetings_are_excluded_from_the_census() -> None:
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
         game_map=game_map,
-    )[0]
+    )[37]
     fold = _walk_game(
         replay_path,
-        seed=0,
+        seed=37,
         num_players=num_players,
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
@@ -477,16 +481,18 @@ def _counts(report: SolvabilityReport) -> dict[str, tuple[int, int]]:
 
 def test_samples_9p2i_cells(samples_9p2i: SolvabilityReport) -> None:
     assert samples_9p2i.games_total == 50
-    assert samples_9p2i.body_meetings == 135  # of 145 recorded meetings  # was 141
-    assert samples_9p2i.ejections_at_body_meetings == 80  # was 85
+    # The promoted stage-b-r2 bytes: with no stale report (the regroup clears
+    # every corpse), every reported body's killer sits in the candidate set.
+    assert samples_9p2i.body_meetings == 114  # of 117 recorded meetings  # was 135
+    assert samples_9p2i.ejections_at_body_meetings == 63  # was 80
     assert _counts(samples_9p2i) == {
-        "killer_in_set": (120, 135),  # was (127, 141)
-        "singleton_sets": (21, 135),  # was (26, 141)
-        "singleton_correct": (16, 21),  # was (21, 26)
-        "at_most_two_sets": (46, 135),  # was (52, 141)
-        "at_most_two_contains_killer": (39, 46),  # was (45, 52)
-        "cleared_player_ejections": (12, 80),  # was (16, 85)
-        "killer_in_set_last_kill_anchor": (129, 135),  # was (132, 141)
+        "killer_in_set": (114, 114),  # was (120, 135)
+        "singleton_sets": (23, 114),  # was (21, 135)
+        "singleton_correct": (23, 23),  # was (16, 21)
+        "at_most_two_sets": (38, 114),  # was (46, 135)
+        "at_most_two_contains_killer": (38, 38),  # was (39, 46)
+        "cleared_player_ejections": (11, 63),  # was (12, 80)
+        "killer_in_set_last_kill_anchor": (114, 114),  # was (129, 135)
     }
 
 
@@ -543,10 +549,12 @@ def test_pooled_denominators_and_headline_cells(
     corpus_9p2i: SolvabilityReport,
     corpus_4p1i: SolvabilityReport,
 ) -> None:
-    """The pooled pin, with the review's [REVIEW-DERIVED] values beside it.
+    """The pooled pin within one era, with the review's [REVIEW-DERIVED] values.
 
-    Splits (body meetings / ejections at them) 135/80 + 36/17 + 416/241 +
-    36/21.
+    Pooled over the baseline-9 era's three sets only (eval/eras.py): samples/9p2i
+    has been its own era since the promotion of 2026-10-02 and is pinned on its
+    own above. Splits (body meetings / ejections at them) 36/17 + 416/241 +
+    36/21; the four-set pool read 623/359 with samples/9p2i's 135/80.
 
     The review comparison below is FROZEN at the review's own era (pooled
     denominator 626) and is not re-derived against later bytes — it records why
@@ -572,26 +580,29 @@ def test_pooled_denominators_and_headline_cells(
       clears more players, so more ejections land outside it.
     """
 
-    reports = (samples_9p2i, samples_4p1i, corpus_9p2i, corpus_4p1i)
+    assert samples_9p2i.games_total == 50  # its own era, never pooled here
+    reports = (samples_4p1i, corpus_9p2i, corpus_4p1i)
     pooled: dict[str, tuple[int, int]] = {}
     for report in reports:
         for name, (numerator, denominator) in _counts(report).items():
             carried = pooled.get(name, (0, 0))
             pooled[name] = (carried[0] + numerator, carried[1] + denominator)
 
-    assert sum(report.games_total for report in reports) == 300
-    assert sum(report.body_meetings for report in reports) == 623  # was 620
+    assert sum(report.games_total for report in reports) == 250  # was 300
+    assert sum(report.body_meetings for report in reports) == 488  # was 623
     assert (
-        sum(report.ejections_at_body_meetings for report in reports) == 359
-    )  # was 377
+        sum(report.ejections_at_body_meetings for report in reports) == 279
+    )  # was 359
+    # was (560, 623), (82, 623), (74, 82), (182, 623), (155, 182), (62, 359)
+    # and (592, 623) over all four sets
     assert pooled == {
-        "killer_in_set": (560, 623),  # was (557, 620)
-        "singleton_sets": (82, 623),  # was (90, 620)
-        "singleton_correct": (74, 82),  # was (82, 90)
-        "at_most_two_sets": (182, 623),  # was (194, 620)
-        "at_most_two_contains_killer": (155, 182),  # was (165, 194)
-        "cleared_player_ejections": (62, 359),  # was (63, 377)
-        "killer_in_set_last_kill_anchor": (592, 623),  # was (590, 620)
+        "killer_in_set": (440, 488),
+        "singleton_sets": (61, 488),
+        "singleton_correct": (58, 61),
+        "at_most_two_sets": (136, 488),
+        "at_most_two_contains_killer": (116, 136),
+        "cleared_player_ejections": (50, 279),
+        "killer_in_set_last_kill_anchor": (463, 488),
     }
 
 

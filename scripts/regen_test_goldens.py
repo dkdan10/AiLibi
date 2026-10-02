@@ -9,8 +9,9 @@ and writes them as JSON goldens the tests load:
 
 * ``tests/scripts/_goldens/champion_flip_ruling.json`` — the 17.16/18.27
   ruling's measured cells and derived statistics, from
-  ``training/reports/results-finalist-eval.jsonl`` and the canonical 9p2i
-  ``MANIFEST.md``.
+  ``training/reports/results-finalist-eval.jsonl`` and the same-seed scripted
+  comparator held at its ``d41c9006`` reading
+  (:data:`FSM_COMPARATOR_AT_D41C9006`).
 * ``tests/training/_goldens/finalist_eval_pins.json`` — the 18.26 slate
   table and its companion cells, from the same evidence file.
 
@@ -57,10 +58,16 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from _manifest_writer import parse_manifest  # noqa: E402
-
 _RESULTS_PATH = _REPO_ROOT / "training" / "reports" / "results-finalist-eval.jsonl"
-_SAMPLES_9P2I = _REPO_ROOT / "replays" / "samples" / "9p2i"
+
+#: The same-seed scripted-FSM comparator (9p2i, seeds 0-49) as the baseline-9
+#: samples MANIFEST read it at ``d41c9006``: 11 IMPOSTORS wins of 50. Since the
+#: promotion of candidate round 2 (2026-10-02) ``replays/samples/9p2i`` holds a
+#: later era (``eval/eras.py``) recorded under the adopted gameplay changes, so
+#: it is no longer a same-substrate comparator, and the finalist ruling's
+#: figures stay where they stood under the ML hold. A re-record at the ladder
+#: tip re-derives it.
+FSM_COMPARATOR_AT_D41C9006: tuple[int, int] = (11, 50)
 
 _GENERATED_BY = (
     "scripts/regen_test_goldens.py — do not hand-edit. Measured transcriptions "
@@ -235,13 +242,10 @@ def f13_cell(
 
 
 def fsm_comparator_win_rate() -> float:
-    """The same-seed scripted-FSM impostor win rate from committed provenance."""
+    """The same-seed scripted-FSM impostor win rate, held at its d41c9006 reading."""
 
-    manifest = parse_manifest(
-        (_SAMPLES_9P2I / "MANIFEST.md").read_text(encoding="utf-8")
-    )
-    impostor_wins = sum(1 for row in manifest.values() if row.winner == "IMPOSTORS")
-    return impostor_wins / len(manifest)
+    wins, games = FSM_COMPARATOR_AT_D41C9006
+    return wins / games
 
 
 def crew_wins_excluding(row: dict[str, Any], seed: int) -> int:

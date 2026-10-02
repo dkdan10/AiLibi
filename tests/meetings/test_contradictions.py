@@ -3263,7 +3263,10 @@ _COMMITTED_SETS = (
     _REPO_ROOT / "replays" / "ml_corpus" / "9p2i",
     _REPO_ROOT / "replays" / "ml_corpus" / "4p1i",
 )
-_COMMITTED_MEETINGS = 676  # was 672
+# Every committed meeting across the tree's two eras since 2026-10-02
+# (samples/9p2i holds candidate round 2's bytes); was 676 over the four
+# baseline-9 sets, 672 before them.
+_COMMITTED_MEETINGS = 648
 
 
 @functools.cache
@@ -3289,7 +3292,7 @@ def _committed_meeting_entries() -> tuple[tuple[str, int, MeetingReplayEntry], .
 def _living_roster(entry: MeetingReplayEntry) -> frozenset[str]:
     # A frozen exhibit line carries no world state, so its roster is read off the
     # ballots: every living participant cast one (equal to the living roster on
-    # all 676 committed meetings).
+    # all 648 committed meetings).
     return frozenset(ballot.voter for ballot in entry.ballots)
 
 
@@ -3441,7 +3444,7 @@ class TestLiveDetectorCommittedBytesByteIdentity:
             != meeting.entry.contradictions
         }
         assert diverged == MOVEMENT_DECIDED_MEETINGS
-        assert len(diverged) == 68
+        assert len(diverged) == 67  # was 68 with samples/9p2i's baseline-9 bytes
 
     def test_dropping_the_sighting_channel_diverges_31_meetings(self) -> None:
         # With no sighting mapping the detector keeps its pre-grounding rules,
@@ -3700,14 +3703,16 @@ def _committed_lever_census() -> dict[str, _SetCensus]:
     return per_set
 
 
-# The exemption census, re-measured on the baseline-9 bytes through the channels
-# production threaded. Baseline 6 read {CREWMATE: 37, IMPOSTOR: 3} /
-# {whereabouts: 38, alibi: 2} / 48 flags on 9p2i and a single CREWMATE
-# whereabouts claim on 4p1i, every one of them STRONG. The class survives on
-# 9p2i and is now entirely WEAK-banded; on 4p1i it is empty.
-_SAMPLES_9P2I_EXEMPT_BY_ROLE = {"CREWMATE": 7}  # was CREWMATE 21, records-free
-_SAMPLES_9P2I_EXEMPT_BY_CLASS = {"whereabouts": 7}  # was where 21, records-free
-_SAMPLES_9P2I_EXEMPT_FLAGS = 7  # was 22, records-free
+# The exemption census, re-measured through the channels production threaded:
+# 4p1i on the baseline-9 bytes, 9p2i on candidate round 2's bytes since
+# 2026-10-02 (the baseline-9 9p2i bytes read {CREWMATE: 7} / {whereabouts: 7} /
+# 7 flags). Baseline 6 read {CREWMATE: 37, IMPOSTOR: 3} / {whereabouts: 38,
+# alibi: 2} / 48 flags on 9p2i and a single CREWMATE whereabouts claim on 4p1i,
+# every one of them STRONG. The class survives on 9p2i and is entirely
+# WEAK-banded; on 4p1i it is empty.
+_SAMPLES_9P2I_EXEMPT_BY_ROLE = {"CREWMATE": 3, "IMPOSTOR": 1}
+_SAMPLES_9P2I_EXEMPT_BY_CLASS = {"whereabouts": 4}
+_SAMPLES_9P2I_EXEMPT_FLAGS = 5
 _SAMPLES_9P2I_EXEMPT_STRONG: dict[str, int] = {}
 _SAMPLES_9P2I_EXEMPT_STRONG_FLAGS = 0
 _SAMPLES_4P1I_EXEMPT_BY_ROLE: dict[str, int] = {}
@@ -3758,7 +3763,7 @@ class TestExemptionCensus:
         # {whereabouts: 38, alibi: 2} and 48 flags. The class did not empty; the
         # graduated rules re-banded all of it WEAK (the two STRONG cells are 0).
         cell = census["samples/9p2i"]
-        assert cell.meetings == 145  # was 151
+        assert cell.meetings == 117  # was 145
         assert cell.exempt_off_distinct_by_role == _SAMPLES_9P2I_EXEMPT_BY_ROLE
         assert cell.exempt_off_distinct_by_class == _SAMPLES_9P2I_EXEMPT_BY_CLASS
         assert cell.exempt_off_flag_count == _SAMPLES_9P2I_EXEMPT_FLAGS
@@ -3849,7 +3854,7 @@ def _band_census(flags: tuple[ContradictionRef, ...]) -> dict[str, int]:
 def _grounded_prosecution_census(
     *, with_movement: bool = True
 ) -> dict[str, _GroundedSetCensus]:
-    """One pass over the 676 committed meetings, three detector legs each.
+    """One pass over the 648 committed meetings, three detector legs each.
 
     ``with_movement=False`` is the perturbed control: the same legs with the
     movement channel dropped, which is what the records-free harness read.
@@ -3937,12 +3942,13 @@ def _sighting_bands(
     )
 
 
-#: MEASURED: the fully grounded leg's ``(STRONG, weak)`` sighting class.
-_FULLY_GROUNDED_SIGHTING_BANDS: Final[tuple[int, int]] = (2, 44)
+#: MEASURED: the fully grounded leg's ``(STRONG, weak)`` sighting class, over
+#: both eras' committed meetings (was (2, 44) over the four baseline-9 sets).
+_FULLY_GROUNDED_SIGHTING_BANDS: Final[tuple[int, int]] = (2, 43)
 
 
 class TestGroundedProsecutionCommittedCensus:
-    """The lever's price and its scope firewall, over all 676 committed meetings."""
+    """The lever's price and its scope firewall, over all 648 committed meetings."""
 
     @pytest.fixture(scope="class")
     def census(self) -> dict[str, _GroundedSetCensus]:
@@ -3982,14 +3988,15 @@ class TestGroundedProsecutionCommittedCensus:
         # Baseline 6 read 234/79/37/5/35/440. The lever-OFF leg: the true vent
         # and movement channels with no sighting channel, so the pre-grounding
         # rules decide the sighting class.
-        # was {alibi_vs_sighting:strong 42, weak 79}, records-free (no move channel)
+        # was {alibi_vs_sighting:strong 42, weak 79}, records-free (no move channel);
+        # over the four baseline-9 sets 19 / 27 / 18 / 7 / 3 / 455
         assert totals == {
-            "alibi_vs_sighting:strong": 19,
-            "alibi_vs_sighting:weak": 27,
-            "alibi_vs_physical:strong": 18,
-            "alibi_vs_physical:weak": 7,
-            "alibi_conflict:weak": 3,
-            "vent_sighting:strong": 455,
+            "alibi_vs_sighting:strong": 20,
+            "alibi_vs_sighting:weak": 25,
+            "alibi_vs_physical:strong": 14,
+            "alibi_vs_physical:weak": 8,
+            "alibi_conflict:weak": 5,
+            "vent_sighting:strong": 403,
         }
 
     def test_the_ungrounded_leg_convicts_on_nothing(
@@ -3997,8 +4004,9 @@ class TestGroundedProsecutionCommittedCensus:
     ) -> None:
         # Rule (a) alone, at its limit: no speaker's record supports anything
         # they said, so the whole class is weak and none convicts. The class is
-        # 46 flags on these bytes (baseline 6: 313).
-        assert _sighting_bands(census, "ungrounded") == (0, 46)  # was (0, 121)
+        # 45 flags on these bytes (46 over the four baseline-9 sets; baseline 6:
+        # 313).
+        assert _sighting_bands(census, "ungrounded") == (0, 45)
 
     def test_the_fully_grounded_leg_keeps_two_strong_on_these_bytes(
         self, census: dict[str, _GroundedSetCensus]
@@ -4026,7 +4034,7 @@ class TestGroundedProsecutionCommittedCensus:
         perturbed = _sighting_bands(
             _grounded_prosecution_census(with_movement=False), "grounded"
         )
-        assert perturbed == (8, 113)
+        assert perturbed == (11, 110)  # was (8, 113) over the four baseline-9 sets
         assert perturbed != _FULLY_GROUNDED_SIGHTING_BANDS
 
 
@@ -4114,7 +4122,7 @@ class TestGroundedProsecutionInjusticeShapes:
 # one and a sighting in the other at the window's edge are two honest accounts of
 # one transit. The lever teaches the detector that geometry; these tests pin the
 # resolver, the demotion and its two limits, the frozen neighbour table against
-# the map, and the whole class over the 676 committed meetings.
+# the map, and the whole class over the 648 committed meetings.
 
 _ROSTER_MAP = frozenset({"p-1", "p-9"})
 
@@ -4356,7 +4364,7 @@ class _MapAwareSetCensus:
 
 @functools.cache
 def _map_aware_census() -> dict[str, _MapAwareSetCensus]:
-    """One pass over the 676 committed meetings, three detector legs each.
+    """One pass over the 648 committed meetings, three detector legs each.
 
     Every leg passes the channels production threaded
     (:meth:`CommittedMeeting.rederive`); the lever key is no longer read, so the
@@ -4422,7 +4430,7 @@ def _map_aware_census() -> dict[str, _MapAwareSetCensus]:
 
 
 class TestMapAwareArbitrationCommittedCensus:
-    """The lever's price and its scope firewall, over all 676 committed meetings."""
+    """The lever's price and its scope firewall, over all 648 committed meetings."""
 
     @pytest.fixture(scope="class")
     def census(self) -> dict[str, _MapAwareSetCensus]:
@@ -4438,7 +4446,7 @@ class TestMapAwareArbitrationCommittedCensus:
             assert cell.off_matches_recorded == cell.falsey_matches_recorded
         # was {samples/9p2i 123, samples/4p1i 39, ml_corpus/9p2i 382, ...}, vents only
         assert {name: cell.off_matches_recorded for name, cell in census.items()} == {
-            "samples/9p2i": 145,
+            "samples/9p2i": 117,  # was 145
             "samples/4p1i": 39,
             "ml_corpus/9p2i": 449,
             "ml_corpus/4p1i": 43,
@@ -4472,8 +4480,9 @@ class TestMapAwareArbitrationCommittedCensus:
     ) -> None:
         # Baseline 6 priced the corridor at 140 demotions of 234 STRONG flags.
         # The arbitration is UNCONDITIONAL here, so both legs already carry it and
-        # the env differential is zero: the recorded class, 1 STRONG and 45 WEAK
-        # on both sides, and nothing moves BETWEEN the legs. The corridor's price
+        # the env differential is zero: the recorded class, 1 STRONG and 44 WEAK
+        # on both sides (45 WEAK over the four baseline-9 sets), and nothing moves
+        # BETWEEN the legs. The corridor's price
         # on these bytes is in the record audit, not in an env diff that no
         # longer exists.
         strong_off = sum(
@@ -4490,7 +4499,7 @@ class TestMapAwareArbitrationCommittedCensus:
             cell.bands_on.get("alibi_vs_sighting:weak", 0) for cell in census.values()
         )
         assert (strong_off, strong_on) == (1, 1)  # was (42, 42), vents only
-        assert (weak_off, weak_on) == (45, 45)  # was (79, 79), vents only
+        assert (weak_off, weak_on) == (44, 44)  # was (79, 79), vents only
         assert sum(cell.demoted for cell in census.values()) == 0
         # The rule still bites -- on a transcript, where a corridor pair exists.
         corridor = detect_contradictions(_corridor_transcript(), roster=_ROSTER_MAP)
@@ -5067,8 +5076,9 @@ class TestOneSegmentRoutesReadLikeTheEnvelope:
     The corpus-wide half of the same property is
     :meth:`TestLiveDetectorCommittedBytesByteIdentity.
     test_re_derivation_equals_recorded_on_every_committed_meeting`, which holds
-    the 676 committed meetings to their recorded flags; 62 of their 1,021 alibi
-    claims are one-segment routes (baseline 8's were all one segment).
+    the 648 committed meetings to their recorded flags; 74 of their 1,091 alibi
+    claims are one-segment routes (62 of 1,021 over the four baseline-9 sets;
+    baseline 8's were all one segment).
     """
 
     @staticmethod

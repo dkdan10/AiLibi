@@ -98,7 +98,11 @@ from orchestrator.game import (
     build_default_meeting_runner,
 )
 from meetings.voting import tally_ballots
-from orchestrator.replay import MeetingReplayEntry, read_all_entries
+from orchestrator.replay import (
+    MeetingReplayEntry,
+    read_all_entries,
+    recorded_experiment_config,
+)
 from tests._helpers.scripted_meeting import (
     BALLOT_ARMS_SEED,
     PROMPT_SET,
@@ -1735,13 +1739,31 @@ def _walk_with_renderers(
             yield from golden.rerendered_prompts(meeting)
 
 
-def test_a_byte_inside_an_on_block_fails_only_the_arm_on_recording(
+def _impostor_arm_on(directory: Path) -> bool:
+    """Whether the recordings in ``directory`` turned the impostor ballot arm on.
+
+    Every recording of one directory must agree; a directory that mixes the two
+    raises rather than reading as either.
+    """
+
+    readings: set[bool] = set()
+    for path in sorted(directory.glob("replay-seed-*.jsonl")):
+        config = recorded_experiment_config(read_all_entries(path))
+        readings.add(config is not None and config.impostor_ballot_version == 1)
+    (reading,) = readings
+    return reading
+
+
+def test_a_byte_inside_an_on_block_fails_only_the_arm_on_recordings(
     scripted_game: Path, tmp_path: Path
 ) -> None:
     """Planted: one byte inside the impostor block.
 
-    The committed sets never render the block, so the golden stays green on
-    samples/9p2i and samples/4p1i; the scripted game renders it, so it fails.
+    A recording made with the arm OFF never renders the block, so the golden
+    stays green on samples/4p1i. One made with it ON renders the block in its
+    impostors' ballots, so the golden fails there, on vote ballots alone: the
+    promoted samples/9p2i, whose era's declared config turns the arm on (since
+    2026-10-02; its baseline-9 bytes stayed green), and the scripted game.
     """
 
     root = tmp_path / "prompts"
@@ -1755,9 +1777,17 @@ def test_a_byte_inside_an_on_block_fails_only_the_arm_on_recording(
     renderers = {
         name: build_prompt_renderers(name, root=root) for name in PROMPT_VERSION_SETS
     }
-    for committed in golden._SAMPLE_SETS:  # noqa: PLC2701
+    committed_sets = golden._SAMPLE_SETS  # noqa: PLC2701
+    arm_on = {
+        committed.name: _impostor_arm_on(committed) for committed in committed_sets
+    }
+    assert arm_on == {"9p2i": True, "4p1i": False}
+    for committed in committed_sets:
         prompts = list(_walk_with_renderers(committed, renderers))
-        assert prompts and all(prompt.reproduced for prompt in prompts), committed.name
+        assert prompts, committed.name
+        failing = {prompt.kind for prompt in prompts if not prompt.reproduced}
+        expected = {"vote_ballot"} if arm_on[committed.name] else set()
+        assert failing == expected, committed.name
     scripted = list(_walk_with_renderers(scripted_game, renderers))
     assert scripted and not all(prompt.reproduced for prompt in scripted)
 

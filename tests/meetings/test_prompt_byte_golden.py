@@ -1358,10 +1358,12 @@ _RETIRED_REWRITE_REASONS: Final[frozenset[str]] = frozenset(
 #: candidate set takes its roster's name, so it shares that name with a sample
 #: set. Every directory the golden walks has its own row.
 _RETIRED_GUARD_PINS: Final[Mapping[str, tuple[int, int, int, int]]] = {
-    "samples/9p2i": (145, 845, 0, 0),  # was (151, 869, 23, 14)
+    # was (145, 845, 0, 0) on the baseline-9 bytes, and (151, 869, 23, 14) on
+    # baseline 8's; since 2026-10-02 the set holds candidate round 2's bytes,
+    # whose candidate row read (117, 691, 0, 0) until the round's copy retired.
+    "samples/9p2i": (117, 691, 0, 0),
     "samples/4p1i": (39, 117, 0, 0),  # was (39, 117, 1, 1)
     "candidates/stage-b-r1/9p2i": (124, 717, 0, 0),
-    "candidates/stage-b-r2/9p2i": (117, 691, 0, 0),
 }
 
 
@@ -1465,7 +1467,7 @@ def test_the_retired_guard_pins_are_keyed_by_the_path_under_replays() -> None:
     sample = replays / "samples" / "9p2i"
     candidate = replays / "candidates" / "stage-b-r1" / "9p2i"
     assert sample.name == candidate.name
-    assert _retired_guard_pin(sample) == (145, 845, 0, 0)
+    assert _retired_guard_pin(sample) == (117, 691, 0, 0)
     assert _retired_guard_pin(candidate) == (124, 717, 0, 0)
     # The defect this keying removes: by base name, two rows collapse into one.
     by_base_name = {Path(key).name: pin for key, pin in _RETIRED_GUARD_PINS.items()}
@@ -1656,13 +1658,21 @@ def overlay_stamp_violations(
     return violations
 
 
-def _first_meeting_prompt_set() -> Mapping[str, str]:
-    """The ``prompt_versions`` stamp the 9p2i set's first meeting recorded."""
+def _first_meeting_prompt_set() -> str:
+    """The prompt set the 9p2i set's first meeting resolves to.
+
+    Resolved from that meeting's recorded stamp with its recording's own
+    settings, as the walk resolves every meeting.
+    """
 
     path = _seed_paths(_SAMPLE_SETS[0])[0]
-    for entry in read_all_entries(path):
+    entries = read_all_entries(path)
+    for entry in entries:
         if isinstance(entry, MeetingReplayEntry):
-            return entry.prompt_versions
+            return resolve_prompt_set(
+                entry.prompt_versions,
+                experiment_config=recorded_experiment_config(entries),
+            )
     raise AssertionError(f"{path.name}: no recorded meeting to read a stamp from")
 
 
@@ -1719,8 +1729,12 @@ def test_the_bump_in_flight_window_is_closed_and_the_archive_is_empty() -> None:
     was written to fail at the re-record that closed the window. Asserted in both
     directions -- the archive registry and its card pairing are empty and no
     fixture directory remains, and every committed stamp resolves through the
-    LIVE registry to exactly that set's live mapping -- so a later bump that
-    moves the default entry without re-opening the archive fails HERE.
+    LIVE registry to exactly the mapping its recording's settings serve -- so a
+    later bump that moves the default entry without re-opening the archive fails
+    HERE. A recording with no experiment config (the baseline-9 sets) must wear
+    its set's live default mapping; one with a config (the shown 9-player set,
+    promoted 2026-10-02) must wear the live set's stamp under that config, which
+    folds in the arms it turns on. Both kinds are present in the sample sets.
 
     Every directory the golden walks is held to :func:`stamp_window_problems`: a
     stamp other than the live default passes only on a recording whose own
@@ -1730,14 +1744,29 @@ def test_the_bump_in_flight_window_is_closed_and_the_archive_is_empty() -> None:
     assert ARCHIVED_PROMPT_VERSION_SETS == {}
     assert ARCHIVED_MAP_CARDS == {}
     assert not _ARCHIVE_ROOT.exists()
+    kinds: set[str] = set()
     for path in _SAMPLE_SETS:
         for replay in _seed_paths(path):
-            for entry in read_all_entries(replay):
+            entries = read_all_entries(replay)
+            config = recorded_experiment_config(entries)
+            for entry in entries:
                 if not isinstance(entry, MeetingReplayEntry):
                     continue
-                assert dict(entry.prompt_versions) == dict(
-                    PROMPT_VERSION_SETS[resolve_prompt_set(entry.prompt_versions)]
+                if config is None:
+                    kinds.add("default")
+                    assert dict(entry.prompt_versions) == dict(
+                        PROMPT_VERSION_SETS[resolve_prompt_set(entry.prompt_versions)]
+                    )
+                    continue
+                kinds.add("declared")
+                name = resolve_prompt_set(
+                    entry.prompt_versions, experiment_config=config
                 )
+                assert name in PROMPT_VERSION_SETS
+                assert dict(entry.prompt_versions) == dict(
+                    prompt_versions_for_set(name, env={}, experiment_config=config)
+                )
+    assert kinds == {"default", "declared"}
     stamps = list(recorded_stamps(golden_directories()))
     assert stamps
     assert stamp_window_problems(stamps) == []
@@ -1970,7 +1999,7 @@ def test_impostor_report_opening_kind_is_exercised() -> None:
     # version no committed meeting stamps — and take that set's renderers from
     # the same table the walk uses, so an archived stamp binds to its archived
     # template dir rather than a directory that does not exist.
-    renderers = _canonical_renderers()[resolve_prompt_set(_first_meeting_prompt_set())]
+    renderers = _canonical_renderers()[_first_meeting_prompt_set()]
     renders: list[_Render] = []
     stub = _RecordedResponseStub(responses={})
     manager = _tagging_manager(
@@ -2536,16 +2565,15 @@ def test_candidate_sets_are_listed_in_path_order_whatever_the_filesystem_returns
 # The witnessed-kill row's OFF gate is not vacuous                             #
 # --------------------------------------------------------------------------- #
 
-#: MEASURED at the ballot card: the committed sample meetings where a living
-#: voter holds a first-hand sighting of a non-teammate's kill, as
-#: ``(set, seed, meeting id)``. They are the only ballots the kill-row gate moves,
-#: so they are where the golden's OFF leg bites.
+#: MEASURED at the ballot card: the committed sample meetings recorded with the
+#: kill-row arm OFF where a living voter holds a first-hand sighting of a
+#: non-teammate's kill, as ``(set, seed, meeting id)``. They are the only ballots
+#: the kill-row gate moves, so they are where the golden's OFF leg bites. The
+#: shown 9-player set recorded the arm ON (its era's declared config), so forcing
+#: the gate moves none of its ballots; its four baseline-9 holders (seeds 17, 19
+#: and 26 twice) left with those bytes on 2026-10-02.
 _KILL_HOLDER_MEETINGS: Final[frozenset[tuple[str, int, str]]] = frozenset(
     {
-        ("9p2i", 17, "headless-seed-17:meeting-3"),
-        ("9p2i", 19, "headless-seed-19:meeting-3"),
-        ("9p2i", 26, "headless-seed-26:meeting-0"),
-        ("9p2i", 26, "headless-seed-26:meeting-1"),
         ("4p1i", 22, "headless-seed-22:meeting-0"),
     }
 )
@@ -2558,8 +2586,10 @@ def test_the_kill_row_gate_forced_on_fails_the_golden_at_the_kill_holders(
 
     With the arm OFF the committed ballots re-render byte-identically (the golden
     above). Forcing only the gate -- the ``own_kill`` rows, not the header
-    sentence -- moves exactly the ballots of the voters who watched a kill, so
-    the OFF gate is what keeps them identical and it is not vacuous.
+    sentence -- moves exactly the ballots of the voters who watched a kill in a
+    recording made with the arm OFF, so the OFF gate is what keeps them
+    identical and it is not vacuous. A recording made with the arm ON already
+    renders the rows, so forcing the gate moves nothing there.
     """
 
     import meetings.manager as manager_module

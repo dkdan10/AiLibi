@@ -2602,10 +2602,12 @@ class TestCommittedWalk:
 #: ``(set, seed, meeting index)`` for each meeting the hardening pass named as a
 #: worked case, so the amendment is pinned to the recorded bytes it was measured
 #: on rather than to synthetic fixtures alone
-#: (audits/audit-phase-21-hardening.md §3.2).
+#: (audits/audit-phase-21-hardening.md §3.2). The samples/9p2i case was seed 48
+#: meeting 2 on the baseline-9 bytes; since 2026-10-02 the set holds candidate
+#: round 2's bytes and the same shape is re-read at seed 0 meeting 0.
 _ANCHORS: Final[tuple[tuple[str, int, int], ...]] = (
     ("ml_corpus/9p2i", 1111, 0),
-    ("samples/9p2i", 48, 2),
+    ("samples/9p2i", 0, 0),
     ("ml_corpus/9p2i", 1002, 2),
 )
 
@@ -2682,10 +2684,11 @@ class TestRecordedAnchors:
         self,
         anchor_rows: dict[tuple[str, int, int], dict[PlayerId, _TestimonySupport]],
     ) -> None:
-        # p-9 spoke "p-2 in WEST_HALL at tick 7" and held the transition that
-        # put p-2 there; their own ballot told them they had named p-2 with
-        # nothing their record bore out.
-        assert "p-9" in anchor_rows[("samples/9p2i", 48, 2)]["p-2"].first_hand
+        # p-9 spoke a sighting of p-1 in WEST_HALL at tick 13 and held the
+        # transition that put p-1 there, not a sighting; before the fix their own
+        # ballot would have told them they had named p-1 with nothing their record
+        # bore out. (Seed 48 m2's p-9 on p-2 at tick 7 on the baseline-9 bytes.)
+        assert "p-9" in anchor_rows[("samples/9p2i", 0, 0)]["p-1"].first_hand
 
     def test_a_transition_the_speakers_sighting_bears_out_is_credited(
         self,

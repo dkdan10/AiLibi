@@ -66,6 +66,7 @@ from regen_test_goldens import (
     pooled_z,
     rate_cells,
 )
+from regen_test_goldens import fsm_comparator_win_rate as regen_comparator
 from agents.tactical.learned.crew_forward import committed_crew_weights_sha256
 from agents.tactical.learned.factory import (
     CHAMPION_ANCHOR_POLICY,
@@ -76,6 +77,7 @@ from agents.tactical.learned.factory import (
 from agents.tactical.learned.forward import ENCODER_VERSION
 from agents.tactical.learned.weights import committed_weights_sha256
 from eval import balance_eval
+from eval.eras import LADDER_TIP_ERA, era_of
 from orchestrator.game import (
     AgentFactory,
     TacticalAgent,
@@ -126,23 +128,31 @@ def _finalist_rows() -> dict[str, dict[str, Any]]:
     return rows
 
 
-def _fsm_comparator_win_rate() -> float:
-    """The same-seed scripted-FSM impostor win rate, from committed provenance.
+#: The same-seed scripted-FSM comparator as the baseline-9 samples/9p2i
+#: MANIFEST read it at ``d41c9006``: 11 IMPOSTORS wins of 50, every row
+#: attributed to the scripted FSM. An independent anchor, written here rather
+#: than read from the regenerator.
+_FSM_COMPARATOR_AT_D41C9006: Final[tuple[int, int]] = (11, 50)
 
-    Derived from the canonical 9p2i MANIFEST's ``winner`` column (11/50 =
-    0.22 on the baseline-9 record) rather than restated as a bare literal,
-    after asserting every row's
-    ``policy`` cell attributes the scripted FSM — the house win-edge
-    convention's comparator (report-finalist-eval.md §3.a).
+
+def _fsm_comparator_win_rate() -> float:
+    """The same-seed scripted-FSM impostor win rate the ruling reads.
+
+    It followed the canonical 9p2i MANIFEST's ``winner`` column at every
+    re-record up to baseline 9 (11/50 = 0.22) — the house win-edge convention's
+    comparator (report-finalist-eval.md §3.a). Since the promotion of candidate
+    round 2 (2026-10-02) that set holds a later era recorded under the adopted
+    gameplay changes, which is not a same-substrate comparator, and the
+    finalist ruling stays where it stood under the ML hold: the comparator is
+    the dated baseline-9 reading. The era check is the tripwire: a re-record
+    that puts the set back at the ladder tip fails here until the comparator is
+    re-derived from it.
     """
 
-    manifest = parse_manifest(
-        (_SAMPLES_9P2I / "MANIFEST.md").read_text(encoding="utf-8")
-    )
-    assert len(manifest) == 50
-    assert {row.policy for row in manifest.values()} == {FSM_DEFAULT_POLICY_ID}
-    impostor_wins = sum(1 for row in manifest.values() if row.winner == "IMPOSTORS")
-    return impostor_wins / len(manifest)
+    assert era_of("replays/samples/9p2i") != LADDER_TIP_ERA
+    wins, games = _FSM_COMPARATOR_AT_D41C9006
+    assert regen_comparator() == wins / games
+    return wins / games
 
 
 # -- the evidence gate: locked decision 2 reads FAIL --------------------------
@@ -167,9 +177,10 @@ def test_locked_decision_2_reads_fail_on_the_committed_17_14_evidence() -> None:
     assert {"utility-es", "policy-es"} <= set(rows)
     rows = {entrant: rows[entrant] for entrant in ("utility-es", "policy-es")}
     fsm_rate = _fsm_comparator_win_rate()
-    # The FSM comparator win rate reads the LIVE 9p2i samples, so every re-record
-    # moves it: 0.36 at baseline 5, 0.30 at baseline 6, 0.24 at baseline 7, 0.30
-    # at baseline 8, 0.22 (11/50 IMPOSTORS) on the baseline-9 record. The
+    # The FSM comparator win rate read the 9p2i samples at every re-record up to
+    # the ladder tip: 0.36 at baseline 5, 0.30 at baseline 6, 0.24 at baseline 7,
+    # 0.30 at baseline 8, 0.22 (11/50 IMPOSTORS) on the baseline-9 record, where
+    # it is held since the set moved to a later era (2026-10-02). The
     # finalist-eval rows below are frozen
     # (results-finalist-eval.jsonl, not re-recorded), so only this comparator and
     # the two win-edge deltas that subtract it move — the ruling's SHAPE (utility-es
@@ -336,9 +347,10 @@ def test_unflagged_run_selects_the_default_factory_and_records_no_stamp(
 def test_committed_canonical_replay_still_resolves_to_the_fsm_stamp() -> None:
     """The absent-stamp fallback interpretation is untouched on committed bytes.
 
-    The canonical 9p2i set was recorded under the scripted default and
-    carries NO ``tactical_policy`` stamp — per-record truth that predates any
-    learned mover. Moving ``FSM_DEFAULT_POLICY_ID`` or the absent-stamp
+    The canonical 9p2i set was recorded with the scripted FSM movers (the
+    promoted round under its era's experimental settings) and carries NO
+    ``tactical_policy`` stamp — per-record truth that predates any learned
+    mover. Moving ``FSM_DEFAULT_POLICY_ID`` or the absent-stamp
     interpretation would re-read that history as champion games, so this
     fixture pins the read path on the committed bytes themselves: seed 0's
     replay reads back an absent stamp, the explicit stand-in is the
