@@ -1,6 +1,6 @@
 # The featured tour and spectator honesty on the promoted set
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -206,7 +206,7 @@ fails at this card's base for the stated reason; Results quotes that failing run
 through `SPECTATOR_COPY` or the picker data. It carries no task or audit ID, no unexplained jargon and no
 threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
 
-- [ ] **The instrument names the candidates.** `scripts/measure_featured_criterion.py` gains `--list`. Per set
+- [x] **The instrument names the candidates.** `scripts/measure_featured_criterion.py` gains `--list`. Per set
   it prints the seeds behind each count it already prints, plus two new lists:
   - the non-vent openers: games whose FIRST meeting ejects an impostor, with no flag anywhere in the game and
     no vent event at or before that meeting;
@@ -216,7 +216,7 @@ threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
   Proof, in `tests/scripts/test_measure_featured_criterion.py`: on the promoted bytes the lists equal the seeds
   above (re-measured at dispatch). Perturbed: a served replay with a vent event moved before the first meeting
   leaves the non-vent list, and one with the ejected role flipped leaves it too.
-- [ ] **The strip, re-picked on the promoted bytes.** `FEATURED_GAMES` keeps `4p1i` 2, 11 and 29 unchanged. Its
+- [x] **The strip, re-picked on the promoted bytes.** `FEATURED_GAMES` keeps `4p1i` 2, 11 and 29 unchanged. Its
   9p2i row becomes:
   - **(a)** a head drawn from the eligible openers, its seed and reason named in Results. At authoring, seeds
     5, 6, 19, 20 and 27 show a look-and-wait stay of three ticks or more; of those, only seed 19 also has a
@@ -238,7 +238,7 @@ threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
   with its `match=`. Seed 23 (ejects a crewmate), seed 0 (first meeting skips) and seed 2 (other-flag crewmate
   ejection) are in it, plus non-vent rejections for seed 24 (vent before the meeting) and seed 8 (a later
   flag).
-- [ ] **The category clause, proved by perturbation, re-targeted.** No round-2 game isolates the `role_proof`
+- [x] **The category clause, proved by perturbation, re-targeted.** No round-2 game isolates the `role_proof`
   comparison (Evidence), so the holding edit already deleted `test_seed_7_isolates_the_role_proof_clause` and
   landed `test_the_role_proof_clause_rejects_a_recategorised_head` on its holding head. This card re-targets
   that test to the head it picks and re-verifies it, rather than writing it first: it cannot fail at this
@@ -247,7 +247,7 @@ threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
   role-proof flag as `cross_statement`, every other field unchanged. It asserts that the criterion rejects the
   perturbed replay by the flag clause (`match=`), and that the weakened predicate (`ejected in flag.subjects`)
   accepts the same replay. The second assertion is what shows the perturbation isolates the clause.
-- [ ] **Every label is true and spoils nothing.** Each 9p2i label states only countable facts:
+- [x] **Every label is true and spoils nothing.** Each 9p2i label states only countable facts:
   - meetings and spoken turns, extending `_assert_featured_counts`' number vocabulary word by word;
   - a reported vent sighting;
   - "no flagged contradictions" for pick (b), whose game carries none.
@@ -261,7 +261,7 @@ threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
   because it would spoil the game. If pick (c) is included, that framing appears only in its curated case's
   explanation, behind "Reveal case analysis (spoilers)", within the existing three classes. Adding a fourth
   classification would be a DTO change and is out of scope.
-- [ ] **The curated cases, re-derived or withdrawn, and always on the strip.** Each case in `_curated_cases`
+- [x] **The curated cases, re-derived or withdrawn, and always on the strip.** Each case in `_curated_cases`
   either is re-written on a promoted meeting that sits on a featured game, or is withdrawn. Each re-written case
   has:
   - a sha constant;
@@ -286,7 +286,7 @@ threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
   `frontend/e2e/evidence-journey.ts` replaces the holding edit's version: its case leg walks the kept cases,
   with their source link matching the promotion merge commit, and its evidence legs re-enter through a kept
   case or, if all three are withdrawn, keep the head's citation. Its 9p2i rubric leg stays the unscored state.
-- [ ] **Omniscient-only annotations.** A new pure module, `frontend/src/lib/annotations.ts`, derives three facts
+- [x] **Omniscient-only annotations.** A new pure module, `frontend/src/lib/annotations.ts`, derives three facts
   from the served replay:
   - **(1)** for a body meeting, the reported corpse's age: meeting tick minus the victim's kill tick;
   - **(2)** for each player an accusation in the meeting names, their recorded rooms from the last regroup
@@ -306,7 +306,7 @@ threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
   - planted leak: rendered under an agent lens, the DOM carries no corpse age, route or reply note. The same
     assertion helper applied to the omniscient render must throw, which proves the helper can fail;
   - the e2e fog test (`journey.spec.ts:796`) is extended to all three.
-- [ ] **The regroup, shown as it happens.** On a replay whose recorded `meeting_reset` is `hub_with_grace`, a
+- [x] **The regroup, shown as it happens.** On a replay whose recorded `meeting_reset` is `hub_with_grace`, a
   single step onto the first frame after a meeting's close does not tween: tokens appear in the meeting room.
   Elsewhere a single step still tweens. A per-replay note in plain words says that each meeting gathers the
   survivors in the meeting room and clears the bodies. It shows on reset replays only; `4p1i` stays `preserve`
@@ -317,7 +317,7 @@ threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
   - a `bodies.test.ts` census leg confirms the rewritten comment: on promoted 9p2i no first post-regroup
     frame carries a body, while `4p1i` keeps unreported bodies across meetings. The retired accumulate rule
     stays the negative control and fails the new leg.
-- [ ] **Vent trips drawn as recorded, look-and-wait stays included.** Segment pairing moves to a pure
+- [x] **Vent trips drawn as recorded, look-and-wait stays included.** Segment pairing moves to a pure
   `frontend/src/lib/vents.ts`. Rules:
   - every dive yields exactly one segment, and no later dive overwrites an earlier one;
   - a segment ends at its exit, or at the last frame where the served `is_venting` still holds for that actor.
@@ -330,19 +330,19 @@ threshold arithmetic. A new component file joins `IN_SCOPE_SOURCES`.
   of 140). Planted: `MapView`'s `d41c9006` pairing rule, kept in the test as the retired control, fails the
   same census (22 dives without a segment, 46 one-tick pulses at authoring). A hand-built preserve trip that
   spans a meeting stays one segment.
-- [ ] **The e2e head-card guard, green in both directions.** The main leg (`journey.spec.ts:475-482`) takes the
+- [x] **The e2e head-card guard, green in both directions.** The main leg (`journey.spec.ts:475-482`) takes the
   "has evidence" branch on the new head. The planted guard (`:568-618`) opens pick (b) by exact pill text in
   place of the holding edit's `4p1i` seed 11, and walks the "no flags" branch with both mismatches
   constructed against the real render.
   Mechanism: Playwright, run locally, because it sits outside `scripts/check.sh`. Proof: both branches are seen
   in the run, quoted in Results. Planted: pick (b)'s label with "no flagged contradictions" removed makes the
   guard's pairing assertion fail.
-- [ ] **The reading guide's exhibits follow the strip.** The paragraph at `docs/reading-guide.md:67-75` is
+- [x] **The reading guide's exhibits follow the strip.** The paragraph at `docs/reading-guide.md:67-75` is
   rewritten in place, naming at least two featured promoted games and their meetings in countable terms.
   The sentence at `:62-65` stays true, and the rest of the page belongs to the promotion card. Mechanism:
   `check_doc_facts.py` check 16 and the 1,350-word ceiling. Planted: the paragraph naming seed 23, which the
   strip dropped, fails check 16. `wc -w` is quoted in Results.
-- [ ] **The bundle change, stated byte by byte.** `uv run python scripts/build_demo_bundle.py --out <scratch>/before`
+- [x] **The bundle change, stated byte by byte.** `uv run python scripts/build_demo_bundle.py --out <scratch>/before`
   is run at the promotion merge commit, then `--out <scratch>/after` at this card's head, then
   `diff -rq <scratch>/before <scratch>/after`. Every changed path is listed in Results and in the pull request:
   the 9p2i replays added and removed by seed, `data/9p2i/eval/summary.json` (the cases), the picker metadata,
@@ -464,17 +464,254 @@ live provider, the recorder, the held-out generator or any calibration as a chec
 
 ## Results
 
-Not started. The implementer records here:
-- the commits, and the sections relied on: this card, decision memo sections 1 and 7, partial-record section 5
-  rows 13, 14 and 17 (row 16 only for the census leg), the round-2 audit sections 6 and 7, and
-  `docs/architecture.md`;
-- what the promotion card's holding edit was, file by file, and how it was replaced (`evidence-journey.ts`
-  named as replaced), plus the re-targeted category-clause test's green and weakened-clause red runs;
-- the instrument's `--list` output, the picks with their reasons, and each kept or withdrawn case;
-- every planted failure, with its test id and its red and green runs, and the census agreements;
-- the bundle diff;
-- every validation command with its exit code, and the limitations, the README stills among them;
-- optionally, a cross-read of the owner's gameplay diagnosis, only if a committed copy is in the repository
-  at dispatch: each game it names good or bad that is on the strip or among the candidates, with one line
-  agreeing or disagreeing with the measured pick. It informs only and never overrides the criterion; without a
-  committed copy, Results says it was not read.
+Done on `work/spectator-tour-round-2`, stacked on `work/promote-round-2` at `80d40422` (the promotion's PR #495,
+open), by the orchestrator's ruling of 2026-10-02; the pull request says it must be retargeted to `main` after
+#495 merges. Counts are count-only; no prompt, transcript or seed-band prefix was printed, and no live provider,
+recorder or held-out generator ran.
+
+**Commits**, in order: `dc0096db` the criterion's `--list`; `32c27446` the strip and its gates; `790f67d9` the
+curated cases and the split source root; `1538ad5f` the map's vent trips and regroup snap, the omniscient
+annotations and the skeleton fixture; `646810c4` the browser legs; `8d07a340` the answers to the neuter and
+mutation passes; `ff79026f` the README media re-capture; `8a405d64` the strip comment's counts; `3a52c98f` the
+head's reason at the strength the recording gives; then the commit recording these Results.
+
+**Sections relied on.** This card; the decision memo `tasks/decision-2026-09-24-stage-b-wave.md` sections 0.1
+(ruling 11), 1 ("What adoption means later", items 2(b) and 8) and 7; `tasks/investigations-2026-09-24/partial_record.md`
+section 5, rows 13, 14 and 17 (row 16 for the `bodies.test.ts` leg); `audits/audit-2026-10-01-stage-b-r2.md` sections
+6 (6.2 for the census twins and the body handle, 6.4 for the reporter flag), 7 and 9; the promotion card's
+Results ("The holding edit, file by file"); `docs/architecture.md`, "Layering" (api is a privileged post-game
+reader; agent-lens controls constrain presentation) and "Determinism and the substrate ladder" (the shown set's
+era).
+
+### The instrument, the picks and the cases
+
+`uv run python scripts/measure_featured_criterion.py --alternatives --list`, exit 0, on `replays/samples` at the
+head (9p2i block; the 4p1i block reads 19 of 50 eligible, both new lists empty):
+
+```
+replays/samples/9p2i — 50 games
+    role_proof flag   24 ejections  24 role-correct
+    other flag         2 ejections   0 role-correct
+    no flag           40 ejections  20 role-correct
+  first meeting ejects on a role_proof flag: 11 of 50 games
+  no flag and no ejection anywhere: seeds [4, 15, 31, 36]
+    other flag ejections: 2:0 8:1
+  first meeting ejects on a role_proof flag: seeds [3, 5, 6, 7, 10, 11, 19, 20, 27, 42, 49]
+  first meeting ejects an impostor, no flag anywhere and no vent at or before it: seeds [14, 44]
+  first meeting ejects a crewmate who did not open it: seeds [2, 12, 13, 22, 25]
+     691 ballots  1090 recorded entries
+```
+
+(The band lines list every `seed:meeting`; quoted in the PR.) The lists equal the card's authoring seeds.
+
+- **(a) Head: 9p2i seed 19.** Eligible (its first meeting, tick 12, ejects impostor p-6 on p-1's role-proof vent
+  sighting). Of the eleven eligible openers, two record both vent behaviours the map now draws, a wait of three
+  ticks or more inside a vent and a dive a regroup closes: seeds 6 and 19 (count-only walk; the card's authoring
+  note named 19 alone, and seed 6's regroup-closed dive comes at its second meeting). Seed 19 shows both before
+  its first meeting, the stretch the tour plays before it pauses (p-6 inside from Storage to Engineering, ticks 8
+  to 11; p-9 diving at 10 and pulled out at the meeting at 12), and its first two meetings carry a supported and
+  an unresolved case shape, so both kept cases sit on the landing game. Three meetings, nineteen turns.
+  Re-measured at the head through `--list`. (Commit `32c27446`'s message says "the only one that also records
+  both"; this paragraph is the correction, and the strip comment says "before its first meeting".)
+- **(b) Second card: 9p2i seed 14**, of the two non-vent openers the one with no vent event anywhere in the game:
+  one meeting, eight turns, no flag; five crewmate EJECT ballots name impostor p-1.
+- **(c) omitted**, by the orchestrator's ruling (2): no crewmate-ejecting first meeting and no reporter ejection is
+  featured; the wrong-but-believable framing appears nowhere, so row 8's count was not needed.
+- Labels: "Three meetings, nineteen spoken turns, and a reported vent sighting. Which ballots rest on what their
+  voter saw?" and "One meeting, eight spoken turns, and no flagged contradictions. What did each voter have to go
+  on?". The 4p1i cards (2, 11, 29) are unchanged.
+- **Kept cases**, both on seed 19 (sha256 `3c2f045f…bb28`): `witnessed-vent` (supported, meeting 0: a body report,
+  then p-1's opt-in turn describing p-6 venting in Engineering, observation `p-1:12:1`, scene frame 11; p-1's
+  ballot cites it; four other voters cite p-1's turn and vote p-6; role proof; p-6 ejected) and `weak-evidence`
+  (unresolved, meeting 1: four speakers accuse the reporter p-1, no flag, p-1 replies with its own route, four
+  skips each labelled "held nothing", one vote for p-1, no ejection). Every sentence is held by a `_check_case`
+  clause. **Withdrawn**: `disputed-route`, with its branch, sha and tests: its game (seed 2 meeting 0's shape)
+  is a crewmate-ejecting first meeting, which the ruling keeps off the strip, and no featured meeting ejects an
+  innocent player on a disputed account.
+- Source roots: the 9p2i root names `148fa211` (the commit that landed the promoted bytes; the promotion's merge
+  commit did not exist yet, ruling (1)), keyed to the promoted fingerprint `sha256:ebb629f6…`; the 4p1i root stays
+  at `9bae2b03` (its replays, manifest and roster are unchanged there; only its report later moved to `.json.gz`).
+
+### The holding edit, replaced file by file
+
+- `ReplayPicker.tsx`: the one-card 9p2i strip (seed 3) and its comment are replaced by seeds 19 and 14 and a
+  comment naming which picks are measured and by what, and the curation clause.
+- `tests/api/test_sets.py`: pins and planted seeds re-derived (seed 14 joins the head rejections);
+  `_assert_non_vent_opener` added with its rejections (24 vent, 8 and 34 a later flag, 19 the head, 23 a
+  crewmate, 0 a skip; the role clause and the vent boundary by perturbation); the category-clause test
+  re-targeted to seed 19; the label checks re-parametrized pair by pair, plus a coverage pin and a one-question
+  shape check. The seed-0 shape test stays absent (`git grep -n "seed_0\|seed-0 shape" tests/api/test_sets.py`
+  finds nothing).
+- `tests/api/test_public_results.py`: the withheld-case tests are replaced by per-sentence perturbations of the two
+  kept cases, controls, the split-root test and the prose-facts test.
+- `frontend/e2e/journey.spec.ts`: the planted guard opens 9p2i seed 14 by its exact pill (was 4p1i seed 11 via
+  `?set=4p1i`); the fog test gains the meeting-record leg; a regroup-note test is added.
+- `frontend/e2e/evidence-journey.ts`: **replaced**. It reads the published cases from the summary the app fetched,
+  holds every card's and the set's source link to `148fa211` and 4p1i's to `9bae2b03`, opens the statement case
+  on the reporter's reply, and re-enters the scene, fog, perspective and missing-reference legs through the
+  supported case's cited observation. Both rubric legs keep the unscored state.
+- `docs/reading-guide.md` exhibit paragraph: names 9p2i seeds 19 and 14 and 4p1i seed 11 in counts and the
+  source-bound cases on the first 9-player card.
+- `tests/scripts/test_build_demo_bundle.py`: the summary test bakes seed 19 and expects both cases; a new test bakes
+  the strip's own `FEATURED_GAMES`.
+
+**The category clause.** `uv run pytest tests/api/test_sets.py -k recategorised_head`: green, 1 passed. With the
+flag clause weakened to `ejected in flag.subjects` in `_assert_opens_on_role_proof` (scratch edit, restored from a
+copy): `Failed: DID NOT RAISE <class 'AssertionError'>`, 1 failed. The test also runs the weakened predicate on the
+recategorised replay, which accepts it.
+
+### The viewer
+
+- `frontend/src/lib/vents.ts`: one trip per dive, ended by its exit or by the last frame whose served
+  `is_venting` holds; shapes travel, stay and closed. Over promoted 9p2i (`vents.test.ts`): 140 dives, 0 without a
+  trip; surfaced windows 1 tick 49, 2 ticks 3, 3 ticks 15, 4 ticks 5 (`ticks_inside_per_trip`); 47 closed by a
+  regroup (`trips_closed_by_regroup`); the other 21 split 19 ejected inside a vent and 2 at the game's end. The
+  retired `MapView` pairing, kept verbatim: 22 dives without a segment, 46 one-tick pulses. 4p1i: 44 dives, 0
+  regroups. A preserve trip spanning a meeting stays one segment; a 500-schedule generated family recovers every
+  trip.
+- `frontend/src/lib/regroup.ts`: `isRegroupStep` / `shouldTween`, which `MapView`'s `animate` reads. The step
+  between a meeting's frame and the next snaps on `hub_with_grace` in both directions; preserve, a config-less
+  replay, a two-tick scrub and every other step behave as before; 102 regroup steps on 9p2i (one per meeting the
+  game outlives), 0 on 4p1i. Measured: the first frame after a regroup already carries each survivor's first move
+  (0 of 102 such frames have every survivor in the meeting room), so the snap lands on the meeting room or one
+  corridor from it; the note's words say "the map jumps to where they stand on the next tick". The note shows on
+  9p2i only (`journey.spec.ts`).
+- `bodies.ts`'s header says a regroup clears every corpse; `bodies.test.ts`: 0 bodies served or drawn on the 102
+  post-regroup frames (the retired accumulate rule paints 102 of 102); on 4p1i, 19 meetings outlived, one keeps
+  an unreported body, and no reported body survives its meeting.
+- `frontend/src/lib/annotations.ts` and `MeetingView`'s omniscient-only panel "What the recording shows". Over
+  promoted 9p2i: corpse ages over 114 report meetings 1:19, 2:13, 3:33, 4:30, 5:6, 6:6, 7:2, 8:2, 10:2, 11:1
+  (`corpse_age_at_report`); accused openers answered 87 of 105 (`accused_opener_answers`). The route reads
+  `agent_states`; the spoken-alibi route fails on seed 2 meeting 0 for p-5 (and p-3), because a stated route is
+  stamped on the players' clock, one tick ahead of the frames, which the panel's copy states.
+- The skeleton fixture `frontend/src/lib/replay-skeleton.fixture.json` (structure only) is bound by
+  `corpusSha256`; its recipe in `skeleton.testkit.ts` regenerated it byte for byte (sha256 `cb0ede3d…aa91`).
+
+### Planted failures and the write-first runs
+
+- The new tests at the base code (the base tree from `git archive 80d40422`, with this card's test files copied
+  in): Python 44 failed, 426 passed (each new pin, perturbation, split-root, prose and bundle test, the three check-16
+  tests; e.g. `('9p2i', 3) == ('9p2i', 19)`, `assert None == '…148fa211…/9p2i/'`, `module … has no attribute
+  'opens_on_non_vent_impostor_ejection'`); frontend 8 failed and 3 files failed to import (`vents`, `regroup`,
+  `annotations` absent); Playwright 4 failed, 6 passed (evidence journey, the guard, the fog record, the regroup
+  note). Passing at the base by construction: the test-local criterion rejections and the `bodies.test.ts` leg
+  (the shipped body rule already read the served rows; the leg proves the rewritten comment).
+- Planted, each green now: the no-reply note appears without the opener's rebuttal and leaves when it is added
+  (lib and DOM); the leak helper passes every agent lens and throws on the omniscient render; the config-blind
+  regroup rule fails the preserve step; the retired rules fail the vent and body censuses; the label with "no
+  flagged contradictions" removed and the promise over evidence both throw in the guard; the seed-23 exhibit fails
+  check 16; a case moved to an unfeatured game fails the strip-bakes-every-case test; the single-root rule fails the
+  split-root test.
+
+### The neuter pass and the mutation pass
+
+Every production line, row and argument this card adds or changes, neutered alone (237 probes: criterion 37,
+cases 72, strip 7, viewer 121), its suite run, the file restored from a copy and its sha256 checked. First run:
+224 killed, 13 came back green: N-C13 (`listing` default), N-C33 (`--list` renamed; argparse prefix match), N-P53
+(accusation target), N-V07, N-V13, N-V20 (window's first tick), N-R04 (step size), N-A05, N-A06, N-M18 (heading
+text), N-K11 (`MAP_COPY`), N-W16, N-W17 (traveller key). Answered in `8d07a340`: the default deleted, the usage
+line pinned, an isolating perturbation, a redundant guard and a redundant type check deleted, tests for the
+window's first tick, a two-tick scrub from the meeting, a vent before the report, the heading text, the map
+note's words and the key. Re-probed: all killed except four equivalent: N-C13b (no caller relies on a default),
+N-V07 (the dive's initializer is overwritten on the same frame), N-A07c (only kill events carry `victim_id`),
+N-W16 (the fog branch never reads the trip map).
+
+One bounded mutation pass, exactly the eight listed classes, 68 mutants over `scripts/measure_featured_criterion.py`,
+`api/public_results.py`, `ReplayPicker.tsx`, `vents.ts`, `regroup.ts`, `annotations.ts`, `MeetingView.tsx` and
+`MapView.tsx` (F drop a filter 8, S swap a collection 7, N None test 14, K read to constant 14, M message argument
+10, T drop a tuple member 2, B swap branches 7, L loaded source to literal 6). First run: 55 killed, 11 came back
+green (F4, K14, M1-M8, M10), 2 spans not applied (S8, N1). After the message-text and opener tests: 67 killed;
+F4 is equivalent (deleting the current entry while iterating a JS `Map` is safe; the copy is defensive). The full
+tables are in the PR.
+
+### The bundle
+
+`build_demo_bundle.py --out` at `80d40422` (the stacked promotion head, standing in for the merge commit, ruling
+(1)) and at the head, `diff -rq`: `data/9p2i/replays/headless-seed-3*` removed, `headless-seed-14*` and
+`headless-seed-19*` added (with beliefs, meetings and memory); `data/9p2i/replays.json` (seeds [3] to [14, 19]);
+`data/9p2i/eval/summary.json` (`cases` [] to the two cases, `source_url` null to the `148fa211` root; every count
+identical); `README.md` ("Games: 4" to "Games: 5"); `index.html` and the hashed `assets/` (`index`, `MapView`,
+`ReplayPicker`, `TournamentDashboard`, the three Pixi renderer chunks, `index-*.css`). `data/4p1i/`: `eval/summary.json`
+and `sets.json` and every meeting, memory and belief file byte-identical; the three replay files and
+`replays.json` differ only in `created_at` (each checkout's file mtime). Perturbed, in scratch copies: reordering
+the 4p1i entries changes only the `ReplayPicker` asset (the bake is seed-sorted, so `data/4p1i/` keeps its
+content); swapping 4p1i seed 11 for 12 shows `data/4p1i/replays/headless-seed-11*` removed and `-12*` added; the
+`d41c9006` single-root rule shows `data/4p1i/eval/summary.json` differing.
+
+### The README media (scope extension, ruling 4)
+
+Re-captured with `AILIBI_CAPTURE_MEDIA=1 npx playwright test e2e/media.spec.ts` (3 passed) from the bundle built at
+`8d07a340`: the hero is seed 19 tick 9 (two bodies, both impostors on the map, one inside the vents; fog subject
+p-5 in Labs sees one player and no body, then accuses crewmate p-4 at tick 12), every fact asserted against the
+baked bytes. A second capture gave byte-identical stills and GIF; the clip differs run to run (as documented), and
+the second run's clip ships. `provenance.json` names the served recording (its sha256 is held to the served bytes
+by `test_public_recording_provenance.py`, with a moved digest planted to fail); `docs/media/README.md`, the README
+caption and samples sentence, and the `docs/artifacts.md` media row (1.6 MB / 7 files) follow. The media are not
+part of the demo bundle.
+
+### Validation
+
+| command | result |
+|---|---|
+| `measure_featured_criterion.py --alternatives --list` | 0 |
+| `pytest tests/api/test_sets.py tests/api/test_public_results.py tests/scripts/test_build_demo_bundle.py tests/scripts/test_measure_featured_criterion.py tests/scripts/test_public_recording_provenance.py -n 6` | 0: 176 passed |
+| `npm run lint`, `tsc:check`, `test`, `build` (frontend) | 0; 0; 0: 25 files, 645 tests; 0 |
+| `verify_samples.sh` bare; `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i` | 0 (50 clean); 0 each (50, 50, 150, 50, 50) |
+| `build_sample_report.py --check`, the five sets | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `check_doc_facts.py`; `validate_task_docs.py` | 0; 0 |
+| `verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
+| `pytest -m campaign -n 6` | 0: 337 passed |
+| `wc -w` | README 1,569 of 1,600; reading guide 1,338 of 1,350 |
+| `npm run e2e` (local, serial, `CI=1`) | 0: 14 passed, 3 skipped (the media spec's) |
+| bundle diff | above |
+| `bash scripts/check.sh`, once at the pushed head | in the PR body (a card cannot carry the run of the commit that writes it) |
+
+### Decisions
+
+1. The 9p2i source root names `148fa211`, the commit that landed the promoted bytes, which `main` will contain
+   after a merge-commit merge; the 4p1i root stays at `9bae2b03`; the bundle's before tree is `80d40422`
+   (orchestrator ruling 1).
+2. No reporter-ejection game and no crewmate-ejecting first meeting is featured; pick (c) is omitted and the
+   wrong-but-believable framing appears nowhere (ruling 2).
+3. The head is seed 19 for the reason above, measured at the head. The owner's diagnosis memo of 2026-10-02 has no
+   committed copy, so it was not read; the orchestrator relayed its advice (seeds 7 or 19 as the opener, a strip
+   of 1, 6, 0 and 3). Seed 19 is eligible and agrees with it; seed 7 is eligible but records no wait of three
+   ticks or more inside a vent; the advised strip was not taken, since seeds 1 and 0 open on a skip and the
+   card's second card must be a non-vent opener (ruling 3).
+4. The curated cases keep two of three; `disputed-route` is withdrawn, and the per-sentence planted coverage is
+   restored for both kept cases (ruling 5).
+5. The README media were re-captured (ruling 4).
+6. `PublicResults.tsx`, `copy.ts`'s `interestingnessAbsentLead`, the no-rubric empty state and banner are left as
+   the promotion card wrote them (ruling 6); the 9p2i rubric leg stays the unscored state.
+7. Annotations render only in the omniscient lens and only on a replay that carries frames (an isolated meeting
+   fixture has none); the route window opens on the frame after the last regroup, and its ticks are the map's.
+8. The regroup snaps in both directions of the step across it; the note shows in both lenses (it is a rule the
+   players are told too).
+9. Every trip with no exit is drawn held at the in-vent size until its last venting frame, and a stay is drawn
+   held, coming up full size on its exit tick.
+10. `skeleton.testkit.ts` holds the fixture reader and its recipe, shared by four test files.
+
+### Limitations
+
+- `MapView`'s canvas wiring (the tween decision, the trip poses, the traveller size) is pinned on its source by
+  `MapView.wiring.test.ts` and in behaviour by the lib tests; no browser test reads pixels off the canvas.
+- The reporter flag the promoted set carries (17/114, record 9.2) is untouched here; the strip features no
+  reporter ejection.
+- Four neuter probes and one mutant are equivalent (above).
+- Reordering the 4p1i entries is invisible in `data/4p1i/` because the bake is seed-sorted; the diff's sight of
+  that directory is shown by the seed swap and the single-root rule instead.
+- Defects noted, not fixed, for the follow-up card `rubric-extractor-era` (owned elsewhere): `PublicResults.tsx`'s
+  behaviour list still calls the adopted arms "experimental", which is literally true of the recorded config but
+  reads as unadopted.
+- The base runs used a git-less archive of `80d40422`.
+- On macOS the evolution-strategy hash pin is Linux-only; CI is cited for it if `check.sh` reports it.
+
+### Deviations
+
+Files outside Expected scope, each directly necessary: `tests/scripts/test_check_doc_facts.py` (check 16's planted
+tests name the guide's new exhibits); `frontend/src/components/PrivateReasoning.test.tsx` (its isolated meeting
+fixture gains `ticks: []`); `frontend/src/components/MeetingView.test.tsx`, `MapView.wiring.test.ts` and
+`frontend/src/lib/skeleton.testkit.ts` (new test files). Ruling 4's extension: `README.md` (caption and samples
+sentence), `docs/media/*`, `frontend/e2e/media.spec.ts`, `tests/scripts/test_public_recording_provenance.py`
+(the placement phrase "Archive only"), and the `docs/artifacts.md` media row.
