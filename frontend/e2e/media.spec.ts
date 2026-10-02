@@ -68,23 +68,22 @@ const BUILD_TIMEOUT_MS = 300_000;
  * The moment the hero pictures, chosen from the recorded corpus this repository
  * ships and re-checked against those bytes below.
  *
- * 9p2i seed 2 is a featured game — the strip's last 9p2i entry since the order
- * became a measured property of the recordings (ReplayPicker.tsx above
- * FEATURED_GAMES); this capture names its game id directly and does not read the
- * strip. At tick 5 the omniscient map
- * carries two bodies and both impostors: one standing over the player it has
- * just killed, the other already a room away from the body that will trigger the
- * meeting. The fog subject saw none of it, and then spent the meeting accusing a
- * fellow crewmate — which is the whole point of the picture.
+ * 9p2i seed 19 is the featured strip's head on the shown 9-player set
+ * (ReplayPicker.tsx above FEATURED_GAMES); this capture names its game id
+ * directly and does not read the strip. At tick 9 the omniscient map carries two
+ * bodies and both impostors: one in Medbay with the player it has just killed,
+ * the other inside the vents between Storage and Engineering. The fog subject,
+ * in Labs, saw one other player and none of it, and then spent the meeting
+ * accusing that fellow crewmate — which is the whole point of the picture.
  */
 const HERO = {
   set: "9p2i",
-  gameId: "headless-seed-2",
-  tick: 5,
-  fogSubject: "p-3",
-  accused: "p-1",
-  meetingId: "headless-seed-2:meeting-0",
-  meetingTick: 7,
+  gameId: "headless-seed-19",
+  tick: 9,
+  fogSubject: "p-5",
+  accused: "p-4",
+  meetingId: "headless-seed-19:meeting-0",
+  meetingTick: 12,
   /** Bodies on the omniscient half at `tick` — the caption's "two players are already dead". */
   bodies: 2,
   /** Players the fog subject can see at `tick` — the caption's "one other player". */
@@ -895,8 +894,9 @@ test.describe("README media capture", () => {
     const page = await context.newPage();
     // Opened AT the meeting's own tick, not merely with its modal on top: the
     // transport behind the dialog is in the picture, and `docs/media/README.md`
-    // publishes this asset as tick 7. `openMoment` asserts the scrubber lands on
-    // the frame the URL names, so the deep link and the pixels agree.
+    // publishes this asset at the meeting's tick. `openMoment` asserts the
+    // scrubber lands on the frame the URL names, so the deep link and the
+    // pixels agree.
     await openMoment(
       page,
       momentUrl(bundle.origin, {
@@ -1146,10 +1146,10 @@ test.describe("README media capture", () => {
     await uncoverMap(gifPage);
     const gifSeek = gifPage.getByLabel("Seek tick");
     const forward = gifPage.getByRole("button", { name: "Step forward 1 tick" });
-    for (let tick = 0; tick <= HERO.tick + 2; tick += 1) {
+    for (let tick = 0; tick <= HERO.meetingTick; tick += 1) {
       await expect(gifSeek).toHaveValue(String(tick + 1));
       frames.push(await gifPage.screenshot({ animations: "disabled" }));
-      if (tick < HERO.tick + 2) {
+      if (tick < HERO.meetingTick) {
         await forward.click();
       }
     }

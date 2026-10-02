@@ -1,21 +1,23 @@
 {
-  "status": "historical",
-  "capture_revision": "5184417779d26a0ddc26c703574fdcf341e16098",
+  "status": "current",
+  "capture_revision": "8d07a340bb7464cdd54d56b7754c35d925e6e936",
   "recording": {
-    "path": "replays/samples/9p2i/replay-seed-2.jsonl",
-    "sha256": "6f6fe02fa8bb5dc042b0b730f01458ebeec863f1592df63ed2d3651a51fbe57c",
-    "game_id": "headless-seed-2",
-    "seed": 2,
-    "recorded_on": "2026-08-25",
+    "path": "replays/samples/9p2i/replay-seed-19.jsonl",
+    "sha256": "3c2f045f761eeb5bb5d02c8bfeeae9559cd7999b75937f25572e772949b31e64",
+    "game_id": "headless-seed-19",
+    "seed": 19,
+    "recorded_on": "2026-10-01",
     "model": "Qwen/Qwen3.6-27B",
     "prompt_family": "qwen3_6_27b",
-    "prompt_version": "v4",
-    "reference_recording": 7
+    "prompt_version": "v6",
+    "ballot_version": "v8",
+    "era": "stage-b-r2",
+    "landed_in": "148fa211a5851c288eeaf1a9591197f8ba13bdcc"
   },
   "assets_sha256": {
-    "spectator-two-truths.png": "f745b3a308da06fde24be41ad130f4b3144a1dfaaac9ef98e12d0de9b18cac51",
-    "spectator-meeting.png": "75c1f2bfabefa5c626bc0eb724bd8ac1780fc17cb6958f6ecd242ec1473a0245",
-    "spectator-journey.gif": "1ab365dcd67ab60fe38a97280ced62d0216ccc486ef8f479fc382a0398f89c6e",
-    "spectator-journey.webm": "8d0e66542642f6301c633ae2ea6f4e34263ac394993b2935c7952185d79c7a8b"
+    "spectator-two-truths.png": "91103279d4190933c2c5fcf4330beedcb85b57f62aef65f9157cbfd3fbb73ea0",
+    "spectator-meeting.png": "c827b6ac4d96d949ed8622cbd3fa7dc746ca12abbb339723d53363d509056927",
+    "spectator-journey.gif": "0a5aa048e08bacfc730e1bcddb0544f5ea8ff67c344d281ce5472cc0c337fc51",
+    "spectator-journey.webm": "0a5bd71fe972294b3779cae25cc8262e9a564ad95fb689555ed8798101f07aed"
   }
 }
