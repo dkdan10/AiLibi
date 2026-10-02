@@ -238,6 +238,61 @@ describe("the omniscient meeting record", () => {
     expect(render({ mode: "omniscient" }, MEETING, fresh)).toContain("killed at tick 4, one tick before this meeting.");
   });
 
+  it("reads the victim, the kill tick and the age off the recording, in both forms", () => {
+    // Another victim than the planted meeting's p-4, killed at other ticks before
+    // other meetings, so each argument of the corpse line is read off this
+    // recording rather than off the planted one: p-3 dies in Admin at tick 0
+    // and is reported at tick 5 (age 5), then dies at tick 2 and is reported at
+    // tick 3 (age 1). p-3 takes no turn here, and p-4 lives.
+    const reported = (killTick: number, meetingTick: number): string => {
+      const meeting: MeetingDTO = { ...MEETING, tick: meetingTick, turns: MEETING.turns.slice(0, 2) };
+      const ticks: TickView[] = [0, 1, 2, 3, 4, 5]
+        .filter((tick) => tick <= meetingTick)
+        .map(frame)
+        .map((item) => ({
+          ...item,
+          agent_states: item.agent_states.map((agent) =>
+            agent.agent_id === "p-3" && item.tick >= killTick
+              ? { ...agent, room_id: null, is_alive: false }
+              : agent.agent_id === "p-4"
+                ? { ...agent, room_id: "LABS", is_alive: true }
+                : agent,
+          ),
+          events:
+            item.tick === killTick
+              ? [{ type: "kill", tick: killTick, killer_id: "p-2", victim_id: "p-3", room_id: "ADMIN" }]
+              : item.tick === meetingTick
+                ? [{ type: "report_body", tick: meetingTick, reporter_id: "p-1", body_of: "p-3", room_id: "ADMIN" }]
+                : [],
+        }));
+      return render({ mode: "omniscient" }, meeting, ticks);
+    };
+    const plural = reported(0, 5);
+    expect(plural).toContain("The reported body is p-3&#x27;s, killed at tick 0, 5 ticks before this meeting.");
+    expect(plural).not.toContain("p-4&#x27;s");
+    const singular = reported(2, 3);
+    expect(singular).toContain("The reported body is p-3&#x27;s, killed at tick 2, one tick before this meeting.");
+    expect(singular).not.toContain("p-4&#x27;s");
+  });
+
+  it("names the room of each vent leg off the recording", () => {
+    // p-2 is inside a vent in Labs at ticks 3-4 (the planted meeting), and here
+    // still inside one at tick 5, when the frames put it in Admin.
+    const ticks = [0, 1, 2, 3, 4, 5].map(frame).map((item) =>
+      item.tick === 5
+        ? {
+            ...item,
+            agent_states: item.agent_states.map((agent) =>
+              agent.agent_id === "p-2" ? { ...agent, is_venting: true } : agent,
+            ),
+          }
+        : item,
+    );
+    expect(render({ mode: "omniscient" }, MEETING, ticks)).toContain(
+      "p-2</span>: Labs, ticks 0–2 → inside a vent in Labs, ticks 3–4 → inside a vent in Admin, tick 5",
+    );
+  });
+
   it("has nothing to read on a meeting fixture with no frames", () => {
     assertNoEngineRecord(render({ mode: "omniscient" }, MEETING, []));
   });

@@ -324,6 +324,17 @@ def _sighting_moved(replay: ReplayView) -> ReplayView:
     return _edit_turn(replay, _VENT, _VENT_TURN, observations=observations)
 
 
+def _sighting_retimed(replay: ReplayView) -> ReplayView:
+    """The turn's vent sighting one tick earlier, its venter and room unchanged."""
+
+    turn = next(t for t in _meeting(replay, _VENT).turns if t.turn_id == _VENT_TURN)
+    observations = tuple(
+        o.model_copy(update={"tick": 11}) if o.type == "saw_vent" else o
+        for o in turn.observations
+    )
+    return _edit_turn(replay, _VENT, _VENT_TURN, observations=observations)
+
+
 def _one_voter_cites_elsewhere(replay: ReplayView) -> ReplayView:
     return _edit_ballot(
         replay, _VENT, "p-3", primary_reason_id="headless-seed-19:meeting-0:turn-0"
@@ -424,6 +435,7 @@ _PERTURBATIONS: dict[str, tuple[str, Callable[[ReplayView], ReplayView]]] = {
         lambda r: _edit_turn(r, _VENT, _VENT_TURN, turn_kind="opening"),
     ),
     "venting-in-engineering": ("witnessed-vent", _sighting_moved),
+    "venting-at-tick-12": ("witnessed-vent", _sighting_retimed),
     "the-witness-ballot-cites-it": (
         "witnessed-vent",
         lambda r: _edit_ballot(r, _VENT, "p-1", primary_reason_observation_id=None),
@@ -467,6 +479,16 @@ _PERTURBATIONS: dict[str, tuple[str, Callable[[ReplayView], ReplayView]]] = {
     "voters-choose-to-skip": (
         "weak-evidence",
         lambda r: _edit_ballot(r, _WEAK, "p-3", rewrite_reasons=("invalid_target",)),
+    ),
+    # The meeting each case names, by its tick: the recorded meeting moved one
+    # tick off the case's `meeting_tick`, every other fact as recorded.
+    "the-vent-meeting-at-tick-12": (
+        "witnessed-vent",
+        lambda r: _edit_meeting(r, _VENT, tick=13),
+    ),
+    "the-weak-meeting-at-tick-31": (
+        "weak-evidence",
+        lambda r: _edit_meeting(r, _WEAK, tick=30),
     ),
     # Each conjunct alone, where the sentence families above change two facts.
     "the-sighting-is-p-1s": (
@@ -607,6 +629,81 @@ def test_the_cited_observation_must_resolve_to_what_the_case_says(
             public._check_case(case, head_replay, head_loader)  # noqa: SLF001
     monkeypatch.setattr(head_loader, "get_meeting_memory", original)
     public._check_case(case, head_replay, head_loader)  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    ("field", "moved"),
+    [
+        ("observation_tick", 11),
+        ("scene_tick", 10),
+        ("kind", "saw_player"),
+        ("subject_id", "p-9"),
+    ],
+)
+def test_each_fact_of_the_cited_observation_is_held_alone(
+    head_loader: ReplayLoader,
+    head_replay: ReplayView,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    moved: int | str,
+) -> None:
+    # "records p-6 venting ... at tick 12": the cited reference's kind, subject,
+    # observation tick and the scene frame it was delivered on (11) are each
+    # held alone (its room by the test above). Any one moved, every other field
+    # of the reference as recorded, withholds the case.
+    original = head_loader.get_meeting_memory
+    case = _case("witnessed-vent")
+    recorded = next(
+        r
+        for r in original(case.game_id, case.meeting_id, "p-1").observation_references
+        if r.observation_id == case.observation_id
+    )
+    assert (
+        recorded.kind,
+        recorded.subject_id,
+        recorded.observation_tick,
+        recorded.scene_tick,
+    ) == ("saw_vent", "p-6", 12, 11)
+
+    def retimed(game_id: str, meeting_id: str, agent_id: str) -> AgentMemoryView:
+        memory = original(game_id, meeting_id, agent_id)
+        return memory.model_copy(
+            update={
+                "observation_references": tuple(
+                    r.model_copy(update={field: moved})
+                    if r.observation_id == case.observation_id
+                    else r
+                    for r in memory.observation_references
+                )
+            }
+        )
+
+    monkeypatch.setattr(head_loader, "get_meeting_memory", retimed)
+    with pytest.raises(
+        ValueError,
+        match="^Curated case no longer describes its source: witnessed-vent$",
+    ):
+        public._check_case(case, head_replay, head_loader)  # noqa: SLF001
+    monkeypatch.setattr(head_loader, "get_meeting_memory", original)
+    public._check_case(case, head_replay, head_loader)  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    ("case_id", "moved"), [("witnessed-vent", 13), ("weak-evidence", 30)]
+)
+def test_a_case_naming_another_meeting_tick_withholds_publication(
+    head_loader: ReplayLoader, head_replay: ReplayView, case_id: str, moved: int
+) -> None:
+    # The case's own `meeting_tick` moved one tick off the recorded meeting's,
+    # the recording unchanged: the case no longer names that meeting.
+    case = _case(case_id)
+    assert _meeting(head_replay, case.meeting_id).tick == case.meeting_tick
+    with pytest.raises(
+        ValueError, match=f"^Curated case no longer describes its source: {case_id}$"
+    ):
+        public._check_case(  # noqa: SLF001
+            case.model_copy(update={"meeting_tick": moved}), head_replay, head_loader
+        )
 
 
 @pytest.mark.parametrize(
