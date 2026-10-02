@@ -3963,7 +3963,7 @@ def test_unbolded_guide_exhibit_the_picker_dropped_detected(doc_tree: Path) -> N
 def test_guide_exhibit_the_picker_no_longer_carries_detected(doc_tree: Path) -> None:
     # The curated strip is committed data. A guide naming a game it dropped
     # points a reader at a card the spectator never opens.
-    _substitute(doc_tree, _READING_GUIDE, "**9p2i seed 3**", "**9p2i seed 23**")
+    _substitute(doc_tree, _READING_GUIDE, "**9p2i seed 19**", "**9p2i seed 23**")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -3976,17 +3976,19 @@ def test_guide_exhibits_follow_a_recurated_picker(doc_tree: Path) -> None:
     # guide that still names it, which is what forces the two to be curated
     # together.
     text = _read(doc_tree, _PICKER)
-    entry = '    set: "9p2i",\n    seed: 3,\n'
+    entry = '    set: "9p2i",\n    seed: 19,\n'
     assert entry in text
     _write(doc_tree, _PICKER, text.replace(entry, '    set: "9p2i",\n    seed: 47,\n'))
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "names 9p2i seed 3 as an exhibit" in errors[0]
+    assert "names 9p2i seed 19 as an exhibit" in errors[0]
 
 
 def test_guide_with_too_few_exhibits_fails_loud(doc_tree: Path) -> None:
-    # A paragraph that lost its exhibits would otherwise pass vacuously.
+    # A paragraph that lost its exhibits would otherwise pass vacuously. The
+    # guide names three; two removed leave one, below the floor.
     _substitute(doc_tree, _READING_GUIDE, "**4p1i seed 11**", "the smallest table")
+    _substitute(doc_tree, _READING_GUIDE, "**9p2i seed 14**", "a quiet table")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "names 1 featured games, fewer than the 2" in errors[0]

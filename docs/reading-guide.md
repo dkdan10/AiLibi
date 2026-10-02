@@ -68,10 +68,11 @@ the guided tour can open is hand-picked, not scored, and spoiler-free; the
 order is measured, and leads with the evidence the tour opens on — a first
 meeting that ejects a player a reported vent sighting names.
 
-**Results & cases** shows each set's figures; no curated case is published for
-the 9-player set yet. Start from the featured games: **9p2i seed 3** has four
-meetings and twenty-three spoken turns, and **4p1i seed 11** is a short
-comparison: one meeting, three turns, no flags.
+**Results & cases** shows each set's figures, and source-bound cases from the
+first 9-player featured game. Start from the featured games: **9p2i seed 19**
+has three meetings, nineteen spoken turns and a reported vent sighting;
+**9p2i seed 14** has one meeting, eight turns and no flags; **4p1i seed 11** is
+a short comparison: one meeting, three turns, no flags.
 
 Click an exact statement, observation, or flag source to inspect it. Observation
 time and scene-frame time are labelled separately. Private memory requires the
