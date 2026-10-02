@@ -17,7 +17,6 @@ from api.schemas import (
     PublicResultsView,
     ReplayView,
     ReportProvenanceGroupView,
-    SawPlayerView,
     SawVentObservationView,
 )
 from orchestrator.recording_fingerprint import (
@@ -32,63 +31,66 @@ from orchestrator.replay import (
     read_all_entries,
 )
 
-_SOURCE_ROOT = (
-    "https://github.com/dkdan10/AiLibi/blob/"
-    "9bae2b03032cede6a180c0888fde3b4e47f9a5f1/replays/samples/9p2i/"
+# Each set's source link is rooted at a commit that holds exactly the bytes its
+# fingerprint certifies. The shown 9-player set's bytes landed in
+# 148fa211 (the promotion of candidate round 2); the 4-player set's replays are
+# unchanged since 9bae2b03, so its link, and the bundle bytes that carry it, do
+# not move.
+_REPOSITORY_BLOB = "https://github.com/dkdan10/AiLibi/blob/"
+_SOURCE_ROOT_9P2I = (
+    _REPOSITORY_BLOB + "148fa211a5851c288eeaf1a9591197f8ba13bdcc/replays/samples/9p2i/"
 )
-_SEED_0_SHA = "5e0b8421b960cdf7dc5eddc516281197656fa9a7d2e9f7007155d997850f9f7f"
-_SEED_23_SHA = "35ccb2420b411d81bfa490d998dd973d33c168baee2f07982e11c1f53a7e1bfc"
-_SEED_29_SHA = "06d8fb4c816ed80bfe0fa060daa4c149fc0142544bdf148cb39e2f77f6a54668"
+_SOURCE_ROOT_4P1I = (
+    _REPOSITORY_BLOB + "9bae2b03032cede6a180c0888fde3b4e47f9a5f1/replays/samples/4p1i/"
+)
+_SOURCE_ROOTS: dict[str, str] = {
+    "sha256:ebb629f67c36607e39733660db7e069729fff198adcf34c091a4d6252d796ae2": (
+        _SOURCE_ROOT_9P2I
+    ),
+    "sha256:2abab5c07eafb01c5efeef4d1234a77a6b57939a6923f3aee240349e0c0b1566": (
+        _SOURCE_ROOT_4P1I
+    ),
+}
+_SEED_19_SHA = "3c2f045f761eeb5bb5d02c8bfeeae9559cd7999b75937f25572e772949b31e64"
 MAX_PUBLIC_RESULTS_BYTES = 50 * 1024
 
 
 def _curated_cases() -> tuple[PublicCaseView, ...]:
-    """Editorial examples; source identity and semantic checks qualify publication."""
+    """Editorial examples; source identity and semantic checks qualify publication.
+
+    Both sit on the featured strip's 9-player head, so the demo bundle, which
+    bakes only featured games, carries them.
+    """
     return (
         PublicCaseView(
             case_id="witnessed-vent",
             title="A sighting the table can check",
-            setup="An emergency meeting follows a reported vent sighting. Follow the witness's observation into the ballots.",
-            explanation="p-5's observation records p-6 venting in Engineering at tick 8. The meeting carries role proof and ejects p-6. This is a supported use of a certified observation; it does not demonstrate general social deduction.",
+            setup="A body report opens the meeting, and another player then describes seeing someone use a vent. Follow that observation into the ballots.",
+            explanation="p-1's observation records p-6 venting in Engineering at tick 12, and p-1's ballot cites it. Four other voters cite p-1's turn and vote for p-6. The meeting carries role proof and ejects p-6. This is a supported use of a certified observation; it does not demonstrate general social deduction.",
             classification="supported",
-            game_id="headless-seed-23",
-            meeting_id="headless-seed-23:meeting-0",
-            meeting_tick=10,
-            observer_id="p-5",
-            turn_id="headless-seed-23:meeting-0:turn-0",
-            observation_id="p-5:8:1",
-            source_sha256=_SEED_23_SHA,
-            source_url=_SOURCE_ROOT + "replay-seed-23.jsonl",
-        ),
-        PublicCaseView(
-            case_id="disputed-route",
-            title="Follow an accusation across the map",
-            setup="Two players' sightings dispute a third player's stated route. Compare the sightings with the voters' own cited observations and the recorded moves.",
-            explanation="Five voters eject crewmate p-1, citing the turn where p-1 gives that route. p-9 and p-7 each placed p-1 in Labs at tick 6, where the route says Medbay. Both then cite their own observation of p-1 moving from Labs to Medbay at tick 6, and the replay has p-1 in Medbay at that moment. The statements do conflict, but the recorded moves support p-1's route, not the sightings. A citation can resolve and still fail to support an accusation.",
-            classification="unsupported",
-            game_id="headless-seed-29",
-            meeting_id="headless-seed-29:meeting-1",
-            meeting_tick=9,
-            observer_id="p-9",
-            turn_id="headless-seed-29:meeting-1:turn-2",
-            observation_id="p-9:6:2",
-            source_sha256=_SEED_29_SHA,
-            source_url=_SOURCE_ROOT + "replay-seed-29.jsonl",
+            game_id="headless-seed-19",
+            meeting_id="headless-seed-19:meeting-0",
+            meeting_tick=12,
+            observer_id="p-1",
+            turn_id="headless-seed-19:meeting-0:turn-2",
+            observation_id="p-1:12:1",
+            source_sha256=_SEED_19_SHA,
+            source_url=_SOURCE_ROOT_9P2I + "replay-seed-19.jsonl",
         ),
         PublicCaseView(
             case_id="weak-evidence",
             title="When accounts do not settle the question",
-            setup="A body reporter is accused, and weak flags question where two other players stood. Read the weak flags, the replies, and how the table handles uncertainty.",
-            explanation="Six speakers accuse the reporter, crewmate p-1, but no flag names p-1. The three flags are weak signals about p-5 and p-7, all resting on p-4's sightings, and none is role proof. Five voters choose to skip and two vote for p-1, so no one is ejected. Withholding a conviction is defensible on this evidence; this example does not establish that skipping was the optimal game strategy.",
+            setup="A body reporter is accused, and the meeting raises no flag at all. Read the accusations, the reporter's reply, and how the table handles uncertainty.",
+            explanation="Four speakers accuse the reporter, crewmate p-1, and no flag names anyone. p-1 replies with an account of its own route. Four voters skip, each saying it held nothing, and one votes for p-1, so no one is ejected. Withholding a conviction is defensible on this evidence; this example does not establish that skipping was the optimal game strategy.",
             classification="unresolved",
-            game_id="headless-seed-0",
-            meeting_id="headless-seed-0:meeting-1",
-            meeting_tick=17,
-            observer_id="p-4",
-            turn_id="headless-seed-0:meeting-1:turn-3",
+            game_id="headless-seed-19",
+            meeting_id="headless-seed-19:meeting-1",
+            meeting_tick=31,
+            observer_id="p-1",
+            turn_id="headless-seed-19:meeting-1:turn-5",
             observation_id=None,
-            source_sha256=_SEED_0_SHA,
-            source_url=_SOURCE_ROOT + "replay-seed-0.jsonl",
+            source_sha256=_SEED_19_SHA,
+            source_url=_SOURCE_ROOT_9P2I + "replay-seed-19.jsonl",
         ),
     )
 
@@ -116,212 +118,108 @@ def _check_case(case: PublicCaseView, replay: ReplayView, loader: ReplayLoader) 
             None,
         )
 
-    def room_at(agent_id: str, tick: int) -> str | None:
-        return next(
-            (
-                state.room_id
-                for frame in replay.ticks
-                if frame.tick == tick
-                for state in frame.agent_states
-                if state.agent_id == agent_id
-            ),
-            None,
-        )
-
     if case.classification == "supported":
-        # An emergency meeting the witness opens with the vent sighting, and the
-        # witness's ballot carries the observation behind it.
+        witness, venter = "p-1", "p-6"
+        # A body report opens the meeting, and another player's later turn
+        # describes the vent sighting.
         if not (
-            meeting.trigger_kind == "emergency"
-            and meeting.triggered_by == case.observer_id == case_turn.speaker == "p-5"
-            and case_turn.turn_kind == "opening"
+            meeting.trigger_kind == "body"
+            and meeting.triggered_by != witness
+            and case.observer_id == case_turn.speaker == witness
+            and case_turn.turn_kind != "opening"
             and any(
                 isinstance(o, SawVentObservationView)
-                and (o.subject, o.room, o.tick) == ("p-6", "ENGINEERING", 8)
+                and (o.subject, o.room, o.tick) == (venter, "ENGINEERING", 12)
                 for o in case_turn.observations
             )
-            and any(
-                b.voter == case.observer_id
-                and b.target == "p-6"
-                and b.primary_reason_observation_id == case.observation_id
-                for b in meeting.ballots
-            )
         ):
             raise stale
-        # Role proof in the meeting, and the ejection it names.
-        if not (
-            meeting.ejected_player_id == "p-6"
-            and roles["p-6"] == "IMPOSTOR"
-            and any(
-                c.category == "role_proof" and "p-6" in c.subjects
-                for c in meeting.contradictions
-            )
+        # The witness's ballot cites that observation, which resolves in the
+        # witness's own memory to the vent use it describes.
+        if not any(
+            b.voter == witness
+            and b.target == venter
+            and b.primary_reason_observation_id == case.observation_id
+            for b in meeting.ballots
         ):
             raise stale
-        observation = cited(case.observer_id, case.observation_id)
+        observation = cited(witness, case.observation_id)
         if observation is None or (
             observation.kind,
             observation.subject_id,
             observation.room,
             observation.observation_tick,
             observation.scene_tick,
-        ) != ("saw_vent", "p-6", "ENGINEERING", 8, 7):
+        ) != ("saw_vent", venter, "ENGINEERING", 12, 11):
             raise stale
-    elif case.classification == "unsupported":
-        accused = "p-1"
-        # The case turn is the accused's own route, which says Medbay at tick 6.
-        route = next(
-            (
-                c
-                for c in case_turn.claims
-                if isinstance(c, AlibiClaimView) and c.subject == accused
-            ),
-            None,
-        )
+        # Four other voters cite the witness's turn and vote for the venter.
         if (
-            case_turn.speaker != accused
-            or route is None
-            or route.route is None
-            or not any(
-                leg.room == "MEDBAY" and leg.from_tick <= 6 <= leg.to_tick
-                for leg in route.route
+            sum(
+                b.voter != witness
+                and b.target == venter
+                and b.primary_reason_id == case.turn_id
+                for b in meeting.ballots
             )
+            != 4
         ):
             raise stale
-        # Five voters eject crewmate p-1, each citing that turn.
+        # Role proof in the meeting, and the ejection it names.
         if not (
-            meeting.ejected_player_id == accused
-            and roles[accused] == "CREWMATE"
-            and sum(b.target == accused for b in meeting.ballots) == 5
-            and all(
-                b.primary_reason_id == case.turn_id
-                for b in meeting.ballots
-                if b.target == accused
+            meeting.ejected_player_id == venter
+            and roles[venter] == "IMPOSTOR"
+            and any(
+                c.category == "role_proof" and venter in c.subjects
+                for c in meeting.contradictions
             )
         ):
             raise stale
-        # Exactly two flags, each pairing that route with a different witness's
-        # sighting that places p-1 in Labs at tick 6.
-        route_id = f"turn:{case.turn_id}:claim:{case_turn.claims.index(route)}"
-        witnesses: set[str] = set()
-        if len(meeting.contradictions) != 2:
-            raise stale
-        for flag in meeting.contradictions:
-            ends = {flag.event_a_id, flag.event_b_id}
-            if not (
-                flag.kind == "alibi_vs_physical"
-                and flag.category == "cross_statement"
-                and flag.subjects == (accused,)
-                and route_id in ends
-                and len(ends) == 2
-            ):
-                raise stale
-            (sighting_id,) = ends - {route_id}
-            sighting_turn_id, _, index = sighting_id.removeprefix("turn:").rpartition(
-                ":obs:"
-            )
-            sighting_turn = turns.get(sighting_turn_id)
-            if not (
-                sighting_turn is not None
-                and index.isdigit()
-                and int(index) < len(sighting_turn.observations)
-            ):
-                raise stale
-            sighting = sighting_turn.observations[int(index)]
-            if not (
-                isinstance(sighting, SawPlayerView)
-                and (sighting.room, sighting.tick) == ("LABS", 6)
-                and accused in sighting.co_present
-            ):
-                raise stale
-            witnesses.add(sighting_turn.speaker)
-        if witnesses != {"p-9", "p-7"}:
-            raise stale
-        # Both witnesses vote for p-1 citing their own record of p-1 moving from
-        # Labs to Medbay at tick 6, and the replay has p-1 in Medbay at that scene.
-        if (case.observer_id, case.observation_id) != ("p-9", "p-9:6:2"):
-            raise stale
-        for voter, observation_id in (("p-9", "p-9:6:2"), ("p-7", "p-7:6:2")):
-            if not any(
-                b.voter == voter
-                and b.target == accused
-                and b.primary_reason_observation_id == observation_id
-                for b in meeting.ballots
-            ):
-                raise stale
-            move = cited(voter, observation_id)
-            if move is None or move.scene_tick is None:
-                raise stale
-            if (
-                move.kind,
-                move.subject_id,
-                move.from_room,
-                move.to_room,
-                move.observation_tick,
-            ) != ("saw_player_move", accused, "LABS", "MEDBAY", 6):
-                raise stale
-            if (
-                room_at(accused, move.scene_tick - 1),
-                room_at(accused, move.scene_tick),
-            ) != ("LABS", "MEDBAY"):
-                raise stale
     else:
         reporter = "p-1"
-        # A body reporter whom six other speakers accuse, with a reply on record.
-        accusers = {
-            t.speaker
-            for t in meeting.turns
-            for c in t.claims
-            if isinstance(c, AccusationClaimView) and c.against == reporter
-        }
+        # A body reporter whom four other speakers accuse, in a meeting that
+        # raises no flag.
+        ordered = sorted(meeting.turns, key=lambda t: t.turn_index)
+        accusers = [
+            t
+            for t in ordered
+            if t.speaker != reporter
+            and any(
+                isinstance(c, AccusationClaimView) and c.against == reporter
+                for c in t.claims
+            )
+        ]
         if not (
             meeting.trigger_kind == "body"
             and meeting.triggered_by == reporter
             and roles[reporter] == "CREWMATE"
-            and len(accusers) == 6
-            and reporter not in accusers
-            and any(t.turn_kind == "reply" for t in meeting.turns)
+            and len({t.speaker for t in accusers}) == 4
+            and not meeting.contradictions
         ):
             raise stale
-        # Three weak alibi-versus-sighting flags about p-5 and p-7 only, each
-        # resting on one of the case speaker's sightings of its subject.
-        flags = meeting.contradictions
+        # The reporter replies after the first accusation with an account of
+        # its own route.
         if not (
-            case_turn.speaker == case.observer_id == "p-4"
-            and len(flags) == 3
-            and {s for c in flags for s in c.subjects} == {"p-5", "p-7"}
-            and all(
-                c.kind == "alibi_vs_sighting" and c.category == "weak_signal"
-                for c in flags
+            case.observer_id == case_turn.speaker == reporter
+            and case_turn.turn_kind == "reply"
+            and case_turn.turn_index > accusers[0].turn_index
+            and any(
+                isinstance(c, AlibiClaimView)
+                and c.subject == reporter
+                and c.route is not None
+                and len(c.route) > 0
+                for c in case_turn.claims
             )
         ):
             raise stale
-        for flag in flags:
-            prefix = f"turn:{case.turn_id}:obs:"
-            indexes = [
-                end.removeprefix(prefix)
-                for end in (flag.event_a_id, flag.event_b_id)
-                if end.startswith(prefix)
-            ]
-            if not (
-                len(indexes) == 1
-                and indexes[0].isdigit()
-                and int(indexes[0]) < len(case_turn.observations)
-            ):
-                raise stale
-            sighting = case_turn.observations[int(indexes[0])]
-            if not (
-                isinstance(sighting, SawPlayerView)
-                and (sighting.subject,) == flag.subjects
-            ):
-                raise stale
-        # Five voluntary skips and two votes for the reporter: no ejection.
+        # Four voluntary skips, each labelled as holding nothing, and one vote
+        # for the reporter: no ejection.
+        skips = [b for b in meeting.ballots if b.target == "SKIP"]
         if not (
             meeting.outcome == "SKIPPED"
             and meeting.ejected_player_id is None
-            and len(meeting.ballots) == 7
-            and sum(b.target == "SKIP" for b in meeting.ballots) == 5
-            and sum(b.target == reporter for b in meeting.ballots) == 2
+            and len(meeting.ballots) == 5
+            and len(skips) == 4
+            and all(b.grounding_label == "none_held" for b in skips)
+            and sum(b.target == reporter for b in meeting.ballots) == 1
             and not any(b.rewrite_reasons for b in meeting.ballots)
         ):
             raise stale
@@ -353,17 +251,8 @@ def _recording_dates(directory: Path, seeds: set[int]) -> tuple[str, ...]:
 
 
 def _source_url(fingerprint: str) -> str | None:
-    if (
-        fingerprint
-        == "sha256:cde794abe57af44da0fd3e16652435b7b1af88aaf7310d495cf3108ae80cd09f"
-    ):
-        return _SOURCE_ROOT
-    if (
-        fingerprint
-        == "sha256:2abab5c07eafb01c5efeef4d1234a77a6b57939a6923f3aee240349e0c0b1566"
-    ):
-        return _SOURCE_ROOT.replace("9p2i/", "4p1i/")
-    return None
+    """The pinned source for a set whose bytes match a published fingerprint."""
+    return _SOURCE_ROOTS.get(fingerprint)
 
 
 def build_public_results(loader: ReplayLoader) -> PublicResultsView:
