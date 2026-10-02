@@ -6,7 +6,7 @@
 // forward-accumulated `report_body` set. `retiredAccumulateRule` below is the
 // NEGATIVE CONTROL: a derivation that accumulates `kill` events instead of
 // reading the served rows. Both run the same census on both committed sample
-// sets, and the control has to fail it (0 phantom frames vs 659 of 1,208 on
+// sets, and the control has to fail it (0 phantom frames vs 1,365 of 2,039 on
 // `9p2i`) — a zero-phantom assertion nothing can fail would be prose, since the
 // shipped rule satisfies it by construction.
 //
@@ -447,7 +447,7 @@ describe("the Omniscient body layer over the committed served payloads", () => {
   it("9p2i: reads engine truth on every frame", () => {
     expect(census(set("9p2i").games, bodyStatesByTick)).toEqual({
       games: 50,
-      frames: 1208, // was 1289
+      frames: 2039, // was 1208 on the baseline-9 bytes, before the promotion
       phantomFrames: 0,
       missingFrames: 0,
       phantomBodies: 0,
@@ -455,33 +455,35 @@ describe("the Omniscient body layer over the committed served payloads", () => {
       roomCountMismatchFrames: 0,
       capOverflowFrames: 0,
       // One frame per report_body event, each on the report frame itself.
-      discoveredFrames: 136, // was 141
+      discoveredFrames: 116, // was 136
       discoveredAfterReportFrame: 0,
       attributionMismatches: 0,
     });
-    expect(reportBodyEvents(set("9p2i").games)).toBe(136); // was 141
+    expect(reportBodyEvents(set("9p2i").games)).toBe(116); // was 136
   });
 
   it("9p2i: the retired accumulate rule fails the same walk", () => {
     expect(census(set("9p2i").games, retiredAccumulateRule)).toEqual({
       games: 50,
-      frames: 1208, // was 1289
-      // Over half the frames painted a corpse the engine had consumed.
-      phantomFrames: 659, // was 740
+      frames: 2039, // was 1208
+      // Two frames in three painted a corpse the engine had consumed.
+      phantomFrames: 1365, // was 659
       missingFrames: 0,
-      phantomBodies: 1291, // was 1512
-      gamesWithPhantom: 48,
+      phantomBodies: 3389, // was 1291
+      gamesWithPhantom: 50, // was 48
       // Every phantom frame also inflates that room's body count …
-      roomCountMismatchFrames: 659, // was 740
-      // … and on one of them the phantom pile crosses BODY_CAP, firing a
-      // spurious "✕ ×N" collapse marker the served bodies never call for (7
-      // such frames on the baseline-7 bytes, none on baseline 8).
-      capOverflowFrames: 1, // was 0
-      discoveredFrames: 709, // was 790
-      // Exactly the phantom count: every phantom IS a consumed corpse, so every
-      // one of them still wears the "freshly reported" kill ring on a frame long
-      // after its report. The shipped rule reads 0 here.
-      discoveredAfterReportFrame: 1291, // was 1512
+      roomCountMismatchFrames: 1365, // was 659
+      // … and on the baseline-9 bytes one phantom pile crossed BODY_CAP, firing
+      // a spurious "✕ ×N" collapse marker the served bodies never call for (7
+      // such frames on the baseline-7 bytes, none on baseline 8 or here).
+      capOverflowFrames: 0, // was 1
+      discoveredFrames: 1415, // was 709
+      // A phantom that was reported still wears the "freshly reported" kill
+      // ring on a frame long after its report. On the baseline-9 bytes that was
+      // every phantom (1,291 of 1,291); the promoted set's meeting reset also
+      // clears corpses nobody reported, so here it is 2,182 of the 3,389. The
+      // shipped rule reads 0.
+      discoveredAfterReportFrame: 2182, // was 1291
       attributionMismatches: 0,
     });
   });
@@ -517,8 +519,9 @@ describe("the Omniscient body layer over the committed served payloads", () => {
     // pin: a floor the engine has emptied that the retired rule still paints,
     // and a pile the retired rule inflates around a single real corpse. The
     // coordinates move with every re-record — the first survived the baseline-7
-    // recording, the second re-anchored from seed 2 tick 29 to seed 6 tick 39 —
-    // so the census above is what proves the class, and these two draw it.
+    // recording and the promotion, the second re-anchored from seed 2 tick 29 to
+    // seed 6 tick 39, then to seed 0 tick 38 on the promoted set — so the census
+    // above is what proves the class, and these two draw it.
 
     // "the engine has nothing on the floor, the map draws p-2."
     const empty = victimsAt(set("9p2i").games, "headless-seed-0", 18);
@@ -527,10 +530,10 @@ describe("the Omniscient body layer over the committed served payloads", () => {
     expect(empty.retired).toEqual(["p-2"]);
 
     // "FOUR corpses drawn while the engine state has one."
-    const pile = victimsAt(set("9p2i").games, "headless-seed-6", 39);
-    expect(pile.served).toEqual(["p-4"]);
-    expect(pile.shipped).toEqual(["p-4"]);
-    expect(pile.retired).toEqual(["p-2", "p-3", "p-4", "p-5"]);
+    const pile = victimsAt(set("9p2i").games, "headless-seed-0", 38);
+    expect(pile.served).toEqual(["p-3"]);
+    expect(pile.shipped).toEqual(["p-3"]);
+    expect(pile.retired).toEqual(["p-1", "p-2", "p-3", "p-9"]);
   });
 });
 

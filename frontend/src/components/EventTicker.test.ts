@@ -100,7 +100,7 @@ function kill(tick: number, killer = "p-3", victim = "p-5"): TickEventView {
 
 // The ENTER event's `to_room_id` EQUALS its `from_room_id` — this is the real
 // byte shape, verified against every traversal in the committed 9p2i sets
-// (e.g. seed 2: `t9 enter from=STORAGE to=STORAGE`, `t10 exit from=STORAGE
+// (e.g. seed 0: `t8 enter from=STORAGE to=STORAGE`, `t11 exit from=STORAGE
 // to=ENGINEERING`). The destination is not resolved at dive time. A fixture that
 // put the destination on the enter event would be fiction, and it would hide
 // exactly the defect these tests exist to prevent: a route rendered off the
@@ -299,7 +299,7 @@ describe("kills through the As-agent projection", () => {
   });
 
   it("REJECTS a LIVING agent whose `visibility` is null — the invariant forbids it", () => {
-    // Verified against the corpus before tightening: across all 18,649
+    // Verified against the corpus before tightening: across all 20,783
     // agent-frames in the committed 9p2i + 4p1i sets, `alive && visibility ===
     // null` occurs zero times (and `!alive && visibility !== null` likewise), so
     // this can only ever be a malformed payload.
@@ -529,7 +529,7 @@ describe("public beats", () => {
     // The loader deliberately reopens the reported body in `visible_bodies` for
     // co-located agents on the report tick, so without accounting the victim the
     // feed reads "p-1 reported p-5's body" then "Found p-5's body" on one frame.
-    // Real on committed bytes: 9p2i seed 1, tick 8, for p-1 and p-6.
+    // Real on committed bytes: 9p2i seed 1, tick 10, for p-1.
     const reportTick: readonly TickView[] = [
       frame(START_TICK, [], [watcherState(visibility())]),
       frame(
@@ -727,12 +727,12 @@ describe("frame-bounding", () => {
     // The counterpart of the swap above, and the reason it is surgical rather
     // than a sort by kind: arrival order is the engine's deterministic emission
     // order, so it is chronological and re-ranking it destroys real information.
-    // This is the committed case — 9p2i seed 1 tick 7 emits p-6's vent EXIT
-    // before p-7's kill — which a kill-before-vent rank would flip, and the
+    // This mirrors the committed case — 9p2i seed 0 tick 27 emits p-6's vent
+    // EXIT before p-8's kill — which a kill-before-vent rank would flip, and the
     // reversed feed would then show the earlier vent above the later kill.
     const independent: readonly TickView[] = [
       frame(START_TICK, [], [watcherState(visibility())]),
-      frame(7, [ventExit(7, "p-6"), kill(7, "p-7", "p-2")], [watcherState(visibility())]),
+      frame(7, [ventExit(7, "p-6"), kill(7, "p-8", "p-2")], [watcherState(visibility())]),
     ];
     const kinds = projectTicker(independent, NO_MEETINGS, 1, OMNISCIENT).map((e) => e.kind);
     expect(kinds).toEqual(["vent", "kill"]);
