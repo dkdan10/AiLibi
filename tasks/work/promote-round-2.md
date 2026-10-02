@@ -461,8 +461,9 @@ transcript or seed-band prefix was printed. Scratch work stayed under the sessio
 **Commits**, in order: `148fa211` the promoted bytes; `7900fdc8` the era registry; `e75780b7` the era-aware
 instruments; `429d1b4b` the recorder rule; `2f2160d1` the viewer holding edit and set-neutral copy; `d29fa175`
 the viewer digests and byte citations; `c7abd2a5` the Python re-pin sweep; `0ff6713f` the front door and the
-doc facts; `b6f75091` the promotion record; then this card's Results commit. Intermediate commits were not
-gated one by one; the head is.
+doc facts; `b6f75091` the promotion record; `f3392317` this card's Results; `091bd2a5` the lint, format and
+typing findings `check.sh` raised at `f3392317`; then the commit recording that run. Intermediate commits were
+not gated one by one; the head is.
 
 **Sections relied on.** This card; the decision memo (`tasks/decision-2026-09-24-stage-b-wave.md`) sections 1
 (items 2(b), 5, 7, 8) and 7; `tasks/investigations-2026-09-24/partial_record.md` section 5 (rows 9-20); the
@@ -682,10 +683,12 @@ the pass. One pass, as ruled; neither is reworked here.
 | `verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
 | the same at base (git-less archive) | 0: OK 47, ABSENT 11; the four extra ABSENT legs read the git index |
 | `pytest -m campaign` at base / at head | 336 passed / 337 passed (the new refusal case) |
-| `pytest -n auto` (full, before the last three fixes) | 1: 9,959 passed, 3 failed (an audit identifier in the candidates README, the `audits/` byte row, the parity leg it feeds); each fixed and its file re-run green; the full run is `check.sh`'s, below |
+| `pytest -n auto` (full, before the last three fixes) | 1: 9,959 passed, 3 failed (an audit identifier in the candidates README, the `audits/` byte row, the parity leg it feeds); each fixed and its file re-run green |
+| `pytest -n auto` (full, at `091bd2a5`'s tree) | 0: 9,962 passed, 20 skipped, 3 xfailed |
 | `npm run e2e` (local Playwright) | 0: 13 passed, 3 skipped (the media spec's intentional skips) |
 | bundle `build_demo_bundle.py --out` at base and head, `diff -rq` | `data/4p1i/`: same 24 files, 20 byte-identical, 4 differing only in `created_at` (each checkout's file mtime); `data/9p2i/`: four baked games (0, 2, 23, 29) and the rubric replaced by seed 3, summary re-derived; the JS assets and `index.html` rebuilt |
-| `bash scripts/check.sh` | once, at the pushed head; recorded in the PR body |
+| `bash scripts/check.sh` at `f3392317` | 1: stopped at `ruff check` (`Final` undefined in `tests/eval/test_gameplay_census.py`); its later static legs, run one by one, found the rest `091bd2a5` fixes |
+| `bash scripts/check.sh` at the pushed head | recorded in the PR body (this card cannot carry the run of the commit that writes it) |
 
 ### Decisions
 
