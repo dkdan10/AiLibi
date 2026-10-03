@@ -1034,7 +1034,7 @@ file nor `docs/media/README.md` is a bundle input. What goes live at the merge i
 | `pytest tests/scripts/test_verify_ml_evidence.py tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py tests/scripts/test_build_demo_bundle.py -n 6` | 0: 477 passed (459 at `374f217f`, plus the 18 new cases) |
 | `uv run pytest -m campaign` | 0: 337 passed |
 | `uv run ruff format --check`, `ruff check`, `mypy` over the test file | clean |
-| `bash scripts/check.sh`, once at this round's pushed head | recorded by the commit after this one |
+| `bash scripts/check.sh`, once at this round's pushed head `4d1147d9`, exit code read directly | 0: ruff and format clean (551 files); import contracts 4 kept; task docs valid (96 work cards); mypy clean over 522 files; 10,081 passed, 20 skipped, 3 xfailed (10,063 at `d49e0313`, plus the 18 new cases); vitest 26 files, 695 tests; frontend build ok. The replays status is empty after. The commit that records this row changes only this card |
 
 No frontend file changes this round, so the frontend suites and the e2e are not re-run; `check.sh` runs vitest and the
 build.
