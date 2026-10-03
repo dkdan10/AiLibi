@@ -17,7 +17,8 @@ that owns it, the date its sets were recorded and its declared config file, or
 none. ``tests/eval/test_eras.py`` holds the registry to the bytes: each set's
 games fold to one census era key, the sets of one era id share it, ids differ
 where keys differ, and every game of an era with a declared config recorded
-exactly that config.
+exactly that config. It also holds :data:`ERAS` to the eras the registry names
+(:func:`registered_eras`).
 
 The substrate ladder tip stays at baseline 9: no substrate lever moved, and
 baseline 10 is reserved for the full re-record that re-freezes the corpus.
@@ -84,7 +85,8 @@ STAGE_B_R2: Final[Era] = Era(
     declared_config="replays/samples/9p2i/experiment-config.json",
 )
 
-#: Every era a committed set belongs to, oldest first.
+#: Every era a committed set belongs to, oldest first. ``tests/eval/test_eras.py``
+#: holds it equal to :func:`registered_eras` of the registry below.
 ERAS: Final[tuple[Era, ...]] = (BASELINE_9, STAGE_B_R2)
 
 #: The era the substrate ladder tip stands at. A directory the registry does not
@@ -145,6 +147,24 @@ def sets_in(
     return tuple(entry.path for entry in registry if entry.era == era)
 
 
+def registered_eras(
+    registry: Sequence[CommittedSet] = COMMITTED_SETS,
+) -> tuple[Era, ...]:
+    """The distinct eras ``registry`` names, oldest first.
+
+    Ordered by recording date, eras of one date in first-appearance order. Two
+    different eras filed under one id raise: an id names one recorded era.
+    """
+
+    distinct: dict[str, Era] = {}
+    for entry in registry:
+        if distinct.setdefault(entry.era.id, entry.era) != entry.era:
+            raise ValueError(
+                f"the era registry files two different eras under the id {entry.era.id}"
+            )
+    return tuple(sorted(distinct.values(), key=lambda era: era.recorded_on))
+
+
 __all__ = [
     "BASELINE_9",
     "COMMITTED_SETS",
@@ -156,5 +176,6 @@ __all__ = [
     "committed_set",
     "era_groups",
     "era_of",
+    "registered_eras",
     "sets_in",
 ]

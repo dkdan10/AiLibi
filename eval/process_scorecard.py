@@ -1826,15 +1826,26 @@ def pool(
     the same way because it is carried as an exact sum of per-ballot shares plus
     the ballot count, not as a float mean.
 
-    Raises :class:`ValueError` when the sources ``registry`` names span two
-    eras: the scorecard never pools across a recorded boundary. A source the
-    registry does not name (a hand-built group) carries no era to check.
+    Raises :class:`ValueError` when the sources span two eras: the scorecard
+    never pools across a recorded boundary. Every source must be a set
+    ``registry`` places in an era, and each tally comes with its one source; a
+    source the registry cannot place, or a count of sources other than the
+    count of tallies, raises before anything is added.
     """
 
+    if len(sources) != len(tallies):
+        raise ValueError(
+            f"{label}: {len(tallies)} tallies with {len(sources)} sources; each "
+            "pooled tally names the one set it came from"
+        )
     registered = {entry.path for entry in registry}
-    eras = era_groups(
-        [source for source in sources if source in registered], registry=registry
-    )
+    unplaced = [source for source in sources if source not in registered]
+    if unplaced:
+        raise ValueError(
+            f"{label}: the era registry places no {', '.join(unplaced)} in an era; "
+            "the scorecard pools only sets of one recorded era"
+        )
+    eras = era_groups(list(sources), registry=registry)
     if len(eras) > 1:
         raise ValueError(
             f"{label}: its sets span the "

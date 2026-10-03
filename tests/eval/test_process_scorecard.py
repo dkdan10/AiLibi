@@ -22,6 +22,7 @@ import pytest
 from pydantic import ValidationError
 
 from engine.entities import Role
+from eval.eras import BASELINE_9, CommittedSet
 from eval.alibi_fabrication import (
     ALIBI_CONTRADICTION_KINDS,
     compute_alibi_fabrication_rate,
@@ -1410,7 +1411,9 @@ def test_pooling_adds_counts_and_recomputes_every_rate() -> None:
 
     left = ProcessTally(ballots=1, eject_ballots=1, grounded_eject=1)
     right = ProcessTally(ballots=3, eject_ballots=3, grounded_eject=0)
-    pooled = pool([left, right], label="pooled", sources=("a", "b"))
+    pooled = pool(
+        [left, right], label="pooled", sources=("a", "b"), registry=_SCRATCH_REGISTRY
+    )
     assert (pooled.grounded_eject.numerator, pooled.grounded_eject.denominator) == (
         1,
         4,
@@ -1418,12 +1421,19 @@ def test_pooling_adds_counts_and_recomputes_every_rate() -> None:
     assert pooled.grounded_eject.rate == 0.25
 
 
+#: Two hand-built sources the arithmetic tests pool, placed in one era.
+_SCRATCH_REGISTRY = (
+    CommittedSet("a", BASELINE_9),
+    CommittedSet("b", BASELINE_9),
+)
+
+
 def test_pooling_two_eras_is_refused_and_one_era_pools() -> None:
     """Planted: the promoted set pooled with a baseline-9 set raises, naming both.
 
     The era registry decides: two baseline-9 sets pool, the promoted set beside
-    either one does not, and a hand-built group the registry does not name
-    carries no era to check.
+    either one does not, and a source the registry cannot place in an era is
+    refused by name rather than pooled with no era to check.
     """
 
     left = ProcessTally(ballots=1, eject_ballots=1, grounded_eject=1)
@@ -1444,10 +1454,49 @@ def test_pooling_two_eras_is_refused_and_one_era_pools() -> None:
         sources=("replays/samples/4p1i", "replays/ml_corpus/9p2i"),
     )
     assert within.grounded_eject.denominator == 4
-    unregistered = pool(
-        [left, right], label="hand-built", sources=("replays/samples/9p2i", "b")
-    )
-    assert unregistered.sources == ("replays/samples/9p2i", "b")
+    # Before 2026-10-02 an unregistered source passed through unchecked: this
+    # pool returned with sources ("replays/samples/9p2i", "b"). It is refused
+    # now, by the message that names the source the registry cannot place.
+    with pytest.raises(
+        ValueError,
+        match="^hand-built: the era registry places no b in an era; the scorecard "
+        "pools only sets of one recorded era$",
+    ):
+        pool([left, right], label="hand-built", sources=("replays/samples/9p2i", "b"))
+
+
+def test_a_candidate_pooled_with_a_baseline_9_set_is_refused() -> None:
+    """Planted: candidate round 1's directory beside a baseline-9 set.
+
+    The registry names no candidate, so the candidate cannot be placed in an era
+    and the pool raises naming it, before any count is added.
+    """
+
+    tally = ProcessTally(ballots=1, eject_ballots=1, grounded_eject=1)
+    with pytest.raises(
+        ValueError,
+        match="^mixed: the era registry places no "
+        "replays/candidates/stage-b-r1/9p2i in an era; ",
+    ):
+        pool(
+            [tally, tally],
+            label="mixed",
+            sources=("replays/ml_corpus/9p2i", "replays/candidates/stage-b-r1/9p2i"),
+        )
+
+
+def test_sources_and_tallies_must_pair_one_to_one() -> None:
+    """Planted: two tallies pooled with no sources, and with one source too many."""
+
+    tally = ProcessTally(ballots=1, eject_ballots=1, grounded_eject=1)
+    with pytest.raises(
+        ValueError,
+        match="^none: 2 tallies with 0 sources; each pooled tally names the one "
+        "set it came from$",
+    ):
+        pool([tally, tally], label="none", sources=())
+    with pytest.raises(ValueError, match="^extra: 1 tallies with 2 sources; "):
+        pool([tally], label="extra", sources=("a", "b"), registry=_SCRATCH_REGISTRY)
 
 
 def test_pooling_the_chance_baseline_is_exact_and_order_free() -> None:
@@ -1461,8 +1510,12 @@ def test_pooling_the_chance_baseline_is_exact_and_order_free() -> None:
 
     left = ProcessTally(chance_share_sum=Fraction(1, 3), chance_ballots=1, followers=1)
     right = ProcessTally(chance_share_sum=Fraction(1, 2), chance_ballots=1, followers=1)
-    forwards = pool([left, right], label="x", sources=()).argmax_independence
-    backwards = pool([right, left], label="x", sources=()).argmax_independence
+    forwards = pool(
+        [left, right], label="x", sources=("a", "b"), registry=_SCRATCH_REGISTRY
+    ).argmax_independence
+    backwards = pool(
+        [right, left], label="x", sources=("b", "a"), registry=_SCRATCH_REGISTRY
+    ).argmax_independence
     assert forwards.chance_baseline == backwards.chance_baseline
     assert forwards.chance_baseline == round(float(Fraction(5, 12)), 6)
 
