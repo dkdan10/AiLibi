@@ -441,7 +441,7 @@ of the session scratchpad.
 **Commits**, in order: `acdaddb6` the front-door words and the hero caption template; `52c4b1f3` the public results
 wording; `c91e604b` the media re-capture; `a74045b3` the recorder tests off the shared tree; `e5403bb0` the M14
 numerator pin; `dd1a4b17` the deployment figure; `cd77b998` the two dated notes; `d392b108` the probes the first pass
-left green; then the registry rows with this Results, and the commit recording the `check.sh` run.
+left green; `e35b052f` the registry rows with this Results; then the commit recording the `check.sh` run.
 
 **Sections relied on.** This card; `AGENTS.md`; `docs/workflow.md` (card format, reopen pattern); the Stage B
 decision memo (`tasks/decision-2026-09-24-stage-b-wave.md`) sections 0, 1, 3.1-3.3 and 7; the diagnosis
@@ -689,7 +689,7 @@ restored from a copy with its sha256 checked.
 | `uv run pytest -m campaign` | 0: 337 passed, as at `59bbd1be` |
 | bundle `build_demo_bundle.py --out` at `5877adb4` and at `52c4b1f3`, one checkout, `diff -rq` | `data/` identical; only the seven hashed JS assets and `index.html` differ |
 | `git diff --numstat 59bbd1be` over the two merged cards | 55 0; 27 0 |
-| `bash scripts/check.sh`, once at the pushed head | recorded in the next commit |
+| `bash scripts/check.sh`, once at the pushed head `e35b052f`, exit code read directly | 0: 10,061 passed, 20 skipped, 3 xfailed; import contracts 4 kept; mypy clean over 522 files; vitest 26 files, 695 tests; frontend build ok. The commit that records this row changes only this card |
 
 ### Decisions
 
