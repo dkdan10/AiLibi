@@ -877,7 +877,7 @@ route.
 | `uv run pytest -m campaign` | 0: 337 passed |
 | `npm run lint`, `tsc:check`, `test` (frontend) | 0; 0; 0: 26 files, 695 tests |
 | `CI=1 npm run e2e -- --workers=1` (local, serial) | 0: 14 passed, 3 skipped (the media spec's, without its capture switch) |
-| `bash scripts/check.sh`, once at the pushed head | recorded in the commit after this one |
+| `bash scripts/check.sh`, once at the pushed head `d49e0313`, exit code read directly | 0: ruff and format clean; import contracts 4 kept; mypy clean over 522 files; 10,063 passed, 20 skipped, 3 xfailed; vitest 26 files, 695 tests; frontend build ok. The `replays/` inventory around the run: 386 entries, 0 changed. The commit that records this row changes only this card |
 
 **Decisions.**
 
