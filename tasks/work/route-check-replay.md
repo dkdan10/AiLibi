@@ -118,6 +118,66 @@ census `kills_seen_by_crew`, 3, 4 and 14).
 
 ## Acceptance
 
+- [x] Review correction, round 2: a public regroup's room is read from the memory wherever the regroup gathers the
+  table. `test_a_regroup_off_the_hub_takes_its_room_from_the_memory` plants Labs at 10 and a regroup to Admin at
+  11: the regroup line's ends read Labs then Admin, and it holds a charged placement in Admin at 11 and not one in
+  the Cafeteria. `test_a_regroup_from_the_hub_to_another_room_reaches_its_charge` plants the Cafeteria at 10 and a
+  regroup to Admin at 11, where only the memory's room makes the line two-roomed, and requires (b) and
+  (b-snapshot) to reach the ejection and its charge through the production case reader. Probe C1 (the room read
+  replaced with the literal CAFETERIA) turns both red.
+- [x] Review correction, round 2: (c)'s unreached reason tests kinds against (c)'s own inputs.
+  `test_a_gated_sighting_against_an_alibi_stay_is_given_the_relevance_gate` plants a button meeting where p-1's
+  own turn places p-5 in the Cafeteria at tick 1 (the spawn window the relevance gate drops) and p-5 states an
+  alibi in Admin from 3 to 5: (c) does not reach, its reason is the relevance gate over both pairs, and (a)'s is
+  kind. Probe S1 ((c)'s step read against (a)'s kinds) turns it red.
+- [x] Review correction, round 2: the eleven raises the review named carry their real arguments, held by
+  whole-message matches with values no likely constant matches: the malformed request's text; git's own detail
+  (`fatal: Needed a single revision`) in the unknown-commit and unresolved-path raises; the path and sha of the
+  unresolved-path and not-a-directory raises; the label and path of the no-config raise under r2 and under r1
+  (`test_a_declared_r1_config_that_is_no_config_names_r1`); the declared path of the settings raise under r2 and
+  under r1 (`test_r2s_tree_under_the_r1_label_names_r1s_config`); the sha, path and tree of the tree-mismatch raise
+  under r2 and r1; the unknown label; both ledger bounds' names; the walk's own assertion, compared with
+  `walk_replay_meetings`' raise on the same flipped copy; and the JSON and report paths of `--check`'s two
+  problems. Probes M13 to M28 turn them red.
+- [x] Review correction, round 2: the unknown-label guard of `recorded_sources` is held.
+  `test_an_unknown_recorded_label_is_refused_by_name` plants a JSON copy with one column labelled r3 and requires
+  `--check` to exit 1 with exactly "column 'r3' is not a known column"; neuter X4 (the guard off) turns it red
+  with the uncaught `ValueError` the review saw.
+- [x] Review correction, round 2: the run scans the JSON it would write.
+  `test_a_run_whose_json_would_carry_a_rationale_writes_nothing` patches `serialize` so a recorded rationale
+  reaches the JSON alone, and requires the run to exit 1 naming the scan and to write neither file. Neuter X5 (the
+  verifier's P9: the run scans the report only) turns it red.
+- [x] Review correction, round 2 (the integrity lens): the lab row's byte total after review round 1 is 7,192,265
+  bytes over 167 files, not 7,192,231; Decisions now states it with its command (`git ls-tree -r -l 01dc8a9f --
+  experiments/lab experiments/model_probe | awk '{n++; s+=$4} END {print n, s}'` prints `167 7192265`).
+- [x] Review correction, round 2 (the documentation lens): the same figure reproduces with that command at
+  `17aab62d` and `01dc8a9f`, beside `164 6591637` at `5877adb4` and `167 7189659` at `8b18aa53`; at `200e2a32`,
+  this round's code commit, it prints `167 7195798`. The row's 6.9 MB and 167 files hold at every one.
+- [x] Review correction, round 2 (Codex P2, valid): the census's tick is compared with the walk's. `read_game`
+  raises when a census meeting's tick differs from the walked meeting's entry tick;
+  `test_a_later_meeting_the_census_reads_differently_is_named[tick-1]` moves seed 1's third meeting by one tick
+  and requires exactly "r1 seed 1 meeting 2: the census and the walk read different meetings". Neuter X1 and probe
+  N1 turn it red. No committed count moved: the regenerated run walks all 386 meetings with the comparison on.
+- [x] Review correction, round 2 (Codex P2, valid): the report states each column's seeds and roster as its
+  recorded games hold them, never a fixed "seeds 0-49 at 9 players and 2 impostors". `seed_ranges` and
+  `column_roster` write `seeds` and `roster` into each JSON column, and the report's provenance table prints them;
+  a column whose games hold more than one roster raises. Tests: `test_seeds_are_stated_as_runs`,
+  `test_no_seed_at_all_raises`, `test_a_columns_roster_is_its_games_own`,
+  `test_a_columns_seeds_are_every_recorded_game_not_only_those_with_a_meeting`,
+  `test_a_run_states_its_columns_own_seeds_and_roster` (the one-game run reads seed 2, and its report holds no
+  0-49) and `test_the_report_states_the_seeds_and_roster_the_json_records`. Probes N3 to N5, B1, F1, F2, C2, S2, L1
+  to L3 and neuters X6 to X13 turn them red. The six-game checkpoint the review ran (`9725ece0`) now reads seeds
+  0-5 over 6 games.
+- [x] Review correction, round 2 (Codex P2 of the first review, valid, unanswered in round 1): `--check` refuses a
+  recorded sha that is not a commit's full sha. `test_a_recorded_sha_that_is_no_full_commit_sha_fails_check`
+  [HEAD, short] records the very commit the run read under `HEAD` and under a 12-character abbreviation, with its
+  tree unchanged, and requires exit 1 naming the value; the r1 tree-mismatch test does the same under r1. Neuter
+  X3 and probes N2, M29 and M30 turn them red.
+- [x] Review correction, round 2 (Codex P2 of the first review, valid, unanswered in round 1): the walk raises when
+  the manager asks for a recorded call other than exactly once, by the golden's own `consumed_exactly_once`.
+  `test_a_recorded_call_asked_for_other_than_once_raises` [a prompt recorded twice and asked once; recorded once
+  and asked twice] requires exactly "r1 seed 7 meeting 1: the walk did not ask for each recorded call exactly as
+  often as it was recorded"; neuter X2 and probe M31 turn it red. Every meeting of the three columns passes it.
 - [x] Review correction: a contradiction flag is a charge only when both of its events place the target.
   `test_a_flag_whose_second_event_places_only_another_player_is_no_charge` plants a flag naming the target whose
   second event places only another player: `charges_against` returns no charge and `read_meeting` counts 0.
@@ -446,14 +506,15 @@ re-measure reads as the card states.
 
 ### Acceptance, item by item
 
-Test file: `tests/experiments/test_route_check_replay.py`, 104 tests at delivery (117 after review round 1,
-below), `uv run pytest tests/experiments/test_route_check_replay.py -n 6` → 104 passed (exit 0). Each planted case below
+Test file: `tests/experiments/test_route_check_replay.py`, 104 tests at delivery (117 after review round 1 and
+139 after review round 2, below), `uv run pytest tests/experiments/test_route_check_replay.py -n 6` → 104 passed (exit 0). Each planted case below
 is a test that asserts the failure it plants, so a green run is the planted case failing as claimed.
 
 - **Columns with exact provenance.** Mechanism: `resolve_column` (`git rev-parse --verify COMMIT^{commit}`),
   `tree_at`, `materialize` (`git archive SHA -- PATH`), `declared_config` and `require_declared_settings` (the era
   registry's own comparison of canonical recorded settings); `--check` builds its columns from the JSON by
-  `recorded_sources`, which refuses a tree mismatch before anything is recomputed. Planted:
+  `recorded_sources`, which refuses an unknown label, a recorded sha that is not a commit's full sha (since review
+  round 2) and a tree mismatch before anything is recomputed. Planted:
   `test_r1s_tree_under_the_r2_label_is_refused` (exit 1, "column r2: seed 2 recorded settings that differ from the
   config its label declares"), `test_an_unknown_commit_is_refused` (exit 1, "commit '0123456789abcdef' does not
   resolve"), `test_a_tree_named_as_the_commit_is_refused`, `test_a_recorded_tree_id_that_is_not_the_shas_tree_fails_check`
@@ -463,9 +524,10 @@ is a test that asserts the failure it plants, so a green run is the planted case
   path that does not resolve, r2 bytes under the s9 label, a broken declared config, `--set` with `--check`, and a
   moved era config (`test_the_r2_config_is_read_from_the_era_registry`) are refused. The tests resolve the
   checkout's `HEAD` to its sha or build temporary repositories; none reads a column through a symbolic ref.
-- **A faithful walk, or none.** Mechanism: `walk_game` (a state hash the walk cannot reproduce, or a recorded
-  prompt it did not re-render, raises naming column, seed and meeting), `read_game` (the census's meetings must be
-  the walk's, one for one, by id, opener, ejection and trigger), and `require_faithful_rerender` (each voter's
+- **A faithful walk, or none.** Mechanism: `walk_game` (a state hash the walk cannot reproduce, a recorded
+  prompt it did not re-render, or, since review round 2, a recorded call the manager asked for other than exactly
+  once, raises naming column, seed and meeting), `read_game` (the census's meetings must be the walk's, one for
+  one, by id, tick (since review round 2), opener, ejection and trigger), and `require_faithful_rerender` (each voter's
   memory, re-rendered on a deep copy at the default budget with the pre-vote suspicion, must be the whole
   `<memory>` block of its recorded ballot; it held at every one of the 386 meetings of the full run). Planted:
   `test_a_flipped_byte_in_a_recorded_prompt_raises` (two seeds and labels), `test_a_state_hash_the_walk_cannot_reproduce_raises`,
@@ -527,7 +589,8 @@ is a test that asserts the failure it plants, so a green run is the planted case
   escapes it. `test_the_outputs_carry_no_recorded_text`, the planted
   `test_a_rationale_written_into_the_json_fails_the_scan` and `..._turn_text_...` (ASCII texts), the planted
   `test_a_recorded_text_the_json_escapes_fails_the_scan` (non-ASCII texts the JSON escapes), `test_a_run_holds_its_outputs_to_every_travel_row_it_read`
-  (a report carrying a travel row is refused), and `test_a_run_needs_no_network` (`--check` with
+  (a report carrying a travel row is refused), `test_a_run_whose_json_would_carry_a_rationale_writes_nothing` (since
+  review round 2: a JSON carrying a recorded rationale stops the run, which writes nothing), and `test_a_run_needs_no_network` (`--check` with
   `socket.connect` and `create_connection` refused: exit 0). No provider client is built; the walk's
   recorded-response stub answers every call.
 - **The artifacts, pinned.** `--check` reproduces both committed files (exit 0 above);
@@ -859,8 +922,10 @@ harness. First run: 31 red, 8 survivors; 5 survivors killed by planted tests and
 - **r2's declared config is read from the era registry at call time** (`declared_config_path`), so a moved era
   file moves the run (a planted case), rather than a copy frozen at import.
 - **The `docs/artifacts.md` row** also states the row's tracked size, 6.9 MB (7,189,659 bytes across 167 files at
-  delivery, 7,192,231 after review round 1; 6.3 MB was 6,591,637 bytes before), so the row stays true; the count
-  is what `verify_ml_evidence.py` holds.
+  delivery, `8b18aa53`; 7,192,265 after review round 1, `01dc8a9f`, corrected in review round 2 from a mistyped
+  7,192,231; 7,195,798 after review round 2's code commit, `200e2a32`; 6.3 MB was 6,591,637 bytes over 164 files
+  before, `5877adb4`), so the row stays true; the count is what `verify_ml_evidence.py` holds. Each figure is
+  `git ls-tree -r -l <commit> -- experiments/lab experiments/model_probe | awk '{n++; s+=$4} END {print n, s}'`.
 
 ### Verification
 
@@ -1053,6 +1118,171 @@ Deviations, round 1: the heading carries 2026-10-03, the day these corrections w
 2026-10-02). `npm ci` ran in `frontend/` so the gate's frontend legs could run; no frontend file changed. Record
 impact: none. No recording, prompt, template, detector, recorded byte or ML artifact moved; the JSON gains its
 labels block and nothing else, and the merge publishes nothing (the empty bundle diff above).
+
+### Review corrections, round 2 (2026-10-03)
+
+Review round 2 of PR 499 returned nine blocking findings, and two of the five Codex comments on the first review
+(at `8b18aa5`) had gone unanswered in round 1. Each is repaired here, and `## Acceptance` opens with one
+review-correction item per finding. Commits: `200e2a32` (the instrument, its regenerated JSON and report, and the
+planted cases), then the commit adding this subsection and the gate's. Files written:
+`experiments/lab/route_check_replay.py`, `experiments/lab/results-route-check-replay.json`,
+`experiments/lab/report-route-check-replay.md`, `tests/experiments/test_route_check_replay.py` and this card, all
+inside the Expected scope. `docs/artifacts.md` and `tasks/README.md` need no change: the row's 167 files and 6.9 MB
+hold at `200e2a32` (7,195,798 bytes), and the card's Status stays done.
+
+1. **A regroup room read as the canonical literal (C7).** `held_rooms` read the regroup's room from the memory,
+   but every planted regroup gathered the table in the Cafeteria, so the literal survived. `_sighting_memory` now
+   takes the regroup's room, and two planted cases put the regroup in Admin: Labs at 10 then Admin at 11 (the
+   line's ends and its charge follow the memory), and the Cafeteria at 10 then Admin at 11 (only the memory's room
+   makes the line two-roomed, so (b) and (b-snapshot) reach the ejection and its charge through `_read_case`).
+2. **(c)'s reason step read against (a)'s kinds (S14).** No planted case put an alibi stay at the end of a pair
+   (c) left unreached. The planted button meeting does: a sighting at tick 1, which the relevance gate drops, against
+   an alibi in Admin from 3 to 5; (c)'s reason is the relevance gate over both pairs, and (a)'s is kind.
+3. **Eleven message arguments set to constants.** Every test now matches the whole message, with values chosen
+   so that no likely constant matches, and two refusals gain r1 twins (a broken r1 config; r2's tree under the r1
+   label), so a label or path constant of r2 fails too. The walk's raise is compared with the assertion
+   `walk_replay_meetings` itself raises on the same flipped copy. No assertion was loosened: each earlier substring
+   is part of the whole message now required.
+4. **The unknown-label guard, untested.** Planted: a JSON copy with one column labelled r3 makes `--check` exit 1
+   with the named refusal; without the guard, `--check` stops on an uncaught `ValueError` from `run_columns`' sort,
+   and the test fails.
+5. **The run's scan of the JSON, untested through the run.** Every earlier JSON-leak case called `scan_outputs`
+   directly. Planted: `serialize` patched to carry a recorded rationale of r2 seed 2 into the JSON alone; the run
+   exits 1, prints "an output carries recorded text; nothing written", and writes neither file.
+6. and 7. **The round-1 byte total.** 7,192,231 was a typing slip: the sum at `17aab62d` and `01dc8a9f` is
+   7,192,265 (`git ls-tree -r -l 01dc8a9f -- experiments/lab experiments/model_probe | awk '{n++; s+=$4} END {print n, s}'`
+   prints `167 7192265`). Decisions carries the corrected figure, the command and this round's 7,195,798.
+8. **The census tick (Codex P2 at line 1819, valid).** `read_game` compared id, opener, ejection and trigger and
+   then used the census's tick for the record and the witness window. It now also compares `fact.tick` with the
+   walked meeting's entry tick. Committed bytes: all 386 meetings agree (the regenerated run and `--check` walk
+   every one with the comparison on), so no count moved.
+9. **The fixed seeds sentence (Codex P2 at line 1858, valid).** Of the two repairs offered, the report now derives
+   each column's seeds and roster from its recorded games rather than refusing a column outside 0 to 49: the
+   statement is then true of any column the run reads, the one-game test columns need no seam, and the committed
+   columns' pairing on seeds 0 to 49 is held where it matters, by `test_the_report_states_the_seeds_and_roster_the_json_records`
+   (each committed column reads `0-49`, 9 players, 2 impostors) and by `test_the_committed_r2_column_recomputes_from_the_checkouts_bytes`,
+   which recomputes r2's `seeds` and `roster` from the bytes. The seeds are the census's games (equal to the seeds on
+   disk by `read_set`), so a game with no meeting still counts in its band. The report's Method sentence no longer
+   states a band or a roster; its provenance table gains seeds, players and impostors columns. The six-game
+   checkpoint the review ran now reads `0-5 | 9 | 2 | 6`.
+10. **A recorded sha that could move (Codex P2 at line 2793, valid).** `recorded_sources` accepted any tree-ish the
+    JSON recorded, so a hand-edited `HEAD`, branch or abbreviation would pass `--check` while it pointed at the
+    recorded tree, and `--check` would then archive a moving name. It now resolves the recorded value as a commit
+    and requires the result to equal it. The run itself always records `rev-parse`'s full sha, so no committed
+    byte moved.
+11. **Prompt multiplicity in the faithful walk (Codex P2 at line 1784, valid).** The walk compared sets, so a
+    recorded prompt consumed once of twice, or asked for twice, passed. After the missed-prompt check, `walk_game`
+    now requires the golden's own `consumed_exactly_once` (hits counted against the recorded calls), imported from
+    the walk's module by the same ruling that imports the walk. Every meeting of the three columns passes it.
+
+**The Codex review, answered.** The first Codex review (`8b18aa5`, five P2 comments): the escaped-text scan was
+fixed in round 1 (correction 4 there); the census tick and the seeds sentence are corrections 8 and 9 here; the
+symbolic sha and the prompt multiplicity are corrections 10 and 11 here. All five were valid; none is refuted.
+
+**Mutation pass, round 2.** One bounded pass with the listed classes only, over the spans the findings name and
+the spans this round changed: 34 mutants. Harness (`probes.py`, scratch, not committed): apply one edit to
+`experiments/lab/route_check_replay.py`, run the named tests with `pytest -n 4 -k`, and, only if they pass, the
+whole file; restore the module from its byte copy, never `git checkout` (its sha1 matched the copy after the run).
+First run: 34 red, no survivor. Before this round, at `01dc8a9f`, the verifiers' runs had C1 (their C7), S1
+(their S14) and the eleven class-M probes they listed (here M13, M14, M16, M18, M20 and M22 to M27) green; each is
+red now through the planted cases above.
+
+| # | mutant | first run | red test |
+| --- | --- | --- | --- |
+| C1 | C: `held_rooms` adds the literal CAFETERIA for a public regroup | RED | a_regroup_off_the_hub_takes_its_room_from_the_memory, a_regroup_from_the_hub_to_another_room_reaches_its_charge |
+| S1 | S: (c)'s reason step tests kinds against `A_INPUT_KINDS` | RED | a_gated_sighting_against_an_alibi_stay_is_given_the_relevance_gate |
+| M13 | M: the malformed-request raise names a constant text | RED | a_malformed_column_request_is_refused (all six) |
+| M14 | M: the git raise names a constant detail | RED | an_unknown_commit_is_refused, a_path_that_does_not_resolve_is_refused |
+| M15 | M: the unresolved-commit raise names a constant commit | RED | an_unknown_commit_is_refused, a_tree_named_as_the_commit_is_refused |
+| M16 | M: the unresolved-path raise names a constant sha | RED | a_path_that_does_not_resolve_is_refused |
+| M17 | M: the unresolved-path raise names a constant path | RED | a_path_that_does_not_resolve_is_refused |
+| M18 | M: the not-a-directory raise names a constant path | RED | a_path_that_names_a_file_is_refused |
+| M19 | M: the not-a-directory raise names a constant sha | RED | a_path_that_names_a_file_is_refused |
+| M20 | M: the no-config raise names the constant label r2 | RED | a_declared_r1_config_that_is_no_config_names_r1 |
+| M21 | M: the no-config raise names a constant path | RED | a_declared_config_that_is_no_config_is_refused, a_declared_r1_config_that_is_no_config_names_r1 |
+| M22 | M: the settings raise names the no-config constant for the declared path | RED | r1s_tree_under_the_r2_label_is_refused, r2s_tree_under_the_r1_label_names_r1s_config |
+| M23 | M: the tree-mismatch raise names a constant sha | RED | a_recorded_tree_id_that_is_not_the_shas_tree_fails_check, an_r1_columns_tree_mismatch_names_r1 |
+| M24 | M: the unknown-column raise names a constant label | RED | an_unknown_recorded_label_is_refused_by_name |
+| M25 | M: the ledger-bound raise names the constant bound MAP_ARBITRATION_MAX_HOPS | RED | a_ledger_bound_that_is_no_integer_raises |
+| M26 | M: the walk raise names a constant detail | RED | a_state_hash_flipped_after_the_second_meeting_names_the_third |
+| M27 | M: `--check` names a constant JSON path | RED | one_count_edited_in_a_copy_of_the_json_fails_check |
+| M28 | M: `--check` names a constant report path | RED | a_report_that_differs_from_its_recomputation_fails_check |
+| M29 | M: the full-sha raise names the constant label r2 | RED | an_r1_columns_tree_mismatch_names_r1 |
+| M30 | M: the full-sha raise names a constant sha | RED | a_recorded_sha_that_is_no_full_commit_sha_fails_check[short] |
+| M31 | M: the call-count raise names the constant label r2 | RED | a_recorded_call_asked_for_other_than_once_raises (both) |
+| N1 | N: the census tick comparison inverted | RED | a_later_meeting_the_census_reads_differently_is_named (all five rows), an_unchanged_copy_of_a_game_reads_cleanly |
+| N2 | N: the full-sha comparison inverted | RED | check_reproduces_a_run_from_its_recorded_sha, a_recorded_sha_that_is_no_full_commit_sha_fails_check (both) |
+| N3 | N: the seed-run continuation test inverted | RED | seeds_are_stated_as_runs (three of four) |
+| N4 | N: the empty-seed test inverted | RED | seeds_are_stated_as_runs (all four), no_seed_at_all_raises |
+| N5 | N: the one-roster test inverted | RED | a_columns_roster_is_its_games_own |
+| B1 | B: the single-seed and run branches swapped | RED | seeds_are_stated_as_runs (all four) |
+| F1 | F: the seed sort and dedup dropped | RED | seeds_are_stated_as_runs (the unsorted and repeated rows) |
+| F2 | F: the seed dedup dropped | RED | seeds_are_stated_as_runs[3-4, 9] |
+| C2 | C: the impostor count reads a constant role | RED | a_columns_roster_is_its_games_own |
+| S2 | S: the seeds read from the meeting records, not every recorded game | RED | a_columns_seeds_are_every_recorded_game_not_only_those_with_a_meeting |
+| L1 | L: the column's seeds replaced by the canonical literal `0-49` | RED | a_run_states_its_columns_own_seeds_and_roster, a_columns_seeds_are_every_recorded_game_not_only_those_with_a_meeting |
+| L2 | L: the column's roster replaced by the canonical 9 and 2 | RED | a_columns_seeds_are_every_recorded_game_not_only_those_with_a_meeting |
+| L3 | L: the report's seeds cell replaced by the canonical literal `0-49` | RED | a_run_states_its_columns_own_seeds_and_roster, the_report_states_the_seeds_and_roster_the_json_records |
+
+**Neuter pass, round 2.** Every production line this round added or changed, and the two lines the review named,
+switched off in turn with the same harness: 13 probes, all red on the first run. X4 and X5 are the review's own
+probes (the guard removal and P9), green at `01dc8a9f`.
+
+| # | neutered | first run | red test |
+| --- | --- | --- | --- |
+| X1 | the census tick left out of the comparison | RED | a_later_meeting_the_census_reads_differently_is_named[tick-1] |
+| X2 | the call-count check switched off | RED | a_recorded_call_asked_for_other_than_once_raises (both) |
+| X3 | the full-sha guard switched off | RED | a_recorded_sha_that_is_no_full_commit_sha_fails_check (both) |
+| X4 | the unknown-label guard of `recorded_sources` switched off | RED | an_unknown_recorded_label_is_refused_by_name |
+| X5 | the run scans the report only (the review's P9) | RED | a_run_whose_json_would_carry_a_rationale_writes_nothing |
+| X6 | the payload drops the seeds | RED | a_run_states_its_columns_own_seeds_and_roster, a_columns_seeds_are_every_recorded_game_not_only_those_with_a_meeting |
+| X7 | the payload drops the roster | RED | the same two |
+| X8 | the report's players cell blank | RED | a_run_states_its_columns_own_seeds_and_roster, the_report_states_the_seeds_and_roster_the_json_records |
+| X9 | the report's impostors cell blank | RED | the same two |
+| X10 | the empty-seed raise switched off | RED | no_seed_at_all_raises |
+| X11 | the one-roster raise switched off | RED | a_columns_roster_is_its_games_own |
+| X12 | the player count read as the constant 9 | RED | a_columns_roster_is_its_games_own, a_columns_seeds_are_every_recorded_game_not_only_those_with_a_meeting |
+| X13 | the Method sentence restored to its fixed band and roster | RED | a_run_states_its_columns_own_seeds_and_roster |
+
+The module docstring now names the full-sha refusal and the derived seeds and roster; it is prose and carries no
+probe. No test was weakened, skipped or deleted: eleven earlier substring matches now require the whole message
+they were part of, `test_a_missed_prompt_count_is_the_meetings_own` builds its walked meetings with the calls the
+golden's count reads (its expected message is unchanged), and `test_a_later_meeting_the_census_reads_differently_is_named`
+gains its tick row beside the four it had.
+
+**Verification, round 2.** Each command ran alone with its exit code captured directly (no pipe), at `200e2a32`;
+no frontend file changed.
+
+| command | exit | result |
+| --- | --- | --- |
+| the run (the five `--set`/`--out` arguments above) | 0 | wrote both files (41.7 s); every count unchanged, the JSON gains `seeds` and `roster` per column |
+| `uv run python -m experiments.lab.route_check_replay --check` | 0 | reproduced (39.2 s) |
+| the run with `--set r1=9725ece0:replays/candidates/stage-b-r1/9p2i` into scratch (the review's checkpoint) | 0 | its report's provenance row reads seeds `0-5`, 9 players, 2 impostors, 6 games, and holds no `0-49` |
+| `uv run pytest tests/experiments/test_route_check_replay.py -n 6` | 0 | 139 passed |
+| `uv run ruff format --check` and `uv run ruff check` on the two Python files; `uv run mypy --strict` on them | 0, 0, 0 | formatted, clean, no issues (the gate covers the tree) |
+| `bash scripts/verify_samples.sh replays/<set>` for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent with the committed recordings |
+| `publish_gameplay_census.py --set-dir ... --json-stdout`, r2 and r1 | 0 each | r2 117 meetings, 24 with vent proof, 3 button; r1 124, 26, 6: the denominators quoted above |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | every check passed: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -n 6` | 0 | 86 passed |
+| `uv run python scripts/check_doc_facts.py` | 0 | every fact verified |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 historical phase tasks and 390 prompts; 96 work cards (on this card at the subsection commit) |
+| `uv run lint-imports` | 0 | 4 kept, 0 broken |
+| `uv run pytest -m campaign -n 6` | 0 | 337 passed |
+| `build_demo_bundle.py --out <scratch>/base` at `5877adb4`, then `--out <scratch>/head` at `200e2a32`, one checkout; `diff -rq` | 0, 0, 0 | no difference across 109 files: nothing publishes |
+
+**The gate, round 2:** `bash scripts/check.sh` runs once, to its end, in this clean worktree at the commit that
+adds this subsection; the commit after it changes only this card and records the gate's exit code here.
+
+Deviations, round 2: the heading carries 2026-10-03, the day these corrections were made (the dispatch named
+2026-10-02), as round 1's did. The two Codex comments of the first review that round 1 left unanswered are treated
+as findings, as the dispatch's rule for valid Codex comments requires. `npm ci` ran in `frontend/` so the gate's
+frontend legs could run; no frontend file changed. Record impact: none. No recording, prompt, template, detector,
+recorded byte or ML artifact moved; the JSON gains `seeds` and `roster` per column and the report the matching
+table columns and Method sentence, with every count unchanged, and the merge publishes nothing (the empty bundle
+diff above).
 
 ### Reading (2026-10-03)
 
