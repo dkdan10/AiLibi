@@ -43,13 +43,15 @@ import {
   bodyStatesByTick,
   visibleBodiesForTick,
 } from "../lib/bodies";
+import { MAP_COPY } from "../lib/copy";
+import { regroupsAfterMeetings, shouldTween } from "../lib/regroup";
+import { type VentTrip, activeTrips, tripPose, ventTrips } from "../lib/vents";
 import { useReplayStore } from "../store/replayStore";
 import { pixiHex, tokens } from "../tokens";
 import type {
   AgentTickStateView,
   PlayerView,
   RoomView,
-  TickView,
   VentView,
 } from "../types/api";
 import { AgentToken, TWEEN_DURATION_MS } from "./AgentToken";
@@ -84,14 +86,6 @@ interface VentEdgeSpec {
   key: string;
   fromRoom: RoomView;
   toRoom: RoomView;
-}
-
-interface VentSegment {
-  actorId: string;
-  enterTick: number;
-  exitTick: number;
-  fromRoomId: string;
-  toRoomId: string;
 }
 
 // A meeting sighting's room label is model-authored, so its casing/spacing is not
@@ -183,49 +177,6 @@ function buildVentEdges(
   return edges;
 }
 
-// The vent-escape route is split across two events: `enter` (dive) carries
-// from==to == the dive room (engine/rules.py: the entered vent must be IN the
-// actor's room), and the actual cross-room travel is only known at the matching
-// `exit` (its `to_room_id` is where the impostor emerges). Pair them per actor so
-// the animation shows the real dive→travel→emerge over the in-vent window, not an
-// in-place entry pulse. An unmatched dive (a meeting interrupted the vent before
-// emergence) degrades to a brief in-place pulse at the dive room.
-function buildVentSegments(ticks: readonly TickView[]): VentSegment[] {
-  const segments: VentSegment[] = [];
-  const pendingDive = new Map<string, { enterTick: number; fromRoomId: string }>();
-  for (const tick of ticks) {
-    for (const event of tick.events) {
-      if (event.type !== "vent") continue;
-      if (event.phase === "enter") {
-        pendingDive.set(event.actor_id, {
-          enterTick: event.tick,
-          fromRoomId: event.from_room_id,
-        });
-      } else {
-        const dive = pendingDive.get(event.actor_id);
-        pendingDive.delete(event.actor_id);
-        segments.push({
-          actorId: event.actor_id,
-          enterTick: dive?.enterTick ?? event.tick - Math.max(1, event.traversal_ticks),
-          exitTick: event.tick,
-          fromRoomId: dive?.fromRoomId ?? event.from_room_id,
-          toRoomId: event.to_room_id, // the emerge room — the real destination
-        });
-      }
-    }
-  }
-  for (const [actorId, dive] of pendingDive) {
-    segments.push({
-      actorId,
-      enterTick: dive.enterTick,
-      exitTick: dive.enterTick + 1,
-      fromRoomId: dive.fromRoomId,
-      toRoomId: dive.fromRoomId,
-    });
-  }
-  return segments;
-}
-
 // ── one vent-escape traveller: a capsule gliding the dive→emerge route ──
 // Position is TICK-ANCHORED: `progress` is `(tick - enterTick)/(exitTick -
 // enterTick)` (0 at the dive room, 1 at the emerge room), so a paused/scrubbed
@@ -240,6 +191,8 @@ interface VentTravelerProps {
   label: string;
   glyph: string;
   progress: number;
+  /** A held trip's marker size (`lib/vents.ts` `tripPose`); null for a travel. */
+  heldScale: number | null;
   animate: boolean;
   scale: number;
   offsetX: number;
@@ -258,6 +211,7 @@ function VentTraveler({
   label,
   glyph,
   progress,
+  heldScale,
   animate,
   scale,
   offsetX,
@@ -308,7 +262,9 @@ function VentTraveler({
   // dive→travel→emerge during the tween without drifting from replay time.
   const routeLen = Math.hypot(tx - fx, ty - fy) || 1;
   const travelled = Math.min(1, Math.max(0, Math.hypot(pos.x - fx, pos.y - fy) / routeLen));
-  const capsuleScale = 1 - 0.4 * Math.sin(travelled * Math.PI);
+  // A trip that does not travel (a wait in its own room, or one a meeting
+  // ended inside the vent) holds its pose's size instead of the glide's.
+  const capsuleScale = heldScale ?? 1 - 0.4 * Math.sin(travelled * Math.PI);
   const inkLine = pixiHex(tokens.ink[500]);
 
   return (
@@ -534,8 +490,11 @@ export function MapView() {
     () => buildVentEdges(currentReplay?.map.vents ?? [], roomsById),
     [currentReplay, roomsById],
   );
-  const ventSegments = useMemo<VentSegment[]>(
-    () => buildVentSegments(currentReplay?.ticks ?? []),
+  // Every dive is one trip, ended by its exit or by the last frame the actor
+  // was still venting (a regroup, an ejection or the game's end): see
+  // `lib/vents.ts`.
+  const trips = useMemo<VentTrip[]>(
+    () => ventTrips(currentReplay?.ticks ?? []),
     [currentReplay],
   );
   // The Omniscient body layer for every frame, walked once per replay and
@@ -570,8 +529,12 @@ export function MapView() {
   // the source so EVERY mover snaps — the agent tokens AND the vent-escape
   // travellers (which both read this `animate`) — alongside the kill-flash /
   // vent-dive paths that already check `prefers-reduced-motion` directly.
-  const animate =
-    sameReplay && Math.abs(currentTick - prevTick) === 1 && !prefersReducedMotion;
+  // A single step across a meeting's regroup is a gathering, not a walk, so it
+  // snaps too (`lib/regroup.ts`).
+  const animate = shouldTween(currentReplay, prevTick, currentTick, {
+    sameReplay,
+    reducedMotion: prefersReducedMotion,
+  });
 
   const omniscient = perspective.mode === "omniscient";
   const fogAgentId = perspective.mode === "agent" ? perspective.agentId : null;
@@ -615,14 +578,9 @@ export function MapView() {
   // INCLUSIVE of the exit tick so the traveller renders the emergence frame
   // (and the normal token is suppressed there — the traveller IS the emerged
   // token at that tick), keeping position tied to replay time, never ahead of it.
-  const activeVentByActor = new Map<string, VentSegment>();
-  if (omniscient) {
-    for (const seg of ventSegments) {
-      if (seg.enterTick <= tickNumber && tickNumber <= seg.exitTick) {
-        activeVentByActor.set(seg.actorId, seg);
-      }
-    }
-  }
+  const activeVentByActor: ReadonlyMap<string, VentTrip> = omniscient
+    ? activeTrips(trips, tickNumber)
+    : new Map<string, VentTrip>();
 
   // ── tokens ──
   const tokenSpecs: Array<{
@@ -776,23 +734,24 @@ export function MapView() {
 
   // ── vent escapes + kill flashes (Omniscient only) ──
   const ventTravelers = omniscient
-    ? [...activeVentByActor.values()].flatMap((seg) => {
-        const fromRoom = roomsById.get(seg.fromRoomId);
-        const toRoom = roomsById.get(seg.toRoomId);
-        const player = playerById.get(seg.actorId);
+    ? [...activeVentByActor.values()].flatMap((trip) => {
+        const fromRoom = roomsById.get(trip.fromRoomId);
+        const toRoom = roomsById.get(trip.toRoomId);
+        const player = playerById.get(trip.actorId);
         if (fromRoom === undefined || toRoom === undefined || player === undefined) return [];
-        // Tick-anchored progress along the route (0 = dive room, 1 = emerge room).
-        const span = seg.exitTick - seg.enterTick;
-        const progress = span > 0 ? Math.min(1, Math.max(0, (tickNumber - seg.enterTick) / span)) : 1;
+        // Tick-anchored pose: a travel moves 0 → 1 from the dive room to the room
+        // it came up in; a stay or a closed trip holds at the dive room.
+        const pose = tripPose(trip, tickNumber);
         return [
           <VentTraveler
-            key={`${seg.actorId}:${seg.enterTick}`}
+            key={`${trip.actorId}:${trip.enterTick}`}
             fromRoom={fromRoom}
             toRoom={toRoom}
             color={player.color}
-            label={seg.actorId}
+            label={trip.actorId}
             glyph={GLYPH_SVG.vent}
-            progress={progress}
+            progress={pose.progress}
+            heldScale={pose.heldScale}
             animate={animate}
             scale={scale}
             offsetX={offsetX}
@@ -909,6 +868,13 @@ export function MapView() {
           />
         </Application>
       </div>
+      {/* A rule of the recording, which the players are told too, so it shows
+          in both lenses; a preserve recording shows nothing here. */}
+      {regroupsAfterMeetings(currentReplay) && (
+        <p data-regroup-note className="mt-1.5 px-1 font-mono text-2xs text-ink-600">
+          {MAP_COPY.regroupNote}
+        </p>
+      )}
     </div>
   );
 }

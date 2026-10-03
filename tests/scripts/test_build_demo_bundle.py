@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -793,17 +793,20 @@ def test_the_repository_url_is_not_read_as_a_host_path() -> None:
 def test_summary_covers_full_validated_set_but_links_only_baked_cases(
     tmp_path: Path, api: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Since 2026-10-02 the source check withholds every curated case on the
-    # promoted 9p2i bytes, so the baked summary is the live one over all fifty
-    # games with no case in it.
-    head = (bdb.FeaturedGame(set_name="9p2i", seed=3),)
+    # The featured head, seed 19, carries both curated cases, so its baked
+    # summary is the live one over all fifty games, both cases included.
+    head = (bdb.FeaturedGame(set_name="9p2i", seed=19),)
     bdb.bake_data(tmp_path, games=head, samples_dir=_SAMPLES)
     path = tmp_path / "data/9p2i/eval/summary.json"
     summary = json.loads(path.read_text())
     response = api.get("/eval/summary", params={"set": "9p2i"})
     assert response.status_code == 200
     assert summary == response.json()
-    assert summary["games"] == 50 and summary["cases"] == []
+    assert summary["games"] == 50
+    assert [case["case_id"] for case in summary["cases"]] == [
+        "witnessed-vent",
+        "weak-evidence",
+    ]
     assert path.stat().st_size < 50 * 1024
 
     # Planted: the same summary carrying a case on the baked game and one on a
@@ -814,13 +817,7 @@ def test_summary_covers_full_validated_set_but_links_only_baked_cases(
     real = public.build_public_results
     curated = public._curated_cases()  # noqa: SLF001
     planted_cases = (
-        curated[0].model_copy(
-            update={
-                "game_id": "headless-seed-3",
-                "meeting_id": "headless-seed-3:meeting-0",
-                "observer_id": "p-1",
-            }
-        ),
+        curated[0],
         curated[1].model_copy(update={"game_id": "headless-seed-4"}),
     )
 
@@ -831,9 +828,61 @@ def test_summary_covers_full_validated_set_but_links_only_baked_cases(
     out = tmp_path / "planted"
     bdb.bake_data(out, games=head, samples_dir=_SAMPLES)
     baked = json.loads((out / "data/9p2i/eval/summary.json").read_text())
-    assert [case["game_id"] for case in baked["cases"]] == ["headless-seed-3"]
+    assert [case["game_id"] for case in baked["cases"]] == ["headless-seed-19"]
     for case in baked["cases"]:
         base = out / "data/9p2i/replays" / case["game_id"] / "meetings"
         mid = bdb._file_segment(case["meeting_id"])
         assert (base / f"{mid}.json").is_file()
         assert (base / mid / "memory" / f"{case['observer_id']}.json").is_file()
+
+
+def _assert_strip_carries_every_case(
+    out: Path, build: Callable[[ReplayLoader], PublicResultsView]
+) -> None:
+    """Every case ``build`` publishes for a baked set is in its baked summary."""
+
+    import api.public_results as public
+
+    for set_dir in sorted((out / "data").iterdir()):
+        live = build(ReplayLoader(_SAMPLES / set_dir.name))
+        baked = json.loads((set_dir / "eval/summary.json").read_text())
+        assert [case["case_id"] for case in baked["cases"]] == [
+            case.case_id for case in live.cases
+        ], (set_dir.name, "a published case is missing from the baked summary")
+    # The check is about the real curation, so the real one is non-empty.
+    assert public._curated_cases()  # noqa: SLF001
+
+
+def test_the_strip_carries_every_published_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The bundle bakes a case only beside its game, and bakes only featured
+    # games, so a case the curation moves off the strip would vanish from the
+    # demo with every other test green. Baking the strip's OWN list keeps every
+    # case the live results publish.
+    import api.public_results as public
+
+    strip = bdb.parse_featured_games()
+    bdb.bake_data(tmp_path / "strip", games=strip, samples_dir=_SAMPLES)
+    _assert_strip_carries_every_case(tmp_path / "strip", public.build_public_results)
+    nine = json.loads((tmp_path / "strip/data/9p2i/eval/summary.json").read_text())
+    assert len(nine["cases"]) == 2
+
+    # Planted: a case pointed at a game the strip does not feature is published
+    # live and missing from the bundle.
+    real = public.build_public_results
+    curated = public._curated_cases()  # noqa: SLF001
+    moved = curated[1].model_copy(
+        update={"game_id": "headless-seed-2", "meeting_id": "headless-seed-2:meeting-0"}
+    )
+
+    def planted(loader: ReplayLoader) -> PublicResultsView:
+        result = real(loader)
+        if loader._replay_dir.name != "9p2i":  # noqa: SLF001
+            return result
+        return result.model_copy(update={"cases": (curated[0], moved)})
+
+    monkeypatch.setattr(bdb, "build_public_results", planted)
+    bdb.bake_data(tmp_path / "planted", games=strip, samples_dir=_SAMPLES)
+    with pytest.raises(AssertionError, match="missing from the baked summary"):
+        _assert_strip_carries_every_case(tmp_path / "planted", planted)

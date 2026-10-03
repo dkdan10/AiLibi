@@ -37,9 +37,10 @@ const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
  * matters: `seed 2` is a prefix of `seed 23`, and a substring match would open
  * whichever of the two the strip happens to list first. `set` lands on that
  * set's strip through the set switch (`?set=`) instead of the served default.
- * The one caller that passes them is the evidence guard's planted case, which
- * needs a zero-flag game specifically: the one-card 9p2i strip has none, so it
- * opens `4p1i` seed 11.
+ * The evidence guard's planted case passes `want`: it needs a zero-flag game
+ * specifically, and opens the 9p2i strip's second card, whose label promises
+ * no flagged contradictions, by its exact pill. The regroup-note check passes
+ * `set` to land on the 4p1i strip, whose recordings do not regroup.
  *
  * The tour is marked seen before the first paint. Not because it is untested
  * territory to be avoided, but because on a virgin visit it AUTO-LOADS its own
@@ -54,16 +55,35 @@ const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
  * join: the card you click opens that seed's workspace.
  */
 //: The featured card's text, captured by `openFeaturedReplay` before the strip
-//: unmounts — the head's for the main leg, and 4p1i seed 11's for the planted
-//: case that opens it by name. The evidence leg holds the rendered meeting to what
-//: that card PROMISES, in both directions, so a card and its game cannot drift
-//: apart.
+//: unmounts — the head's for the main leg, and the 9p2i zero-flag card's for the
+//: planted case that opens it by name. The evidence leg holds the rendered meeting
+//: to what that card PROMISES, in both directions, so a card and its game cannot
+//: drift apart.
 let headCardCopy = "";
 
 // The featured card's claim about detected contradictions, not all available
 // evidence. Its rendered flag count must agree; the planted case below proves
 // that changed copy or changed flags fail this check.
 const NO_FLAGGED_CONTRADICTIONS_PROMISE = /no flagged contradictions/i;
+
+/**
+ * The pairing the evidence leg asserts: a card promising no flagged
+ * contradictions opens on a meeting with none, and any other card on a meeting
+ * that has some. Synchronous, so a planted mismatch can be shown to throw.
+ */
+function assertCardMatchesEvidence(
+  cardCopy: string,
+  declaredTotal: number,
+  groupCount: number,
+): void {
+  if (NO_FLAGGED_CONTRADICTIONS_PROMISE.test(cardCopy)) {
+    expect(declaredTotal, `a card promising no flags: ${cardCopy}`).toBe(0);
+    expect(groupCount).toBe(0);
+  } else {
+    expect(declaredTotal, `a card making no such promise: ${cardCopy}`).toBeGreaterThan(0);
+    expect(groupCount).toBeGreaterThan(0);
+  }
+}
 
 async function openFeaturedReplay(
   page: Page,
@@ -474,18 +494,12 @@ test.describe("spectator journey", () => {
     expect(declared.length === 0).toBe(grouped.length === 0);
 
     // Bind the card's detector-flag claim to the rendered count. Since the strip
-    // leads with a grounded game this leg now takes the `else` branch, and the
-    // next test opens the zero-flag game by name so the `if` branch is still
-    // walked. That test also plants both mismatches; neither claim describes all
-    // the agents' evidence.
-    const promisesNoFlags = NO_FLAGGED_CONTRADICTIONS_PROMISE.test(headCardCopy);
-    if (promisesNoFlags) {
-      expect(declaredTotal).toBe(0);
-      expect(grouped.length).toBe(0);
-    } else {
-      expect(declaredTotal).toBeGreaterThan(0);
-      expect(grouped.length).toBeGreaterThan(0);
-    }
+    // leads with a grounded game this leg takes the "has evidence" branch, and the
+    // next test opens the zero-flag card by name so the "no flags" branch is
+    // still walked. That test also plants both mismatches; neither claim
+    // describes all the agents' evidence.
+    expect(NO_FLAGGED_CONTRADICTIONS_PROMISE.test(headCardCopy)).toBe(false);
+    assertCardMatchesEvidence(headCardCopy, declaredTotal, grouped.length);
 
     // …and the panel is NOT empty just because the evidence is: the room did
     // deliberate. Without this, "no evidence" would be satisfied by a meeting
@@ -579,14 +593,14 @@ test.describe("spectator journey", () => {
     // MISMATCH actually goes red — so both mismatches are constructed here
     // against the real rendered meeting, with no bytes and no copy touched.
     //
-    // The 9p2i strip is one card since 2026-10-02, a head whose first meeting
-    // ejects on a role-proof flag (ReplayPicker.tsx above FEATURED_GAMES), so
-    // the main leg above exercises the "has evidence" branch. This one opens
-    // 4p1i seed 11, whose card promises no flagged contradictions, through the
-    // set switch, to keep the "no evidence" branch covered. Both directions
-    // still run on every suite.
-    const seed = await openFeaturedReplay(page, 11, "4p1i");
-    expect(seed).toBe(11);
+    // The strip's head ejects on a role-proof flag in its first meeting
+    // (ReplayPicker.tsx above FEATURED_GAMES), so the main leg above exercises
+    // the "has evidence" branch. This one opens the 9p2i strip's second card,
+    // seed 14, whose label promises no flagged contradictions, by its exact
+    // pill, to keep the "no evidence" branch covered. Both directions run on
+    // every suite.
+    const seed = await openFeaturedReplay(page, 14);
+    expect(seed).toBe(14);
 
     await resetFocus(page);
     await page.keyboard.press("]");
@@ -603,26 +617,24 @@ test.describe("spectator journey", () => {
       .map((text) => Number(/^Evidence \((\d+)\)$/.exec(text.trim())?.[1] ?? 0))
       .reduce((sum, n) => sum + n, 0);
 
-    // The head's real state, and the real card: no flagged contradictions, and copy
-    // that says so. This is the pairing the journey asserts.
+    // The card's real state, and the real label: no flagged contradictions, and
+    // copy that says so. This is the pairing the journey asserts.
     expect(declaredTotal).toBe(0);
     expect(grouped.length).toBe(0);
     expect(NO_FLAGGED_CONTRADICTIONS_PROMISE.test(headCardCopy)).toBe(true);
+    assertCardMatchesEvidence(headCardCopy, declaredTotal, grouped.length);
 
-    // MISMATCH A — a card that PROMISES contradictions over a meeting that has
-    // none. The journey would take the `else` branch and demand > 0.
-    const cardClaimingEvidence = headCardCopy.replace(
-      NO_FLAGGED_CONTRADICTIONS_PROMISE,
-      "three accounts that cannot all be true",
+    // MISMATCH A — the same label with its "no flagged contradictions" removed,
+    // over this meeting that has none: the pairing demands evidence and fails.
+    const withoutPromise = headCardCopy.replace(NO_FLAGGED_CONTRADICTIONS_PROMISE, "");
+    expect(NO_FLAGGED_CONTRADICTIONS_PROMISE.test(withoutPromise)).toBe(false);
+    expect(() => assertCardMatchesEvidence(withoutPromise, declaredTotal, grouped.length)).toThrow(
+      /a card making no such promise/,
     );
-    expect(NO_FLAGGED_CONTRADICTIONS_PROMISE.test(cardClaimingEvidence)).toBe(false);
-    expect(declaredTotal).not.toBeGreaterThan(0); // the branch it would fail on
 
-    // MISMATCH B — the no-flags promise over a meeting that HAS evidence.
-    // The journey would take the `if` branch and demand 0.
-    const pretendEvidenceTotal = 3;
-    expect(NO_FLAGGED_CONTRADICTIONS_PROMISE.test(headCardCopy)).toBe(true);
-    expect(pretendEvidenceTotal).not.toBe(0); // the branch it would fail on
+    // MISMATCH B — the real label over a meeting that HAS evidence: the pairing
+    // demands none and fails.
+    expect(() => assertCardMatchesEvidence(headCardCopy, 3, 1)).toThrow(/a card promising no flags/);
   });
 
   test("the keyboard transport drives the playhead", async ({ page }) => {
@@ -808,6 +820,9 @@ test.describe("spectator journey", () => {
     );
     await openFeaturedReplay(page);
     const replay = (await (await served).json()) as {
+      metadata: { game_id: string };
+      players: { agent_id: string }[];
+      meetings: { meeting_id: string; tick: number; trigger_kind: string }[];
       ticks: { events: { type: string; phase?: string; actor_id?: string; from_room_id?: string; to_room_id?: string }[] }[];
     };
 
@@ -910,6 +925,60 @@ test.describe("spectator journey", () => {
     await page.getByRole("button", { name: "Exit fog" }).click();
     await expect(ticker(page)).toContainText("omniscient");
     expect(await ticker(page).getByRole("listitem").count()).toBe(omniscientBeats);
+
+    // ── the omniscient meeting record (`lib/annotations.ts`) ────────────────
+    // The head's first meeting carries the three omniscient facts — how long
+    // the reported body lay there, where each accused player really was, and
+    // whether an accused opener spoke again — in the omniscient view, and none
+    // of them reaches the DOM under an agent's lens, wherever that lens opens.
+    const first = replay.meetings[0];
+    if (first === undefined) throw new Error("the head has no meeting");
+    const meetingUrl = (agentId: string | null): string => {
+      const url = new URL(page.url());
+      url.search = new URLSearchParams({
+        set: "9p2i",
+        game_id: replay.metadata.game_id,
+        tick: String(first.tick),
+        selectedMeeting: first.meeting_id,
+        view: "workspace",
+        ...(agentId === null ? {} : { perspective: agentId }),
+      }).toString();
+      return url.toString();
+    };
+    const meetingDialog = page.getByRole("dialog", { name: `Meeting at tick ${first.tick}`, exact: true });
+    const record = page.getByRole("region", { name: "What the recording shows" });
+    const recordMarks = ["killed at tick", "really was", "spoke again", "speak again"];
+    await page.goto(meetingUrl(null));
+    await expect(meetingDialog).toBeVisible();
+    await expect(record).toBeVisible();
+    await expect(record).toContainText("really was");
+    if (first.trigger_kind === "body") {
+      await expect(record).toContainText("killed at tick");
+    }
+    // The regroup is a rule of the recording, told in both lenses.
+    const regroupNote = page.locator("[data-regroup-note]");
+    await expect(regroupNote).toHaveCount(1);
+    for (const player of replay.players.slice(0, 3)) {
+      await page.goto(meetingUrl(player.agent_id));
+      await expect(meetingDialog).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`perspective=${player.agent_id}`));
+      await expect(record).toHaveCount(0);
+      for (const mark of recordMarks) {
+        await expect(page.locator("body")).not.toContainText(mark);
+      }
+      await expect(regroupNote).toHaveCount(1);
+    }
+  });
+
+  test("the regroup note shows only on a recording that regroups", async ({ page }) => {
+    // The served 9p2i head regroups its survivors after every meeting its game
+    // outlives; the 4p1i recordings keep `preserve` and show nothing new.
+    await openFeaturedReplay(page);
+    await expect(page.locator("[data-regroup-note]")).toContainText(
+      "whenever play resumes after a meeting, the survivors start from the meeting room",
+    );
+    await openFeaturedReplay(page, null, "4p1i");
+    await expect(page.locator("[data-regroup-note]")).toHaveCount(0);
   });
 
   test("reduced motion collapses DOM transitions and is visible to the canvas layer", async ({

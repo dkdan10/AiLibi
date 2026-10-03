@@ -85,34 +85,49 @@ export interface FeaturedGame {
   readonly label: string;
 }
 
-// WHICH games are here is editorial, independent of the pacing rubric: three
-// hand-picked 4p1i recordings and, for the 9p2i set, one head the criterion
-// below chose from the recordings that set holds since 2026-10-02 (the
-// first eligible opener in seed order), until that strip is re-curated. Labels
-// name a setup or question, never an ending, ejection or vote tally. A lack of
-// detector flags says nothing about how much evidence the agents hold.
-// Countable claims are checked against the recordings by tests/api/test_sets.py
-// and the browser tests.
+// WHICH games are here is independent of the pacing rubric: three of the five
+// (each set's head and the 9p2i second card) are drawn from measured lists, and
+// the other two 4p1i cards are hand-picked. Labels state countable facts and
+// a setup or question, never an ending, a player, an ejection or a vote tally.
+// A lack of detector flags says nothing about how much evidence the agents
+// hold. Countable claims are checked against the recordings by
+// tests/api/test_sets.py and the browser tests.
 //
-// The ORDER is measured, not editorial, and only the head of each set carries
-// the measurement. A grounded ejection is one where the ejected player carries a
-// role_proof flag in the same meeting — the derived category for a vent
-// sighting, a spoken observation matched against the speaker's own typed
-// vent-witness record. Each set therefore leads with a game whose FIRST meeting,
-// the one the viewer's auto-follow opens, ejects on such a flag: the tour opens
-// on a table that established something rather than on one that did not.
-// Reproduce the bands and the eligible openers with
-//   uv run python scripts/measure_featured_criterion.py
-// and see tests/api/test_sets.py, which pins EACH SET'S head against the
-// criterion rather than against a seed — per set because the tour opens the
-// head of the set it targets — so the next re-record re-chooses those heads
-// instead of quietly keeping these ones.
+// The HEAD of each set is measured. A grounded ejection is one where the ejected
+// player carries a role_proof flag in the same meeting — the derived category
+// for a vent sighting, a spoken observation matched against the speaker's own
+// typed vent-witness record. Each set therefore leads with a game whose FIRST
+// meeting, the one the viewer's auto-follow opens, ejects on such a flag: the
+// tour opens on a table that established something rather than on one that did
+// not. Of the eleven 9p2i games that qualify, seed 19 is the one that shows
+// both vent behaviours the map draws before its first meeting, the stretch the
+// tour plays before it pauses: a wait of three ticks inside a vent, and a dive
+// that meeting's regroup closes.
+//
+// The second 9p2i card is a measured kind of game too: its first meeting
+// ejects an impostor while no flag is raised anywhere in the game and no vent
+// event happens at or before that meeting (two games qualify; seed 14 records
+// no vent event at all). The two 4p1i cards behind that set's head are
+// editorial. Both criteria read the ejected player's recorded role; that read
+// is curation: it describes the strip and gates no record, instrument or
+// adoption. Reproduce the bands, the eligible openers and both lists with
+//   uv run python scripts/measure_featured_criterion.py --list
+// and see tests/api/test_sets.py, which pins EACH SET'S head and the 9p2i
+// second card against these criteria rather than against seeds — per set
+// because the tour opens the head of the set it targets — so the next
+// re-record re-chooses them instead of quietly keeping these ones.
 export const FEATURED_GAMES: readonly FeaturedGame[] = [
   {
     set: "9p2i",
-    seed: 3,
+    seed: 19,
     label:
-      "Four meetings, twenty-three spoken turns. Read which each ballot cites, and who else its voter weighed.",
+      "Three meetings, nineteen spoken turns, and a reported vent sighting. Which ballots rest on what their voter saw?",
+  },
+  {
+    set: "9p2i",
+    seed: 14,
+    label:
+      "One meeting, eight spoken turns, and no flagged contradictions. What did each voter have to go on?",
   },
   {
     set: "4p1i",

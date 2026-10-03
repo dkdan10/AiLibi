@@ -10,7 +10,7 @@ import type { Perspective } from "../lib/playback";
 const state = vi.hoisted(() => ({
   perspective: { mode: "agent", agentId: "p-2" } as Perspective,
   selectedMeetingId: "meeting-0",
-  currentReplay: null as Pick<ReplayView, "players" | "meetings"> | null,
+  currentReplay: null as Pick<ReplayView, "players" | "meetings" | "ticks"> | null,
   revealOutcome: false,
   selectedEvidence: null,
   memoryCache: {},
@@ -59,7 +59,7 @@ const mind: MindInspectorPanelProps = {
 describe("private reasoning perspective", () => {
   it.each([false, true])("keeps another ballot's confidence out of Resolution, outcome reveal=%s", (revealOutcome) => {
     state.perspective = { mode: "agent", agentId: "p-2" };
-    state.currentReplay = { players, meetings: [meeting] };
+    state.currentReplay = { players, meetings: [meeting], ticks: [] };
     state.revealOutcome = revealOutcome;
     const html = renderToStaticMarkup(<MeetingView />);
     expect(html).toContain("Resolution");
@@ -70,7 +70,7 @@ describe("private reasoning perspective", () => {
   });
   it.each([["p-1", "0.73"], ["p-3", "0.42"]])("Resolution shows only %s's own leader ballot", (observerId, confidence) => {
     state.perspective = { mode: "agent", agentId: observerId };
-    state.currentReplay = { players, meetings: [meeting] };
+    state.currentReplay = { players, meetings: [meeting], ticks: [] };
     const html = renderToStaticMarkup(<MeetingView />);
     expect(html).toContain(`your ballot ${confidence}`);
     expect(html).not.toContain("top ballot");
@@ -78,14 +78,14 @@ describe("private reasoning perspective", () => {
   });
   it("retains the aggregate Resolution confidence only in omniscient mode", () => {
     state.perspective = { mode: "omniscient" };
-    state.currentReplay = { players, meetings: [meeting] };
+    state.currentReplay = { players, meetings: [meeting], ticks: [] };
     const html = renderToStaticMarkup(<MeetingView />);
     expect(html).toContain("top ballot 0.73");
     expect(html).not.toContain("your ballot");
   });
   it.each(["p-2", null])("does not expose confidence when the gate fails or ties, leader=%s", (leader) => {
     state.perspective = { mode: "agent", agentId: "p-2" };
-    state.currentReplay = { players, meetings: [{
+    state.currentReplay = { players, ticks: [], meetings: [{
       ...meeting, outcome: "SKIPPED", ejected_player_id: null,
       ballots: meeting.ballots.map((entry) => entry.voter === "p-1" ? { ...entry, confidence: 0.53 } : entry),
       gate: { ...meeting.gate, leader, passed: false, leader_max_confidence: 0.53 },

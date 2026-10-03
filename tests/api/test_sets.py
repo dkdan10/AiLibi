@@ -496,6 +496,39 @@ def test_featured_labels_are_spoiler_free() -> None:
             assert token not in lowered, f"outcome spoiler {token!r} in: {label}"
 
 
+_PLAYER_ID = re.compile(r"\bp-\d+\b")
+_VOTE_OR_ENDING = re.compile(
+    r"\b(?:votes?|voted|tally|unanimous|skip(?:s|ped)?|eject\w*)\b", re.IGNORECASE
+)
+
+
+def _assert_label_shape(label: str) -> None:
+    """A 9p2i card's shape: one question, and no player, vote or ending named."""
+
+    assert label.count("?") == 1, ("one question", label)
+    assert _PLAYER_ID.search(label) is None, ("names a player", label)
+    assert _VOTE_OR_ENDING.search(label) is None, ("names a vote or ending", label)
+
+
+def test_each_9p2i_label_poses_one_question_and_names_no_player_or_vote() -> None:
+    # The strip renders before a game opens, so a card may count what a viewer
+    # will see and ask one question about it, and may not say who, which vote
+    # or how it ends. The 4p1i cards predate the question rule and are kept.
+    pairs = zip(_parse_featured_games(), _FEATURED_LABEL.findall(_featured_block()))
+    nine = [label for (set_name, _), label in pairs if set_name == "9p2i"]
+    assert len(nine) == 2
+    for label in nine:
+        _assert_label_shape(label)
+    for planted, why in (
+        ("Three meetings. Who saw what? Who said so?", "one question"),
+        ("Three meetings, and p-6 is accused. Who saw what?", "names a player"),
+        ("Three meetings. Which way does the vote go?", "names a vote"),
+        ("Three meetings, and nobody is ejected. Why not?", "names a vote"),
+    ):
+        with pytest.raises(AssertionError, match=why):
+            _assert_label_shape(planted)
+
+
 def test_set_fingerprints_compare_by_exact_equality() -> None:
     # Review fix (PR #324, P2): a fingerprint is a fixed-width digest, not a
     # truncatable sha, so it must NOT ride the bidirectional prefix comparison —
@@ -573,6 +606,46 @@ def _assert_opens_on_role_proof(
     assert roles[ejected] == "IMPOSTOR", (set_name, seed, ejected, roles[ejected])
 
 
+def _assert_non_vent_opener(
+    registry: SetLoaderRegistry, set_name: str, seed: int
+) -> None:
+    """The second 9p2i card's criterion, asserted against the SERVED replay.
+
+    The game's FIRST meeting ejects an impostor, no meeting in the game raises a
+    flag of any kind, and no vent event happens at or before that meeting's
+    tick: the table decided without a vent sighting or a flagged contradiction
+    in front of it. The role read describes the strip and gates nothing else.
+
+    Re-implemented rather than imported from
+    ``scripts/measure_featured_criterion.py`` (its
+    ``opens_on_non_vent_impostor_ejection``), for the reason
+    :func:`_assert_opens_on_role_proof` gives. The clauses run in this order and
+    each names itself in its message, so a planted case can say which one it
+    isolates.
+    """
+
+    replay = registry.get(set_name).load_replay(f"headless-seed-{seed}")
+    first = replay.meetings[0]
+    assert first.outcome == "EJECTED", (set_name, seed, first.outcome)
+    ejected = first.ejected_player_id
+    assert ejected is not None, (set_name, seed)
+    roles = {player.agent_id: player.role for player in replay.players}
+    assert roles[ejected] == "IMPOSTOR", (set_name, seed, ejected, roles[ejected])
+    flagged = [
+        (meeting.meeting_id, len(meeting.contradictions))
+        for meeting in replay.meetings
+        if meeting.contradictions
+    ]
+    assert not flagged, (set_name, seed, "flags", flagged)
+    vents = [
+        (event.tick, event.phase)
+        for frame in replay.ticks
+        for event in frame.events
+        if event.type == "vent" and event.tick <= first.tick
+    ]
+    assert not vents, (set_name, seed, "vent at or before the first meeting", vents)
+
+
 def test_featured_seeds_exist_in_their_committed_sets() -> None:
     # The curated featured list is committed DATA (frontend/src/components/
     # ReplayPicker.tsx: FEATURED_GAMES) — the audits' named good tail, each with a
@@ -587,12 +660,15 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
     # from with `uv run python scripts/measure_featured_criterion.py`.
     featured = _parse_featured_games()
     assert {game[0] for game in featured} == {"4p1i", "9p2i"}
-    # The 9p2i strip holds one head until it is re-curated: the first eligible
-    # opener in seed order on the recordings the set holds since 2026-10-02
-    # (eleven of fifty games open on a role-proof ejection there). The baseline-9
-    # bytes featured 9p2i {23, 0, 29, 2}; baseline 8 {2, 13, 23, 46}.
-    assert featured[0] == ("9p2i", 3)  # the tour's landing game (the curated head)
-    assert {seed for set_name, seed in featured if set_name == "9p2i"} == {3}
+    # On the recordings the set holds since 2026-10-02, eleven of fifty 9p2i
+    # games open on a role-proof ejection and two open on an impostor ejection
+    # with no vent evidence about (`scripts/measure_featured_criterion.py
+    # --list`). The head is seed 19 of the first list and the second card seed
+    # 14 of the second. The holding strip featured 9p2i {3}; the baseline-9
+    # bytes {23, 0, 29, 2}; baseline 8 {2, 13, 23, 46}.
+    assert featured[0] == ("9p2i", 19)  # the tour's landing game (the curated head)
+    nine = [seed for set_name, seed in featured if set_name == "9p2i"]
+    assert nine == [19, 14]
     assert {seed for set_name, seed in featured if set_name == "4p1i"} == {2, 11, 29}
     registry = SetLoaderRegistry(_PARENT)
     for set_name, seed in featured:
@@ -608,6 +684,9 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
     assert heads[0] == featured[0]
     for set_name, seed in heads:
         _assert_opens_on_role_proof(registry, set_name, seed)
+    # The 9p2i second card carries its own measured kind: an impostor ejected
+    # in the first meeting with no flag anywhere and no vent at or before it.
+    _assert_non_vent_opener(registry, "9p2i", nine[1])
 
 
 @pytest.mark.parametrize(
@@ -637,8 +716,14 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
         (
             "9p2i",
             23,
-            "the old head: its first meeting ejects a CREWMATE on no flag at all",
+            "the baseline-9 head: its first meeting ejects a CREWMATE on no flag",
             r"'9p2i', 23, \[\]",
+        ),
+        (
+            "9p2i",
+            14,
+            "the strip's second card: an IMPOSTOR ejected on no flag at all",
+            r"'9p2i', 14, \[\]",
         ),
         (
             "9p2i",
@@ -684,18 +769,39 @@ def test_featured_head_criterion_rejects_a_head_that_establishes_nothing(
     # `test_the_role_proof_clause_rejects_a_recategorised_head`: the head's own
     # served first meeting with its role-proof flag recategorised.
     #
-    # The rest bracket it. 8 ejects an IMPOSTOR in its first meeting on no flag
-    # at all, so a pin checking only "the head ejects" or "the head ejects
-    # correctly" would wave it through; 12 and 23 (the strip's old head) eject a
-    # CREWMATE on no flag; 17 ejects an IMPOSTOR while its flags name others, and
-    # 2 ejects a CREWMATE that two contradictions name; 0 establishes something
-    # only in a LATER meeting, which the tour's auto-follow does not open first;
-    # 1 skips its first meeting and 4 and 36 eject nobody at all.
+    # The rest bracket it. 8 and 14 (the strip's own second card) eject an
+    # IMPOSTOR in their first meeting on no flag at all, so a pin checking only
+    # "the head ejects" or "the head ejects correctly" would wave them through;
+    # 12 and 23 (the baseline-9 head) eject a CREWMATE on no flag; 17 ejects an
+    # IMPOSTOR while its flags name others, and 2 ejects a CREWMATE that two
+    # contradictions name; 0 establishes something only in a LATER meeting,
+    # which the tour's auto-follow does not open first; 1 skips its first
+    # meeting and 4 and 36 eject nobody at all.
     # (Re-derived on the promoted bytes, 2026-10-02; the baseline-9 cases were
     # 2, 10, 46, 36, 44, 12, 13 and 7.)
     registry = SetLoaderRegistry(_PARENT)
     with pytest.raises(AssertionError, match=message):
         _assert_opens_on_role_proof(registry, set_name, seed)
+
+
+class _PlantedLoader:
+    """One served replay, standing in for a set's loader."""
+
+    def __init__(self, replay: ReplayView) -> None:
+        self._replay = replay
+
+    def load_replay(self, _game_id: str) -> ReplayView:
+        return self._replay
+
+
+class _PlantedRegistry:
+    """A registry whose every set serves the one planted replay."""
+
+    def __init__(self, replay: ReplayView) -> None:
+        self._replay = replay
+
+    def get(self, _set_name: str) -> _PlantedLoader:
+        return _PlantedLoader(self._replay)
 
 
 def test_the_role_proof_clause_rejects_a_recategorised_head() -> None:
@@ -704,10 +810,12 @@ def test_the_role_proof_clause_rejects_a_recategorised_head() -> None:
     # cross-statement, changing nothing else: the meeting still ejects the same
     # impostor and the flags still name them, so the category comparison is the
     # only clause left that can reject it. The head itself passes, so the
-    # rejection is the recategorisation's.
+    # rejection is the recategorisation's; and the weakened predicate (any flag
+    # naming the ejected player) accepts the perturbed replay, which is what
+    # shows the perturbation isolates the category clause and nothing else.
     registry = SetLoaderRegistry(_PARENT)
     head = _featured_heads()[0]
-    assert head == ("9p2i", 3)
+    assert head == ("9p2i", 19)
     _assert_opens_on_role_proof(registry, *head)
 
     replay = registry.get(head[0]).load_replay(f"headless-seed-{head[1]}")
@@ -732,16 +840,95 @@ def test_the_role_proof_clause_rejects_a_recategorised_head() -> None:
         update={"meetings": (recategorised, *replay.meetings[1:])}
     )
 
-    class _Planted:
-        def load_replay(self, _game_id: str) -> ReplayView:
-            return planted
+    def weakened(candidate: ReplayView) -> None:
+        """The criterion with its category clause dropped: any flag naming them."""
 
-    class _PlantedRegistry:
-        def get(self, _set_name: str) -> _Planted:
-            return _Planted()
+        opening = candidate.meetings[0]
+        assert opening.outcome == "EJECTED"
+        named = opening.ejected_player_id
+        assert named is not None
+        assert any(named in flag.subjects for flag in opening.contradictions)
+        roles = {player.agent_id: player.role for player in candidate.players}
+        assert roles[named] == "IMPOSTOR"
 
+    weakened(planted)
     with pytest.raises(AssertionError, match="cross_statement"):
-        _assert_opens_on_role_proof(_PlantedRegistry(), *head)  # type: ignore[arg-type]
+        _assert_opens_on_role_proof(_PlantedRegistry(planted), *head)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "seed,why,message",
+    [
+        (24, "an impostor ejected, no flag anywhere, a vent trip before", "vent at"),
+        (8, "an impostor ejected, a flag raised in a later meeting", "'flags'"),
+        (34, "an impostor ejected, no vent before, a later flag", "'flags'"),
+        (19, "the head: its first meeting carries role proof", "'flags'"),
+        (23, "the first meeting ejects a CREWMATE", "CREWMATE"),
+        (0, "the first meeting skips", "SKIPPED"),
+    ],
+)
+def test_the_non_vent_criterion_rejects_a_card_with_vent_evidence(
+    seed: int, why: str, message: str
+) -> None:
+    # THE PLANTED CASES for the second card's criterion, each a committed game
+    # it must reject through the clause named. 24 isolates the vent clause
+    # (nothing else fails); 34 isolates the flag clause (no vent before its
+    # first meeting); 8 is the card's named case for a later flag; 19 shows the
+    # head itself could not be this card; 23 and 0 fail earlier clauses. No
+    # committed game ejects a crewmate with no flag anywhere and no vent before,
+    # so the role clause rests on the perturbation in the next test.
+    registry = SetLoaderRegistry(_PARENT)
+    with pytest.raises(AssertionError, match=message):
+        _assert_non_vent_opener(registry, "9p2i", seed)
+
+
+def test_the_non_vent_criterion_reads_the_role_and_the_vent_tick() -> None:
+    # Seed 14 with its ejected impostor read as a crewmate fails the role
+    # clause; seed 44 with its one vent trip moved onto the meeting's own tick
+    # fails the vent clause, and moved to the tick after still passes.
+    registry = SetLoaderRegistry(_PARENT)
+    card = registry.get("9p2i").load_replay("headless-seed-14")
+    ejected = card.meetings[0].ejected_player_id
+    flipped = card.model_copy(
+        update={
+            "players": tuple(
+                p.model_copy(update={"role": "CREWMATE"})
+                if p.agent_id == ejected
+                else p
+                for p in card.players
+            )
+        }
+    )
+    _assert_non_vent_opener(_PlantedRegistry(card), "9p2i", 14)  # type: ignore[arg-type]
+    with pytest.raises(AssertionError, match="CREWMATE"):
+        _assert_non_vent_opener(_PlantedRegistry(flipped), "9p2i", 14)  # type: ignore[arg-type]
+
+    other = registry.get("9p2i").load_replay("headless-seed-44")
+    opened = other.meetings[0].tick
+
+    def vent_moved_to(tick: int) -> ReplayView:
+        event = next(
+            e for frame in other.ticks for e in frame.events if e.type == "vent"
+        )
+        assert event.tick > opened
+        moved = event.model_copy(update={"tick": tick})
+        return other.model_copy(
+            update={
+                "ticks": tuple(
+                    frame.model_copy(
+                        update={
+                            "events": tuple(e for e in frame.events if e is not event)
+                            + ((moved,) if frame.tick == tick else ())
+                        }
+                    )
+                    for frame in other.ticks
+                )
+            }
+        )
+
+    _assert_non_vent_opener(_PlantedRegistry(vent_moved_to(opened + 1)), "9p2i", 44)  # type: ignore[arg-type]
+    with pytest.raises(AssertionError, match="vent at"):
+        _assert_non_vent_opener(_PlantedRegistry(vent_moved_to(opened)), "9p2i", 44)  # type: ignore[arg-type]
 
 
 def test_determinism_holds_per_set(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -786,23 +973,33 @@ def _flag_claim_holds(claim: str, replay: ReplayView) -> bool:
 
 
 def _assert_featured_counts(label: str, replay: ReplayView) -> None:
-    """Check the bounded count vocabulary used by these editorial labels."""
+    """Check the bounded count vocabulary used by these editorial labels.
+
+    The vocabulary grows word by word with the strip: a count word no label
+    uses is not here, so a label reaching for a new number fails until its
+    word is added and checked.
+    """
     words = {
         "one": 1,
         "three": 3,
         "four": 4,
+        "eight": 8,
+        "nineteen": 19,
         "twenty-three": 23,
     }
+    number = "|".join(sorted(words, key=len, reverse=True))
     text = label.lower()
-    meeting = re.search(r"\b(one|three|four) (?:short )?meetings?\b", text)
-    turns = re.search(r"\b(three|twenty-three) (?:spoken )?turns\b", text)
+    meeting = re.search(rf"\b({number}) (?:short )?meetings?\b", text)
+    turns = re.search(rf"\b({number}) (?:spoken )?turns\b", text)
     assert meeting is not None or turns is not None
     if meeting is not None:
-        assert len(replay.meetings) == words[meeting.group(1)]
+        assert len(replay.meetings) == words[meeting.group(1)], ("meetings", label)
     if turns is not None:
-        assert sum(len(item.turns) for item in replay.meetings) == words[turns.group(1)]
+        spoken = sum(len(item.turns) for item in replay.meetings)
+        assert spoken == words[turns.group(1)], ("turns", label)
     if "no flagged contradictions" in text:
-        assert not any(item.contradictions for item in replay.meetings)
+        flagged = [item.meeting_id for item in replay.meetings if item.contradictions]
+        assert not flagged, ("no flagged contradictions", flagged)
     for pattern, claim in _FLAG_CLAIMS.items():
         if re.search(pattern, text):
             assert _flag_claim_holds(claim, replay), (claim, label)
@@ -832,15 +1029,22 @@ def _without_flags(replay: ReplayView, claim: str) -> ReplayView:
     )
 
 
-@pytest.mark.parametrize(
-    "set_name,seed",
-    [
-        ("9p2i", 3),
-        ("4p1i", 2),
-        ("4p1i", 11),
-        ("4p1i", 29),
-    ],
+_LABELLED_PAIRS: tuple[tuple[str, int], ...] = (
+    ("9p2i", 19),
+    ("9p2i", 14),
+    ("4p1i", 2),
+    ("4p1i", 11),
+    ("4p1i", 29),
 )
+
+
+def test_every_featured_label_is_checked() -> None:
+    # The parametrize below is the strip, in order: a card added or re-pointed
+    # without its label check fails here rather than shipping unchecked.
+    assert tuple(_parse_featured_games()) == _LABELLED_PAIRS
+
+
+@pytest.mark.parametrize("set_name,seed", _LABELLED_PAIRS)
 def test_current_featured_claims_match_source_and_gate_bites(
     set_name: str, seed: int
 ) -> None:
@@ -857,6 +1061,19 @@ def test_current_featured_claims_match_source_and_gate_bites(
     _assert_featured_counts(label, replay)
     with pytest.raises(AssertionError):
         _assert_featured_counts(label, replay.model_copy(update={"meetings": ()}))
+    # A turn count bites on its own: one turn fewer, every meeting kept.
+    if re.search(r"\bturns\b", label.lower()):
+        last = replay.meetings[-1]
+        fewer = replay.model_copy(
+            update={
+                "meetings": (
+                    *replay.meetings[:-1],
+                    last.model_copy(update={"turns": last.turns[:-1]}),
+                )
+            }
+        )
+        with pytest.raises(AssertionError, match="turns"):
+            _assert_featured_counts(label, fewer)
     # Each flag claim the label makes bites on its own: strip only the flags that
     # claim rests on, leave every meeting, turn and other flag in place, and the
     # same label must fail.
@@ -864,6 +1081,27 @@ def test_current_featured_claims_match_source_and_gate_bites(
         if re.search(pattern, label.lower()):
             with pytest.raises(AssertionError, match=claim):
                 _assert_featured_counts(label, _without_flags(replay, claim))
+    # The no-flags promise bites the other way: one flag planted in the first
+    # meeting, copied from a game that carries one, and the same label fails.
+    if "no flagged contradictions" in label.lower():
+        flag = (
+            SetLoaderRegistry(_PARENT)
+            .get("9p2i")
+            .load_replay("headless-seed-2")
+            .meetings[0]
+            .contradictions[0]
+        )
+        first = replay.meetings[0]
+        planted = replay.model_copy(
+            update={
+                "meetings": (
+                    first.model_copy(update={"contradictions": (flag,)}),
+                    *replay.meetings[1:],
+                )
+            }
+        )
+        with pytest.raises(AssertionError, match="no flagged contradictions"):
+            _assert_featured_counts(label, planted)
     for claim in (
         "no evidence at all",
         "everything the crew will ever know",

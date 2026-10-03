@@ -36,12 +36,25 @@ ballot card annotates an entry that duplicates its own header — the voter
 itself, or the target the vote applied to — and this is where the rate behind
 that claim is counted instead of asserted.
 
+``--list`` names the games behind the counts: the ``seed:meeting`` of every
+ejection in each band and of the role-correct ones, the eligible openers, and
+two candidate lists the strip draws its second and third kinds of card from:
+
+* the NON-VENT OPENERS — games whose first meeting ejects an impostor while no
+  flag is raised anywhere in the game and no vent event happens at or before
+  that meeting, so the table decided with no vent evidence in front of it;
+* the first meetings that eject a crewmate who did not open the meeting.
+
+The role reads behind ``role-correct`` and both lists are curation: they
+describe which games the strip can show and gate no record, instrument or
+adoption. It prints seeds only, never a transcript line.
+
 Usage::
 
     uv run python scripts/measure_featured_criterion.py
-    uv run python scripts/measure_featured_criterion.py --alternatives
+    uv run python scripts/measure_featured_criterion.py --alternatives --list
     uv run python scripts/measure_featured_criterion.py --alternatives \\
-        --games 9p2i:23 9p2i:13 9p2i:46 9p2i:2 4p1i:2 4p1i:11 4p1i:29
+        --games 9p2i:19 9p2i:14 4p1i:2 4p1i:11 4p1i:29
 """
 
 from __future__ import annotations
@@ -106,6 +119,54 @@ def establishes_nothing(replay: ReplayView) -> bool:
     )
 
 
+def _first_ejected_role(replay: ReplayView) -> tuple[str, str] | None:
+    """The first meeting's ejected player and recorded role, or ``None``."""
+
+    if not replay.meetings:
+        return None
+    ejected = replay.meetings[0].ejected_player_id
+    if ejected is None:
+        return None
+    roles = {player.agent_id: player.role for player in replay.players}
+    return ejected, roles[ejected]
+
+
+def opens_on_non_vent_impostor_ejection(replay: ReplayView) -> bool:
+    """Whether the first meeting ejects an impostor with no vent evidence about.
+
+    No flag of any kind is raised in any meeting of the game, and no vent event
+    happens at or before the first meeting's tick: whatever the table decided
+    on, it was not a vent sighting or a flagged contradiction.
+    """
+
+    first = _first_ejected_role(replay)
+    if first is None or first[1] != "IMPOSTOR":
+        return False
+    if any(meeting.contradictions for meeting in replay.meetings):
+        return False
+    opened = replay.meetings[0].tick
+    return not any(
+        event.type == "vent" and event.tick <= opened
+        for frame in replay.ticks
+        for event in frame.events
+    )
+
+
+def first_meeting_ejects_a_crewmate_not_the_opener(replay: ReplayView) -> bool:
+    """Whether the first meeting ejects a crewmate other than its opener."""
+
+    first = _first_ejected_role(replay)
+    return (
+        first is not None
+        and first[1] == "CREWMATE"
+        and first[0] != replay.meetings[0].triggered_by
+    )
+
+
+def _join(tokens: list[str]) -> str:
+    return " ".join(tokens) if tokens else "none"
+
+
 def alternatives_shape(replay: ReplayView) -> tuple[int, int, int, int]:
     """``(ballots, recorded entries, ballots naming the voter, naming the target)``.
 
@@ -135,14 +196,17 @@ def _measure_set(
     *,
     seeds: frozenset[int] | None = None,
     alternatives: bool = False,
+    listing: bool,
 ) -> str:
     loader = SetLoaderRegistry(parent).get(set_name)
     every = sorted(loader.list_replays(), key=lambda meta: meta.seed)
     metas = [meta for meta in every if seeds is None or meta.seed in seeds]
-    ejections: dict[Band, int] = {band: 0 for band, _ in _BAND_LABELS}
-    role_correct: dict[Band, int] = {band: 0 for band, _ in _BAND_LABELS}
-    eligible = 0
+    ejections: dict[Band, list[str]] = {band: [] for band, _ in _BAND_LABELS}
+    role_correct: dict[Band, list[str]] = {band: [] for band, _ in _BAND_LABELS}
+    eligible: list[int] = []
     silent: list[int] = []
+    non_vent: list[int] = []
+    crewmate_not_opener: list[int] = []
     shape = [0, 0, 0, 0]
 
     for meta in metas:
@@ -151,17 +215,22 @@ def _measure_set(
             carried + new for carried, new in zip(shape, alternatives_shape(replay))
         ]
         roles = {player.agent_id: player.role for player in replay.players}
-        for meeting in replay.meetings:
+        for index, meeting in enumerate(replay.meetings):
             band = ejection_band(meeting)
             if band is None:
                 continue
-            ejections[band] += 1
+            where = f"{meta.seed}:{index}"
+            ejections[band].append(where)
             if roles[str(meeting.ejected_player_id)] == "IMPOSTOR":
-                role_correct[band] += 1
+                role_correct[band].append(where)
         if opens_on_role_proof(replay):
-            eligible += 1
+            eligible.append(meta.seed)
         if establishes_nothing(replay):
             silent.append(meta.seed)
+        if opens_on_non_vent_impostor_ejection(replay):
+            non_vent.append(meta.seed)
+        if first_meeting_ejects_a_crewmate_not_the_opener(replay):
+            crewmate_not_opener.append(meta.seed)
 
     # Repo-relative where it can be, so the output is the same on every machine
     # and can be quoted verbatim in a card's Results.
@@ -174,13 +243,28 @@ def _measure_set(
     lines.append("  ejections, by the band of the ejected player in that meeting")
     for band, label in _BAND_LABELS:
         lines.append(
-            f"    {label:<16} {ejections[band]:>3} ejections "
-            f"{role_correct[band]:>3} role-correct"
+            f"    {label:<16} {len(ejections[band]):>3} ejections "
+            f"{len(role_correct[band]):>3} role-correct"
         )
     lines.append(
-        f"  first meeting ejects on a role_proof flag: {eligible} of {len(metas)} games"
+        f"  first meeting ejects on a role_proof flag: {len(eligible)} of "
+        f"{len(metas)} games"
     )
     lines.append(f"  no flag and no ejection anywhere: seeds {silent}")
+    if listing:
+        lines.append("  the games behind each count (seed:meeting)")
+        for band, label in _BAND_LABELS:
+            lines.append(f"    {label} ejections: {_join(ejections[band])}")
+            lines.append(f"    {label} role-correct: {_join(role_correct[band])}")
+        lines.append(f"  first meeting ejects on a role_proof flag: seeds {eligible}")
+        lines.append(
+            "  first meeting ejects an impostor, no flag anywhere and no vent at or "
+            f"before it: seeds {non_vent}"
+        )
+        lines.append(
+            "  first meeting ejects a crewmate who did not open it: seeds "
+            f"{crewmate_not_opener}"
+        )
     if alternatives:
         ballots, entries, own, applied = shape
         lines.append("  considered_alternatives, over every ballot in those games")
@@ -225,12 +309,18 @@ def main(argv: list[str] | None = None) -> int:
         "--games",
         nargs="+",
         metavar="SET:SEED",
-        help="measure only these games (e.g. the featured strip's seven)",
+        help="measure only these games (e.g. the featured strip's five)",
     )
     parser.add_argument(
         "--alternatives",
         action="store_true",
         help="also count the shape of considered_alternatives on their ballots",
+    )
+    parser.add_argument(
+        "--list",
+        dest="listing",
+        action="store_true",
+        help="also name the games behind each count and the two candidate lists",
     )
     args = parser.parse_args(argv)
     parent: Path = args.parent
@@ -248,12 +338,17 @@ def main(argv: list[str] | None = None) -> int:
                     name,
                     seeds=chosen[name],
                     alternatives=args.alternatives,
+                    listing=args.listing,
                 )
             )
         return 0
     names: list[str] = args.sets or SetLoaderRegistry(parent).available_sets()
     for name in names:
-        print(_measure_set(parent, name, alternatives=args.alternatives))
+        print(
+            _measure_set(
+                parent, name, alternatives=args.alternatives, listing=args.listing
+            )
+        )
     return 0
 
 

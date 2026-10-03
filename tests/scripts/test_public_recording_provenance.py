@@ -145,15 +145,43 @@ def _asset_mismatches(directory: Path) -> list[str]:
     ]
 
 
-def test_historical_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
+def _recording_mismatch(root: Path, provenance: dict[str, Any]) -> bool:
+    """Whether the captured recording is not the bytes this checkout serves."""
+
+    recording = provenance["recording"]
+    served = root / recording["path"]
+    return (
+        not served.is_file()
+        or hashlib.sha256(served.read_bytes()).hexdigest() != recording["sha256"]
+    )
+
+
+def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
+    # The captures show the featured head of the shown 9-player set, 9p2i seed
+    # 19, since the promotion of 2026-10-02 (they were a historical seed-2
+    # capture from the baseline-7 record before it): the captured recording is
+    # the replay this checkout serves, byte for byte, and the README caption
+    # names that game, its set and its record.
     root = Path(__file__).resolve().parents[2]
     media = root / "docs/media"
     assert not _asset_mismatches(media)
     provenance = json.loads((media / "provenance.json").read_text())
-    assert provenance["status"] == "historical"
-    assert provenance["recording"]["prompt_version"] == "v4"
-    assert "earlier recording" in (root / "README.md").read_text()
-    assert "historical" in (media / "README.md").read_text()
+    assert provenance["status"] == "current"
+    assert not _recording_mismatch(root, provenance)
+    recording = provenance["recording"]
+    assert (recording["game_id"], recording["seed"], recording["recorded_on"]) == (
+        "headless-seed-19",
+        19,
+        "2026-10-01",
+    )
+    readme = (root / "README.md").read_text()
+    assert (
+        "9p2i seed 19, the featured strip's head, from the 2026-10-01 record" in readme
+    )
+    assert "earlier recording" not in readme
+    # A capture of a recording the checkout no longer serves must fail.
+    moved = {**provenance, "recording": {**recording, "sha256": "0" * 64}}
+    assert _recording_mismatch(root, moved)
     # A changed image with an unchanged claim must fail the digest check.
     (tmp_path / "provenance.json").write_bytes((media / "provenance.json").read_bytes())
     names = list(provenance["assets_sha256"])
@@ -199,9 +227,7 @@ def _media_placement_mismatches(root: Path) -> list[str]:
             for document, links in targets.items()
             if (media / name).resolve() in links
         }
-        if declared != actual or (
-            not declared and placement != "Historical archive only"
-        ):
+        if declared != actual or (not declared and placement != "Archive only"):
             problems.append(name)
     return problems
 
@@ -231,7 +257,7 @@ def test_media_placement_claims_follow_actual_frontdoor_links(tmp_path: Path) ->
     inventory = tmp_path / "docs/media/README.md"
     inventory.write_text(
         inventory.read_text().replace(
-            "| Historical archive only |", "| [README image](../../README.md) |", 1
+            "| Archive only |", "| [README image](../../README.md) |", 1
         )
     )
     assert _media_placement_mismatches(tmp_path) == ["spectator-meeting.png"]

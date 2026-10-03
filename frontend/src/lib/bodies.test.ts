@@ -97,6 +97,7 @@ import {
   bodyStatesByTick,
   visibleBodiesForTick,
 } from "./bodies";
+import { readSkeleton, skeletonGame, skeletonSet } from "./skeleton.testkit";
 
 // Mirrors `BodyMarker.BODY_CAP`. Not imported: that module pulls Pixi and the
 // Vite `?raw` SVG set at module scope, which this node-environment runner cannot
@@ -537,6 +538,84 @@ describe("the Omniscient body layer over the committed served payloads", () => {
   });
 });
 
+// ── a meeting's close, by the recording's reset ─────────────────────────────
+//
+// The header's two removal rules, held to the bytes: on the promoted 9p2i set
+// (`hub_with_grace`) the first frame after every meeting the game survives
+// carries no body, reported or not; on 4p1i (`preserve`) only the triggering
+// corpse goes, and unreported ones stay on the floor. The meeting ticks come
+// from the skeleton dump (`skeleton.testkit.ts`), bound to the same bytes.
+
+interface AfterMeeting {
+  readonly gameId: string;
+  /** The frame index right after the meeting's frame. */
+  readonly index: number;
+  /** The victim the meeting's report named, if it was a body meeting. */
+  readonly reported: string | null;
+}
+
+const SKELETON = readSkeleton();
+
+function afterMeetings(name: string): AfterMeeting[] {
+  const skeleton = skeletonSet(SKELETON, name);
+  return set(name).games.flatMap((game) => {
+    const replay = skeletonGame(skeleton, game.gameId).replay;
+    return replay.meetings.flatMap((meeting) => {
+      const at = game.frames.findIndex((candidate) => candidate.tick === meeting.tick);
+      if (at === -1) throw new Error(`${game.gameId} has no frame at meeting tick ${meeting.tick}`);
+      if (at + 1 >= game.frames.length) return []; // the game ended at this meeting
+      const report = game.frames[at]?.events.find((event) => event.type === "report_body");
+      const reported = report !== undefined && report.type === "report_body" ? report.body_of : null;
+      return [{ gameId: game.gameId, index: at + 1, reported }];
+    });
+  });
+}
+
+function framesOf(name: string, gameId: string): readonly FixtureFrame[] {
+  const game = set(name).games.find((candidate) => candidate.gameId === gameId);
+  if (game === undefined) throw new Error(`no game "${gameId}" in the fixture`);
+  return game.frames;
+}
+
+describe("a meeting's close clears bodies by the recording's reset", () => {
+  it("9p2i: the regroup leaves no body on the first frame after any meeting", () => {
+    const after = afterMeetings("9p2i");
+    expect(after).toHaveLength(102);
+    let served = 0;
+    let shipped = 0;
+    for (const { gameId, index } of after) {
+      const frames = framesOf("9p2i", gameId);
+      served += frames[index]?.bodies.length ?? 0;
+      shipped += bodyStatesByTick(frames)[index]?.length ?? 0;
+    }
+    expect([served, shipped]).toEqual([0, 0]);
+  });
+
+  it("9p2i: the retired accumulate rule fails the same leg", () => {
+    // The negative control paints the corpses the regroup cleared.
+    const painted = afterMeetings("9p2i").filter(
+      ({ gameId, index }) => (retiredAccumulateRule(framesOf("9p2i", gameId))[index]?.length ?? 0) > 0,
+    );
+    expect(painted).toHaveLength(102);
+  });
+
+  it("4p1i: unreported bodies survive a meeting, and the reported one does not", () => {
+    const after = afterMeetings("4p1i");
+    let kept = 0;
+    for (const { gameId, index, reported } of after) {
+      const frames = framesOf("4p1i", gameId);
+      const victims = (frames[index]?.bodies ?? []).map((body) => body.victim_id);
+      if (reported !== null) expect(victims, `${gameId} frame ${index}`).not.toContain(reported);
+      if (victims.length > 0) kept += 1;
+      expect(bodyStatesByTick(frames)[index]?.map((spec) => spec.victimId)).toEqual(victims);
+    }
+    // 19 meetings the 4p1i games outlive; after one of them an unreported
+    // body is still on the floor.
+    expect(after).toHaveLength(19);
+    expect(kept).toBe(1);
+  });
+});
+
 // ── the semantics, on hand-built frames the committed sets do not exercise ───
 
 const ROOM = "ADMIN";
@@ -580,8 +659,9 @@ describe("presence and discovery", () => {
   });
 
   it("keeps the discovered treatment on a reported body still on the floor", () => {
-    // Only the meeting's TRIGGERING corpse is deleted, so a second reported body
-    // can survive its own report — it must stay solid, not revert to ghosted.
+    // On a preserve recording only the meeting's TRIGGERING corpse is deleted,
+    // so a second reported body can survive its own report — it must stay
+    // solid, not revert to ghosted.
     const layers = bodyStatesByTick([
       frame([{ victim: "p-1" }, { victim: "p-2" }], [reportOf("p-1")]),
       frame([{ victim: "p-1" }, { victim: "p-2" }]),

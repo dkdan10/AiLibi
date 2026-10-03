@@ -1,26 +1,25 @@
 # docs/media — the committed pictures
 
-Five visual assets are preserved here. The repository [README](../../README.md)
+Five visual assets are kept here. The repository [README](../../README.md)
 shows the two-perspective PNG and links the WebM clip. The architecture note
-embeds the diagram; the meeting still and GIF remain historical archive assets.
-The four spectator captures are **historical**, preserved from the previous
-reference recording; they do not depict the current demo recording.
+embeds the diagram; the meeting still and GIF are archive assets no page embeds.
+The four spectator captures show the featured strip's head on the shown 9-player
+set, 9p2i seed 19, a game the current demo serves.
 [provenance.json](provenance.json) identifies their source and exact asset bytes:
 
 Placement below refers to the README and architecture note.
 
 | File | What it is | Current placement |
 | --- | --- | --- |
-| `spectator-two-truths.png` | 2036×850 — the same scene through omniscient and crewmate views, with the following accusation | [README image](../../README.md) |
-| `spectator-meeting.png` | 1440×900 — accusation chain, ballots and mind inspector | Historical archive only |
-| `spectator-journey.gif` | 640×400, 8 frames — playback from the opening tick to a meeting | Historical archive only |
+| `spectator-two-truths.png` | 2036×864 — the same scene through omniscient and crewmate views, with the following accusation | [README image](../../README.md) |
+| `spectator-meeting.png` | 1440×900 — accusation chain, ballots and mind inspector | Archive only |
+| `spectator-journey.gif` | 640×400, 13 frames — playback from the opening tick to a meeting | Archive only |
 | `spectator-journey.webm` | 1440×900, 9 s — movement, a kill flash, a meeting pause and fog | [README clip link](../../README.md) |
 | `architecture.svg` | Text SVG of the packages, data flow and observation firewall | [Architecture image](../architecture.md) |
 
 The four spectator assets were captured from the **static demo bundle**
-(`scripts/build_demo_bundle.py`) at the source revision below. Building the
-current checkout uses the current recordings, so it does not recreate these
-historical scenes.
+(`scripts/build_demo_bundle.py`) built at the capture revision below, whose
+recordings are the ones the current checkout serves.
 
 `architecture.svg` is not a capture at all: it is hand-written SVG text — real
 `<text>`, no raster, no external font — so it diffs line by line and reads in
@@ -38,8 +37,9 @@ Nothing regenerates any of them automatically. They are committed bytes,
 refreshed by hand when the surface changes enough that they misrepresent it — a
 screenshot is a claim about the product, and a stale one is a false claim. That
 standard also applies to the recorded game: when the corpus changes, captures
-must either be refreshed from the new bytes or clearly labelled historical, as
-they are here. A new capture must update the provenance file and its captions.
+must either be refreshed from the new bytes, as these were after the 9-player
+set's promotion, or clearly labelled historical. A new capture must update the
+provenance file and its captions.
 
 ## Regenerating all four spectator assets
 
@@ -69,36 +69,36 @@ fails rather than shipping a picture of the dock.
 
 ### Provenance
 
-Every spectator asset is a capture of **9p2i seed 2** (`headless-seed-2`) from
-the baseline-7 record: recorded 2026-08-25 on `Qwen/Qwen3.6-27B` at prompt set
-v4, $0. Its [historical manifest](https://github.com/dkdan10/AiLibi/blob/5184417779d26a0ddc26c703574fdcf341e16098/replays/samples/9p2i/MANIFEST.md) and [source replay](https://github.com/dkdan10/AiLibi/blob/5184417779d26a0ddc26c703574fdcf341e16098/replays/samples/9p2i/replay-seed-2.jsonl) are pinned to the capture revision. The current manifest describes a later v5 recording.
+Every spectator asset is a capture of **9p2i seed 19** (`headless-seed-19`)
+from the shown 9-player set, recorded 2026-10-01 on `Qwen/Qwen3.6-27B` with v6
+prompts and a v8 ballot, $0, under that set's declared experiment config. Its
+[manifest](https://github.com/dkdan10/AiLibi/blob/148fa211a5851c288eeaf1a9591197f8ba13bdcc/replays/samples/9p2i/MANIFEST.md) and [source replay](https://github.com/dkdan10/AiLibi/blob/148fa211a5851c288eeaf1a9591197f8ba13bdcc/replays/samples/9p2i/replay-seed-19.jsonl) are pinned to the commit that landed those bytes.
 
-Verify the source replay without replacing current samples (the commit must be
-available locally; a shallow clone may need to fetch it first):
+Verify the source replay against the one this checkout serves:
 
 ```bash
-git show 5184417779d26a0ddc26c703574fdcf341e16098:replays/samples/9p2i/replay-seed-2.jsonl | shasum -a 256
+shasum -a 256 replays/samples/9p2i/replay-seed-19.jsonl
 ```
 
 The digest must equal `recording.sha256` in `provenance.json`.
 `tests/scripts/test_public_recording_provenance.py` verifies each committed
-asset digest and rejects a changed image with unchanged provenance. It does not
-claim that historical images represent the current corpus.
+asset digest, holds that digest to the served replay's bytes, and rejects a
+changed image with unchanged provenance.
 
 | Asset | Engine tick | Perspective | Capture viewport |
 | --- | --- | --- | --- |
-| `spectator-two-truths.png` | 5 (both halves), plus the meeting at tick 7 for the card | omniscient (left) and as-agent `p-3` (right) | 1440×900 at 2× density, laid out on a 2036 px sheet |
-| `spectator-meeting.png` | 7 — meeting `headless-seed-2:meeting-0` open | omniscient | 1440×900 |
-| `spectator-journey.gif` | 0 → 7 | omniscient | 1440×900 at 2× density, scaled to 640 wide |
-| `spectator-journey.webm` | 1 → 7, then as-agent fog | omniscient, then as-agent | 1440×900 |
+| `spectator-two-truths.png` | 9 (both halves), plus the meeting at tick 12 for the card | omniscient (left) and as-agent `p-5` (right) | 1440×900 at 2× density, laid out on a 2036 px sheet |
+| `spectator-meeting.png` | 12 — meeting `headless-seed-19:meeting-0` open | omniscient | 1440×900 |
+| `spectator-journey.gif` | 0 → 12 | omniscient | 1440×900 at 2× density, scaled to 640 wide |
+| `spectator-journey.webm` | 1 → 12, then as-agent fog | omniscient, then as-agent | 1440×900 |
 
-`p-3` is the fog subject because the picture's argument depends on it: at tick 5
-`p-3` is a crewmate in MedBay who can see one other player, while the omniscient
-half of the same tick carries two bodies and both impostors — and at the meeting
-that follows, `p-3` accuses `p-1`, who is also a crewmate. The capture harness checks these scene and accusation facts before shooting.
-The preserved source replay was also checked when this historical provenance
-was recorded: the meeting is at tick 7 and p-3 accuses p-1. A current capture
-must establish its own scene facts instead of copying this caption.
+`p-5` is the fog subject because the picture's argument depends on it: at tick 9
+`p-5` is a crewmate in Labs who can see one other player, while the omniscient
+half of the same tick carries two bodies and both impostors — one in MedBay with
+the player it has just killed, the other inside the vents — and at the meeting
+that follows, `p-5` accuses `p-4`, who is also a crewmate. The capture harness
+checks these scene and accusation facts against the served bytes before
+shooting.
 
 ### What is deterministic, and what is not
 
@@ -125,10 +125,9 @@ the final frame resolves to the opening view and the capture fails.
 
 The README embeds `spectator-two-truths.png` and links
 `spectator-journey.webm`; it does not embed the GIF or meeting still. Its caption
-labels both displayed/linked captures historical and directs readers to the
-current interactive demo. The retained GIF and still document that earlier
-capture without claiming to show the current product.
+names the game, its set and its recording date, and the image links to the
+interactive demo, which serves the same game.
 
-Budget: the directory is currently 1.4 MB. Keep the still under 400 kB, the clip
+Budget: the directory is currently 1.6 MB. Keep the still under 400 kB, the clip
 under 3 MB and the GIF under 1.5 MB — the capture asserts all three, so a walk
 that grows past them fails instead of landing in the tree.
