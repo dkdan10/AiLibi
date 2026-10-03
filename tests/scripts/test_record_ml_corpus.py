@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -2157,29 +2158,31 @@ def test_the_dry_run_refuses_an_unsupported_provider() -> None:
 
 def test_fake_target_guard_resolves_symlinks_and_dot_dot(tmp_path: Path) -> None:
     # Physical paths are compared, so neither a symlink nor a `..` can smuggle
-    # the target back under replays/. The decoy lives in the committed tree and
-    # must stay empty.
-    decoy = _REPO_ROOT / "replays" / "ml_corpus" / ".test-corpus-decoy"
+    # the target back under replays/. The link points at a committed corpus set,
+    # read only, and the run aims at a directory below it whose name is this
+    # case's own: nothing is made in the shared tree, so a concurrent case that
+    # inventories replays/ never sees this one.
+    committed = _REPO_ROOT / "replays" / "ml_corpus" / "4p1i"
+    name = f"scratch-{uuid.uuid4().hex[:12]}"
     link = tmp_path / "corpus-link"
-    target = f"{tmp_path}/not-there/../corpus-link/scratch"
+    link.symlink_to(committed, target_is_directory=True)
+    target = f"{tmp_path}/not-there/../corpus-link/{name}"
     env = dict(
         _clean_env(),
         AILIBI_LLM_PROVIDER="fake",
         AILIBI_PROMPT_SET="qwen3_6_27b",
         AILIBI_ML_CORPUS_ROOT=target,
     )
-    decoy.mkdir()
-    link.symlink_to(decoy)
-    try:
-        proc = _run("--set", "4p1i", env=env, timeout=180)
-        out = proc.stdout + proc.stderr
-        assert proc.returncode != 0
-        assert "may not write into the repository's replays/ tree" in out
-        assert str(decoy) in out  # resolved all the way through the symlink
-        assert list(decoy.iterdir()) == []
-        assert not (tmp_path / "not-there").exists()
-    finally:
-        shutil.rmtree(decoy)
+    listing = sorted(path.name for path in committed.iterdir())
+    proc = _run("--set", "4p1i", env=env, timeout=180)
+    out = proc.stdout + proc.stderr
+    assert proc.returncode != 0
+    assert "may not write into the repository's replays/ tree" in out
+    # resolved all the way through the symlink
+    assert f"{os.path.realpath(committed)}/{name}" in out
+    assert not (committed / name).exists()
+    assert sorted(path.name for path in committed.iterdir()) == listing
+    assert not (tmp_path / "not-there").exists()
 
 
 def test_fake_provider_skips_the_api_key_preflight(tmp_path: Path) -> None:

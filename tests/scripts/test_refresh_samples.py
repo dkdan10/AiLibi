@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import socket
+import stat
 import subprocess
 import tempfile
 import threading
@@ -55,6 +56,80 @@ _OLLAMA_MODEL = "qwen3.5:9b"
 pytestmark = pytest.mark.skipif(
     shutil.which("bash") is None, reason="bash required to run refresh_samples.sh"
 )
+
+#: The real tree every case here leaves untouched.
+_REPLAYS = _REPO_ROOT / "replays"
+
+
+def _replays_inventory(replays: Path = _REPLAYS) -> dict[str, tuple[str, int, int]]:
+    """Every entry under ``replays``, by its kind, size and modification time.
+
+    A directory's modification time moves whenever an entry is made in it or
+    removed from it, so a path a case creates and deletes again still shows. A
+    file's size and modification time move when its bytes are written.
+    """
+
+    def entry(path: Path) -> tuple[str, int, int]:
+        status = path.lstat()
+        if stat.S_ISLNK(status.st_mode):
+            return ("link", 0, status.st_mtime_ns)
+        if stat.S_ISDIR(status.st_mode):
+            return ("dir", 0, status.st_mtime_ns)
+        return ("file", status.st_size, status.st_mtime_ns)
+
+    inventory = {".": entry(replays)}
+    for directory, subdirectories, files in os.walk(replays):
+        for name in (*subdirectories, *files):
+            path = Path(directory) / name
+            inventory[path.relative_to(replays).as_posix()] = entry(path)
+    return inventory
+
+
+def _inventory_changes(
+    before: dict[str, tuple[str, int, int]], after: dict[str, tuple[str, int, int]]
+) -> list[str]:
+    """The entries made, removed or rewritten between two inventories."""
+
+    return sorted(
+        path
+        for path in before.keys() | after.keys()
+        if before.get(path) != after.get(path)
+    )
+
+
+@pytest.fixture(autouse=True)
+def _replays_tree_untouched() -> Iterator[None]:
+    """Every case leaves the real ``replays/`` tree exactly as it found it.
+
+    No case writes there while the guard it tests holds: decoys, planted rounds
+    and strays live under the case's own ``tmp_path``, and a case aimed at the
+    tree reads a committed directory or names an absent path of its own. So a
+    difference here is a case, or a regressed guard, writing into the shared
+    tree, which is what made these cases race under pytest-xdist.
+    """
+
+    before = _replays_inventory()
+    yield
+    changed = _inventory_changes(before, _replays_inventory())
+    assert changed == [], f"the case changed the real replays/ tree: {changed}"
+
+
+def _tree_bytes(directory: Path) -> dict[str, str]:
+    """Every file under ``directory`` (links not followed), by its sha256."""
+
+    return {
+        (Path(parent) / name).relative_to(directory).as_posix(): hashlib.sha256(
+            (Path(parent) / name).read_bytes()
+        ).hexdigest()
+        for parent, _subdirectories, files in os.walk(directory)
+        for name in files
+    }
+
+
+def _unique(name: str) -> str:
+    """``name`` with a suffix of this case's own, so no two cases share a path."""
+
+    return f"{name}-{uuid.uuid4().hex[:12]}"
 
 
 def _run(
@@ -1186,24 +1261,24 @@ _REFRESH_OUTPUT_NAMES = (
     "tournament-eval-report.json",
     "results-rubric-score.json",
 )
-# A refused run must never create this; the `..` cases point through it.
-_STRAY_TARGET_ROOT = _REPO_ROOT / "not-a-real-dir"
 
 
 @contextlib.contextmanager
-def _replays_tree_restored() -> Iterator[None]:
+def _replays_tree_restored(stray_roots: Sequence[Path] = ()) -> Iterator[None]:
     """Put the committed tree back if a refused run turns out not to be refused.
 
     The refusal cases below aim a REAL recording run at the committed tree,
     which is the only way to prove the guard refuses it. Their assertions report
     a regression; this undoes the damage, so a regressed guard cannot also leave
     the repository dirty. It takes a recursive inventory of ``replays/`` and
-    removes anything new (files and directories alike, deepest first), and keeps
+    removes anything new (files and directories alike, deepest first), keeps
     the bytes of the files a refresh would overwrite in any of the directories
-    these cases name.
+    these cases name, and removes the case's own ``stray_roots``. While the
+    guard holds there is nothing to undo, and the autouse check above sees the
+    tree unchanged.
     """
 
-    replays = _REPO_ROOT / "replays"
+    replays = _REPLAYS
     targets = [replays, replays / "samples" / "4p1i", replays / "samples" / "9p2i"]
     inventory = set(replays.rglob("*"))
     contents: dict[Path, bytes] = {}
@@ -1228,8 +1303,9 @@ def _replays_tree_restored() -> Iterator[None]:
         for path, data in contents.items():
             if not path.is_file() or path.read_bytes() != data:
                 path.write_bytes(data)
-        if _STRAY_TARGET_ROOT.exists():
-            shutil.rmtree(_STRAY_TARGET_ROOT)
+        for root in stray_roots:
+            if root.exists():
+                shutil.rmtree(root)
 
 
 @pytest.mark.parametrize(
@@ -1242,15 +1318,19 @@ def _replays_tree_restored() -> Iterator[None]:
         # case a string-prefix form of the guard would wave through.
         "scripts/../replays/samples/4p1i",
         # The same trick behind a component that does not exist yet, which the
-        # kernel cannot resolve but `mkdir -p` would create on the way in.
-        "not-a-real-dir/../replays/samples/new-set",
+        # kernel cannot resolve but `mkdir -p` would create on the way in. Both
+        # names are filled per run, so the paths a regression would make are
+        # this case's own.
+        "{stray}/../replays/samples/{absent}",
     ],
 )
 def test_fake_refresh_refuses_a_replays_target(relative_target: str) -> None:
     # The guard that makes an explicit `fake` safe: committed sets are REAL
     # recordings, so fake bytes may never land in the repo's replays/ tree. The
     # refusal fires before mkdir/staging and names the path and the rule.
-    target = f"{_REPO_ROOT}/{relative_target}"
+    stray, absent = _unique("not-a-real-dir"), _unique("new-set")
+    relative = relative_target.format(stray=stray, absent=absent)
+    target = f"{_REPO_ROOT}/{relative}"
     env = _clean_env()
     env.update(
         AILIBI_LLM_PROVIDER="fake",
@@ -1264,7 +1344,10 @@ def test_fake_refresh_refuses_a_replays_target(relative_target: str) -> None:
         if relative_target == "replays/samples/9p2i"
         else ()
     )
-    with _replays_tree_restored():
+    # A committed directory is aimed at read-only: its bytes are compared.
+    committed = Path(os.path.realpath(target))
+    before = _tree_bytes(committed) if committed.is_dir() else None
+    with _replays_tree_restored(stray_roots=(_REPO_ROOT / stray,)):
         proc = _run("--seeds", "0", *era, env=env, timeout=300)
         out = proc.stdout + proc.stderr
         assert proc.returncode != 0
@@ -1274,11 +1357,14 @@ def test_fake_refresh_refuses_a_replays_target(relative_target: str) -> None:
         # It aborted at the provider gate: the later pre-spend gates never ran,
         # so no directory, descriptor or stage was created.
         assert "Substrate slate OK" not in out
-        samples_root = _REPO_ROOT / "replays" / "samples"
-        assert list(samples_root.glob(".ailibi-refresh-stage-*")) == []
-        # The `..` cases must not create their leading component on the way in
-        # (asserted inside the block, before the cleanup would remove it).
-        assert not _STRAY_TARGET_ROOT.exists()
+        assert list((_REPLAYS / "samples").glob(".ailibi-refresh-stage-*")) == []
+        # The `..` case must not create its leading component on the way in,
+        # nor its set (asserted inside the block, before the cleanup would
+        # remove them).
+        assert not (_REPO_ROOT / stray).exists()
+        assert not (_REPLAYS / "samples" / absent).exists()
+        if before is not None:
+            assert _tree_bytes(committed) == before
 
 
 def test_fake_refresh_refuses_a_manifest_inside_replays(tmp_path: Path) -> None:
@@ -1293,6 +1379,7 @@ def test_fake_refresh_refuses_a_manifest_inside_replays(tmp_path: Path) -> None:
         AILIBI_SAMPLE_DIR=str(set_dir),
         AILIBI_MANIFEST=str(_COMMITTED_4P1I / "MANIFEST.md"),
     )
+    before = _tree_bytes(_COMMITTED_4P1I)
     with _replays_tree_restored():
         proc = _run("--seeds", "0", env=env, timeout=300)
         out = proc.stdout + proc.stderr
@@ -1301,32 +1388,34 @@ def test_fake_refresh_refuses_a_manifest_inside_replays(tmp_path: Path) -> None:
         assert "(from AILIBI_MANIFEST)" in out
         assert "nothing was staged" in out
         assert not set_dir.exists()  # refused before the target dir was created
+        assert _tree_bytes(_COMMITTED_4P1I) == before
 
 
 def test_fake_refresh_refuses_a_symlink_into_replays(tmp_path: Path) -> None:
     # The other way a string-prefix form of this guard is defeated: a sample dir
     # that only LOOKS outside replays/. The guard compares physical paths, so the
     # symlink resolves back into the tree and the run is refused. The link points
-    # at a scratch subdir of replays/samples (not a committed set), so a regressed
-    # guard would record into a throwaway dir rather than over real bytes.
-    decoy = _REPO_ROOT / "replays" / "samples" / ".test-symlink-decoy"
+    # at a committed set, read-only, and the run aims at a set directory below it
+    # that does not exist and whose name is this case's own, so a regressed guard
+    # would record into a new directory rather than over real bytes.
+    name = _unique("absent-set")
     link = tmp_path / "looks-like-scratch"
+    link.symlink_to(_COMMITTED_4P1I, target_is_directory=True)
     env = _clean_env()
     env.update(
         AILIBI_LLM_PROVIDER="fake",
-        AILIBI_SAMPLE_DIR=str(link),
-        AILIBI_MANIFEST=str(link / "MANIFEST.md"),
+        AILIBI_SAMPLE_DIR=str(link / name),
+        AILIBI_MANIFEST=str(link / name / "MANIFEST.md"),
     )
-    decoy.mkdir()
-    link.symlink_to(decoy)
-    try:
+    before = _tree_bytes(_COMMITTED_4P1I)
+    with _replays_tree_restored():
         proc = _run("--seeds", "0", env=env, timeout=300)
         out = proc.stdout + proc.stderr
         assert proc.returncode != 0
         assert "may not write into the repository's replays/ tree" in out
-        assert list(decoy.iterdir()) == []
-    finally:
-        shutil.rmtree(decoy)
+        assert f"{os.path.realpath(_COMMITTED_4P1I)}/{name}" in out
+        assert not (_COMMITTED_4P1I / name).exists()
+        assert _tree_bytes(_COMMITTED_4P1I) == before
 
 
 def test_fake_refresh_refuses_a_symlink_revealed_by_normalization(
@@ -1336,28 +1425,29 @@ def test_fake_refresh_refuses_a_symlink_revealed_by_normalization(
     # behind a component that does not exist yet, collapsing onto a symlink that
     # points into replays/. Resolving once and normalizing once leaves the
     # symlink unresolved, so the guard has to run both steps to a fixed point.
-    # Again aimed at a throwaway subdir, so a regression costs nothing.
-    decoy = _REPO_ROOT / "replays" / "samples" / ".test-composed-decoy"
+    # Again aimed through a committed set at a directory of this case's own, so
+    # a regression costs nothing.
+    name = _unique("new-set")
     link = tmp_path / "samples-link"
-    target = f"{tmp_path}/not-there/../samples-link/new-set"
+    link.symlink_to(_COMMITTED_4P1I, target_is_directory=True)
+    target = f"{tmp_path}/not-there/../samples-link/{name}"
     env = _clean_env()
     env.update(
         AILIBI_LLM_PROVIDER="fake",
         AILIBI_SAMPLE_DIR=target,
         AILIBI_MANIFEST=f"{target}/MANIFEST.md",
     )
-    decoy.mkdir()
-    link.symlink_to(decoy)
-    try:
+    before = _tree_bytes(_COMMITTED_4P1I)
+    with _replays_tree_restored():
         proc = _run("--seeds", "0", env=env, timeout=300)
         out = proc.stdout + proc.stderr
         assert proc.returncode != 0
         assert "may not write into the repository's replays/ tree" in out
-        assert str(decoy) in out  # resolved all the way through the symlink
-        assert list(decoy.iterdir()) == []
+        # resolved all the way through the symlink
+        assert f"{os.path.realpath(_COMMITTED_4P1I)}/{name}" in out
+        assert not (_COMMITTED_4P1I / name).exists()
         assert not (tmp_path / "not-there").exists()
-    finally:
-        shutil.rmtree(decoy)
+        assert _tree_bytes(_COMMITTED_4P1I) == before
 
 
 def test_fake_refresh_bash_trace_names_the_worker_pool(tmp_path: Path) -> None:
@@ -2267,9 +2357,6 @@ def test_a_run_without_any_export_passes_the_environment_check() -> None:
     assert "Substrate slate OK" in proc.stdout
 
 
-_DECOY = _REPO_ROOT / "replays" / "samples" / ".test-config-decoy"
-
-
 def _require_absent_round(name: str) -> str:
     """``name``, once no path the round cases aim at exists under it; else raises.
 
@@ -2296,12 +2383,10 @@ def _absent_round_name() -> str:
     return _require_absent_round(f"probe-{uuid.uuid4().hex[:12]}")
 
 
-def _new_replays_paths(before: set[Path]) -> list[Path]:
-    """Every path under ``replays/`` that ``before`` does not hold, in path order."""
+def _new_replays_paths(before: set[Path], replays: Path = _REPLAYS) -> list[Path]:
+    """Every path under ``replays`` that ``before`` does not hold, in path order."""
 
-    return sorted(
-        path for path in (_REPO_ROOT / "replays").rglob("*") if path not in before
-    )
+    return sorted(path for path in replays.rglob("*") if path not in before)
 
 
 #: macOS reaches every directory of its data volume through this prefix too (a
@@ -2440,36 +2525,43 @@ def test_a_switched_on_config_is_refused_at_every_unsafe_target(
     env, refusal = _refused_target_env(case, tmp_path, round_name)
     config = _test_config(tmp_path)
     if case == "a symlink into samples":
-        _DECOY.mkdir()
-        (tmp_path / "looks-like-scratch").symlink_to(_DECOY)
-    before = set((_REPO_ROOT / "replays").rglob("*"))
-    try:
-        with _replays_tree_restored():
-            proc = _run("--seeds", "0", "--experiment-config", str(config), env=env)
-            assert proc.returncode == 1
-            assert refusal in proc.stderr
-            assert _NOTHING_STAGED in proc.stderr
-            # The refusal names the offending path as it resolves physically.
-            offending = {
-                "default target": None,
-                "a scratch dir with a committed manifest": env.get("AILIBI_MANIFEST"),
-            }.get(case, env.get("AILIBI_SAMPLE_DIR"))
-            if offending is not None:
-                assert f"resolves to {os.path.realpath(offending)}" in proc.stderr
-            # The check ran before every preflight: the key gate never spoke.
-            assert "ANTHROPIC_API_KEY" not in proc.stderr
-            assert "Substrate slate OK" not in proc.stdout
-            assert _stage_dirs() == []
-            assert not (_REPO_ROOT / "replays" / round_name).exists()
-            assert not (_REPO_ROOT / "replays" / "candidates" / round_name).exists()
-            assert not (
-                _REPO_ROOT / "replays" / "candidates" / f".{round_name}"
-            ).exists()
-            assert _new_replays_paths(before) == []
-            assert not (tmp_path / "scratch-set").exists()
-    finally:
-        if _DECOY.exists():
-            shutil.rmtree(_DECOY)
+        # A link of this case's own, to a committed set aimed at read-only.
+        (tmp_path / "looks-like-scratch").symlink_to(
+            _COMMITTED_4P1I, target_is_directory=True
+        )
+    # Each committed directory the run is aimed at, through its sample dir (the
+    # default target included) or its manifest, is read and compared after.
+    aimed = {
+        Path(os.path.realpath(env.get("AILIBI_SAMPLE_DIR", str(_COMMITTED_4P1I)))),
+        Path(os.path.realpath(env.get("AILIBI_MANIFEST", str(_MANIFEST)))).parent,
+    }
+    committed = {
+        directory: _tree_bytes(directory) for directory in aimed if directory.is_dir()
+    }
+    before = set(_REPLAYS.rglob("*"))
+    with _replays_tree_restored():
+        proc = _run("--seeds", "0", "--experiment-config", str(config), env=env)
+        assert proc.returncode == 1
+        assert refusal in proc.stderr
+        assert _NOTHING_STAGED in proc.stderr
+        # The refusal names the offending path as it resolves physically.
+        offending = {
+            "default target": None,
+            "a scratch dir with a committed manifest": env.get("AILIBI_MANIFEST"),
+        }.get(case, env.get("AILIBI_SAMPLE_DIR"))
+        if offending is not None:
+            assert f"resolves to {os.path.realpath(offending)}" in proc.stderr
+        # The check ran before every preflight: the key gate never spoke.
+        assert "ANTHROPIC_API_KEY" not in proc.stderr
+        assert "Substrate slate OK" not in proc.stdout
+        assert _stage_dirs() == []
+        assert not (_REPLAYS / round_name).exists()
+        assert not (_REPLAYS / "candidates" / round_name).exists()
+        assert not (_REPLAYS / "candidates" / f".{round_name}").exists()
+        assert _new_replays_paths(before) == []
+        assert not (tmp_path / "scratch-set").exists()
+        for directory, contents in committed.items():
+            assert _tree_bytes(directory) == contents, directory
 
 
 def test_a_switched_on_config_is_accepted_at_a_candidate_set_directory(
@@ -2500,38 +2592,138 @@ def test_a_switched_on_config_is_accepted_at_a_candidate_set_directory(
 def test_a_round_already_on_disk_is_still_refused_and_left_as_it_was(
     tmp_path: Path,
 ) -> None:
-    """Planted: a round directory of the case's own sits on disk, as a committed one does.
+    """A committed round on disk, aimed at itself one level deep, is refused.
 
-    Aimed at that directory itself, one level deep, a switched-on config is
-    refused; the planted bytes stay as they were and nothing new appears under
-    ``replays/``. The no-trace check bites: a path made after the snapshot is
-    named, and a name whose round exists is refused as a probe name.
+    Aimed at the round directory rather than a set inside it, a switched-on
+    config is refused; the round's bytes stay as they were and nothing new
+    appears under ``replays/``. A name whose round exists is refused as a probe
+    name. The planted twin of this case, a round of its own under ``tmp_path``,
+    is ``test_a_planted_round_on_disk_is_refused_and_left_as_it_was``.
     """
 
-    round_name = _absent_round_name()
-    planted = _REPO_ROOT / "replays" / "candidates" / round_name
+    committed = _ROUND_1_CONFIG.parent
+    assert committed.is_dir()
     env = _clean_env()
-    env.update(AILIBI_SAMPLE_DIR=str(planted), AILIBI_MANIFEST=f"{planted}/MANIFEST.md")
+    env.update(
+        AILIBI_SAMPLE_DIR=str(committed), AILIBI_MANIFEST=f"{committed}/MANIFEST.md"
+    )
     config = _test_config(tmp_path)
+    contents = _tree_bytes(committed)
+    before = set(_REPLAYS.rglob("*"))
     with _replays_tree_restored():
-        planted.mkdir()
-        (planted / "README.md").write_text("planted\n", encoding="utf-8")
-        before = set((_REPO_ROOT / "replays").rglob("*"))
         proc = _run("--seeds", "0", "--experiment-config", str(config), env=env)
         assert proc.returncode == 1
         assert "records only into a candidate set" in proc.stderr
-        assert f"resolves to {os.path.realpath(planted)}" in proc.stderr
+        assert f"resolves to {os.path.realpath(committed)}" in proc.stderr
         assert _NOTHING_STAGED in proc.stderr
         assert "Substrate slate OK" not in proc.stdout
         assert _new_replays_paths(before) == []
-        assert sorted(planted.iterdir()) == [planted / "README.md"]
-        assert (planted / "README.md").read_text(encoding="utf-8") == "planted\n"
-        with pytest.raises(ValueError, match="is taken"):
-            _require_absent_round(round_name)
-        stray = planted / "9p2i"
-        stray.mkdir()
-        assert _new_replays_paths(before) == [stray]
-    assert not planted.exists()
+        assert not (committed / "MANIFEST.md").exists()
+        assert _tree_bytes(committed) == contents
+    with pytest.raises(ValueError, match="is taken"):
+        _require_absent_round(committed.name)
+
+
+def test_a_planted_round_on_disk_is_refused_and_left_as_it_was(
+    tmp_path: Path,
+) -> None:
+    """Planted: a round of the case's own sits on a scratch repository's disk.
+
+    The rule reads the scratch repository's ``replays/`` tree, so the planted
+    round is found on disk by device and inode, as a committed one is; aimed at
+    itself, it is refused and left as it was. The no-trace check bites: a set
+    directory made under the round after the snapshot is named.
+    """
+
+    repo = tmp_path / "repo"
+    (repo / "replays" / "samples").mkdir(parents=True)
+    planted = repo / "replays" / "candidates" / "probe-round"
+    planted.mkdir(parents=True)
+    (planted / "README.md").write_text("planted\n", encoding="utf-8")
+    before = set((repo / "replays").rglob("*"))
+    with pytest.raises(
+        de.DeclaredExperimentError, match="records only into a candidate set"
+    ):
+        de.refuse_unsafe_target(
+            _TEST_CONFIG,
+            sample_dir=planted,
+            manifest=planted / "MANIFEST.md",
+            sample_dir_explicit=True,
+            repo_root=repo,
+        )
+    assert _new_replays_paths(before, repo / "replays") == []
+    assert sorted(planted.iterdir()) == [planted / "README.md"]
+    assert (planted / "README.md").read_text(encoding="utf-8") == "planted\n"
+    stray = planted / "9p2i"
+    stray.mkdir()
+    assert _new_replays_paths(before, repo / "replays") == [stray]
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "a set below a committed set",
+        "a stage directory",
+        "a round",
+        "a set inside a round",
+        "a stray at the repository root's tree",
+        "a rewritten committed file",
+        "a decoy made and removed",
+    ],
+)
+def test_the_no_trace_checks_report_a_stray_of_each_kind(
+    kind: str, tmp_path: Path
+) -> None:
+    """Planted, on a scratch tree: each kind of path a regressed case would leave.
+
+    The kinds are the ones the cases above would make if their guard regressed:
+    a set directory below a committed set (the symlink cases), a staging
+    directory, a round and a set inside one (the round cases), a path at the
+    top of the tree, a committed file rewritten, and a decoy directory made and
+    removed again within the case, which only the modification time of the
+    directory that held it records. The autouse inventory check reports every
+    kind, and the path snapshot every kind that is still there.
+    """
+
+    replays = tmp_path / "replays"
+    committed = replays / "samples" / "4p1i"
+    committed.mkdir(parents=True)
+    (committed / "MANIFEST.md").write_text("| seed |\n", encoding="utf-8")
+    (replays / "candidates" / "stage-b-r1").mkdir(parents=True)
+    paths = set(replays.rglob("*"))
+    before = _replays_inventory(replays)
+    made: Path | None = None
+    if kind == "a set below a committed set":
+        made = committed / _unique("absent-set")
+        made.mkdir()
+    elif kind == "a stage directory":
+        made = replays / "samples" / ".ailibi-refresh-stage-planted"
+        made.mkdir()
+    elif kind == "a round":
+        made = replays / "candidates" / _unique("probe")
+        made.mkdir()
+    elif kind == "a set inside a round":
+        made = replays / "candidates" / "stage-b-r1" / "9p2i"
+        made.mkdir()
+    elif kind == "a stray at the repository root's tree":
+        made = replays / _unique("new-set")
+        made.mkdir()
+    elif kind == "a rewritten committed file":
+        (committed / "MANIFEST.md").write_text("| seed | row |\n", encoding="utf-8")
+    else:
+        decoy = replays / "samples" / ".test-symlink-decoy"
+        decoy.mkdir()
+        decoy.rmdir()
+    changes = _inventory_changes(before, _replays_inventory(replays))
+    assert changes, kind
+    if made is not None:
+        assert _new_replays_paths(paths, replays) == [made]
+        assert made.relative_to(replays).as_posix() in changes
+    elif kind == "a rewritten committed file":
+        assert changes == ["samples/4p1i/MANIFEST.md"]
+    else:
+        assert _new_replays_paths(paths, replays) == []
+        assert changes == ["samples"]
 
 
 def test_a_config_of_historical_defaults_goes_anywhere_and_records_no_key(
