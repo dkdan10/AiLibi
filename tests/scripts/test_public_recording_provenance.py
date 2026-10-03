@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -232,8 +233,8 @@ def test_the_front_door_names_the_pictured_game_in_plain_words(
 ) -> None:
     # The pictured game is the one the guided tour opens on
     # (tests/api/test_sets.py pins it as the featured list's first entry), and
-    # the caption's scene keeps one impostor inside a vent, as the capture
-    # harness checks against the served bytes.
+    # the caption keeps one impostor inside a vent, which
+    # test_the_captions_scene_is_the_recorded_one holds to the served bytes.
     root = Path(__file__).resolve().parents[2]
     assert _front_door_jargon(root) == []
     readme = (root / "README.md").read_text()
@@ -260,6 +261,51 @@ def test_the_front_door_names_the_pictured_game_in_plain_words(
     planted.write_text(readme.replace(caption, _CAPTION_AT_59BBD1BE))
     assert _front_door_jargon(tmp_path) == ["README.md"]
     assert "inside a vent" not in _readme_caption(planted.read_text())
+
+
+#: The caption's scene: the pictured game and tick, and the room the impostor
+#: standing outside the vents is in.
+_HERO_GAME, _HERO_TICK, _HERO_ROOM = "headless-seed-19", 9, "MEDBAY"
+
+
+def _hero_scene_problems(
+    impostors: Sequence[tuple[str | None, bool]], bodies: int
+) -> list[str]:
+    """Why the caption's scene is not the one recorded, given each impostor's
+    (room, inside-a-vent) and the body count at the pictured tick."""
+
+    problems = []
+    if bodies != 2:
+        problems.append(f"{bodies} bodies, not two")
+    if sorted(venting for _room, venting in impostors) != [False, True]:
+        problems.append("not exactly one impostor inside a vent")
+    if [room for room, venting in impostors if not venting] != [_HERO_ROOM]:
+        problems.append(f"the impostor outside the vents is not in {_HERO_ROOM}")
+    return problems
+
+
+def test_the_captions_scene_is_the_recorded_one() -> None:
+    # The README caption says that at tick 9 two players lie dead, one impostor
+    # stands in MedBay and the other is inside a vent. The capture harness runs
+    # only under its capture switch, so the claim is held here, in every run, to
+    # the replay the demo serves.
+    root = Path(__file__).resolve().parents[2]
+    replay = ReplayLoader(root / "replays/samples/9p2i").load_replay(_HERO_GAME)
+    frame = next(frame for frame in replay.ticks if frame.tick == _HERO_TICK)
+    roles = {player.agent_id: player.role for player in replay.players}
+    impostors = [
+        (state.room_id, state.is_venting)
+        for state in frame.agent_states
+        if roles[state.agent_id] == "IMPOSTOR" and state.is_alive
+    ]
+    assert _hero_scene_problems(impostors, len(frame.bodies)) == []
+    # Planted: the scene the `59bbd1be` caption described, both impostors in rooms.
+    standing = [(room, False) for room, _venting in impostors]
+    assert _hero_scene_problems(standing, len(frame.bodies)) == [
+        "not exactly one impostor inside a vent",
+        f"the impostor outside the vents is not in {_HERO_ROOM}",
+    ]
+    assert _hero_scene_problems(impostors, 1) == ["1 bodies, not two"]
 
 
 _MEDIA_SPEC = "frontend/e2e/media.spec.ts"

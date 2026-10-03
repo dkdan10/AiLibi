@@ -751,7 +751,9 @@ test.describe("README media capture", () => {
     expect(heroFrame?.events.some((event) => event.type === "kill")).toBe(true);
     // "two players are already dead" — the caption's count, not a rounded one.
     expect(heroFrame?.bodies).toHaveLength(HERO.bodies);
-    // "both impostors are on screen": alive and standing in a room this frame.
+    // Both impostors are alive and placed in a room this frame, one of them inside
+    // a vent there; tests/scripts/test_public_recording_provenance.py holds the
+    // caption's vent clause to the served bytes in every run.
     const impostors = replay.players
       .filter((player) => player.role === "IMPOSTOR")
       .map((player) => player.agent_id);

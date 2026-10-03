@@ -128,6 +128,6 @@ The README embeds `spectator-two-truths.png` and links
 names the game, its set and its recording date, and the image links to the
 interactive demo, which serves the same game.
 
-Budget: the directory is currently 1.6 MB. Keep the still under 400 kB, the clip
+Budget: the directory is currently 1.4 MB. Keep the still under 400 kB, the clip
 under 3 MB and the GIF under 1.5 MB — the capture asserts all three, so a walk
 that grows past them fails instead of landing in the tree.
