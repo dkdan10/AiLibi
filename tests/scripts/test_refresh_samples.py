@@ -2670,6 +2670,7 @@ def test_a_planted_round_on_disk_is_refused_and_left_as_it_was(
         "a set inside a round",
         "a stray at the repository root's tree",
         "a rewritten committed file",
+        "a rewritten file with its time put back",
         "a decoy made and removed",
     ],
 )
@@ -2681,7 +2682,8 @@ def test_the_no_trace_checks_report_a_stray_of_each_kind(
     The kinds are the ones the cases above would make if their guard regressed:
     a set directory below a committed set (the symlink cases), a staging
     directory, a round and a set inside one (the round cases), a path at the
-    top of the tree, a committed file rewritten, and a decoy directory made and
+    top of the tree, a committed file rewritten (also with its modification
+    time put back, which only its size records), and a decoy directory made and
     removed again within the case, which only the modification time of the
     directory that held it records. The autouse inventory check reports every
     kind, and the path snapshot every kind that is still there.
@@ -2712,6 +2714,11 @@ def test_the_no_trace_checks_report_a_stray_of_each_kind(
         made.mkdir()
     elif kind == "a rewritten committed file":
         (committed / "MANIFEST.md").write_text("| seed | row |\n", encoding="utf-8")
+    elif kind == "a rewritten file with its time put back":
+        manifest = committed / "MANIFEST.md"
+        written = manifest.stat()
+        manifest.write_text("| seed | row |\n", encoding="utf-8")
+        os.utime(manifest, ns=(written.st_atime_ns, written.st_mtime_ns))
     else:
         decoy = replays / "samples" / ".test-symlink-decoy"
         decoy.mkdir()
@@ -2721,7 +2728,10 @@ def test_the_no_trace_checks_report_a_stray_of_each_kind(
     if made is not None:
         assert _new_replays_paths(paths, replays) == [made]
         assert made.relative_to(replays).as_posix() in changes
-    elif kind == "a rewritten committed file":
+    elif kind in (
+        "a rewritten committed file",
+        "a rewritten file with its time put back",
+    ):
         assert changes == ["samples/4p1i/MANIFEST.md"]
     else:
         assert _new_replays_paths(paths, replays) == []
