@@ -22,6 +22,12 @@ This page is generated. Do not edit it by hand: run `uv run python scripts/publi
 * **fresh kill**: the impostor's own victim, killed at most 3 ticks earlier in the same room, with no meeting in between.
 * **inferred-visible rooms**: the rooms an impostor inside a vent can infer it sees: the vent's own room and its map neighbours, or the own room alone while any sabotage is active. Never the engine's own visibility.
 * **rebuttal**: a turn by a player who already spoke in the same meeting; the only such turn the meeting layer can produce is the bounded rebuttal.
+* **seat**: one living player at one report meeting. The reporter's seat is the reporter's whatever its role; every other seat belongs to a crewmate or an impostor. A player dead before the meeting has no seat.
+* **living witnesses**: the crewmates the engine recorded as seeing a kill who are still alive at the next meeting, counted as one, or as two or more. A fellow impostor who saw the kill is never one of them.
+* **held kill**: a kill a crewmate saw whose crew witness is still alive when the next meeting opens, a meeting on the kill's own tick included.
+* **re-tally**: the meeting's recorded ballots counted again by the game's own vote count at the meeting's recorded confidence floor, with each impostor ballot read as a SKIP or removed. Every other ballot is held fixed, so a re-tally describes the ballots, not what the table would have done: real voters would have heard different speech.
+* **holds-nothing label**: the grounding label a SKIP ballot carries when its voter stated outright that it held nothing that resolves the vote. The label restates the voter's own statement; nothing checks it against what the voter held.
+* **rebuttal citation**: a ballot whose cited turn, or whose counter slot (the strongest thing the voter held pointing away from its choice), names a rebuttal of the same meeting.
 * **era**: the recorded settings a group of games shares: its experiment settings, its observation delivery version, its substrate-flag stamp and its prompt versions. Games of different eras are never pooled.
 * **by construction**: a count a recorded setting forces to zero. While the setting is on the census checks the count is zero and stops with an error naming the game and the meeting or tick if it is not, and the page says 0 by construction instead of presenting a measured improvement.
 * **n/a**: nothing to count, so no rate exists: either nothing of that kind happened, or the cell or table counts only games recorded with a setting these games were not recorded with.
@@ -148,6 +154,22 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 | entry only | 46 | 37 | 4 | 5 | 16 |
 | exit only | 202 | 166 | 22 | 14 | 8 |
 
+### Ejections at report meetings, by seat
+
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Reporter seats ejected | 30/488 (6.1%) | 29/416 (7.0%) | 1/36 (2.8%) | 0/36 (0.0%) | 17/114 (14.9%) |
+| Reporter seats ejected, without vent proof | 29/271 (10.7%) | 28/234 (12.0%) | 1/17 (5.9%) | 0/20 (0.0%) | 17/93 (18.3%) |
+| Reporter seats ejected, with vent proof | 1/217 (0.5%) | 1/182 (0.5%) | 0/19 (0.0%) | 0/16 (0.0%) | 0/21 (0.0%) |
+| Other crewmate seats ejected | 2/1390 (0.1%) | 2/1318 (0.2%) | 0/36 (0.0%) | 0/36 (0.0%) | 5/367 (1.4%) |
+| Other crewmate seats ejected, without vent proof | 2/703 (0.3%) | 2/666 (0.3%) | 0/17 (0.0%) | 0/20 (0.0%) | 5/291 (1.7%) |
+| Other crewmate seats ejected, with vent proof | 0/687 (0.0%) | 0/652 (0.0%) | 0/19 (0.0%) | 0/16 (0.0%) | 0/76 (0.0%) |
+| Impostor seats ejected | 247/669 (36.9%) | 210/597 (35.2%) | 20/36 (55.6%) | 17/36 (47.2%) | 41/195 (21.0%) |
+| Impostor seats ejected, without vent proof | 32/340 (9.4%) | 30/303 (9.9%) | 1/17 (5.9%) | 1/20 (5.0%) | 20/158 (12.7%) |
+| Impostor seats ejected, with vent proof | 215/329 (65.3%) | 180/294 (61.2%) | 19/19 (100.0%) | 16/16 (100.0%) | 21/37 (56.8%) |
+| Reporters among the crewmates ejected | 30/32 (93.8%) | 29/31 (93.5%) | 1/1 (100.0%) | n/a | 17/22 (77.3%) |
+| Reporters among the crewmate seats | 488/1878 (26.0%) | 416/1734 (24.0%) | 36/72 (50.0%) | 36/72 (50.0%) | 114/481 (23.7%) |
+
 ### Corpses and the state play resumes in
 
 | cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
@@ -196,6 +218,7 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 | Vent trips ended by a regroup | n/a | n/a | n/a | n/a | 47/140 (33.6%) |
 | Kill witnesses pressing the button soon after a regroup | n/a | n/a | n/a | n/a | 0/3 (0.0%) |
 | Sabotage active at a regroup | n/a | n/a | n/a | n/a | 5/102 (4.9%) |
+| Prompts after a regroup missing an earlier regroup's notice | n/a | n/a | n/a | n/a | 0/722 by construction |
 
 **Trigger-tick movement and task events a regroup drops.**
 
@@ -273,6 +296,8 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 | Rebuttals that only redirect | n/a | n/a | n/a | n/a | 27/117 (23.1%) |
 | Rebuttal accusations against players who already spoke | n/a | n/a | n/a | n/a | 116/116 (100.0%) |
 | Opener rebuttals answering the charged tick | n/a | n/a | n/a | n/a | 17/18 (94.4%), 69 not evaluable |
+| Ballots whose cited turn is a rebuttal | n/a | n/a | n/a | n/a | 57/691 (8.2%) |
+| Ballots whose counter slot names a rebuttal | n/a | n/a | n/a | n/a | 175/691 (25.3%) |
 
 **Who received the rebuttal, and who had accused them.**
 
@@ -294,11 +319,56 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 | Impostor ballots recorded against a teammate | 0/733 by construction | 0/651 by construction | 0/43 by construction | 0/39 by construction | 0/200 by construction |
 | Impostor ballots written against a teammate | 12/733 (1.6%) | 12/651 (1.8%) | 0/43 (0.0%) | 0/39 (0.0%) | 16/200 (8.0%) |
 | Ejections whose confidence floor only impostors met | 0/321 (0.0%) | 0/273 (0.0%) | 0/28 (0.0%) | 0/20 (0.0%) | 0/66 (0.0%) |
+| Ejections that would not stand with impostor ballots read as SKIP | 15/321 (4.7%) | 14/273 (5.1%) | 1/28 (3.6%) | 0/20 (0.0%) | 14/66 (21.2%) |
+| Ejections that would not stand with impostor ballots removed | 7/321 (2.2%) | 6/273 (2.2%) | 1/28 (3.6%) | 0/20 (0.0%) | 5/66 (7.6%) |
 | Own-kill ballot rows naming a teammate or held by a non-witness | n/a | n/a | n/a | n/a | 0/23 by construction |
 | Own-kill ballot rows their holder cited | n/a | n/a | n/a | n/a | 21/23 (91.3%) |
 | Kills a crewmate saw, held by a living witness at the next meeting | 17/17 (100.0%) | 16/16 (100.0%) | n/a | 1/1 (100.0%) | 14/14 (100.0%) |
 | Held kills whose witness voted the killer | 16/17 (94.1%) | 15/16 (93.8%) | n/a | 1/1 (100.0%) | 13/14 (92.9%) |
 | Held kills whose killer was ejected | 10/17 (58.8%) | 10/16 (62.5%) | n/a | 0/1 (0.0%) | 6/14 (42.9%) |
+| Held kills whose killer some later meeting ejected | 13/17 (76.5%) | 13/16 (81.2%) | n/a | 0/1 (0.0%) | 8/14 (57.1%) |
+| Held kills whose living witness was ejected | 2/17 (11.8%) | 2/16 (12.5%) | n/a | 0/1 (0.0%) | 5/14 (35.7%) |
+| SKIP ballots labelled as holding nothing | 764/1183 (64.6%) | 702/1052 (66.7%) | 34/63 (54.0%) | 28/68 (41.2%) | 214/281 (76.2%) |
+
+**Outcomes a re-tally changes.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| impostor ballots as SKIP: an impostor ejected -> no one ejected | 1 | 1 | 0 | 0 | 1 |
+| impostor ballots as SKIP: another crewmate ejected -> no one ejected | 1 | 1 | 0 | 0 | 3 |
+| impostor ballots as SKIP: no one ejected -> someone ejected | 1 | 1 | 0 | 0 | 1 |
+| impostor ballots as SKIP: the reporter ejected -> a different player ejected | 0 | 0 | 0 | 0 | 1 |
+| impostor ballots as SKIP: the reporter ejected -> no one ejected | 13 | 12 | 1 | 0 | 9 |
+| impostor ballots removed: another crewmate ejected -> no one ejected | 0 | 0 | 0 | 0 | 1 |
+| impostor ballots removed: no one ejected -> someone ejected | 23 | 23 | 0 | 0 | 3 |
+| impostor ballots removed: the reporter ejected -> a different player ejected | 0 | 0 | 0 | 0 | 1 |
+| impostor ballots removed: the reporter ejected -> no one ejected | 7 | 6 | 1 | 0 | 3 |
+
+**What the next meeting did after a held kill.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| one living crew witness: a witness ejected | 2 | 2 | 0 | 0 | 5 |
+| one living crew witness: another player ejected | 1 | 1 | 0 | 0 | 1 |
+| one living crew witness: no one ejected | 4 | 3 | 0 | 1 | 2 |
+| one living crew witness: the killer ejected | 9 | 9 | 0 | 0 | 1 |
+| two or more living crew witnesses: a witness ejected | 0 | 0 | 0 | 0 | 0 |
+| two or more living crew witnesses: another player ejected | 0 | 0 | 0 | 0 | 0 |
+| two or more living crew witnesses: no one ejected | 0 | 0 | 0 | 0 | 0 |
+| two or more living crew witnesses: the killer ejected | 1 | 1 | 0 | 0 | 5 |
+
+**SKIP ballots by grounding label.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| flag_only | 0 | 0 | 0 | 0 | 0 |
+| invalid_citation | 0 | 0 | 0 | 0 | 0 |
+| none_held | 764 | 702 | 34 | 28 | 214 |
+| not_assessed | 17 | 17 | 0 | 0 | 17 |
+| off_target | 128 | 101 | 10 | 17 | 6 |
+| supported | 274 | 232 | 19 | 23 | 44 |
+| uncited | 0 | 0 | 0 | 0 | 0 |
+| unlabelled | 0 | 0 | 0 | 0 | 0 |
 
 ### Reported beside the counts
 
@@ -359,6 +429,28 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 
 **Button meetings with vent proof** (`button_meetings_with_vent_proof`). Button meetings with vent proof, over all button meetings. Reads `MeetingTriggered`, `meeting row flags`.
 
+**Reporter seats ejected** (`reporter_seats_ejected`). Report meetings that ejected their reporter, over the reporter's seats: one per report meeting, whatever the reporter's role. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
+**Reporter seats ejected, without vent proof** (`reporter_seats_ejected_without_vent_proof`). Report meetings without vent proof that ejected their reporter, over the reporter's seats at report meetings without vent proof. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
+**Reporter seats ejected, with vent proof** (`reporter_seats_ejected_with_vent_proof`). Report meetings with vent proof that ejected their reporter, over the reporter's seats at report meetings with vent proof. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
+**Other crewmate seats ejected** (`other_crewmate_seats_ejected`). Seats of living crewmates other than the reporter that a report meeting ejected, over those seats at every report meeting. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
+**Other crewmate seats ejected, without vent proof** (`other_crewmate_seats_ejected_without_vent_proof`). Seats of living crewmates other than the reporter that a report meeting without vent proof ejected, over those seats at report meetings without vent proof. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
+**Other crewmate seats ejected, with vent proof** (`other_crewmate_seats_ejected_with_vent_proof`). Seats of living crewmates other than the reporter that a report meeting with vent proof ejected, over those seats at report meetings with vent proof. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
+**Impostor seats ejected** (`impostor_seats_ejected`). Seats of living impostors other than the reporter that a report meeting ejected, over those seats at every report meeting. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
+**Impostor seats ejected, without vent proof** (`impostor_seats_ejected_without_vent_proof`). Seats of living impostors other than the reporter that a report meeting without vent proof ejected, over those seats at report meetings without vent proof. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
+**Impostor seats ejected, with vent proof** (`impostor_seats_ejected_with_vent_proof`). Seats of living impostors other than the reporter that a report meeting with vent proof ejected, over those seats at report meetings with vent proof. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
+**Reporters among the crewmates ejected** (`reporters_among_ejected_crewmates`). Crewmates a report meeting ejected who were its reporter, over all crewmates report meetings ejected. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
+**Reporters among the crewmate seats** (`reporters_among_crewmate_seats`). Crewmate seats at report meetings that were the reporter's, over all crewmate seats at report meetings. Reads `MeetingTriggered`, `state at the meeting`, `meeting row`, `meeting row flags`.
+
 **Stale report meetings** (`stale_report_meetings`). Report meetings whose reported corpse already lay on the floor when the previous meeting opened, over all report meetings. Reads `MeetingTriggered`, `state at the meeting`. Zero by construction while `meeting_reset = hub_with_grace`.
 
 **Meetings opening with another unreported corpse** (`meetings_opening_with_another_unreported_corpse`). Meetings that opened with a corpse other than the reported one that no one had discovered, over all meetings. Reads `state at the meeting`.
@@ -382,6 +474,8 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 **Kill witnesses pressing the button soon after a regroup** (`kill_witness_button_calls_soon_after_regroup`). Button meetings called at most 6 ticks after a regroup by a player who witnessed a kill since it, over button meetings whose previous meeting regrouped. Reads `Killed`, `MeetingTriggered`, `meeting row`.
 
 **Sabotage active at a regroup** (`sabotage_active_at_regroup`). Regroup meetings that opened with a sabotage active, over all regroup meetings. Reads `state at the meeting`.
+
+**Prompts after a regroup missing an earlier regroup's notice** (`prompts_missing_a_regroup_notice`). Recorded meeting prompts of a player at a meeting after a regroup that lack the notice of some earlier regroup of the same game, in the wording the memory renders from that regroup's tick and room, over all such prompts. Reads `recorded meeting prompts`, `meeting row`. Zero by construction while `meeting_reset = hub_with_grace`.
 
 **Kill cooldowns that differ from the recorded value** (`kill_cooldowns_differing_from_recorded`). Impostor kill cooldowns that differ from the recorded kill cooldown, else the map's, read on the state each engine write leaves: every impostor at round start, the killer after each of its kills and every living impostor after each regroup; over all such writes. Reads `state at round start`, `Killed`, `state after the meeting`. Zero by construction in every recording.
 
@@ -419,6 +513,10 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 
 **Opener rebuttals answering the charged tick** (`opener_rebuttals_answering_charged_tick`). Repeat-speaker turns by the opener carrying an alibi leg, a whereabouts claim or a sighting at a tick the answered turn observed the opener, over such turns whose answered turn observed the opener at some tick; the rest are not evaluable. Reads `meeting row turns`.
 
+**Ballots whose cited turn is a rebuttal** (`ballots_citing_a_rebuttal`). Ballots whose cited turn is a repeat-speaker turn of the same meeting, over all ballots at meetings with a repeat-speaker turn. Reads `meeting row turns`, `meeting row ballots`. Counted only in games recorded with `bounded_rebuttal_version = 1`; in any other era it reads n/a.
+
+**Ballots whose counter slot names a rebuttal** (`ballots_countering_with_a_rebuttal`). Ballots whose counter slot, the strongest thing the voter held pointing away from its choice, names a repeat-speaker turn of the same meeting, over all ballots at meetings with a repeat-speaker turn. Reads `meeting row turns`, `meeting row ballots`. Counted only in games recorded with `bounded_rebuttal_version = 1`; in any other era it reads n/a.
+
 **Impostor ballots that skip** (`impostor_skip_ballots`). Impostor ballots whose recorded target is SKIP, over all impostor ballots. Reads `meeting row ballots`.
 
 **Impostor ballots that name a player** (`impostor_eject_ballots`). Impostor ballots whose recorded target is a player, over all impostor ballots. Reads `meeting row ballots`.
@@ -431,6 +529,10 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 
 **Ejections whose confidence floor only impostors met** (`ejections_carried_only_by_impostor_ballots`). Ejections where every ballot for the ejected player at or above the tally's recorded confidence floor was cast by an impostor, over all ejections. Reads `meeting row ballots`.
 
+**Ejections that would not stand with impostor ballots read as SKIP** (`ejections_undone_with_impostor_ballots_as_skip`). Ejections whose re-tally, with every impostor ballot read as SKIP and every other ballot held fixed, ejects no one or a different player, over all ejections. Reads `meeting row ballots`.
+
+**Ejections that would not stand with impostor ballots removed** (`ejections_undone_with_impostor_ballots_removed`). Ejections whose re-tally, with every impostor ballot removed and every other ballot held fixed, ejects no one or a different player, over all ejections. Reads `meeting row ballots`.
+
 **Own-kill ballot rows naming a teammate or held by a non-witness** (`own_kill_rows_breaching`). Served own-kill rows that name the holder's fellow impostor as the killer, whatever they cite, or that do not cite, by the holder's own observation id, a kill the named player made with the holder among its witnesses, over all served own-kill rows. A row citing nothing counts here, because the row is specified to cite its kill. Reads `recorded ballot prompt`, `Killed`. Zero by construction while `ballot_kill_row_version = 1`.
 
 **Own-kill ballot rows their holder cited** (`own_kill_rows_cited_by_holder`). Served own-kill rows whose holder's ballot cites the row's observation, over all served own-kill rows. Reads `recorded ballot prompt`, `meeting row ballots`.
@@ -440,6 +542,12 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 **Held kills whose witness voted the killer** (`held_kill_witnesses_voting_killer`). Held crew-witnessed kills where a living witness's ballot names the killer, over held crew-witnessed kills. Reads `Killed`, `meeting row ballots`.
 
 **Held kills whose killer was ejected** (`held_kill_killers_ejected`). Held crew-witnessed kills whose killer the next meeting ejected, over held crew-witnessed kills. Reads `Killed`, `meeting row`.
+
+**Held kills whose killer some later meeting ejected** (`held_kill_killers_ejected_at_any_later_meeting`). Held crew-witnessed kills whose killer the next meeting, or any meeting after it, ejected, over held crew-witnessed kills. Reads `Killed`, `meeting row`.
+
+**Held kills whose living witness was ejected** (`held_kill_witnesses_ejected`). Held crew-witnessed kills where the next meeting ejected one of the kill's living crew witnesses, over held crew-witnessed kills. Reads `Killed`, `meeting row`.
+
+**SKIP ballots labelled as holding nothing** (`skips_holding_nothing`). SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement; it is not a checked fact. Reads `meeting row ballots`.
 
 **Games the impostors won** (`impostor_wins`). Games whose recorded winner is the impostors, over games with a recorded winner. Reads `game over row`.
 
@@ -462,3 +570,9 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 **Actions thrown away on trigger ticks** (`actions_thrown_away_on_trigger_ticks`). Submitted actions the engine never ran because an earlier action on the same tick opened a meeting, by action type, read from the recorded dispositions; tick rows recorded without dispositions are not evaluable. Reads `recorded action dispositions`.
 
 **Who received the rebuttal, and who had accused them** (`rebuttal_beneficiaries`). Repeat-speaker turns by the speaker's seat (the opener, or another crewmate or impostor) and the role of the speaker of the turn answered. Reads `meeting row turns`. Counted only in games recorded with `bounded_rebuttal_version = 1`; in any other era it reads n/a.
+
+**Outcomes a re-tally changes** (`retally_outcome_changes`). Meetings whose re-tally differs from the recorded outcome, by re-tally, by the recorded outcome (the reporter, another crewmate, an impostor or no one ejected) and by what the re-tally gives instead. Every other ballot is held fixed; real voters would have heard different speech. Reads `MeetingTriggered`, `meeting row ballots`.
+
+**What the next meeting did after a held kill** (`held_kill_next_meeting_outcomes`). Held crew-witnessed kills by how many of the kill's crew witnesses were alive at the next meeting, one or two or more, and by what that meeting did: ejected the killer, ejected one of those witnesses, ejected another player, or ejected no one. Every row is listed. Reads `Killed`, `meeting row`.
+
+**SKIP ballots by grounding label** (`skips_by_grounding_label`). Every SKIP ballot by its recorded grounding label. Every label the meeting layer can write is listed, and unlabelled counts a ballot recorded before ballots were labelled. Reads `meeting row ballots`.
