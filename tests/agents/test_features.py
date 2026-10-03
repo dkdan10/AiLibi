@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Iterator
+import tempfile
+from collections.abc import Generator
 from pathlib import Path
 from typing import Final, NoReturn
 
@@ -428,7 +429,7 @@ _SWEEP_WALK: Final[ReplayWalkConfig] = ReplayWalkConfig(
 
 def _iter_committed_packets(
     set_name: str,
-) -> Iterator[tuple[ObservationPacket, PublicMapView, AgentMemory]]:
+) -> Generator[tuple[ObservationPacket, PublicMapView, AgentMemory], None, None]:
     """Reconstruct one committed set and yield (packet, memory) per living agent.
 
     Walks each recording through the shared replay walk (re-seed, advance over
@@ -446,38 +447,58 @@ def _iter_committed_packets(
     public_map = public_map_from_engine_map(game_map)
     for replay_path in sorted(set_dir.glob("replay-seed-*.jsonl")):
         memories: dict[str, AgentMemory] = {}
-        audit_path = replay_path.parent / f"_sweep_audit_{replay_path.stem}.jsonl"
-        service = ObservationService(game_map=game_map, audit_log_path=audit_path)
-        try:
-            for step in walk_replay(
-                replay_path,
-                seed=int(replay_path.stem.rsplit("-", 1)[1]),
-                num_players=roster["num_players"],
-                num_impostors=roster["num_impostors"],
-                tasks_per_crewmate=roster["tasks_per_crewmate"],
-                game_map=game_map,
-                config=_SWEEP_WALK,
-            ):
-                if not isinstance(step, TickAdvanced):
-                    continue
-                for pid, player in step.state.players.items():
-                    if not player.alive:
+        # The observation audit log goes to a temporary directory, never beside
+        # the recording: the committed set directories stay read-only, so no
+        # test that inventories the shared replays/ tree sees it come and go.
+        with tempfile.TemporaryDirectory(prefix="ailibi-feature-sweep-") as audit_dir:
+            service = ObservationService(
+                game_map=game_map, audit_log_path=Path(audit_dir) / "audit.jsonl"
+            )
+            try:
+                for step in walk_replay(
+                    replay_path,
+                    seed=int(replay_path.stem.rsplit("-", 1)[1]),
+                    num_players=roster["num_players"],
+                    num_impostors=roster["num_impostors"],
+                    tasks_per_crewmate=roster["tasks_per_crewmate"],
+                    game_map=game_map,
+                    config=_SWEEP_WALK,
+                ):
+                    if not isinstance(step, TickAdvanced):
                         continue
-                    memory = memories.setdefault(pid, AgentMemory())
-                    packet = service.build_packet(
-                        world_state=step.state,
-                        agent_id=pid,
-                        engine_events=list(step.events),
-                    )
-                    ingest_packet(
-                        packet=packet,
-                        memory=memory.episodic,
-                        beliefs=memory.beliefs,
-                    )
-                    yield packet, public_map, memory
-        finally:
-            service.close()
-            audit_path.unlink(missing_ok=True)
+                    for pid, player in step.state.players.items():
+                        if not player.alive:
+                            continue
+                        memory = memories.setdefault(pid, AgentMemory())
+                        packet = service.build_packet(
+                            world_state=step.state,
+                            agent_id=pid,
+                            engine_events=list(step.events),
+                        )
+                        ingest_packet(
+                            packet=packet,
+                            memory=memory.episodic,
+                            beliefs=memory.beliefs,
+                        )
+                        yield packet, public_map, memory
+            finally:
+                service.close()
+
+
+def test_the_sweep_leaves_the_committed_set_directory_untouched() -> None:
+    # The sweep writes nothing into a committed set directory. An audit log
+    # beside the recording would be listed while the walk is open, and its
+    # removal on close would still move the directory's modification time.
+    set_dir = _SAMPLES_DIR / "4p1i"
+    entries = sorted(path.name for path in set_dir.iterdir())
+    modified = set_dir.stat().st_mtime_ns
+    packets = _iter_committed_packets("4p1i")
+    next(packets)
+    try:
+        assert sorted(path.name for path in set_dir.iterdir()) == entries
+    finally:
+        packets.close()
+    assert set_dir.stat().st_mtime_ns == modified
 
 
 @pytest.mark.parametrize("set_name", _SAMPLE_SETS)

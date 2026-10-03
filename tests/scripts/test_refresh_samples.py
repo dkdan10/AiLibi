@@ -103,9 +103,11 @@ def _replays_tree_untouched() -> Iterator[None]:
 
     No case writes there while the guard it tests holds: decoys, planted rounds
     and strays live under the case's own ``tmp_path``, and a case aimed at the
-    tree reads a committed directory or names an absent path of its own. So a
-    difference here is a case, or a regressed guard, writing into the shared
-    tree, which is what made these cases race under pytest-xdist.
+    tree reads a committed directory or names an absent path of its own. The
+    inventory covers the whole tree for the length of the case, so a difference
+    is a case or a regressed guard writing into the shared tree, or a test in
+    another file doing so beside it under pytest-xdist; the paths it names show
+    which. Either one is what made these cases race.
     """
 
     before = _replays_inventory()
