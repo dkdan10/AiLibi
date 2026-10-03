@@ -6,7 +6,8 @@ hold it to its card (``tasks/work/route-check-replay.md``): every column is read
 from an exact commit, the walk is faithful or the run stops, (a) is built exactly
 as the meeting manager builds it, (b) is the recorded field's own rendering, (c)
 is a reference reading, the planted route cases tell the checks apart, the
-process count reads no role, and the outputs carry counts only.
+process count reads no role, and the outputs carry counts and the instrument's
+own wording, never a recorded text, whether written as is or as the JSON escapes it.
 
 Columns are read from temporary repositories built here, or from the checkout's
 own ``HEAD`` resolved to its sha, so a shallow clone runs every case.
