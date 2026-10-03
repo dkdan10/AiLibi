@@ -374,8 +374,9 @@ pin is Linux-only, so gate in a clean worktree and cite CI for it.
 
 Commits: `2ccf7af6` (the instrument, its report and JSON, its tests), `8d65bfad` (the committed-column golden and
 the refusal pins), `319a6e36` (r2's declared config read from the era registry; further planted cases),
-`0f566756` and `45e109dd` (the planted cases the neuter and mutation passes called for), then this card's
-Results commit with the `docs/artifacts.md` row and the gate's commit. Files written: the four new files of the
+`0f566756` and `45e109dd` (the planted cases the neuter and mutation passes called for), `8b18aa53` (these
+Results and the `docs/artifacts.md` row), `5d227914` (the scan helper reworked after the first gate), then the
+Results update the final gate ran on and the gate's commit. Files written: the four new files of the
 Expected scope, the `experiments/lab/` row of `docs/artifacts.md`, this card and the `tasks/README.md` inventory
 sentence. Nothing under `engine/`, `agents/`, `meetings/`, `observation/`, `orchestrator/`, `llm/`, `training/`,
 `replays/` or `tests/fixtures/` was written; no recorded byte, prompt, template, detector or ML artifact moved.
@@ -726,8 +727,8 @@ equivalent.
 | 145 | read_game: earlier ticks never grow | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
 | 146 | read_game: previous tick never passed | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
 | 147 | read_set: drop the seed guard | GREEN | RED | a_census_of_other_seeds_raises |
-| 148 | forbidden: no rationales | RED | RED | a_rationale_written_into_the_json_fails_the_scan |
-| 149 | forbidden: no turn texts | GREEN | RED | a_turn_text_written_into_the_json_fails_the_scan |
+| 148 | forbidden: no rationales | RED | RED | the_outputs_carry_no_recorded_text |
+| 149 | forbidden: no turn texts | GREEN | RED | the_outputs_carry_no_recorded_text |
 | 150 | scan: never raise | RED | RED | a_rationale_written_into_the_json_fails_the_scan |
 | 151 | half: strict majority | RED | RED | the_rule_takes_each_branch |
 | 152 | rule: drop the M-empty branch | RED | RED | the_rule_takes_each_branch |
@@ -739,7 +740,7 @@ equivalent.
 | 158 | moved_by: never | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
 | 159 | run: allow pooling | RED | RED | a_request_to_pool_columns_is_refused |
 | 160 | run: no settings check | RED | RED | r2s_tree_under_the_s9_label_is_refused |
-| 161 | run: no travel rows in the scan | GREEN | RED | a_run_holds_its_outputs_to_every_travel_row_it_read |
+| 161 | run: no travel rows in the scan | GREEN | RED | a_rationale_written_into_the_json_fails_the_scan |
 | 162 | outputs: no scan | GREEN | RED | a_run_holds_its_outputs_to_every_travel_row_it_read |
 | 163 | check: no tree check | RED | RED | a_recorded_tree_id_that_is_not_the_shas_tree_fails_check |
 | 164 | check: no JSON comparison | RED | RED | one_count_edited_in_a_copy_of_the_json_fails_check |
@@ -858,7 +859,7 @@ journeys were not required.
 | `uv run pytest -m campaign` | 0 | 337 passed, 10,172 deselected |
 | `build_demo_bundle.py --out <scratch>/base` at `5877adb4`, then `--out <scratch>/head` at this branch, one checkout; `diff -rq` | 0, 0, 0 | no difference across 109 files: nothing publishes |
 
-`bash scripts/check.sh` runs once, at the head of the Results commit, after this table; its exit code is recorded by the commit that follows it.
+The first full gate, `bash scripts/check.sh` at `8b18aa53`, exited 1 (624 s): 10,148 passed, 20 skipped, 3 xfailed and 1 failed, `tests/_helpers/test_committed_single_home.py::test_every_committed_walk_goes_through_the_shared_cache`, which flagged the scan helper's census walk over a column read from a committed path. `5d227914` reworks the helper to walk nothing itself (the scan probes 148 to 162 re-run red against it). The final gate runs once, at the head of the commit carrying this sentence; its exit code lands in the commit after it.
 
 ### Limitations
 
