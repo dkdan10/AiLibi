@@ -39,6 +39,7 @@ from eval.watchability import (
     _BASELINE_SUPPLY_FLOORS,
     REFEREE_READS,
     FloorPin,
+    SupplyFloorGauge,
     SupplyFloors,
     SupplyGaugeValues,
     WatchabilityGameScore,
@@ -792,6 +793,65 @@ def test_stage_b_r2_floor_pins_equal_the_measured_bytes() -> None:
         assert by_name[name].floor == fraction, f"{name} floor pin"
     # The other committed sample set reads its own era's block by default.
     assert compute_watchability(_FOUR).baseline_id == "baseline-9"
+
+
+def _stage_pin_numerator_problems(
+    floors: SupplyFloors, measured: SupplyGaugeValues
+) -> list[str]:
+    """Each stage pin whose numerator is not the event count it was measured from.
+
+    The numerator is what the advisory rare-event rule reads, so it is held to
+    the raw count behind the pinned value, not to the value alone.
+    """
+
+    counts = {
+        "witnessed_event_rate": measured.crew_witnessed_kills,
+        "flags_per_meeting": measured.total_flags,
+        "testimony_backed_conversion": measured.backed_conversion_converted,
+        "transcript_flags_per_meeting": (
+            measured.total_flags - measured.persisted_vent_flags
+        ),
+        "persisted_vent_flags_per_meeting": measured.persisted_vent_flags,
+    }
+    problems = []
+    for name, count in counts.items():
+        pin = getattr(floors, name)
+        if pin is None or pin.numerator != count:
+            problems.append(f"{name}: pinned numerator {pin}, measured count {count}")
+    return problems
+
+
+def test_stage_b_r2_floor_numerators_equal_the_measured_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """EXACT ANCHOR: each stage-b-r2 pin's numerator is its measured event count.
+
+    The counts are the ones the referee's own walk measures on the promoted
+    bytes, read off the call that gates them. Planted: one pin's numerator moved
+    by one, the value unchanged, fails by name.
+    """
+
+    measured: list[SupplyGaugeValues] = []
+    gate = watchability_module.evaluate_supply_floors
+
+    def spy(
+        gauges: SupplyGaugeValues, floors: SupplyFloors
+    ) -> tuple[bool, tuple[SupplyFloorGauge, ...]]:
+        measured.append(gauges)
+        return gate(gauges, floors)
+
+    monkeypatch.setattr(watchability_module, "evaluate_supply_floors", spy)
+    assert compute_watchability(_NINE).baseline_id == "stage-b-r2"
+    assert len(measured) == 1
+    floors = _BASELINE_SUPPLY_FLOORS["stage-b-r2"]["9p2i"]
+    assert _stage_pin_numerator_problems(floors, measured[0]) == []
+    for name in sorted(_STAGE_B_R2_FRACTIONS):
+        pin = getattr(floors, name)
+        moved = replace(floors, **{name: replace(pin, numerator=pin.numerator + 1)})
+        assert _stage_pin_numerator_problems(moved, measured[0]) == [
+            f"{name}: pinned numerator {replace(pin, numerator=pin.numerator + 1)}, "
+            f"measured count {pin.numerator}"
+        ]
 
 
 @pytest.mark.parametrize("gauge", sorted(_STAGE_B_R2_FRACTIONS))
