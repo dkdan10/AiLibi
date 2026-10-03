@@ -49,7 +49,7 @@ from agents.perception import ingest_packet
 from engine.world import load_canonical_map
 from engine.entities import Role
 from eval.eras import STAGE_B_R2
-from eval.gameplay_census import GameFacts, fold_set, load_census_inputs
+from eval.gameplay_census import GameFacts, fold_set
 from meetings.manager import derive_reported_testimony
 from meetings.schemas import (
     AccusationClaim,
@@ -1660,16 +1660,31 @@ def test_a_role_read_inside_a_line_computation_fails_the_property(
 
 
 def _forbidden(repo: Path, sha: str) -> frozenset[str]:
+    """What the run scans its outputs against, held to an independent reading.
+
+    The game's turn texts and rationales are read straight from the replay; the
+    run's own set must hold every one of them, and its travel rows besides.
+    """
+
     source = rcr.resolve_column(
         repo, rcr.ColumnRequest("r2", sha, "replays/samples/9p2i")
     )
-    scratch = repo.parent / "scan"
-    scratch.mkdir(exist_ok=True)
-    set_dir = rcr.materialize(repo, source, scratch)
-    found = set(rcr.forbidden_strings(set_dir))
-    _, rows = rcr.read_set(set_dir, label="r2", census=load_census_inputs(set_dir))
-    found.update(rows)
-    return frozenset(found)
+    _, forbidden = rcr.run_columns(repo, [source])
+    recorded = {
+        text
+        for entry in read_all_entries(SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl")
+        for text in (
+            *(
+                turn.free_text
+                for turn in getattr(entry, "transcript", MeetingTranscript()).turns
+            ),
+            *(ballot.rationale_text for ballot in getattr(entry, "ballots", ())),
+        )
+        if len(text) >= 16
+    }
+    assert recorded and recorded <= forbidden
+    assert any(text.startswith("Travel check for") for text in forbidden)
+    return forbidden
 
 
 def test_the_outputs_carry_no_recorded_text(
