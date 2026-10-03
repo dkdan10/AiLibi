@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import pickle
+import re
 import shutil
 import socket
 import subprocess
@@ -78,6 +79,7 @@ from orchestrator.replay import (
 from tests._helpers.committed import SAMPLES_9P2I, census_inputs, repo_root
 from tests.meetings.test_prompt_byte_golden import (
     _canonical_renderers,
+    consumed_exactly_once,
     walk_replay_meetings,
 )
 
@@ -258,15 +260,23 @@ def _see(memory: AgentMemory, tick: int, room: str, action: str | None = None) -
 
 
 def _sighting_memory(
-    first: tuple[str, int], second: tuple[str, int], *, regroup: int | None = None
+    first: tuple[str, int],
+    second: tuple[str, int],
+    *,
+    regroup: int | None = None,
+    regroup_room: str = "CAFETERIA",
 ) -> AgentMemory:
-    """The voter's own plain sightings of the subject at two room-ticks."""
+    """The voter's own plain sightings of the subject at two room-ticks.
+
+    A public regroup at ``regroup`` gathers the voter and the subject in
+    ``regroup_room``; a second sighting at that tick is the regroup's placement.
+    """
 
     memory = _memory()
     _see(memory, first[1], first[0])
     if regroup is not None:
         ingest_public_regroup(
-            memory, tick=regroup, room="CAFETERIA", player_ids=(_VOTER, _SUBJECT)
+            memory, tick=regroup, room=regroup_room, player_ids=(_VOTER, _SUBJECT)
         )
     if second[1] != regroup:
         _see(memory, second[1], second[0])
@@ -437,7 +447,10 @@ def test_r1s_tree_under_the_r2_label_is_refused(
     repo, sha = _column_repo(tmp_path, with_r1=True)
     code = _run(repo, tmp_path, f"r2={sha}:replays/candidates/stage-b-r1/9p2i")
     assert code == 1
-    assert "column r2: seed 2 recorded settings that differ" in capsys.readouterr().err
+    assert capsys.readouterr().err == (
+        "route-check replay: column r2: seed 2 recorded settings that differ from "
+        "the config its label declares (replays/samples/9p2i/experiment-config.json)\n"
+    )
 
 
 def test_an_unknown_commit_is_refused(
@@ -445,7 +458,11 @@ def test_an_unknown_commit_is_refused(
 ) -> None:
     repo, _ = _column_repo(tmp_path)
     assert _run(repo, tmp_path, "r2=0123456789abcdef:replays/samples/9p2i") == 1
-    assert "commit '0123456789abcdef' does not resolve" in capsys.readouterr().err
+    assert capsys.readouterr().err == (
+        "route-check replay: commit '0123456789abcdef' does not resolve to a commit: "
+        "git rev-parse --verify 0123456789abcdef^{commit}: "
+        "fatal: Needed a single revision\n"
+    )
 
 
 def test_a_tree_named_as_the_commit_is_refused(
@@ -475,7 +492,11 @@ def test_a_path_that_does_not_resolve_is_refused(
 ) -> None:
     repo, sha = _column_repo(tmp_path)
     assert _run(repo, tmp_path, f"r2={sha}:replays/samples/4p1i") == 1
-    assert "path 'replays/samples/4p1i' does not resolve" in capsys.readouterr().err
+    assert capsys.readouterr().err == (
+        f"route-check replay: path 'replays/samples/4p1i' does not resolve at {sha}: "
+        f"git rev-parse --verify {sha}:replays/samples/4p1i: "
+        "fatal: Needed a single revision\n"
+    )
 
 
 def test_a_request_to_pool_columns_is_refused(
@@ -499,7 +520,10 @@ def test_an_unknown_label_is_refused(
     "text", ("r2", "r2=", "r2=abc", "r2=abc:", "=abc:replays", "r2=:replays")
 )
 def test_a_malformed_column_request_is_refused(text: str) -> None:
-    with pytest.raises(rcr.RouteCheckReplayError, match="expected LABEL=COMMIT:PATH"):
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=rf"^--set {re.escape(repr(text))}: expected LABEL=COMMIT:PATH$",
+    ):
         rcr.parse_column_request(text)
 
 
@@ -513,7 +537,10 @@ def test_a_path_that_names_a_file_is_refused(
 ) -> None:
     repo, sha = _column_repo(tmp_path)
     assert _run(repo, tmp_path, f"r2={sha}:replays/samples/9p2i/roster.json") == 1
-    assert "is a blob, not a directory" in capsys.readouterr().err
+    assert capsys.readouterr().err == (
+        "route-check replay: path 'replays/samples/9p2i/roster.json' at "
+        f"{sha} is a blob, not a directory\n"
+    )
 
 
 def test_r2s_tree_under_the_s9_label_is_refused(
@@ -536,7 +563,10 @@ def test_a_declared_config_that_is_no_config_is_refused(
     _git(repo, "commit", "-q", "-am", "a broken config")
     sha = _git(repo, "rev-parse", "HEAD")
     assert _run(repo, tmp_path, f"r2={sha}:replays/samples/9p2i") == 1
-    assert "is no experiment config" in capsys.readouterr().err
+    assert capsys.readouterr().err == (
+        "route-check replay: column r2: replays/samples/9p2i/experiment-config.json "
+        f"at {sha} is no experiment config\n"
+    )
 
 
 def test_check_takes_no_columns_from_the_command_line(
@@ -565,13 +595,17 @@ def test_a_recorded_tree_id_that_is_not_the_shas_tree_fails_check(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    repo, out, _ = one_game_run
+    repo, out, sha = one_game_run
     payload = json.loads((out / "results.json").read_text())
     payload["columns"][0]["tree"] = "0" * 40
     copy = tmp_path / "results.json"
     copy.write_text(rcr.serialize(payload))
     assert _check(repo, out, copy) == 1
-    assert "column r2: the recorded tree id" in capsys.readouterr().err
+    tree = _git(repo, "rev-parse", f"{sha}:replays/samples/9p2i")
+    assert capsys.readouterr().err == (
+        f"route-check replay: column r2: the recorded tree id {'0' * 40} is not the "
+        f"tree of {sha}:replays/samples/9p2i ({tree})\n"
+    )
 
 
 def test_one_count_edited_in_a_copy_of_the_json_fails_check(
@@ -585,7 +619,7 @@ def test_one_count_edited_in_a_copy_of_the_json_fails_check(
     copy = tmp_path / "results.json"
     copy.write_text(rcr.serialize(payload))
     assert _check(repo, out, copy) == 1
-    assert "the recomputed JSON differs" in capsys.readouterr().err
+    assert capsys.readouterr().err == f"{copy}: the recomputed JSON differs\n"
 
 
 def test_a_later_commit_that_rewrites_the_column_leaves_check_green(
@@ -713,16 +747,25 @@ def test_a_state_hash_flipped_after_the_second_meeting_names_the_third(
 ) -> None:
     copy = _game_copy(tmp_path, _WALK_SEED)
     _flip_in_line(copy, kind="tick", key="state_hash", after_tick=_SECOND_MEETING_TICK)
-    with pytest.raises(
-        rcr.RouteCheckReplayError,
-        match=r"^r1 seed 1 meeting 2: the walk did not reproduce the recording \(",
-    ):
+    with pytest.raises(AssertionError) as walked:
+        list(
+            walk_replay_meetings(
+                copy,
+                game_map=load_canonical_map(),
+                renderers_for_set=_canonical_renderers(),
+            )
+        )
+    assert str(walked.value)
+    with pytest.raises(rcr.RouteCheckReplayError) as raised:
         rcr.read_game(
             copy,
             label="r1",
             game=_r2_game(_WALK_SEED),
             renderers=_canonical_renderers(),
         )
+    assert str(raised.value) == (
+        f"r1 seed 1 meeting 2: the walk did not reproduce the recording ({walked.value})"
+    )
 
 
 def test_a_prompt_flipped_in_the_third_meeting_names_it(tmp_path: Path) -> None:
@@ -741,18 +784,22 @@ def test_a_prompt_flipped_in_the_third_meeting_names_it(tmp_path: Path) -> None:
         )
 
 
+def _walked(recorded: Sequence[str], asked: Sequence[str]) -> SimpleNamespace:
+    """A walked meeting whose manager asked for ``asked``, each a recorded hit."""
+
+    return SimpleNamespace(
+        entry=SimpleNamespace(
+            llm_calls=[SimpleNamespace(prompt=prompt) for prompt in recorded]
+        ),
+        complete_calls=[SimpleNamespace(prompt=prompt, hit=True) for prompt in asked],
+        hit_prompts=frozenset(asked),
+    )
+
+
 def test_a_missed_prompt_count_is_the_meetings_own(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def meeting(recorded: Sequence[str], hit: Sequence[str]) -> SimpleNamespace:
-        return SimpleNamespace(
-            entry=SimpleNamespace(
-                llm_calls=[SimpleNamespace(prompt=prompt) for prompt in recorded]
-            ),
-            hit_prompts=frozenset(hit),
-        )
-
-    walked = (meeting(("a", "b"), ("a", "b")), meeting(("a", "b", "c"), ("a",)))
+    walked = (_walked(("a", "b"), ("a", "b")), _walked(("a", "b", "c"), ("a",)))
     monkeypatch.setattr(rcr, "walk_replay_meetings", lambda *a, **k: iter(walked))
     with pytest.raises(
         rcr.RouteCheckReplayError,
@@ -929,8 +976,17 @@ def test_a_ledger_bound_that_is_no_integer_raises(
 ) -> None:
     assert rcr._ledger_bound("MAP_ARBITRATION_MAX_HOPS") == 1
     monkeypatch.setattr(corroboration, "MAP_ARBITRATION_MAX_HOPS", "1")
-    with pytest.raises(rcr.RouteCheckReplayError, match="is not an integer"):
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^the ledger's MAP_ARBITRATION_MAX_HOPS is not an integer$",
+    ):
         rcr._ledger_bound("MAP_ARBITRATION_MAX_HOPS")
+    monkeypatch.setattr(corroboration, "MAP_ARBITRATION_MAX_TICK_GAP", None)
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^the ledger's MAP_ARBITRATION_MAX_TICK_GAP is not an integer$",
+    ):
+        rcr._ledger_bound("MAP_ARBITRATION_MAX_TICK_GAP")
 
 
 def test_meeting_kinds_agree_with_the_census_vent_proof_cells() -> None:
@@ -2257,17 +2313,23 @@ def test_a_census_that_names_a_different_meeting_raises() -> None:
     ("field", "value"),
     (
         ("meeting_id", "elsewhere"),
+        ("tick", 1),
         ("opener", "p-gone"),
         ("ejected", "p-gone"),
         ("trigger_kind", "elsewhere"),
     ),
 )
 def test_a_later_meeting_the_census_reads_differently_is_named(
-    field: str, value: str
+    field: str, value: str | int
 ) -> None:
+    """Each compared field, moved at seed 1's third meeting; a tick moves by ``value``."""
+
     game = _r2_game(_WALK_SEED)
-    changes: dict[str, Any] = {field: value}
-    third = replace(game.meetings[2], **changes)
+    fact = game.meetings[2]
+    changes: dict[str, Any] = {
+        field: fact.tick + value if isinstance(value, int) else value
+    }
+    third = replace(fact, **changes)
     with pytest.raises(
         rcr.RouteCheckReplayError,
         match=r"^r1 seed 1 meeting 2: the census and the walk read different "
@@ -2351,7 +2413,7 @@ def test_a_report_that_differs_from_its_recomputation_fails_check(
         ]
     )
     assert code == 1
-    assert "the recomputed report differs" in capsys.readouterr().err
+    assert capsys.readouterr().err == f"{report}: the recomputed report differs\n"
 
 
 def test_a_census_with_no_meeting_for_a_games_first_raises() -> None:
@@ -2377,7 +2439,20 @@ def test_an_r1_columns_tree_mismatch_names_r1(
     copy = tmp_path / "copy.json"
     copy.write_text(rcr.serialize(payload))
     assert _check(repo, tmp_path, copy) == 1
-    assert "column r1: the recorded tree id" in capsys.readouterr().err
+    tree = _git(repo, "rev-parse", f"{sha}:replays/candidates/stage-b-r1/9p2i")
+    assert capsys.readouterr().err == (
+        f"route-check replay: column r1: the recorded tree id {'0' * 40} is not the "
+        f"tree of {sha}:replays/candidates/stage-b-r1/9p2i ({tree})\n"
+    )
+    # The same column, its tree restored, recorded under a name that could move.
+    payload["columns"][0]["tree"] = tree
+    payload["columns"][0]["sha"] = "HEAD"
+    copy.write_text(rcr.serialize(payload))
+    assert _check(repo, tmp_path, copy) == 1
+    assert capsys.readouterr().err == (
+        "route-check replay: column r1: the recorded sha 'HEAD' is not the full sha "
+        "of a commit\n"
+    )
 
 
 def _readable(inputs: rcr.MeetingInputs) -> rcr.MeetingInputs:
@@ -2555,3 +2630,317 @@ def test_a_recorded_text_the_json_escapes_fails_the_scan(
         rcr.scan_outputs((written,), forbidden)
     with pytest.raises(rcr.RouteCheckReplayError, match="carries recorded text"):
         rcr.scan_outputs((f"# report\n\n{text}\n",), forbidden)
+
+
+# ---------------------------------------------------------------------------
+# Planted cases review round 2 called for
+# ---------------------------------------------------------------------------
+
+
+def _charged(room: str, tick: int) -> rcr.Placement:
+    return rcr.Placement(
+        player=_SUBJECT,
+        tick=tick,
+        rooms=frozenset({room}),
+        kind="saw_player",
+        event_id=f"planted:{room}:{tick}",
+        turn_id="m-1:turn-1",
+    )
+
+
+def test_a_regroup_off_the_hub_takes_its_room_from_the_memory() -> None:
+    # Labs at 10, then a public regroup to Admin at 11: the regroup line's
+    # second end is the room the memory's regroup row names.
+    memory = _sighting_memory(
+        ("LABS", 10), ("ADMIN", 11), regroup=11, regroup_room="ADMIN"
+    )
+    (line,) = [
+        line
+        for line in _b_lines(memory, snapshot=False)
+        if line.verdict == "crosses_regroup"
+    ]
+    assert line.ends is not None
+    assert [sorted(end.rooms) for end in line.ends] == [["LABS"], ["ADMIN"]]
+    assert rcr._holds_charge_b(line, frozenset({_charged("ADMIN", 11)}))
+    assert not rcr._holds_charge_b(line, frozenset({_charged("CAFETERIA", 11)}))
+
+
+def test_a_regroup_from_the_hub_to_another_room_reaches_its_charge() -> None:
+    # The voter saw the subject in the Cafeteria at 10, and the regroup at 11
+    # gathered everyone in Admin. Only Admin, read from the memory, makes the
+    # regroup line one over two rooms, and only it holds the charged placement.
+    memory = _sighting_memory(
+        ("CAFETERIA", 10), ("ADMIN", 11), regroup=11, regroup_room="ADMIN"
+    )
+    (line,) = [
+        line
+        for line in _b_lines(memory, snapshot=False)
+        if line.verdict == "crosses_regroup"
+    ]
+    assert line.ends is not None
+    assert [sorted(end.rooms) for end in line.ends] == [["CAFETERIA"], ["ADMIN"]]
+    assert line.two_rooms and rcr._reaching(line)
+    inputs = _inputs(
+        _turn(
+            0,
+            "p-1",
+            observations=(_saw(_SUBJECT, "CAFETERIA", 10),),
+            claims=(_accuses(_SUBJECT),),
+        ),
+        _turn(1, "p-3", observations=(_saw(_SUBJECT, "ADMIN", 11),)),
+        regroup_ticks=frozenset({11}),
+        ballots=(_ballot(_VOTER, _SUBJECT, "m-1:turn-1"),),
+        ejected=_SUBJECT,
+    )
+    readings = {
+        snapshot: {
+            _VOTER: rcr.b_voter_reading(
+                memory, voter=_VOTER, snapshot=snapshot, suspicion_override=None
+            )
+        }
+        for snapshot in (False, True)
+    }
+    case = _case_of(inputs, readings)
+    assert case.misjudged
+    for check in ("b", "b_snapshot"):
+        assert case.check(check).reaches and case.check(check).reaches_charge
+
+
+def test_a_gated_sighting_against_an_alibi_stay_is_given_the_relevance_gate() -> None:
+    # A button meeting: p-1's own turn places the subject in the Cafeteria at
+    # tick 1, inside the spawn window the relevance gate drops, and the subject
+    # states an alibi in Admin from 3 to 5. Both pairs are reconcilable, (c)
+    # takes both kinds, and only the gate keeps it from the sighting.
+    turns = (
+        _turn(
+            0,
+            "p-1",
+            observations=(_saw(_SUBJECT, "CAFETERIA", 1),),
+            claims=(_accuses(_SUBJECT),),
+        ),
+        _turn(1, _SUBJECT, claims=(_alibi(_SUBJECT, ("ADMIN", 3, 5)),)),
+    )
+    inputs = _inputs(
+        *turns,
+        ejected=_SUBJECT,
+        ballots=(_ballot("p-1", _SUBJECT, "m-1:turn-0"),),
+    )
+    assert inputs.trigger_kind == "emergency"
+    case = _case_of(inputs)
+    assert case.misjudged and case.misjudging_pairs == 2
+    reference = case.check("c")
+    assert not reference.reaches
+    assert reference.reason == "relevance_gate"
+    assert reference.pair_reasons == (("relevance_gate", 2),)
+    assert case.check("a").reason == "kind"
+
+
+def test_an_unknown_recorded_label_is_refused_by_name(
+    one_game_run: tuple[Path, Path, str],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo, out, _ = one_game_run
+    payload = json.loads((out / "results.json").read_text())
+    payload["columns"][0]["label"] = "r3"
+    copy = tmp_path / "results.json"
+    copy.write_text(rcr.serialize(payload))
+    assert _check(repo, out, copy) == 1
+    assert capsys.readouterr().err == (
+        "route-check replay: column 'r3' is not a known column\n"
+    )
+
+
+@pytest.mark.parametrize("recorded", ("HEAD", "short"))
+def test_a_recorded_sha_that_is_no_full_commit_sha_fails_check(
+    one_game_run: tuple[Path, Path, str],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    recorded: str,
+) -> None:
+    # Each names the very commit the run read, and its tree is the recorded one,
+    # so only the refusal of a name that could move stops the check.
+    repo, out, sha = one_game_run
+    assert _git(repo, "rev-parse", "HEAD") == sha
+    value = sha[:12] if recorded == "short" else recorded
+    payload = json.loads((out / "results.json").read_text())
+    payload["columns"][0]["sha"] = value
+    copy = tmp_path / "results.json"
+    copy.write_text(rcr.serialize(payload))
+    assert _check(repo, out, copy) == 1
+    assert capsys.readouterr().err == (
+        f"route-check replay: column r2: the recorded sha {value!r} is not the full "
+        "sha of a commit\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("recorded", "asked"),
+    ((("a", "a", "b"), ("a", "b")), (("a", "b"), ("a", "a", "b"))),
+    ids=("a-recorded-twice-asked-once", "a-recorded-once-asked-twice"),
+)
+def test_a_recorded_call_asked_for_other_than_once_raises(
+    monkeypatch: pytest.MonkeyPatch, recorded: tuple[str, ...], asked: tuple[str, ...]
+) -> None:
+    # Every distinct recorded prompt is re-rendered, so only the count of each
+    # tells the second meeting from a faithful one.
+    walked = (_walked(("a", "b"), ("a", "b")), _walked(recorded, asked))
+    monkeypatch.setattr(rcr, "walk_replay_meetings", lambda *a, **k: iter(walked))
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^r1 seed 7 meeting 1: the walk did not ask for each recorded call "
+        r"exactly as often as it was recorded$",
+    ):
+        list(rcr.walk_game(Path("unread.jsonl"), label="r1", seed=7, renderers={}))
+
+
+def test_a_faithful_walks_calls_pass_the_count() -> None:
+    walked = _walked(("a", "a", "b"), ("b", "a", "a"))
+    assert consumed_exactly_once(cast(Any, walked))
+
+
+def test_a_run_whose_json_would_carry_a_rationale_writes_nothing(
+    one_game_run: tuple[Path, Path, str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The leak reaches the JSON alone: the report is rendered from the payload,
+    # so only the run's scan of the JSON text can stop it.
+    repo, _, sha = one_game_run
+    rationale = next(
+        ballot.rationale_text
+        for entry in read_all_entries(SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl")
+        for ballot in getattr(entry, "ballots", ())
+        if len(ballot.rationale_text) >= 40
+    )
+    real = rcr.serialize
+
+    def leaking(payload: Mapping[str, object]) -> str:
+        return real({**payload, "note": rationale})
+
+    monkeypatch.setattr(rcr, "serialize", leaking)
+    out = tmp_path / "out"
+    out.mkdir()
+    assert _run(repo, out, f"r2={sha}:replays/samples/9p2i") == 1
+    assert capsys.readouterr().err == (
+        "route-check replay: an output carries recorded text; nothing written\n"
+    )
+    assert not (out / "results.json").exists() and not (out / "report.md").exists()
+
+
+@pytest.mark.parametrize(
+    ("seeds", "stated"),
+    (
+        (range(50), "0-49"),
+        ((2,), "2"),
+        ((8, 7, 5, 2, 1, 0), "0-2, 5, 7-8"),
+        ((3, 4, 9, 3), "3-4, 9"),
+    ),
+)
+def test_seeds_are_stated_as_runs(seeds: Sequence[int], stated: str) -> None:
+    assert rcr.seed_ranges(seeds) == stated
+
+
+def test_no_seed_at_all_raises() -> None:
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^a column with no game has no seeds to state$",
+    ):
+        rcr.seed_ranges(())
+
+
+_FOUR_PLAYERS: Final[Mapping[str, Role]] = {
+    "p-1": "CREWMATE",
+    "p-2": "IMPOSTOR",
+    "p-3": "CREWMATE",
+    "p-4": "CREWMATE",
+}
+
+
+def test_a_columns_roster_is_its_games_own() -> None:
+    nine = dict(_r2_game(_RUN_SEED).roles)
+    assert rcr.column_roster("r2", {2: nine, 5: nine}) == {
+        "players": 9,
+        "impostors": 2,
+    }
+    assert rcr.column_roster("r1", {0: _FOUR_PLAYERS}) == {
+        "players": 4,
+        "impostors": 1,
+    }
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^column r1: its games hold 2 rosters, not one$",
+    ):
+        rcr.column_roster("r1", {0: _FOUR_PLAYERS, 1: nine})
+
+
+def test_a_columns_seeds_are_every_recorded_game_not_only_those_with_a_meeting() -> (
+    None
+):
+    source = rcr.ColumnSource("r1", "c", "0" * 40, "replays/x", "1" * 40)
+    payload = rcr.column_payload(
+        source, config=None, records=(), roles={3: _FOUR_PLAYERS, 4: _FOUR_PLAYERS}
+    )
+    assert (payload["seeds"], payload["roster"], payload["games"]) == (
+        "3-4",
+        {"players": 4, "impostors": 1},
+        0,
+    )
+
+
+def test_a_run_states_its_columns_own_seeds_and_roster(
+    one_game_run: tuple[Path, Path, str],
+) -> None:
+    _, out, sha = one_game_run
+    (column,) = json.loads((out / "results.json").read_text())["columns"]
+    assert (column["seeds"], column["roster"]) == ("2", {"players": 9, "impostors": 2})
+    report = (out / "report.md").read_text()
+    assert "0-49" not in report
+    assert (
+        f"| `{column['tree']}` | `{column['declared_config']}` | 2 | 9 | 2 | 1 |"
+        in (report)
+    )
+    assert sha in report
+
+
+def test_the_report_states_the_seeds_and_roster_the_json_records() -> None:
+    payload = json.loads(_COMMITTED_JSON.read_text())
+    for column in payload["columns"]:
+        assert (column["seeds"], column["roster"]) == (
+            "0-49",
+            {"players": 9, "impostors": 2},
+        )
+    payload["columns"][0]["seeds"] = "0-5"
+    payload["columns"][0]["roster"] = {"players": 4, "impostors": 1}
+    report = rcr.render_report(payload)
+    (row,) = [line for line in report.splitlines() if line.startswith("| s9 | `")]
+    assert row.endswith("| none | 0-5 | 4 | 1 | 50 |")
+
+
+def test_a_declared_r1_config_that_is_no_config_names_r1(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, _ = _column_repo(tmp_path, with_r1=True)
+    config = repo / "replays" / "candidates" / "stage-b-r1" / "experiment-config.json"
+    config.write_text('{"format_version": 1, "kill_cooldown_ticks": "six"}\n')
+    _git(repo, "commit", "-q", "-am", "a broken r1 config")
+    sha = _git(repo, "rev-parse", "HEAD")
+    assert _run(repo, tmp_path, f"r1={sha}:replays/candidates/stage-b-r1/9p2i") == 1
+    assert capsys.readouterr().err == (
+        "route-check replay: column r1: "
+        f"replays/candidates/stage-b-r1/experiment-config.json at {sha} is no "
+        "experiment config\n"
+    )
+
+
+def test_r2s_tree_under_the_r1_label_names_r1s_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, sha = _column_repo(tmp_path, with_r1=True)
+    assert _run(repo, tmp_path, f"r1={sha}:replays/samples/9p2i") == 1
+    assert capsys.readouterr().err == (
+        "route-check replay: column r1: seed 2 recorded settings that differ from "
+        "the config its label declares "
+        "(replays/candidates/stage-b-r1/experiment-config.json)\n"
+    )

@@ -27,8 +27,10 @@ the counts out by ejection class, as description.
 
 Every column is pinned to a full commit sha resolved when the run starts and
 materialized with ``git archive``; ``--check`` re-materializes the recorded shas,
-refuses a column whose recorded tree id differs from the tree of ``SHA:PATH``,
-and recomputes the JSON and the report byte for byte.
+refuses a column whose recorded sha is not a commit's full sha or whose recorded
+tree id differs from the tree of ``SHA:PATH``, and recomputes the JSON and the
+report byte for byte. The report states each column's seeds and roster as its
+recorded games hold them.
 
 Purity: offline, no provider client (the walk's recorded-response stub answers
 every call from the recording's bytes), no environment write, no recorded byte
@@ -137,6 +139,7 @@ from tests.meetings.test_prompt_byte_golden import (  # noqa: E402
     _KIND_VOTE_BALLOT,
     ReconstructedMeeting,
     _canonical_renderers,
+    consumed_exactly_once,
     walk_replay_meetings,
 )
 
@@ -1762,8 +1765,10 @@ def walk_game(
 ) -> Iterator[ReconstructedMeeting]:
     """The recording's meetings through the faithful walk, or a raise naming one.
 
-    A state hash the walk cannot reproduce and a recorded prompt it did not
-    re-render both raise, naming (column, seed, meeting).
+    A state hash the walk cannot reproduce, a recorded prompt it did not
+    re-render, and a recorded call the manager asked for other than exactly once
+    (the golden's own count, :func:`consumed_exactly_once`) each raise, naming
+    (column, seed, meeting).
     """
 
     walker = walk_replay_meetings(
@@ -1785,6 +1790,11 @@ def walk_game(
             raise RouteCheckReplayError(
                 f"{label} seed {seed} meeting {index}: {len(missed)} recorded "
                 "prompt(s) were not re-rendered by the walk"
+            )
+        if not consumed_exactly_once(meeting):
+            raise RouteCheckReplayError(
+                f"{label} seed {seed} meeting {index}: the walk did not ask for "
+                "each recorded call exactly as often as it was recorded"
             )
         yield meeting
         index += 1
@@ -1814,6 +1824,7 @@ def read_game(
         fact = game.meetings[index]
         if (
             fact.meeting_id != meeting.meeting_id
+            or fact.tick != meeting.entry.tick
             or fact.opener != meeting.result.triggered_by
             or fact.ejected != meeting.result.ejected_player_id
             or fact.trigger_kind != meeting.trigger_kind
@@ -2188,6 +2199,46 @@ def s9_agreement(counts: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+def seed_ranges(seeds: Iterable[int]) -> str:
+    """The seeds as runs of consecutive integers, such as ``0-49`` or ``0-2, 5``.
+
+    No seed at all raises: a column with no game has nothing to state.
+    """
+
+    runs: list[tuple[int, int]] = []
+    for seed in sorted(set(seeds)):
+        if runs and seed == runs[-1][1] + 1:
+            runs[-1] = (runs[-1][0], seed)
+        else:
+            runs.append((seed, seed))
+    if not runs:
+        raise RouteCheckReplayError("a column with no game has no seeds to state")
+    return ", ".join(
+        str(first) if first == last else f"{first}-{last}" for first, last in runs
+    )
+
+
+def column_roster(
+    label: str, roles: Mapping[int, Mapping[PlayerId, Role]]
+) -> dict[str, int]:
+    """The players and impostors each recorded game of a column holds.
+
+    Read from every game's role map; a column whose games hold different
+    rosters raises, naming the column.
+    """
+
+    rosters = {
+        (len(game), sum(role == "IMPOSTOR" for role in game.values()))
+        for game in roles.values()
+    }
+    if len(rosters) != 1:
+        raise RouteCheckReplayError(
+            f"column {label}: its games hold {len(rosters)} rosters, not one"
+        )
+    ((players, impostors),) = rosters
+    return {"players": players, "impostors": impostors}
+
+
 def column_payload(
     source: ColumnSource,
     *,
@@ -2195,7 +2246,12 @@ def column_payload(
     records: Sequence[MeetingRecord],
     roles: Mapping[int, Mapping[PlayerId, Role]],
 ) -> dict[str, object]:
-    """One column's JSON: provenance, counts by meeting kind, classes, meetings."""
+    """One column's JSON: provenance, counts by meeting kind, classes, meetings.
+
+    The seeds and the roster are the recorded games' own (the census's games,
+    which :func:`read_set` holds equal to the seeds on disk), so the report
+    states each column's band and roster as its bytes hold them.
+    """
 
     whole = _group_counts(records)
     payload: dict[str, object] = {
@@ -2207,6 +2263,8 @@ def column_payload(
         "declared_config": declared_config_path(source.label),
         "recorded_experiment_config": dict(config) if config is not None else None,
         "games": len({record.seed for record in records}),
+        "seeds": seed_ranges(roles),
+        "roster": column_roster(source.label, roles),
         "all": whole,
         "by_kind": {
             kind: _group_counts([record for record in records if record.kind == kind])
@@ -2380,8 +2438,9 @@ def render_report(payload: Mapping[str, object]) -> str:
         "",
         "## Method",
         "",
-        "Each column is one recording of seeds 0-49 at 9 players and 2 impostors, "
-        "read alone and never pooled, from the exact commit below. Every meeting is "
+        "Each column is one recording, read alone and never pooled, from the exact "
+        "commit in the table below; the table also gives the seeds and the roster "
+        "(players, impostors) that column's recorded games hold. Every meeting is "
         "re-run through the committed reconstruction walk with the recording's own "
         "settings: every state hash and every recorded prompt is reproduced or the "
         "run stops, and the meetings agree one for one with the gameplay census.",
@@ -2389,7 +2448,17 @@ def render_report(payload: Mapping[str, object]) -> str:
     ]
     out.extend(
         _table(
-            ("column", "commit", "path", "tree", "declared config", "games"),
+            (
+                "column",
+                "commit",
+                "path",
+                "tree",
+                "declared config",
+                "seeds",
+                "players",
+                "impostors",
+                "games",
+            ),
             [
                 (
                     column["label"],
@@ -2399,6 +2468,9 @@ def render_report(payload: Mapping[str, object]) -> str:
                     f"`{column['declared_config']}`"
                     if column["declared_config"]
                     else "none",
+                    column["seeds"],
+                    cast(Mapping[str, int], column["roster"])["players"],
+                    cast(Mapping[str, int], column["roster"])["impostors"],
                     column["games"],
                 )
                 for column in columns
@@ -2783,7 +2855,12 @@ def outputs_for(repo: Path, sources: Sequence[ColumnSource]) -> tuple[str, str]:
 
 
 def recorded_sources(payload: Mapping[str, object], repo: Path) -> list[ColumnSource]:
-    """The columns a JSON records, each tree id checked against its sha's tree."""
+    """The columns a JSON records, each checked before anything is recomputed.
+
+    A column's label must be a known column, its recorded sha the full sha of a
+    commit (never a branch, a tag, ``HEAD`` or an abbreviation, which could move),
+    and its recorded tree id the tree of ``SHA:PATH``.
+    """
 
     sources: list[ColumnSource] = []
     for column in cast(Sequence[Mapping[str, str]], payload["columns"]):
@@ -2797,6 +2874,11 @@ def recorded_sources(payload: Mapping[str, object], repo: Path) -> list[ColumnSo
         if source.label not in COLUMN_LABELS:
             raise RouteCheckReplayError(
                 f"column {source.label!r} is not a known column"
+            )
+        if resolve_commit(repo, source.sha) != source.sha:
+            raise RouteCheckReplayError(
+                f"column {source.label}: the recorded sha {source.sha!r} is not the "
+                "full sha of a commit"
             )
         actual = tree_at(repo, source.sha, source.path)
         if actual != source.tree:
