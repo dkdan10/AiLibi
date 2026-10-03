@@ -32,9 +32,11 @@ and recomputes the JSON and the report byte for byte.
 
 Purity: offline, no provider client (the walk's recorded-response stub answers
 every call from the recording's bytes), no environment write, no recorded byte
-edited. The outputs carry ids, ticks, room ids, kinds, booleans and counts only;
-before it writes, the run scans both outputs for every turn text, ballot
-rationale and travel line it read and refuses to write one that holds any.
+edited. Beyond the instrument's own fixed wording (the report's prose, the
+JSON's check names), the outputs carry ids, ticks, room ids, kinds, booleans and
+counts only; before it writes, the run scans both outputs for every turn text,
+ballot rationale and travel line it read, as written and as the JSON escapes it,
+and refuses to write one that holds any.
 """
 
 from __future__ import annotations
@@ -1885,12 +1887,19 @@ def forbidden_strings(set_dir: Path) -> frozenset[str]:
 
 
 def scan_outputs(texts: Sequence[str], forbidden: Iterable[str]) -> None:
-    """Raise when an output carries any recorded text it read."""
+    """Raise when an output carries any recorded text it read.
+
+    Each text is sought as written, which is how the report would carry it, and
+    as a JSON string body, which is how the JSON would: :func:`serialize` escapes
+    quotes, backslashes, control and non-ASCII characters, so a recorded text
+    that escaping changes is found in either output.
+    """
 
     for text in forbidden:
         if len(text) < _SCAN_MIN_LENGTH:
             continue
-        if any(text in output for output in texts):
+        forms = {text, json.dumps(text)[1:-1]}
+        if any(form in output for form in forms for output in texts):
             raise RouteCheckReplayError(
                 "an output carries recorded text; nothing written"
             )
@@ -2212,6 +2221,46 @@ def column_payload(
     return payload
 
 
+@dataclass(frozen=True)
+class CheckLabel:
+    """How one check's column is named, and what it approximates, if anything."""
+
+    name: str
+    approximates: str | None
+
+
+#: Each check's name in the JSON and the report, which reads it from the JSON.
+#: Only (b-snapshot) is an approximation, and both outputs say so.
+CHECK_LABELS: Final[Mapping[Check, CheckLabel]] = MappingProxyType(
+    {
+        "a": CheckLabel("(a) as built", None),
+        "a_transcript_only": CheckLabel("(a) transcript only", None),
+        "b": CheckLabel("(b) as recorded", None),
+        "b_snapshot": CheckLabel(
+            "(b-snapshot), approximation",
+            "the temporal observation delivery that evidence version 2 requires: "
+            "each plain recorded sighting is relabelled a start-of-tick snapshot, "
+            "movement and action rows keep an unknown phase, and the event rows "
+            "such a recording would add are absent",
+        ),
+        "c": CheckLabel("(c) reference", None),
+    }
+)
+
+
+def checks_payload() -> dict[str, object]:
+    """Each check's name, and whether its column is an approximation and of what."""
+
+    return {
+        check: {
+            "name": CHECK_LABELS[check].name,
+            "approximation": CHECK_LABELS[check].approximates is not None,
+            "approximates": CHECK_LABELS[check].approximates,
+        }
+        for check in CHECKS
+    }
+
+
 def build_payload(columns: Sequence[dict[str, object]]) -> dict[str, object]:
     labels = [cast(str, column["label"]) for column in columns]
     reading: dict[str, object] = {
@@ -2223,6 +2272,7 @@ def build_payload(columns: Sequence[dict[str, object]]) -> dict[str, object]:
     return {
         "schema_version": SCHEMA_VERSION,
         "instrument": "experiments/lab/route_check_replay.py",
+        "checks": checks_payload(),
         "columns": columns,
         "reading": {
             "rule_applies_to": "r2" if "r2" in labels else None,
@@ -2267,16 +2317,6 @@ _LEG_NAMES: Final[Mapping[DisputeLeg, str]] = MappingProxyType(
     }
 )
 
-_CHECK_NAMES: Final[Mapping[Check, str]] = MappingProxyType(
-    {
-        "a": "(a) as built",
-        "a_transcript_only": "(a) transcript only",
-        "b": "(b) as recorded",
-        "b_snapshot": "(b-snapshot), approximation",
-        "c": "(c) reference",
-    }
-)
-
 _REASON_NAMES: Final[Mapping[Reason, str]] = MappingProxyType(
     {
         "kind": "placement kind outside the check's inputs",
@@ -2314,6 +2354,10 @@ def render_report(payload: Mapping[str, object]) -> str:
     """The lab report, a pure function of the JSON payload."""
 
     columns = cast(Sequence[Mapping[str, object]], payload["columns"])
+    checks = cast(Mapping[str, Mapping[str, object]], payload["checks"])
+    names: dict[Check, str] = {
+        check: cast(str, checks[check]["name"]) for check in CHECKS
+    }
     out: list[str] = [
         "# Route-check replay",
         "",
@@ -2423,12 +2467,14 @@ def render_report(payload: Mapping[str, object]) -> str:
         ]
     )
     for column in columns:
-        out.extend(_column_section(column))
+        out.extend(_column_section(column, names))
     out.extend(_reading_section(payload, columns))
     return "\n".join(out) + "\n"
 
 
-def _column_section(column: Mapping[str, object]) -> list[str]:
+def _column_section(
+    column: Mapping[str, object], names: Mapping[Check, str]
+) -> list[str]:
     whole = cast(Mapping[str, object], column["all"])
     by_kind = cast(Mapping[str, Mapping[str, object]], column["by_kind"])
     classes = cast(Mapping[str, object], column["classes"])
@@ -2472,7 +2518,7 @@ def _column_section(column: Mapping[str, object]) -> list[str]:
             ),
             [
                 (
-                    _CHECK_NAMES[check],
+                    names[check],
                     cast(Mapping[str, int], whole["lines"])[check],
                     f"{cast(Mapping[str, int], whole['reaches_misjudged'])[check]} of "
                     f"{whole['misjudged']}",
@@ -2496,7 +2542,7 @@ def _column_section(column: Mapping[str, object]) -> list[str]:
                 "class",
                 "ejections",
                 "misjudged",
-                *(_CHECK_NAMES[check] for check in CHECKS),
+                *(names[check] for check in CHECKS),
                 "judgment net",
             ),
             [
@@ -2580,7 +2626,7 @@ def _column_section(column: Mapping[str, object]) -> list[str]:
     reasons = cast(Mapping[str, Mapping[str, int]], whole["unreached_reasons"])
     out.extend(
         _table(
-            ("reason", *(_CHECK_NAMES[check] for check in CHECKS)),
+            ("reason", *(names[check] for check in CHECKS)),
             [
                 (_REASON_NAMES[reason], *(reasons[check][reason] for check in CHECKS))
                 for reason in REASONS
@@ -2597,7 +2643,7 @@ def _column_section(column: Mapping[str, object]) -> list[str]:
     )
     out.extend(
         _table(
-            ("reason", *(_CHECK_NAMES[check] for check in CHECKS)),
+            ("reason", *(names[check] for check in CHECKS)),
             [
                 (
                     _REASON_NAMES[reason],

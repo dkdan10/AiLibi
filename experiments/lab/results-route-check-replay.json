@@ -1,4 +1,31 @@
 {
+ "checks": {
+  "a": {
+   "approximates": null,
+   "approximation": false,
+   "name": "(a) as built"
+  },
+  "a_transcript_only": {
+   "approximates": null,
+   "approximation": false,
+   "name": "(a) transcript only"
+  },
+  "b": {
+   "approximates": null,
+   "approximation": false,
+   "name": "(b) as recorded"
+  },
+  "b_snapshot": {
+   "approximates": "the temporal observation delivery that evidence version 2 requires: each plain recorded sighting is relabelled a start-of-tick snapshot, movement and action rows keep an unknown phase, and the event rows such a recording would add are absent",
+   "approximation": true,
+   "name": "(b-snapshot), approximation"
+  },
+  "c": {
+   "approximates": null,
+   "approximation": false,
+   "name": "(c) reference"
+  }
+ },
  "columns": [
   {
    "all": {
