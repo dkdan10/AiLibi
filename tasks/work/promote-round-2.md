@@ -1114,3 +1114,58 @@ arguments, so the planted registry reaches it through `refuse_unsafe_target`.
 No frontend file changed, so vitest and the e2e were not run on their own; `check.sh` runs vitest.
 
 Q1 and Q2 (round 1) stay open for the owner; this round adds no question.
+
+### Follow-through note (2026-10-02)
+
+Added after the merge by [`post-promotion-follow-through`](post-promotion-follow-through.md); nothing above this
+subsection changes. Each corrected figure is re-measured, at that card's head, by the command quoted beside it; every
+count is count-only.
+
+**The merge, and the two questions it left open.** On 2026-10-02 the owner merged this card's PR (#495) and the tour's
+(#496) with these words, verbatim: "Merge both and continue". Q1 and Q2 (Review corrections, round 1) were both open
+at that merge, and the words rule on neither.
+- **Q1, the champion-flip FSM comparator, stays open for the owner.** The code as merged holds option (a), the
+  `d41c9006` reading: `scripts/regen_test_goldens.py` returns `FSM_COMPARATOR_AT_D41C9006 = (11, 50)`, and
+  `tests/scripts/test_champion_flip_ruling.py` holds an independent `(11, 50)`. Options (b), re-derive it from the
+  promoted MANIFEST at 24/50, and (c), another ruling, stand as listed. No code moves here.
+- **Q2 needs no ruling.** The twelve commits `148fa211`..`4a36dc03` carry the Opus 5.5 trailer, are published on
+  `main` and stand as pushed. No rewrite is possible under either answer.
+
+**Corrections.**
+- **The referee.** "Watchability, and the referee's layer review" credits `tests/eval/test_watchability.py` with
+  holding the referee's JSON byte-identical at base and head. No test there does that. The command is
+  `uv run python scripts/measure_baseline.py --watchability --json <set>`: it reads 21,981 bytes (sha256 prefix
+  `badba42d`) on `replays/samples/4p1i`, 64,432 bytes (`bc574592`) on `replays/ml_corpus/9p2i` and 22,088 bytes
+  (`79055133`) on `replays/ml_corpus/4p1i`, each exit 0. These equal the review's base-and-head readings; the
+  mechanism is that command, run at both commits, not a test.
+- **The re-pin count.** "The re-pin sweep" states 527 annotations across 38 files by a `grep -c "was"` style count.
+  Over `git diff d41c9006 4a36dc03 -- tests/ frontend/src/`: `grep -c was` reads 1,325 lines; `grep -cE
+  '^\+.*(#|//) was'` reads 530 added lines, across 39 files (the `+++` path of each matching hunk, de-duplicated),
+  529 of them with a space after "was". Two of those notes give the baseline-8 value rather than the one replaced:
+  `tests/meetings/test_citation_relevance.py:343` (`# was 578 on baseline 8`; the replaced value, 545 on the
+  baseline-9 bytes, is in the comment above it) and `tests/agents/test_memory_meeting_history.py:807`
+  (`# was (3631, 1597) on baseline 8`; the replaced value, (3630, 1648), is in the comment above it).
+- **The criterion row.** Validation lists three `measure_featured_criterion.py` commands and two results. They read:
+  `--set 9p2i` 11 of 50 games whose first meeting ejects on a role-proof flag, `--games 9p2i:3` 1 of 1 and
+  `--games 9p2i:23` 0 of 1, each exit 0.
+- **The red-at-base run.** "Planted failures, red and green" states 15 collection errors and "5 failed of 32".
+  Neither is reproduced here; both stay unreproduced. A review reproduction read 11 errors (7 at collection, 4 at
+  setup) with 3 skipped, and a 118-test frontend run; that reading is the review's, not re-derived here.
+- **The mutation pass.** "One bounded mutation pass" used COMPARE, CONST, NEGATE and DELETE, not the wave's eight
+  listed operator classes. Its survivor M14 (a stage pin's numerator alone) is no longer open: on the orchestrator's
+  scope extension of 2026-10-02 the follow-through card added
+  `test_stage_b_r2_floor_numerators_equal_the_measured_counts` to `tests/eval/test_watchability.py`, which holds
+  each stage-b-r2 pin's numerator to the event count the referee's walk measures. Re-applied as the witnessed-kill
+  numerator raised to 15 in `eval/watchability.py`, the mutant passes the earlier stage tests (`-k "(stage_b_r2 or
+  stage_pin) and not numerators"`: 6 passed) and fails the new case (1 failed, 6 passed); the file was restored
+  from a copy, its sha256 checked.
+- **D10** (the wrong-config refusal naming the promoted set's file) is closed, as review round 3's R14 row says.
+  Re-applied at the follow-through card's dispatch (the refusal's `config=declared` replaced by the literal
+  `'replays/samples/9p2i/experiment-config.json'`), `uv run pytest tests/scripts/test_refresh_samples.py -k
+  "era_refusal_names_the_set or declared" -q` read 2 failed, 11 passed: both variables of
+  `test_an_era_refusal_names_the_set_and_the_declared_file_it_found`. The file was restored from a copy.
+- **The deployment figure.** Limitations note `docs/deployment.md`'s "29 MB" for the 9p2i report. It now reads 33 MB:
+  `gzip -dc replays/samples/9p2i/tournament-eval-report.json.gz | wc -c` reads 32,952,472 bytes.
+
+**Open after this note:** Q1, for the owner. M14, open at the merge beside it, is closed by the pin above; D10
+is closed.

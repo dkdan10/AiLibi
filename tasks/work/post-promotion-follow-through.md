@@ -1,6 +1,6 @@
 # Follow-through on the promotion and tour reviews
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -17,8 +17,8 @@ When it is done:
   everything p-5 knew when it voted at tick 12;
 - the public results page calls the seven adopted rules adopted, through `SPECTATOR_COPY`, and keeps the kill
   cooldown's words as they are;
-- the recorder tests pass however pytest-xdist distributes them, because none of them writes into the real
-  `replays/` tree;
+- the recorder tests pass however pytest-xdist distributes them among the rest of the default tier, because none of
+  them writes into the real `replays/` tree and, as measured at this card's head, no other test of that tier does;
 - both merged cards' Results carry a dated note that corrects their wording-only imprecisions and records the
   owner's merge of the promotion with its two questions open. The note closes neither question by inference: Q1
   stays open for the owner, and Q2 needs no ruling because no pushed commit can be rewritten. Nothing written
@@ -165,7 +165,42 @@ diagnosis of 2026-10-02 (`tasks/diagnosis-2026-10-02/README.md`, Part 3, card 0)
 Each item names its enforcing mechanism and a planted or perturbed proof. Each new test is written first and fails at
 this card's base for the stated reason; Results quotes that run.
 
-- [ ] **The before file is registered.**
+- [x] Review correction (round 2): every claim of the README caption's scene is read out of the caption and held to
+  the served replay. `_caption_scene_problems` takes the tick, the number of dead (a word), the room the impostor
+  outside the vents stands in (by the map's own room name), the fog subject, the one player it sees and the accuser
+  from the caption line. It holds the tick to the capture spec's `HERO.tick`, each claim to the frame at that tick,
+  and the accusation to the earliest meeting after it. Before, the case compared the replay to literal copies of the
+  tick, count and room, so the verifiers' edits of MedBay to Admin, two players to three and tick 9 to tick 12 left
+  the file green (13 passed each at `c6e98fef`). Mechanism: `test_the_captions_scene_is_the_recorded_one`,
+  `test_a_caption_naming_another_scene_fails_by_name` and `test_the_caption_counts_its_dead_in_words` in
+  `tests/scripts/test_public_recording_provenance.py`. Proof: seven scratch READMEs, each with one scene phrase
+  changed, and a scratch spec shooting another tick each fail by name; the three edits applied to the real README
+  now fail the scene case (Results, Review corrections, round 2).
+- [x] Review correction (round 1): no test of the default tier writes into a committed set directory, so the
+  recorder tests' whole-tree fixture fails only on a real write into `replays/`. The feature sweep in
+  `tests/agents/test_features.py` wrote its observation audit log beside each recording in `replays/samples/<set>/`
+  and removed it again, and the fixture reported it from a recorder case running beside it (181 passed, 16 errors for
+  the pair under `-n 2 --dist loadfile` at `878d05db`). The sweep now writes that log in a temporary directory.
+  Mechanism: `test_the_sweep_leaves_the_committed_set_directory_untouched`. Proof: the log put back beside the
+  recording fails it; the pair under `-n 2 --dist loadfile` reads 182 passed in each of three runs; the whole default
+  tier between two stat inventories of `replays/` changes none of its 386 entries (Results, Review corrections,
+  round 1).
+- [x] Review correction (round 1): the distribution guarantee is stated at the strength delivered, in the Outcome,
+  this list and Results. The recorder tests pass under any distribution of the default tier because none of them
+  writes into `replays/` and, measured at this card's head, no other test of the tier does. A future test that writes
+  there would turn a concurrent recorder case red, and the fixture names its path. Mechanism: the autouse fixture
+  `_replays_tree_untouched` and the inventory run in Results. The bounded mutation pass over the inventory found one
+  survivor, the directory test negated; the new planted kind "a rewritten file with its time put back" in
+  `test_the_no_trace_checks_report_a_stray_of_each_kind` kills it.
+- [x] Review correction (round 1): every live comment that states the 9p2i eval report's size agrees with
+  `docs/deployment.md` and with the measured bytes. `frontend/src/api/client.ts` and `frontend/e2e/bundle.spec.ts`
+  said 29 MB, and `scripts/build_demo_bundle.py` said 33.86 MB uncompressed and 2.89 MB gzipped, which are binary
+  megabytes of the report before the promotion. They now say 33 MB, and the docstring gives the bytes. Mechanism:
+  these are comments that no test holds; the commands that measure them are in Results. Proof:
+  `git grep -n -E "29 ?MB|33\.86|2\.89 ?MB"` outside `tasks/` and `audits/` finds none, and bundles built in one
+  checkout at `878d05db` and at this round's code head give an empty `diff -rq`.
+
+- [x] **The before file is registered.**
   - `docs/artifacts.md`'s scorecard row names `docs/process-scorecard-before.json`, says it is the frozen before
     columns (sha256-pinned and never recomputed), and states `3 files`.
   - `_IN_TREE_PROBES` and `_IN_TREE_INVENTORY` name the three paths, and the scratch availability tree links them.
@@ -176,7 +211,7 @@ this card's base for the stated reason; Results quotes that run.
     inventory entry without the file fails the same leg. `BEFORE_COLUMNS_PATH` monkeypatched to another path fails
     the new case.
   - `verify_ml_evidence.py`, offline, keeps its check count and FAIL 0.
-- [ ] **The front door names the pictured game in plain words.**
+- [x] **The front door names the pictured game in plain words.**
   - `README.md`'s caption, its samples sentence and `docs/media/README.md` call 9p2i seed 19 the game the demo's
     guided tour opens on, or other plain words a first reader understands. None says "strip" or "head".
   - The caption says one impostor is inside a vent, and the README stays at or under 1,600 words.
@@ -186,7 +221,7 @@ this card's base for the stated reason; Results quotes that run.
   - Planted: the `59bbd1be` caption, put back into a scratch README, fails that assertion by name.
   - `tests/scripts/test_check_doc_facts.py`'s planted `d41c9006` hunk carries the new sentence as its current side.
     Its previous side is unchanged, and the case still passes all four of its assertions.
-- [ ] **The hero caption claims only what the picture shows.**
+- [x] **The hero caption claims only what the picture shows.**
   - `frontend/e2e/media.spec.ts`'s caption and its `:803` comment say only this: the left half is what happened and
     the right half what p-5 could see, both at tick 9, and the card below is the accusation p-5 wrote at the meeting
     that followed, at tick 12. No clause says the panel is everything p-5 knew when it voted.
@@ -199,7 +234,7 @@ this card's base for the stated reason; Results quotes that run.
     requires the tick placeholder.
   - Planted: the `59bbd1be` template in a scratch copy fails the new case. A changed image with unchanged provenance
     fails the existing digest check.
-- [ ] **The public results page calls adopted rules adopted.**
+- [x] **The public results page calls adopted rules adopted.**
   - Every word of `BehaviorIdentity` moves into a new public-results group of `SPECTATOR_COPY`, with `fmt`
     templates for counts. `PublicResults.tsx` joins the disk leg's in-scope sources with a rendered fragment.
   - A field at its adopted value, one of the seven pairs, is listed under a lead that says adopted, each in plain
@@ -219,12 +254,12 @@ this card's base for the stated reason; Results quotes that run.
   - Planted: the paragraph with one pair's value edited, and a config copy with one adopted field moved, each fail
     the source pin. Each changed assertion is replaced by one at least as strong: the old phrase is asserted absent
     where its classification changed.
-- [ ] **The recorder's era refusal stays registry-derived.**
+- [x] **The recorder's era refusal stays registry-derived.**
   - Mechanism: `test_an_era_refusal_names_the_set_and_the_declared_file_it_found`.
   - Proof: D10 re-applied at dispatch fails it for both variables, and Results quotes the run.
   - Only if D10 survives does this card add a planted-registry case to `tests/scripts/test_refresh_samples.py`.
     `scripts/_declared_experiment.py` does not change.
-- [ ] **The recorder tests pass under any distribution.**
+- [x] **The recorder tests pass under any distribution of the default tier.**
   - While the guard under test holds, no case in `tests/scripts/test_refresh_samples.py` creates, edits or deletes a
     path under the real `replays/` tree.
   - Decoys, planted rounds and strays live under the case's own `tmp_path`. Otherwise the case aims, read-only, at an
@@ -238,7 +273,7 @@ this card's base for the stated reason; Results quotes that run.
   - Proof: three runs each of `-n 4 --dist load` and `-n 6 --dist load`, and of both files under
     `-n 8 --dist load`, all green. The serial run and the `--dist loadfile` run stay green. No case is skipped,
     deleted or loosened to get there.
-- [ ] **Both merged cards carry a dated note in Results, and nothing above it changes.**
+- [x] **Both merged cards carry a dated note in Results, and nothing above it changes.**
   - The promotion's note records the owner's words verbatim, "Merge both and continue", and that Q1 and Q2 were
     both open at the merge. It records that the code holds Q1's option (a), the `d41c9006` reading at (11, 50),
     and that the twelve commits stand as pushed: Q2 needs no ruling, because no rewrite is possible. It lists Q1
@@ -252,7 +287,7 @@ this card's base for the stated reason; Results quotes that run.
   - Mechanism: `git diff --numstat 59bbd1be -- tasks/work/promote-round-2.md tasks/work/spectator-tour-round-2.md`
     shows zero deleted lines.
   - Proof: each corrected figure is re-measured by the command the note quotes, at the head that states it.
-- [ ] **Every changed production line goes red when neutered, and one bounded mutation pass is run.**
+- [x] **Every changed production line goes red when neutered, and one bounded mutation pass is run.**
   - The spans: `PublicResults.tsx`, the new copy group, `adoptedRules.ts`, the two `verify_ml_evidence.py` entries
     and the caption lines of `media.spec.ts`.
   - Results tabulates each neutered line with the test that failed. Equivalent probes are named with their reason.
@@ -267,7 +302,7 @@ this card's base for the stated reason; Results quotes that run.
     - a read of a loaded source to the canonical literal.
   - Each mutant is applied alone and the file is restored from a copy with its sha256 checked. Each survivor is
     killed or named equivalent with its reason.
-- [ ] **The gates hold.**
+- [x] **The gates hold.**
   - Nothing recorded moves: `verify_samples.sh`, the five `build_sample_report.py --check` runs, both publishers'
     `--check` and `pytest -m campaign` read as at `59bbd1be`.
   - `npm run e2e` is green.
@@ -434,4 +469,592 @@ gate in a clean worktree and cite CI for it.
 
 ## Results
 
-Not started.
+Done on `work/post-promotion-follow-through`, from `origin/main` at `5877adb4`. Every count is count-only: no rendered
+prompt, transcript text or seed-band prefix was printed or logged. Scratch work stayed under a private subdirectory
+of the session scratchpad.
+
+**Commits**, in order: `acdaddb6` the front-door words and the hero caption template; `52c4b1f3` the public results
+wording; `c91e604b` the media re-capture; `a74045b3` the recorder tests off the shared tree; `e5403bb0` the M14
+numerator pin; `dd1a4b17` the deployment figure; `cd77b998` the two dated notes; `d392b108` the probes the first pass
+left green; `e35b052f` the registry rows with this Results; then the commit recording the `check.sh` run.
+
+**Sections relied on.** This card; `AGENTS.md`; `docs/workflow.md` (card format, reopen pattern); the Stage B
+decision memo (`tasks/decision-2026-09-24-stage-b-wave.md`) sections 0, 1, 3.1-3.3 and 7; the diagnosis
+(`tasks/diagnosis-2026-10-02/README.md`) Part 3, card 0, and Part 4; `audits/audit-2026-10-01-stage-b-r2.md` sections
+1.11 and 9; `docs/experiment-arms.md` "Adopted arms"; `docs/artifacts.md` "The four classes"; `docs/media/README.md`;
+`docs/architecture.md` "Determinism and the substrate ladder" (unchanged: no engine, agent, meeting or recorded
+byte moves).
+
+### The before file is registered
+
+- `docs/artifacts.md`'s scorecard row names `docs/process-scorecard-before.json` as the frozen before columns,
+  sha256-pinned in `eval/process_scorecard.py`, copied into every publication and never recomputed, and states
+  `3 files`. `_IN_TREE_PROBES` and `_IN_TREE_INVENTORY` name the three paths; the scratch availability tree links all
+  three.
+- Mechanism (`tests/scripts/test_verify_ml_evidence.py`): `test_the_scorecard_row_registers_its_pinned_before_file`
+  reads `BEFORE_COLUMNS_PATH` off `eval.process_scorecard` at call time and requires it in the row's words, its probe,
+  its inventory scope and the index, and the row's count to equal the index.
+- Written first, red at the base (`pytest tests/scripts/test_verify_ml_evidence.py -k "scorecard_row or before_path or
+  before_file"`): 3 failed, 1 passed (the registration case, the two planted inventory cases; the moved-path case
+  passes at both commits).
+- Planted: the row restated as `2 files` reads "docs/process-scorecard.md: docs/artifacts.md promises 2 files, the
+  index tracks 3"; the scope without the before file reads "promises 3 files, the index tracks 2";
+  `BEFORE_COLUMNS_PATH` monkeypatched to another path fails the case with four named problems.
+- `uv run python scripts/verify_ml_evidence.py` (offline): 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5, as before.
+
+### The front door names the pictured game in plain words
+
+- `README.md`'s caption and samples sentence and `docs/media/README.md` call 9p2i seed 19 the game the demo's guided
+  tour opens on (`tests/api/test_sets.py` pins it as the featured list's first entry). The caption says one impostor
+  stands in MedBay and the other is inside a vent. `wc -w README.md`: 1,579 (budget 1,600, held by
+  `check_doc_facts.py`).
+- Mechanism (`tests/scripts/test_public_recording_provenance.py`): the caption pin holds the new words;
+  `test_the_front_door_names_the_pictured_game_in_plain_words` refuses the words strip and head in both pages and
+  requires the vent clause; `test_the_captions_scene_is_the_recorded_one` reads the tick, the number of dead, the
+  room, the fog subject, the player it sees and the accuser out of the caption and holds each to the served replay
+  at the tick the capture spec shoots, because the capture harness checks only that both impostors are alive in a
+  room. Until review round 2 the case compared the replay to literal copies of the tick, count and room instead.
+  `acdaddb6`'s message said the harness checks the vent; `c91e604b` corrects it.
+- Red at the base: 3 failed, 9 passed (the caption pin, the front-door case, the caption case). Planted: the
+  `59bbd1be` caption in a scratch README is reported as `["README.md"]`; the `59bbd1be` scene, both impostors in
+  rooms, fails with "says one impostor is inside a vent, the replay has 0" (the message since review round 2).
+- `tests/scripts/test_check_doc_facts.py`'s planted `d41c9006` hunk carries the new samples sentence as its current
+  side; its previous side is unchanged and `test_the_d41c9006_front_door_fails_on_the_promoted_tree` passes all four
+  of its assertions.
+
+### The hero caption claims only what the picture shows
+
+- `frontend/e2e/media.spec.ts`: "Left: what happened at tick 9. Right: what p-5 could see at the same tick. Below: the
+  accusation p-5 wrote at the meeting that followed, at tick 12.", from `HERO.tick`, `HERO.fogSubject` and
+  `HERO.meetingTick`. The right-half comment and the HERO comment say the same.
+- Mechanism: `test_the_hero_caption_claims_only_what_the_picture_shows` reads the template out of the spec, refuses
+  "when it voted" and "allowed to know" anywhere in it, requires both tick placeholders, and pins the whole template.
+  Planted: the `59bbd1be` caption and comment fail with all four named problems.
+- Re-capture, by the documented command (`cd frontend && AILIBI_CAPTURE_MEDIA=1 npx playwright test
+  e2e/media.spec.ts`), twice at `52c4b1f3`: both runs gave the two-truths sheet `a921c55c`, the meeting still
+  `2da7cab6` and the GIF `80dc7add` (13 frames, 640x400); the clip differs run to run as documented, and the second
+  run's ships (`2119ce78`, 1440x900, 9.00 s). `provenance.json` names capture revision `52c4b1f3` and the four new
+  digests; the recording and its sha256 are unchanged. `shasum -a 256 docs/media/*.png docs/media/*.gif
+  docs/media/*.webm` equals `provenance.json`. Both stills keep their documented sizes (2036x864, 1440x900).
+- The meeting still and the GIF are not byte-identical to the `8d07a340` capture, and this card is not why. Captured
+  through `AILIBI_DEMO_BUNDLE_DIR`, one bundle per revision built in this checkout: the `8d07a340` bundle reproduces
+  the committed still (`c827b6ac`) and GIF (`0a5aa048`) exactly; the `5877adb4` base bundle gives this head's new
+  digests. They moved with the viewer between those commits (the tour's review round 1 reworded the regroup note the
+  map draws).
+- Planted: before `provenance.json` moved, the re-captured images failed the existing digest check, naming all four
+  assets.
+
+### The public results page calls adopted rules adopted
+
+- Every word of the recorded-behavior group is in the new `publicResults` group of `SPECTATOR_COPY`, with `fmt`
+  templates for counts. A field is listed under "Rules adopted for the current game:" only at one of the seven pairs
+  in `frontend/src/lib/adoptedRules.ts`; `own_fresh_kill` reads "impostors enter a vent only beside a body they have
+  just killed" (the look-and-wait card's Outcome) and `hub_with_grace` reads "after each meeting, the survivors start
+  again from the meeting room with the bodies cleared" (the glossary's regroup). The kept vent exit and a recorded
+  kill cooldown ("a kill cooldown of N ticks set for these recordings", unchanged) are listed under "Also in place:".
+  Any other value off its default keeps an experiment label; a default group keeps "No enabled experiments recorded.
+  This alone does not certify the default behavior."; the `experimental` factory kind reads "Built-in agents with
+  recorded tactical settings".
+- On the shown set's declared config, read off disk, the rendered results section carries no form of "experiment"
+  and none of "arm", "regroup", "era" or "Stage-B".
+- Mechanism: `adoptedRules.test.ts` reads the paragraph's adoption sentence and the declared config off disk and
+  requires the list to equal the paragraph's seven pairs, in order, each held by the config. Planted: the paragraph
+  with `meeting_reset = preserve` and a config copy with `vent_entry_policy = any_body` each fail the pin.
+- Exhaustive enumeration (`PublicResults.test.tsx`): 128 on/off combinations of the seven fields, times the three vent
+  exits, times a cooldown set or unset (768), each also with one non-default value of each of eleven other fields
+  (orchestrator ruling 2): 9,216 renders. In none is an adopted value called an experiment or left out, and in none is
+  a value outside the seven called adopted.
+- Changed assertions: each old one is replaced by one at least as strong, with the old phrase asserted absent where its
+  classification changed ("Recorded experiments: a kill cooldown", "Recorded experiments: experimental movement or
+  action policies.", "Experimental agent factory").
+- `copy.test.ts`: `PublicResults.tsx` joins the disk leg's sources with the rendered fragment "What the recordings
+  show"; a new case requires the recorded-behavior span to carry no prose literal, with a planted literal and a
+  planted text node caught.
+- Red at the base (the new test files over a `git archive` of `5877adb4`'s frontend): `adoptedRules.test.ts` fails to
+  import its module; `PublicResults.test.tsx` 5 failed of 11; `copy.test.ts` 2 failed of 268.
+
+### The recorder's era refusal stays registry-derived
+
+D10 re-applied (`config=declared` in the wrong-config refusal replaced by
+`'replays/samples/9p2i/experiment-config.json'`): `uv run pytest tests/scripts/test_refresh_samples.py -k
+"era_refusal_names_the_set or declared" -q` read 2 failed, 11 passed, both variables of
+`test_an_era_refusal_names_the_set_and_the_declared_file_it_found`. The file was restored from a copy (sha256
+`c97f4c87...` before and after). `scripts/_declared_experiment.py` does not change; no case was added.
+
+### The recorder tests pass under any distribution of the default tier
+
+- No case writes into the real `replays/` tree while the guard it tests holds. The symlink cases link from `tmp_path`
+  to the committed `replays/samples/4p1i`, read only, and aim at a directory below it of their own unique name; the
+  switched-on config family compares the bytes of each committed directory it is aimed at; the round case aims read
+  only at the committed `stage-b-r1`, and its planted twin plants a round under `tmp_path` and runs the rule over that
+  scratch repository; the replays-target cases fill their absent names per run.
+- The autouse fixture `_replays_tree_untouched` (orchestrator ruling 3) compares a stat inventory of `replays/` (kind,
+  size, modification time, the tree root included) before and after every case and fails naming any difference.
+  `test_the_no_trace_checks_report_a_stray_of_each_kind` plants each kind of stray on a scratch tree (a set below a
+  committed set, a stage directory, a round, a set inside a round, a top-level path, a rewritten file, a decoy made
+  and removed) and the inventory reports each one.
+- Red at the base: the base file with only the fixture added, serially: 154 passed, 4 errors, exactly the symlink
+  decoy, the composed decoy, the switched-on config's decoy and the planted round.
+- Perturbed: one decoy restored under `replays/samples/` turns `-n 6 --dist load` red, 162 passed with 8 errors and 162
+  passed with 9 errors in two runs, each error naming `samples/.test-symlink-decoy`.
+- Runs (`git status --porcelain --ignored -- replays` empty after every one):
+
+| command | result |
+| --- | --- |
+| `test_refresh_samples.py -n 4 --dist load`, three runs | 162 passed each (28.5 s, 30.3 s, 27.8 s) |
+| `test_refresh_samples.py -n 6 --dist load`, three runs | 162 passed each |
+| both files `-n 8 --dist load`, the first three runs | 191 passed, 191 passed, then 1 failed and 190 passed (failure not captured, see Limitations) |
+| both files `-n 8 --dist load`, fifteen further runs with `-rfE` (three under a concurrent `-n 4` watchability run) | 191 passed each |
+| both files `-n 2 --dist loadfile` | 191 passed |
+| both files serially | 191 passed |
+
+- The box is checked on the triples above that are green; the one red `-n 8` run is disclosed under Limitations, at
+  the strength measured: 17 of 18 both-file `-n 8` runs green.
+- `tests/scripts/test_record_ml_corpus.py`'s one decoy case made `replays/ml_corpus/.test-corpus-decoy`, which a
+  concurrent refresh case would now report; it links to the committed `replays/ml_corpus/4p1i`, read only, and names
+  a directory below it of its own (Deviations). That file: 109 passed under `-n 6`.
+
+### Both merged cards carry a dated note
+
+`### Follow-through note (2026-10-02)` closes each card's Results. `git diff --numstat 59bbd1be --
+tasks/work/promote-round-2.md tasks/work/spectator-tour-round-2.md`: 55 0 and 27 0. Re-measured at this head:
+
+| figure | command | reading |
+| --- | --- | --- |
+| referee JSON | `uv run python scripts/measure_baseline.py --watchability --json <set>` | 21,981 B `badba42d` (`samples/4p1i`); 64,432 B `bc574592` (`ml_corpus/9p2i`); 22,088 B `79055133` (`ml_corpus/4p1i`); exit 0 each |
+| re-pin notes | `git diff d41c9006 4a36dc03 -- tests/ frontend/src/ \| grep -c was`; `\| grep -cE '^\+.*(#\|//) was'`; the same with a trailing space | 1,325; 530 across 39 files; 529 |
+| criterion | `measure_featured_criterion.py --set 9p2i`; `--games 9p2i:3`; `--games 9p2i:23` | 11 of 50; 1 of 1; 0 of 1; exit 0 each |
+| tour grep | `git grep -n "every meeting ends\|survivors gathered" 59bbd1be` | 5 lines: 3 in `regroup.test.ts` (`:135`, `:162`, `:165`), 2 in the tour card (`:809`, `:816`) |
+| M14 | witnessed-kill numerator raised to 15 | earlier stage suite 6 passed; the new case fails |
+| D10 | above | 2 failed, 11 passed |
+
+The red-at-base counts (15 errors, 5 of 32) are marked unreproduced.
+
+### M14 and the deployment figure (orchestrator ruling 5)
+
+- `test_stage_b_r2_floor_numerators_equal_the_measured_counts` (`tests/eval/test_watchability.py`) reads the
+  `SupplyGaugeValues` the referee's walk hands `evaluate_supply_floors` on `replays/samples/9p2i` and requires each of
+  the five stage pins' numerators to equal its count (14, 53, 44, 15, 38). Planted: each numerator moved by one, its
+  value unchanged, fails by name. The mutant (numerator 15) passes the earlier stage tests (`-k "(stage_b_r2 or
+  stage_pin) and not numerators"`: 6 passed) and fails the new case; numerator 13 is also caught by the existing
+  raised-by-one case. `eval/watchability.py` was restored from a copy (sha256 `e3720555...` before and after).
+- `docs/deployment.md:127` reads 33 MB: `gzip -dc replays/samples/9p2i/tournament-eval-report.json.gz | wc -c` reads
+  32,952,472 bytes. The bundle built in this checkout (`scripts/build_demo_bundle.py --out`) holds no
+  `tournament-eval-report` file and measures 3.1 MB.
+
+### The neuter pass
+
+Each changed production line neutered alone, its targeted suite run (`vitest` over `PublicResults.test.tsx`,
+`adoptedRules.test.ts` and `copy.test.ts`; `test_verify_ml_evidence.py -n 6`; `test_public_recording_provenance.py`),
+the file restored from a copy with its sha256 checked:
+
+| ids | span | probes | killed |
+| --- | --- | --- | --- |
+| N1-N23 | `PublicResults.tsx`: the null guard, the adopted filter, each set-for-recordings and experiment push, the return, the factory table and lookup, the count, the nothing-recorded test, each rendered line | 23 | 23 |
+| C1-C35 | the `publicResults` copy group: each leaf, and the export | 35 | 35 |
+| A1-A8 | `adoptedRules.ts`: each of the seven rows, and `holdsAdoptedValue` | 8 | 8 |
+| V1-V2 | `verify_ml_evidence.py`: the before file in the probe entry and in the inventory scope | 2 | 2 |
+| S1-S3 | `media.spec.ts`: each caption template line | 3 | 3 |
+
+71 of 71 killed. Run against the tests as committed in `52c4b1f3` and `c91e604b`, before `d392b108`, four probes
+first came back green: S2 (the caption's middle line deleted) and the mutants M26, M27 and M29 below. `d392b108`
+pins the whole caption template and renders a recorded tactical policy; all four are killed now. M35 was already
+killed there.
+
+### One bounded mutation pass
+
+Exactly the eight listed classes, over the spans above; each mutant applied alone, its targeted suite run, the file
+restored from a copy with its sha256 checked.
+
+| id | class | mutant | result |
+| --- | --- | --- | --- |
+| M1 | drop a filter or wrapper on a collection | the adopted filter dropped | killed |
+| M2 | drop a filter or wrapper on a collection | `Object.freeze` dropped from `ADOPTED_RULES` | equivalent: nothing writes to the list, and `as const` keeps it read-only to the compiler |
+| M3 | swap one collection for a related one | the adopted line joins `setForRecordings` | killed |
+| M4 | swap one collection for a related one | the set-for-recordings line joins `experiments` | killed |
+| M5 | swap one collection for a related one | the scorecard probe entry holds the census pair | killed |
+| M6 | swap one collection for a related one | the scorecard inventory scope holds the census pair | killed |
+| M7 | comparison to its inverse | `vent_exit_policy === "look_and_wait"` to `!==` | killed |
+| M8 | comparison to its inverse | `kill_cooldown_ticks != null` to `== null` | killed |
+| M9 | comparison to its inverse | `kill_cooldown_ticks === 1` to `!== 1` | killed |
+| M10 | comparison to its inverse | `!== "target_distance"` to `===` in the movement clause | killed |
+| M11 | comparison to its inverse | `!== "look_and_wait"` to `===` in the movement clause | killed |
+| M12 | comparison to its inverse | `redistribution_policy !== "lowest_id"` to `===` | killed |
+| M13 | comparison to its inverse | `crew_idle_policy !== "hub_wait"` to `===` | killed |
+| M14 | comparison to its inverse | `sabotage_threshold !== "six_sevenths"` to `===` | killed |
+| M15 | comparison to its inverse | `holdsAdoptedValue`'s `===` to `!==` | killed |
+| M16 | comparison to its inverse | `if (!config)` to `if (config)` | killed |
+| M17 | comparison to its inverse | `adopted.length > 0` to `=== 0` | killed |
+| M18 | comparison to its inverse | `count === 1` to `!== 1` | killed |
+| M19 | a kind read to a constant | the factory kind read as `"experimental"` | killed |
+| M20 | a tick read to a constant | the cooldown ticks read as `"6"` | killed |
+| M21 | a tick read to a constant | the caption's `HERO.tick` as `9` | killed |
+| M22 | a tick read to a constant | the caption's `HERO.meetingTick` as `12` | killed |
+| M23 | a message argument to a constant | the adopted rules argument as `""` | killed |
+| M24 | a message argument to a constant | the recording count as `"1"` | killed |
+| M25 | a message argument to a constant | the evidence version as `"1"` | killed |
+| M26 | a message argument to a constant | the impostor policy as "not recorded" | killed (first green) |
+| M27 | a message argument to a constant | the crew policy as "not recorded" | killed (first green) |
+| M28 | a message argument to a constant | the clock version as `"1"` | killed |
+| M29 | a message argument to a constant | the caption's fog subject as `p-5` | killed (first green) |
+| M30 | drop one member of a tuple of kinds | the `vent_entry_policy` row | killed |
+| M31 | drop one member of a tuple of kinds | the `scripted` factory label | killed |
+| M32 | drop one member of a tuple of kinds | `process-scorecard.json` from the inventory scope | killed |
+| M33 | swap adjacent branches | the recording count's one and many | killed |
+| M34 | swap adjacent branches | the cooldown's one and many | killed |
+| M35 | swap adjacent branches | recorded and not-recorded rule settings | killed |
+| M36 | swap adjacent branches | the clock's not-recorded and version | killed |
+| M37 | a read of a loaded source to the canonical literal | the group's game count as 50 | killed |
+
+36 killed, 1 equivalent. No other class was run.
+
+### Validation
+
+| command | result |
+| --- | --- |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
+| `pytest tests/scripts/test_verify_ml_evidence.py tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py` | 0: 428 passed (`-n 6`) |
+| `uv run python scripts/check_doc_facts.py`; `uv run python scripts/validate_task_docs.py` | 0; 0 (96 work cards before this card's flip) |
+| `wc -w README.md` | 1,579 |
+| the re-capture, twice; `shasum -a 256` against `provenance.json` | 3 passed each; equal |
+| `npm run lint`, `tsc:check`, `test`, `build` (frontend) | 0; 0; 0: 26 files, 695 tests; 0 |
+| `npm run e2e` (local, serial, `CI=1`) | 0: 14 passed, 3 skipped (the media spec's, without its capture switch) |
+| `bash scripts/verify_samples.sh`; per set | 0 (50 clean); `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i`: 0 each (50, 50, 150, 50, 50) |
+| `build_sample_report.py --check`, the five sets | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `uv run pytest -m campaign` | 0: 337 passed, as at `59bbd1be` |
+| bundle `build_demo_bundle.py --out` at `5877adb4` and at `52c4b1f3`, one checkout, `diff -rq` | `data/` identical; only the seven hashed JS assets and `index.html` differ |
+| `git diff --numstat 59bbd1be` over the two merged cards | 55 0; 27 0 |
+| `bash scripts/check.sh`, once at the pushed head `e35b052f`, exit code read directly | 0: 10,061 passed, 20 skipped, 3 xfailed; import contracts 4 kept; mypy clean over 522 files; vitest 26 files, 695 tests; frontend build ok. The commit that records this row changes only this card |
+
+### Decisions
+
+1. Orchestrator ruling 1: Q1 stays open for the owner exactly as the card states. The promotion's note quotes the
+   owner's words verbatim, records that the code holds option (a) and that the twelve commits stand as pushed.
+2. Orchestrator ruling 2: the page calls adopted only the seven pairs of `docs/experiment-arms.md`'s Adopted arms
+   paragraph. `vent_exit_policy = look_and_wait` and the kill cooldown are named as set for these recordings, never as
+   adopted or experimental. The enumeration repeats every one of the 768 renders with one non-default value of each
+   of the eleven other config fields.
+3. Orchestrator ruling 3: the xdist race gets the deterministic guard, the autouse inventory fixture, plus the three
+   `-n 4 --dist load` runs above.
+4. Orchestrator ruling 4: Record impact names the replaced media and the moved `docs/media/` row (below).
+5. Orchestrator ruling 5: M14 and the `docs/deployment.md:127` figure are this card's. M14 is pinned in the test that
+   owns the stage pins, so the promotion's note records M14 closed; the card's "Q1 and M14 open" sentence predates the
+   ruling. The figure is the 9p2i report's size, which the bundle leaves out, so it is measured from the report; the
+   one-checkout bundle confirms the exclusion.
+6. The new copy lead for settings kept but not adopted reads "Also in place:"; each such setting's own words end "set
+   for these recordings", which keeps the cooldown's words unchanged.
+7. The front-door check refuses the words strip and head in both pages outright, stronger than the two phrases the
+   card names; neither page uses either word otherwise.
+8. A recorded tactical policy's method, and recorded rule settings, are now asserted; before, no case rendered them.
+
+### Record impact
+
+- No recorded byte, manifest, report, census, scorecard output or ML artifact moves; no prompt byte or experiment field
+  changes; no evaluation moves.
+- Replaced, class (a), by the documented re-capture only: `docs/media/spectator-two-truths.png`,
+  `spectator-meeting.png`, `spectator-journey.gif`, `spectator-journey.webm` and `docs/media/provenance.json`.
+- `docs/artifacts.md`: the scorecard row gains its third file (3 files); the `docs/media/` row's rounded size moves from
+  1.6 MB to 1.4 MB (1,406,205 tracked bytes, was 1,575,772; the clip is smaller), 7 files.
+- What changes for a reader: the public results card's words for recorded settings and the factory label (in the
+  bundle's JS); the README caption and samples sentence and the hero picture's caption (on the front door). Older
+  payloads render as before except for that wording; no DTO changes.
+
+### Limitations
+
+- One run of the both-files `-n 8 --dist load` command failed one case; its name was not captured (the runner kept
+  only the summary line). The replays/ status was clean after it, and fifteen further runs with failure reports,
+  three under extra load, were all green, so the case and cause are unidentified.
+- The promotion's red-at-base counts stay unreproduced.
+- The capture harness still checks only that both impostors stand in a room; the caption's room and vent clauses,
+  with the rest of its scene, are held by the Python scene cases instead, which read them out of the README.
+- On macOS the evolution-strategy hash pin is Linux-only; CI is cited for it if `check.sh` reports it.
+
+### Deviations
+
+- `tests/scripts/test_record_ml_corpus.py` is outside Expected scope: its one decoy case made a directory in the real
+  `replays/ml_corpus/`, which the ruled autouse fixture in `test_refresh_samples.py` would report from a concurrent
+  case under `check.sh`'s `--dist loadfile`. The change is that case alone, reviewed by the orchestrator in the PR.
+- `tests/eval/test_watchability.py` and `docs/deployment.md` are outside Expected scope by orchestrator ruling 5.
+- `acdaddb6`'s message overstated what the capture harness checks; `c91e604b` corrects it, and no pushed commit is
+  rewritten.
+
+### Review corrections, round 1 (2026-10-02)
+
+Three blocking findings from the round-1 verifiers, and the PR's three Codex comments. Commits: `32501b6a` the feature
+sweep off the committed sets; `494a7599` the report-size comments; `374f217f` the planted kind the mutation pass
+asked for; then this record and the commit recording `check.sh`. Every count is count-only.
+
+**Findings 1 and 2 (correctness; integrity): the fixture failed the recorder tests beside the feature sweep.**
+
+- Cause: `tests/agents/test_features.py::_iter_committed_packets` wrote its observation audit log as
+  `_sweep_audit_replay-seed-N.jsonl` beside each recording in `replays/samples/<set>/` and deleted it on close. The
+  autouse fixture `_replays_tree_untouched` saw the file, or the set directory's moved modification time, from any
+  recorder case running at the same moment.
+- Reproduced at `878d05db`: `uv run pytest tests/agents/test_features.py tests/scripts/test_refresh_samples.py -n 2
+  --dist loadfile -q -p no:cacheprovider` read 181 passed, 16 errors.
+- Fix (`32501b6a`): the sweep writes its audit log in a temporary directory, as the committed-set walk in
+  `tests/_helpers/committed.py` does. The fixture's docstring now says a difference can also come from a test in
+  another file writing beside it, and that the paths it names show which.
+- Mechanism: `test_the_sweep_leaves_the_committed_set_directory_untouched` (`tests/agents/test_features.py`) holds
+  `replays/samples/4p1i`'s listing while the walk is open and its modification time after the walk closes.
+- Planted: with the audit log put back beside the recording, the case fails; the open walk lists
+  `_sweep_audit_replay-seed-0.jsonl`. The file was restored from a copy (sha256 `c640c0e2...` before and after), and
+  the one stray the planted run left was removed; `git status --porcelain --ignored -- replays` was empty after.
+- Runs, `git status --porcelain --ignored -- replays` empty after each. The pair ran on the tree committed as
+  `32501b6a` (one comment in the new case was reworded while they ran); the default tier ran at `374f217f`:
+
+| command | result |
+| --- | --- |
+| the pair above under `-n 2 --dist loadfile`, three runs | 182 passed each (190.98 s, 227.17 s, 151.09 s) |
+| the whole default tier as `check.sh` runs it (`uv run pytest -n auto --dist loadfile`), between two stat inventories of `replays/` (kind, size and modification time of every entry, the root included) | exit 0: 10,063 passed, 20 skipped, 3 xfailed; 386 entries before and after, 0 changed |
+
+- The guarantee, restated at the strength delivered: the recorder tests pass under any distribution of the default
+  tier, because none of them writes into `replays/` while its guard holds and, measured at this head by the inventory
+  run above, no other test of the tier does either. The fixture is not a property over every possible future test:
+  a test that writes into `replays/` would turn a concurrent recorder case red, and the path the fixture names would
+  identify it. The Outcome bullet, the Acceptance item and the Results heading above now say "of the default tier".
+- The one red `-n 8` run under Limitations involved only `test_refresh_samples.py` and `test_candidate_sets.py`, not
+  the feature sweep, so this cause does not explain it; it stays unidentified.
+
+**Finding 3 (docs; the Codex P2): the report's size was corrected in one place and stale in three.**
+
+| file | was | now |
+| --- | --- | --- |
+| `frontend/src/api/client.ts` (the `getTournamentReport` comment) | 29 MB | 33 MB |
+| `frontend/e2e/bundle.spec.ts` (the compact-results case's comment) | 29 MB | 33 MB |
+| `scripts/build_demo_bundle.py` (the module docstring) | 33.86 MB uncompressed, 2.89 MB gzipped; ML corpus 102.70 MB | 32,952,472 bytes uncompressed, about 33 MB, and 2,790,383 bytes gzipped; ML corpus 107,690,098 bytes |
+
+- Measured at this head: `gzip -dc replays/samples/9p2i/tournament-eval-report.json.gz | wc -c` reads 32,952,472;
+  `ls -l` gives the `.gz` as 2,790,383 bytes; `gzip -dc replays/ml_corpus/9p2i/tournament-eval-report.json.gz | wc -c`
+  reads 107,690,098.
+- The old docstring figures were binary megabytes of the pre-promotion report: `git show
+  d41c9006:replays/samples/9p2i/tournament-eval-report.json.gz` is 3,027,379 bytes (2.89 MiB) and 35,500,305
+  uncompressed (33.86 MiB). `docs/deployment.md`'s 33 MB is decimal, so the docstring now gives bytes, which no reader
+  can take in the other unit. `docs/artifacts.md` and `eval/report_io.py` keep 102.70 MB for the ML corpus report,
+  which is the binary figure GitHub's 100 MB limit is measured in; neither is in this card's scope.
+- Mechanism: these are comments, and no test holds them. `git grep -n -E "29 ?MB|33\.86|2\.89 ?MB"` outside `tasks/`
+  and `audits/` now finds none.
+- Comment-only, so no shipped byte moves: bundles built in this one checkout at `878d05db` and at `494a7599` give an
+  empty `diff -rq`. `374f217f` and the card commits change only tests and this card.
+
+**The Codex comments.**
+
+- P2, "Synchronize the remaining report-size claims": valid; it is finding 3, fixed above.
+- P1, "Keep the cited capture revision reachable": not valid for this PR. Codex reviewed a synthesized squash
+  (`5b523696`, one parent, `5877adb4`). On the branch, `git merge-base --is-ancestor 52c4b1f3 HEAD` exits 0, and
+  AGENTS.md's delivery rule merges by merge commit or fast-forward, never squash. So `52c4b1f3`, the capture revision
+  `docs/media/provenance.json` names, stays reachable from `main` after the owner's merge. No change.
+- P1, "Record the full-gate result before marking the card done": valid at `e35b052f`, the head Codex reviewed.
+  `878d05db` recorded that run (exit 0), and this round's last commit records the run at this round's head.
+
+**The bounded mutation pass**, over the spans this round changes and the spans the findings name (the sweep's audit
+path and the inventory behind the fixture). The listed classes only; each mutant applied alone, its targeted case run,
+the file restored from a copy with its sha256 checked.
+
+| id | class | mutant | killed by | result |
+| --- | --- | --- | --- | --- |
+| P1 | swap one collection for a related one | the sweep's audit directory, the temporary one, back to the recording's set directory, `replay_path.parent / f"_sweep_audit_{replay_path.stem}.jsonl"` | `test_the_sweep_leaves_the_committed_set_directory_untouched` | killed |
+| FM1 | swap one collection for a related one | the inventory walks `files` only | the planted stray kinds: 6 of 8 fail | killed |
+| FM2 | swap one collection for a related one | the inventory walks `subdirectories` only | 2 of 8 fail | killed |
+| FM3 | comparison to its inverse | `before.get(path) != after.get(path)` to `==` | 8 of 8 fail | killed |
+| FM4 | swap one collection for a related one | `before.keys() \| after.keys()` to `before.keys()` | 5 of 8 fail | killed |
+| FM5 | comparison to its inverse | `stat.S_ISDIR(...)` negated | the new kind, a rewritten file with its time put back | killed (first green) |
+| FM6 | swap adjacent branches | the link and directory tests swapped | none | equivalent: under `lstat` a symbolic link is never a directory, so the two tests are exclusive and their order cannot change an entry |
+
+FM5 first came back green: it records a file by its modification time alone, and every planted kind moved a time.
+`374f217f` adds the kind "a rewritten file with its time put back" (a committed file rewritten at a new size, its
+modification time restored with `os.utime`), which only the size reports; the inventory as written reports it, and
+FM5 fails it. 6 of 7 killed, 1 equivalent. No other class was run.
+
+**Bundle diff, rebuilt for this round** (`scripts/build_demo_bundle.py --out`, at `5877adb4`, `878d05db` and
+`494a7599` in this one checkout): `878d05db` against `494a7599`, `diff -rq` empty. `5877adb4` against `494a7599`,
+`data/` identical; only the seven hashed JS assets and `index.html` differ, as before. The head bundle holds 109 files,
+3,237 KiB. What goes live at the merge is unchanged by this round.
+
+**Observed, not changed.** `frontend/e2e/bundle.spec.ts:170` says the bundle is about 8 MB of built output; the
+bundle above measures 3,237 KiB. That comment is outside the findings, and this round leaves it for the orchestrator to
+route.
+
+**Validation at `374f217f`**, `git status --porcelain --ignored -- replays` empty after each:
+
+| command | result |
+| --- | --- |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run python scripts/check_doc_facts.py`; `uv run python scripts/validate_task_docs.py` | 0; 0 (96 work cards) |
+| `bash scripts/verify_samples.sh`, then once per set directory | 0; `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i`: 0 each (50, 50, 150, 50, 50 clean) |
+| `build_sample_report.py --sample-dir <set> --check`, the five sets | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `pytest tests/scripts/test_verify_ml_evidence.py tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py tests/scripts/test_build_demo_bundle.py -n 6` | 0: 459 passed |
+| `uv run pytest -m campaign` | 0: 337 passed |
+| `npm run lint`, `tsc:check`, `test` (frontend) | 0; 0; 0: 26 files, 695 tests |
+| `CI=1 npm run e2e -- --workers=1` (local, serial) | 0: 14 passed, 3 skipped (the media spec's, without its capture switch) |
+| `bash scripts/check.sh`, once at the pushed head `d49e0313`, exit code read directly | 0: ruff and format clean; import contracts 4 kept; mypy clean over 522 files; 10,063 passed, 20 skipped, 3 xfailed; vitest 26 files, 695 tests; frontend build ok. The `replays/` inventory around the run: 386 entries, 0 changed. The commit that records this row changes only this card |
+
+**Decisions.**
+
+9. The test-file writer into `replays/` is fixed at its source, as both findings prescribe, rather than narrowing the
+   fixture to each case's own paths: the whole-tree fixture keeps catching a concurrent writer, which is what it is
+   for.
+10. `scripts/build_demo_bundle.py` states the report in bytes, so the binary-against-decimal megabyte ambiguity cannot
+    reopen; the two one-line comments say 33 MB, as `docs/deployment.md` does.
+11. The mutation pass's one non-equivalent survivor is killed with a new planted kind in the existing parametrized
+    case, not by changing the inventory.
+
+**Deviations, this round.** Each is outside Expected scope and outside this card's one-writer map; please confirm or
+ask for a revert.
+
+- `tests/agents/test_features.py`: the sweep's audit path and one new case, as findings 1 and 2 prescribe. No wave-1
+  card's Expected scope names it (`census-reporter-base-rate`, `route-check-replay`), and `rubric-extractor-era` does
+  not either.
+- `frontend/src/api/client.ts`, `frontend/e2e/bundle.spec.ts` and `scripts/build_demo_bundle.py`: one comment or
+  docstring passage each, as finding 3 prescribes. `rubric-extractor-era`, which dispatches after this card merges,
+  edits other comment lines of `client.ts` (`:366-372`) and builds on these.
+
+**Record impact, this round.** None: no recorded byte, media asset, manifest, report, census, scorecard output or ML
+artifact moves, and no shipped byte moves (the bundle diff above). The registry rows this card set are unchanged.
+
+### Review corrections, round 2 (2026-10-02)
+
+One blocking finding from the round-2 verifiers. Commits: `bab91b5e` the scene read out of the caption; `faf2d316` the
+media page's sentence on which check holds which claim; then this record and the commit recording `check.sh`. Every
+count is count-only; the scene facts quoted below are agent ids, room ids and counts read off the served replay's
+frames, never transcript text.
+
+**The finding (correctness): the README caption's new scene words were not held by any test.**
+
+- Cause: `test_the_captions_scene_is_the_recorded_one` compared the served replay to the literals `_HERO_TICK = 9`,
+  `_HERO_ROOM = "MEDBAY"` and a body count of two, never to the caption, so its comment and this card's Results
+  claimed more than it held.
+- Reproduced: the `c6e98fef` test file against each of the verifiers' three edits to `README.md` (MedBay to Admin,
+  two players to three, tick 9 to tick 12), `uv run pytest tests/scripts/test_public_recording_provenance.py -q -p
+  no:cacheprovider`: 13 passed each. The README and the test file were restored from copies, their sha256 checked.
+- Fix (`bab91b5e`): `_caption_scene_problems(caption, replay, picture_tick)` reads every claim of the caption's scene
+  clause out of the caption line, with one pattern of named groups, and holds each to the served replay:
+
+| the caption's words | read as | held to |
+| --- | --- | --- |
+| at tick 9 | the tick | the tick the capture spec's `HERO` shoots, read by `_picture_tick`; the scene is the frame at that tick |
+| two players lie dead | a count word, `no` to `nine` | the frame's bodies |
+| one impostor stands in MedBay | the room, by the map's own name (`replay.map.rooms`) | the room of the living impostor outside the vents |
+| and the other is inside a vent | (fixed words) | exactly one living impostor inside a vent |
+| p-5 can see only p-4 | the fog subject and the player seen | the subject's visible players at that tick |
+| whom p-5 accuses at the meeting that follows | the accuser | the accuser's accusations at the earliest meeting after the tick |
+
+- `_readme_scene_problems(root, replay)` reads the caption from `root/README.md` and the tick from
+  `root/frontend/e2e/media.spec.ts`, so the real tree and every scratch copy go through the same reads. A caption that
+  does not match the pattern reads "the caption names no scene". The game stays `headless-seed-19`, which
+  `test_media_hashes_and_labels_are_current` holds to the captured recording and to the caption's seed.
+- The guarantee, at the strength delivered: each word of the caption's scene clause that the table names is read from
+  the README and checked against the served replay in every run of the default tier. The fixed words of the clause
+  (its grammar) are not variables: a caption that rephrases them names no scene and fails.
+
+**Mechanism and planted proofs** (`tests/scripts/test_public_recording_provenance.py`, 31 cases, 13 before):
+
+- `test_the_captions_scene_is_the_recorded_one`: the real README and spec read no problem. Planted: a scratch spec
+  shooting tick 10 reads "names tick 9, the picture shows tick 10"; at the pictured tick, both impostors standing,
+  both inside a vent, the venting impostor dead, or one body, each fail by name; the map's MedBay renamed fails the
+  true caption with "names no room called MedBay" and passes a caption naming the new name; the meetings listed in
+  reverse order still pass.
+- `test_a_caption_naming_another_scene_fails_by_name`: seven scratch READMEs, each the real one with one scene phrase
+  changed:
+
+| case | edit | problems reported |
+| --- | --- | --- |
+| another-room | MedBay to Admin | says one impostor stands in Admin, the replay has ['MEDBAY'] |
+| no-such-room | MedBay to Sickbay | names no room called Sickbay |
+| another-count | two players to three players | says three players lie dead, the replay has 2 |
+| another-tick | tick 9 to tick 12 | names tick 12, the picture shows tick 9; says one impostor stands in MedBay, the replay has ['ENGINEERING']; says p-5 accuses p-4 at the meeting that follows, the replay has [] |
+| another-sighting | can see only p-4 to p-3 | says p-5 can see only p-3, the replay has ['p-4']; says p-5 accuses p-3 at the meeting that follows, the replay has ['p-4'] |
+| another-subject | p-5 can see to p-3 can see | says p-3 can see only p-4, the replay has [] |
+| another-accuser | whom p-5 accuses to whom p-6 accuses | says p-6 accuses p-4 at the meeting that follows, the replay has ['p-1'] |
+
+- `test_the_caption_counts_its_dead_in_words`: each count word from `no` to `nine` holds on a frame with that many
+  bodies and fails by name on one more (ten cases).
+- `test_the_59bbd1be_caption_names_no_scene`: the `59bbd1be` caption reads "the caption names no scene".
+
+**The verifiers' procedure, at `faf2d316`.** Each edit applied alone to the real `README.md`; `uv run pytest
+tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py -n 4 -q -p no:cacheprovider`;
+`uv run python scripts/check_doc_facts.py`; the README restored from a copy, sha256 `ec6608b0...` before and after:
+
+| edit to `README.md` | the two files | `check_doc_facts.py` |
+| --- | --- | --- |
+| MedBay to Admin | 18 failed, 338 passed | 0 |
+| two players to three players | 17 failed, 339 passed | 0 |
+| tick 9 to tick 12 | 18 failed, 338 passed | 0 |
+| can see only p-4 to p-3 | 18 failed, 338 passed | 0 |
+| whom p-5 accuses to whom p-6 accuses | 18 failed, 338 passed | 0 |
+| p-5 can see to p-3 can see | 18 failed, 338 passed | 0 |
+| the room and vent clause to "both impostors are on the map" | 19 failed, 337 passed | 0 |
+
+In every row `test_the_captions_scene_is_the_recorded_one` fails, through the same reads as the matching planted case
+(the last row's caption names no scene, as the `59bbd1be` case's does). The planted cases fail too, because each
+one edits the README it reads. The last row also fails the front-door case.
+`check_doc_facts.py` holds the word budgets and citations, not the scene, so it stays 0.
+
+**Follow-through (`faf2d316`).** `docs/media/README.md` said the capture harness checks "these scene and accusation
+facts" against the served bytes. The harness checks the body count, the kill, how many players `p-5` can see and the
+accusation; the room and the vent are held by the scene cases above. The paragraph now says which check holds which
+claim. `git grep` for the old sentence finds no other live copy; `frontend/e2e/media.spec.ts`'s comment that the
+Python file holds the caption's vent clause stays true and is unchanged.
+
+**The bounded mutation pass**, over the spans this round changes and the span the finding names: the scene helpers in
+`tests/scripts/test_public_recording_provenance.py`. The listed classes only; each mutant applied alone, the file's
+scene cases run (`-k "scene or caption_counts or 59bbd1be_caption"`, 19 cases), the file restored from a copy with its
+sha256 checked. Run at `bab91b5e`'s test file:
+
+| ids | class | mutants | killed by |
+| --- | --- | --- | --- |
+| A1-A7 | drop a filter or wrapper on a collection | the impostor filter whole; its living clause; the outside-the-vents filter; the tick filter on frames; the after-the-tick filter on meetings; the accuser filter; the accusation type filter | A1, A3, A4, A7: the scene, naming and count cases; A2: the scene case alone; A5, A6: the naming cases alone |
+| B1-B3 | swap one collection for a related one | visible players to visible bodies; bodies to events; the living impostors to every agent state | the scene, naming and count cases |
+| C1-C16 | a comparison to its inverse or a None test | each comparison and membership test in the helpers, `_picture_tick`'s count included | the scene, naming and count cases; C14 also the `59bbd1be` case |
+| D1-D5 | a role, kind, room or tick read to a constant | the caption's tick as 9; the role read as IMPOSTOR; the room id as MEDBAY; `_picture_tick` as 9; the meeting order key as 0 | D1, D3: the naming cases alone; D2: the scene, naming and count cases; D4, D5: the scene case alone (D5 first came back green) |
+| E1-E7 | a message argument to a constant | the body count, the venting count, the standing rooms, the players seen, the accused, the unknown room, the picture's tick | E1: the scene and count cases; E2, E7: the scene case alone; E3: the scene and naming cases; E4, E5, E6: the naming cases alone |
+| F1 | drop one member of a tuple of kinds or types | `three` from the count words | the count cases |
+| G1 | swap adjacent branches | the seen list's two arms | the scene, naming and count cases |
+| H1-H2 | a read of a loaded source to the canonical literal | the README read as the current caption; the spec read as 9 | H1: the naming cases alone; H2: the scene case alone (the scratch spec) |
+
+42 of 42 killed. D5 (the meetings' minimum taken by a constant key) first came back green: the served replay lists its
+meetings in tick order, so the first listed was also the earliest. The reversed-meetings plant kills it. The pass ran
+42 mutants, two over the bound of 40 the orchestrator set; no other class was run.
+
+**Bundle diff** (`uv run python scripts/build_demo_bundle.py --out <dir>`, at `c6e98fef` and then at `faf2d316`, in
+this one checkout): `diff -rq` is empty; the head bundle holds 109 files. This round ships nothing: neither the test
+file nor `docs/media/README.md` is a bundle input. What goes live at the merge is unchanged.
+
+**Validation at `faf2d316`**, `git status --porcelain --ignored -- replays` empty after:
+
+| command | result |
+| --- | --- |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run python scripts/check_doc_facts.py`; `uv run python scripts/validate_task_docs.py` | 0; 0 (96 work cards) |
+| `bash scripts/verify_samples.sh`, then once per set directory | 0; `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i`: 0 each (50, 50, 150, 50, 50 clean) |
+| `build_sample_report.py --sample-dir <set> --check`, the five sets | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `pytest tests/scripts/test_verify_ml_evidence.py tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py tests/scripts/test_build_demo_bundle.py -n 6` | 0: 477 passed (459 at `374f217f`, plus the 18 new cases) |
+| `uv run pytest -m campaign` | 0: 337 passed |
+| `uv run ruff format --check`, `ruff check`, `mypy` over the test file | clean |
+| `bash scripts/check.sh`, once at this round's pushed head `4d1147d9`, exit code read directly | 0: ruff and format clean (551 files); import contracts 4 kept; task docs valid (96 work cards); mypy clean over 522 files; 10,081 passed, 20 skipped, 3 xfailed (10,063 at `d49e0313`, plus the 18 new cases); vitest 26 files, 695 tests; frontend build ok. The replays status is empty after. The commit that records this row changes only this card |
+
+No frontend file changes this round, so the frontend suites and the e2e are not re-run; `check.sh` runs vitest and the
+build.
+
+**Decisions.**
+
+12. The scene is parsed into named claims rather than pinned as one sentence built from the frame, so a drifted
+    caption fails with the claim that drifted, as the finding asks.
+13. The caption's tick is held to the capture spec's `HERO.tick` as well as to the replay. A tick whose frame happens
+    to carry the same scene would otherwise pass while the picture shows another.
+14. The room is matched by the map's own room name from the served replay, so the caption's MedBay and the viewer's
+    label are one source.
+15. `docs/media/README.md`'s sentence on what the capture harness checks is restated in this round. It is this card's
+    file, and it overstated the harness in the same way the finding names.
+
+**Deviations, this round.** The mutation pass ran 42 mutants, two over the bound of 40. Each of this round's commits
+ends with the attribution line the session's harness names, `Co-Authored-By: Claude Opus 5.5`, not the line the
+orchestrator's brief gives.
+
+**Record impact, this round.** No recorded byte, media asset, manifest, report, census, scorecard output or ML artifact
+moves, and no shipped byte moves (the bundle diff above). `docs/media/README.md` is class (a) text: the directory's
+tracked bytes move from 1,406,205 to 1,406,386, and the `docs/media/` row stays 1.4 MB / 7 files;
+`verify_ml_evidence.py` (FAIL 0) and `tests/scripts/test_verify_ml_evidence.py` pass at this head.

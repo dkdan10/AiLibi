@@ -4,7 +4,7 @@
 // in two different places:
 //
 //   1. VALUES — every string in `SPECTATOR_COPY` is clean.
-//   2. DISK   — the nine component sources, read off disk with comments
+//   2. DISK   — the ten component sources, read off disk with comments
 //               stripped, carry no dialect either. This is the leg that catches
 //               a NEW literal typed straight into JSX, which leg 1 cannot see.
 //
@@ -62,6 +62,9 @@ const IN_SCOPE_SOURCES: readonly { readonly file: string; readonly rendered: str
     // The map stage renders the regroup note through `MAP_COPY` and its one
     // literal fallback inline.
     { file: "MapView.tsx", rendered: "Select a replay to view the map." },
+    // The public results page: its recorded-behavior groups render through
+    // `PUBLIC_RESULTS_COPY`, the rest of the page still inline.
+    { file: "PublicResults.tsx", rendered: "What the recordings show" },
   ];
 
 // EMPTY, and staying that way is the point: every in-scope surface — TurnCard.tsx
@@ -328,9 +331,11 @@ describe("the in-scope surfaces on disk", () => {
 // claim gets its own check: on that file, the props that CARRY copy must all be
 // expressions, never quoted literals.
 //
-// Only that one file. The other eight keep prose inline by design (the contract
-// scopes `TurnCard.tsx` to a single string, and the transport's button titles
-// are not this task's), and none of them claims otherwise in its header.
+// Only that one file, plus the recorded-behavior group of `PublicResults.tsx`
+// (checked at the end of this section). The other eight keep prose inline by
+// design (the contract scopes `TurnCard.tsx` to a single string, and the
+// transport's button titles are not this task's), and none of them claims
+// otherwise in its header.
 
 // Every literal form JSX accepts for a prop: `x="…"`, `x='…'`, and the braced
 // `x={"…"}` / `x={'…'}` / x={`…`}. Only a real expression passes.
@@ -415,6 +420,46 @@ describe("the dashboard's copy-ownership claim", () => {
       PROSE_RUN.test(text),
     );
     expect(offenders).toEqual([]);
+  });
+});
+
+// The public results page's recorded-behavior group keeps every word in
+// `PUBLIC_RESULTS_COPY`: its span (`recordedSettings` through `BehaviorIdentity`)
+// carries no prose string literal and no literal prose text node. Class names
+// are styling, not copy, so they are set aside first.
+function behaviorSpan(source: string): string {
+  const start = source.indexOf("export function recordedSettings(");
+  const end = source.indexOf("function CaseCard(");
+  if (start < 0 || end <= start) throw new Error("the recorded-behavior span moved");
+  return source.slice(start, end).replace(/className="[^"]*"/g, "");
+}
+
+function proseLiterals(span: string): readonly string[] {
+  const literals = [...span.matchAll(/"([^"\\\n]*)"|'([^'\\\n]*)'|`([^`\\]*)`/g)].map(
+    (match) => match[1] ?? match[2] ?? match[3] ?? "",
+  );
+  return [...literals, ...literalJsxText(span)].filter((text) => PROSE_RUN.test(text));
+}
+
+describe("the public results card's copy-ownership claim", () => {
+  const source = stripComments(
+    readFileSync(resolve(LIB_DIR, "../components/PublicResults.tsx"), "utf8"),
+  );
+
+  it("renders no prose of its own in a recorded-behavior group", () => {
+    const span = behaviorSpan(source);
+    expect(span).toContain("COPY.adoptedLead");
+    expect(proseLiterals(span)).toEqual([]);
+  });
+
+  it("catches a planted literal in the span (planted)", () => {
+    const span = behaviorSpan(source);
+    const literal = span.replace("COPY.factoryCustom", '"Custom agent factory"');
+    expect(literal).not.toBe(span);
+    expect(proseLiterals(literal)).toEqual(["Custom agent factory"]);
+    const text = span.replace("{COPY.noRecordedSettings}", "No enabled experiments recorded");
+    expect(text).not.toBe(span);
+    expect(proseLiterals(text)).toEqual(["No enabled experiments recorded"]);
   });
 });
 

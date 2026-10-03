@@ -3,8 +3,8 @@
 Five visual assets are kept here. The repository [README](../../README.md)
 shows the two-perspective PNG and links the WebM clip. The architecture note
 embeds the diagram; the meeting still and GIF are archive assets no page embeds.
-The four spectator captures show the featured strip's head on the shown 9-player
-set, 9p2i seed 19, a game the current demo serves.
+The four spectator captures show the game the demo's guided tour opens on, 9p2i
+seed 19 from the shown 9-player set, a game the current demo serves.
 [provenance.json](provenance.json) identifies their source and exact asset bytes:
 
 Placement below refers to the README and architecture note.
@@ -97,8 +97,10 @@ changed image with unchanged provenance.
 half of the same tick carries two bodies and both impostors — one in MedBay with
 the player it has just killed, the other inside the vents — and at the meeting
 that follows, `p-5` accuses `p-4`, who is also a crewmate. The capture harness
-checks these scene and accusation facts against the served bytes before
-shooting.
+checks the body count, the kill, how many players `p-5` can see and the
+accusation against the served bytes before shooting. The test suite reads each
+claim of the README caption's scene, MedBay and the vent included, and holds it
+to the same bytes in every run.
 
 ### What is deterministic, and what is not
 
@@ -128,6 +130,6 @@ The README embeds `spectator-two-truths.png` and links
 names the game, its set and its recording date, and the image links to the
 interactive demo, which serves the same game.
 
-Budget: the directory is currently 1.6 MB. Keep the still under 400 kB, the clip
+Budget: the directory is currently 1.4 MB. Keep the still under 400 kB, the clip
 under 3 MB and the GIF under 1.5 MB — the capture asserts all three, so a walk
 that grows past them fails instead of landing in the tree.
