@@ -165,6 +165,17 @@ diagnosis of 2026-10-02 (`tasks/diagnosis-2026-10-02/README.md`, Part 3, card 0)
 Each item names its enforcing mechanism and a planted or perturbed proof. Each new test is written first and fails at
 this card's base for the stated reason; Results quotes that run.
 
+- [x] Review correction (round 2): every claim of the README caption's scene is read out of the caption and held to
+  the served replay. `_caption_scene_problems` takes the tick, the number of dead (a word), the room the impostor
+  outside the vents stands in (by the map's own room name), the fog subject, the one player it sees and the accuser
+  from the caption line. It holds the tick to the capture spec's `HERO.tick`, each claim to the frame at that tick,
+  and the accusation to the earliest meeting after it. Before, the case compared the replay to literal copies of the
+  tick, count and room, so the verifiers' edits of MedBay to Admin, two players to three and tick 9 to tick 12 left
+  the file green (13 passed each at `c6e98fef`). Mechanism: `test_the_captions_scene_is_the_recorded_one`,
+  `test_a_caption_naming_another_scene_fails_by_name` and `test_the_caption_counts_its_dead_in_words` in
+  `tests/scripts/test_public_recording_provenance.py`. Proof: seven scratch READMEs, each with one scene phrase
+  changed, and a scratch spec shooting another tick each fail by name; the three edits applied to the real README
+  now fail the scene case (Results, Review corrections, round 2).
 - [x] Review correction (round 1): no test of the default tier writes into a committed set directory, so the
   recorder tests' whole-tree fixture fails only on a real write into `replays/`. The feature sweep in
   `tests/agents/test_features.py` wrote its observation audit log beside each recording in `replays/samples/<set>/`
@@ -499,13 +510,14 @@ byte moves).
   `check_doc_facts.py`).
 - Mechanism (`tests/scripts/test_public_recording_provenance.py`): the caption pin holds the new words;
   `test_the_front_door_names_the_pictured_game_in_plain_words` refuses the words strip and head in both pages and
-  requires the vent clause; `test_the_captions_scene_is_the_recorded_one` holds the scene to the served replay (two
-  bodies at tick 9, exactly one impostor inside a vent, the other in MedBay), because the capture harness checks only
-  that both impostors are alive in a room. `acdaddb6`'s message said the harness checks the vent; `c91e604b` corrects
-  it.
+  requires the vent clause; `test_the_captions_scene_is_the_recorded_one` reads the tick, the number of dead, the
+  room, the fog subject, the player it sees and the accuser out of the caption and holds each to the served replay
+  at the tick the capture spec shoots, because the capture harness checks only that both impostors are alive in a
+  room. Until review round 2 the case compared the replay to literal copies of the tick, count and room instead.
+  `acdaddb6`'s message said the harness checks the vent; `c91e604b` corrects it.
 - Red at the base: 3 failed, 9 passed (the caption pin, the front-door case, the caption case). Planted: the
   `59bbd1be` caption in a scratch README is reported as `["README.md"]`; the `59bbd1be` scene, both impostors in
-  rooms, fails with "not exactly one impostor inside a vent".
+  rooms, fails with "says one impostor is inside a vent, the replay has 0" (the message since review round 2).
 - `tests/scripts/test_check_doc_facts.py`'s planted `d41c9006` hunk carries the new samples sentence as its current
   side; its previous side is unchanged and `test_the_d41c9006_front_door_fails_on_the_promoted_tree` passes all four
   of its assertions.
@@ -754,8 +766,8 @@ restored from a copy with its sha256 checked.
   only the summary line). The replays/ status was clean after it, and fifteen further runs with failure reports,
   three under extra load, were all green, so the case and cause are unidentified.
 - The promotion's red-at-base counts stay unreproduced.
-- The capture harness still checks only that both impostors stand in a room; the vent clause is held by the Python
-  scene case instead.
+- The capture harness still checks only that both impostors stand in a room; the caption's room and vent clauses,
+  with the rest of its scene, are held by the Python scene cases instead, which read them out of the README.
 - On macOS the evolution-strategy hash pin is Linux-only; CI is cited for it if `check.sh` reports it.
 
 ### Deviations
@@ -901,3 +913,148 @@ ask for a revert.
 
 **Record impact, this round.** None: no recorded byte, media asset, manifest, report, census, scorecard output or ML
 artifact moves, and no shipped byte moves (the bundle diff above). The registry rows this card set are unchanged.
+
+### Review corrections, round 2 (2026-10-02)
+
+One blocking finding from the round-2 verifiers. Commits: `bab91b5e` the scene read out of the caption; `faf2d316` the
+media page's sentence on which check holds which claim; then this record and the commit recording `check.sh`. Every
+count is count-only; the scene facts quoted below are agent ids, room ids and counts read off the served replay's
+frames, never transcript text.
+
+**The finding (correctness): the README caption's new scene words were not held by any test.**
+
+- Cause: `test_the_captions_scene_is_the_recorded_one` compared the served replay to the literals `_HERO_TICK = 9`,
+  `_HERO_ROOM = "MEDBAY"` and a body count of two, never to the caption, so its comment and this card's Results
+  claimed more than it held.
+- Reproduced: the `c6e98fef` test file against each of the verifiers' three edits to `README.md` (MedBay to Admin,
+  two players to three, tick 9 to tick 12), `uv run pytest tests/scripts/test_public_recording_provenance.py -q -p
+  no:cacheprovider`: 13 passed each. The README and the test file were restored from copies, their sha256 checked.
+- Fix (`bab91b5e`): `_caption_scene_problems(caption, replay, picture_tick)` reads every claim of the caption's scene
+  clause out of the caption line, with one pattern of named groups, and holds each to the served replay:
+
+| the caption's words | read as | held to |
+| --- | --- | --- |
+| at tick 9 | the tick | the tick the capture spec's `HERO` shoots, read by `_picture_tick`; the scene is the frame at that tick |
+| two players lie dead | a count word, `no` to `nine` | the frame's bodies |
+| one impostor stands in MedBay | the room, by the map's own name (`replay.map.rooms`) | the room of the living impostor outside the vents |
+| and the other is inside a vent | (fixed words) | exactly one living impostor inside a vent |
+| p-5 can see only p-4 | the fog subject and the player seen | the subject's visible players at that tick |
+| whom p-5 accuses at the meeting that follows | the accuser | the accuser's accusations at the earliest meeting after the tick |
+
+- `_readme_scene_problems(root, replay)` reads the caption from `root/README.md` and the tick from
+  `root/frontend/e2e/media.spec.ts`, so the real tree and every scratch copy go through the same reads. A caption that
+  does not match the pattern reads "the caption names no scene". The game stays `headless-seed-19`, which
+  `test_media_hashes_and_labels_are_current` holds to the captured recording and to the caption's seed.
+- The guarantee, at the strength delivered: each word of the caption's scene clause that the table names is read from
+  the README and checked against the served replay in every run of the default tier. The fixed words of the clause
+  (its grammar) are not variables: a caption that rephrases them names no scene and fails.
+
+**Mechanism and planted proofs** (`tests/scripts/test_public_recording_provenance.py`, 31 cases, 13 before):
+
+- `test_the_captions_scene_is_the_recorded_one`: the real README and spec read no problem. Planted: a scratch spec
+  shooting tick 10 reads "names tick 9, the picture shows tick 10"; at the pictured tick, both impostors standing,
+  both inside a vent, the venting impostor dead, or one body, each fail by name; the map's MedBay renamed fails the
+  true caption with "names no room called MedBay" and passes a caption naming the new name; the meetings listed in
+  reverse order still pass.
+- `test_a_caption_naming_another_scene_fails_by_name`: seven scratch READMEs, each the real one with one scene phrase
+  changed:
+
+| case | edit | problems reported |
+| --- | --- | --- |
+| another-room | MedBay to Admin | says one impostor stands in Admin, the replay has ['MEDBAY'] |
+| no-such-room | MedBay to Sickbay | names no room called Sickbay |
+| another-count | two players to three players | says three players lie dead, the replay has 2 |
+| another-tick | tick 9 to tick 12 | names tick 12, the picture shows tick 9; says one impostor stands in MedBay, the replay has ['ENGINEERING']; says p-5 accuses p-4 at the meeting that follows, the replay has [] |
+| another-sighting | can see only p-4 to p-3 | says p-5 can see only p-3, the replay has ['p-4']; says p-5 accuses p-3 at the meeting that follows, the replay has ['p-4'] |
+| another-subject | p-5 can see to p-3 can see | says p-3 can see only p-4, the replay has [] |
+| another-accuser | whom p-5 accuses to whom p-6 accuses | says p-6 accuses p-4 at the meeting that follows, the replay has ['p-1'] |
+
+- `test_the_caption_counts_its_dead_in_words`: each count word from `no` to `nine` holds on a frame with that many
+  bodies and fails by name on one more (ten cases).
+- `test_the_59bbd1be_caption_names_no_scene`: the `59bbd1be` caption reads "the caption names no scene".
+
+**The verifiers' procedure, at `faf2d316`.** Each edit applied alone to the real `README.md`; `uv run pytest
+tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py -n 4 -q -p no:cacheprovider`;
+`uv run python scripts/check_doc_facts.py`; the README restored from a copy, sha256 `ec6608b0...` before and after:
+
+| edit to `README.md` | the two files | `check_doc_facts.py` |
+| --- | --- | --- |
+| MedBay to Admin | 18 failed, 338 passed | 0 |
+| two players to three players | 17 failed, 339 passed | 0 |
+| tick 9 to tick 12 | 18 failed, 338 passed | 0 |
+| can see only p-4 to p-3 | 18 failed, 338 passed | 0 |
+| whom p-5 accuses to whom p-6 accuses | 18 failed, 338 passed | 0 |
+| p-5 can see to p-3 can see | 18 failed, 338 passed | 0 |
+| the room and vent clause to "both impostors are on the map" | 19 failed, 337 passed | 0 |
+
+In every row `test_the_captions_scene_is_the_recorded_one` fails, through the same reads as the matching planted case
+(the last row's caption names no scene, as the `59bbd1be` case's does). The planted cases fail too, because each
+one edits the README it reads. The last row also fails the front-door case.
+`check_doc_facts.py` holds the word budgets and citations, not the scene, so it stays 0.
+
+**Follow-through (`faf2d316`).** `docs/media/README.md` said the capture harness checks "these scene and accusation
+facts" against the served bytes. The harness checks the body count, the kill, how many players `p-5` can see and the
+accusation; the room and the vent are held by the scene cases above. The paragraph now says which check holds which
+claim. `git grep` for the old sentence finds no other live copy; `frontend/e2e/media.spec.ts`'s comment that the
+Python file holds the caption's vent clause stays true and is unchanged.
+
+**The bounded mutation pass**, over the spans this round changes and the span the finding names: the scene helpers in
+`tests/scripts/test_public_recording_provenance.py`. The listed classes only; each mutant applied alone, the file's
+scene cases run (`-k "scene or caption_counts or 59bbd1be_caption"`, 19 cases), the file restored from a copy with its
+sha256 checked. Run at `bab91b5e`'s test file:
+
+| ids | class | mutants | killed by |
+| --- | --- | --- | --- |
+| A1-A7 | drop a filter or wrapper on a collection | the impostor filter whole; its living clause; the outside-the-vents filter; the tick filter on frames; the after-the-tick filter on meetings; the accuser filter; the accusation type filter | A1, A3, A4, A7: the scene, naming and count cases; A2: the scene case alone; A5, A6: the naming cases alone |
+| B1-B3 | swap one collection for a related one | visible players to visible bodies; bodies to events; the living impostors to every agent state | the scene, naming and count cases |
+| C1-C16 | a comparison to its inverse or a None test | each comparison and membership test in the helpers, `_picture_tick`'s count included | the scene, naming and count cases; C14 also the `59bbd1be` case |
+| D1-D5 | a role, kind, room or tick read to a constant | the caption's tick as 9; the role read as IMPOSTOR; the room id as MEDBAY; `_picture_tick` as 9; the meeting order key as 0 | D1, D3: the naming cases alone; D2: the scene, naming and count cases; D4, D5: the scene case alone (D5 first came back green) |
+| E1-E7 | a message argument to a constant | the body count, the venting count, the standing rooms, the players seen, the accused, the unknown room, the picture's tick | E1: the scene and count cases; E2, E7: the scene case alone; E3: the scene and naming cases; E4, E5, E6: the naming cases alone |
+| F1 | drop one member of a tuple of kinds or types | `three` from the count words | the count cases |
+| G1 | swap adjacent branches | the seen list's two arms | the scene, naming and count cases |
+| H1-H2 | a read of a loaded source to the canonical literal | the README read as the current caption; the spec read as 9 | H1: the naming cases alone; H2: the scene case alone (the scratch spec) |
+
+42 of 42 killed. D5 (the meetings' minimum taken by a constant key) first came back green: the served replay lists its
+meetings in tick order, so the first listed was also the earliest. The reversed-meetings plant kills it. The pass ran
+42 mutants, two over the bound of 40 the orchestrator set; no other class was run.
+
+**Bundle diff** (`uv run python scripts/build_demo_bundle.py --out <dir>`, at `c6e98fef` and then at `faf2d316`, in
+this one checkout): `diff -rq` is empty; the head bundle holds 109 files. This round ships nothing: neither the test
+file nor `docs/media/README.md` is a bundle input. What goes live at the merge is unchanged.
+
+**Validation at `faf2d316`**, `git status --porcelain --ignored -- replays` empty after:
+
+| command | result |
+| --- | --- |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run python scripts/check_doc_facts.py`; `uv run python scripts/validate_task_docs.py` | 0; 0 (96 work cards) |
+| `bash scripts/verify_samples.sh`, then once per set directory | 0; `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i`: 0 each (50, 50, 150, 50, 50 clean) |
+| `build_sample_report.py --sample-dir <set> --check`, the five sets | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `pytest tests/scripts/test_verify_ml_evidence.py tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py tests/scripts/test_build_demo_bundle.py -n 6` | 0: 477 passed (459 at `374f217f`, plus the 18 new cases) |
+| `uv run pytest -m campaign` | 0: 337 passed |
+| `uv run ruff format --check`, `ruff check`, `mypy` over the test file | clean |
+| `bash scripts/check.sh`, once at this round's pushed head | recorded by the commit after this one |
+
+No frontend file changes this round, so the frontend suites and the e2e are not re-run; `check.sh` runs vitest and the
+build.
+
+**Decisions.**
+
+12. The scene is parsed into named claims rather than pinned as one sentence built from the frame, so a drifted
+    caption fails with the claim that drifted, as the finding asks.
+13. The caption's tick is held to the capture spec's `HERO.tick` as well as to the replay. A tick whose frame happens
+    to carry the same scene would otherwise pass while the picture shows another.
+14. The room is matched by the map's own room name from the served replay, so the caption's MedBay and the viewer's
+    label are one source.
+15. `docs/media/README.md`'s sentence on what the capture harness checks is restated in this round. It is this card's
+    file, and it overstated the harness in the same way the finding names.
+
+**Deviations, this round.** The mutation pass ran 42 mutants, two over the bound of 40. Each of this round's commits
+ends with the attribution line the session's harness names, `Co-Authored-By: Claude Opus 5.5`, not the line the
+orchestrator's brief gives.
+
+**Record impact, this round.** No recorded byte, media asset, manifest, report, census, scorecard output or ML artifact
+moves, and no shipped byte moves (the bundle diff above). `docs/media/README.md` is class (a) text: the directory's
+tracked bytes move from 1,406,205 to 1,406,386, and the `docs/media/` row stays 1.4 MB / 7 files;
+`verify_ml_evidence.py` (FAIL 0) and `tests/scripts/test_verify_ml_evidence.py` pass at this head.
