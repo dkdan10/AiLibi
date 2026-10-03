@@ -14,7 +14,7 @@ Some ejections in the recorded games rest on a charge whose stated pair of place
 
 Each column is one recording, read alone and never pooled, from the exact commit in the table below; the table also gives the seeds and the roster (players, impostors) that column's recorded games hold. Every meeting is re-run through the committed reconstruction walk with the recording's own settings: every state hash and every recorded prompt is reproduced or the run stops, and the meetings agree one for one with the gameplay census.
 
-| column | commit | path | tree | declared config | seeds | players | impostors | games |
+| column | commit | path | tree | declared config | seeds | players | impostors | games with a meeting |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | s9 | `d41c90067a0023d08997231f181cc02deb6461bc` | `replays/samples/9p2i` | `5c12c060e75b026daf643ab8b20e5aaca8de20b0` | none | 0-49 | 9 | 2 | 50 |
 | r1 | `5877adb48e046042a1e2927675451f896168673a` | `replays/candidates/stage-b-r1/9p2i` | `2c0529eb694fc011c836cb564d241101da1957e4` | `replays/candidates/stage-b-r1/experiment-config.json` | 0-49 | 9 | 2 | 50 |

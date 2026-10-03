@@ -23,7 +23,8 @@ candidate route check would have shown each voter at every recorded meeting:
 Its reading is a process count, never role-correctness: charges resting on a
 stated pair the map or the public regroup reconciles, ejections carried by such
 a charge, and which check would have reached them. Roles are read only to set
-the counts out by ejection class, as description.
+the counts out by ejection class, as description, and to state each column's
+roster (how many players and impostors its games hold).
 
 Every column is pinned to a full commit sha resolved when the run starts and
 materialized with ``git archive``; ``--check`` re-materializes the recorded shas,
@@ -37,8 +38,9 @@ every call from the recording's bytes), no environment write, no recorded byte
 edited. Beyond the instrument's own fixed wording (the report's prose, the
 JSON's check names), the outputs carry ids, ticks, room ids, kinds, booleans and
 counts only; before it writes, the run scans both outputs for every turn text,
-ballot rationale and travel line it read, as written and as the JSON escapes it,
-and refuses to write one that holds any.
+ballot rationale and travel line of 16 or more characters it read, as written
+and as the JSON escapes it, and refuses to write one that holds any. A shorter
+string is not sought: ids and room names, which the outputs carry, are that short.
 """
 
 from __future__ import annotations
@@ -1886,7 +1888,7 @@ def read_set(
 
 
 def forbidden_strings(set_dir: Path) -> frozenset[str]:
-    """Recorded turn texts and ballot rationales the outputs must never carry."""
+    """Recorded turn texts and rationales the scan seeks: 16 characters or more."""
 
     found: set[str] = set()
     for seed in seeds_on_disk(set_dir):
@@ -1898,12 +1900,14 @@ def forbidden_strings(set_dir: Path) -> frozenset[str]:
 
 
 def scan_outputs(texts: Sequence[str], forbidden: Iterable[str]) -> None:
-    """Raise when an output carries any recorded text it read.
+    """Raise when an output carries a recorded text of 16 or more characters.
 
     Each text is sought as written, which is how the report would carry it, and
     as a JSON string body, which is how the JSON would: :func:`serialize` escapes
     quotes, backslashes, control and non-ASCII characters, so a recorded text
-    that escaping changes is found in either output.
+    that escaping changes is found in either output. Only a text of
+    ``_SCAN_MIN_LENGTH`` (16) characters or more is sought, so what is held is
+    that no recorded text of 16 or more characters reaches an output.
     """
 
     for text in forbidden:
@@ -2457,7 +2461,7 @@ def render_report(payload: Mapping[str, object]) -> str:
                 "seeds",
                 "players",
                 "impostors",
-                "games",
+                "games with a meeting",
             ),
             [
                 (

@@ -59,10 +59,13 @@ from meetings.schemas import (
     AlibiClaim,
     AlibiSegment,
     ContradictionRef,
+    FoundBodyObservation,
     MeetingResult,
     MeetingTranscript,
     MeetingTurn,
+    MoveWitnessRecord,
     ObservationClaim,
+    SawMoveObservation,
     SawPlayerObservation,
     SawVentObservation,
     VoteBallot,
@@ -1974,11 +1977,15 @@ def test_the_committed_s9_column_meets_the_agreement() -> None:
 def test_an_r1_column_reads_under_its_rounds_config(tmp_path: Path) -> None:
     repo, sha = _column_repo(tmp_path, with_r1=True)
     assert _run(repo, tmp_path, f"r1={sha}:replays/candidates/stage-b-r1/9p2i") == 0
-    (column,) = json.loads((tmp_path / "results.json").read_text())["columns"]
+    payload = json.loads((tmp_path / "results.json").read_text())
+    (column,) = payload["columns"]
     assert column["declared_config"] == rcr.R1_CONFIG_PATH
     assert column["recorded_experiment_config"] == json.loads(
         (_R1_CONFIG / "experiment-config.json").read_text()
     )
+    # The dated reading's rule is applied to r2 alone; a run without r2 names
+    # no column for it.
+    assert payload["reading"]["rule_applies_to"] is None
 
 
 def test_a_pair_out_of_tick_order_is_refused() -> None:
@@ -2944,3 +2951,118 @@ def test_r2s_tree_under_the_r1_label_names_r1s_config(
         "the config its label declares "
         "(replays/candidates/stage-b-r1/experiment-config.json)\n"
     )
+
+
+# ---------------------------------------------------------------------------
+# Planted cases review round 3 called for
+# ---------------------------------------------------------------------------
+
+
+def test_columns_given_out_of_column_order_are_written_in_it(tmp_path: Path) -> None:
+    """The JSON's columns and the report's sections follow ``COLUMN_LABELS``.
+
+    The run given r2 before r1 must write, byte for byte, what the run given r1
+    before r2 writes, so the command that regenerates the committed files may
+    name its columns in any order.
+    """
+
+    repo, sha = _column_repo(tmp_path, with_r1=True)
+    r1 = f"r1={sha}:replays/candidates/stage-b-r1/9p2i"
+    r2 = f"r2={sha}:replays/samples/9p2i"
+    given = tmp_path / "r2-first"
+    canonical = tmp_path / "r1-first"
+    given.mkdir()
+    canonical.mkdir()
+    assert _run(repo, given, r2, r1) == 0
+    assert _run(repo, canonical, r1, r2) == 0
+    order = [label for label in rcr.COLUMN_LABELS if label in {"r1", "r2"}]
+    assert order == ["r1", "r2"]
+    payload = json.loads((given / "results.json").read_text())
+    assert [column["label"] for column in payload["columns"]] == order
+    report = (given / "report.md").read_text()
+    sections = [line for line in report.splitlines() if line.startswith("### Column ")]
+    assert sections == [f"### Column {label}" for label in order]
+    provenance = [
+        line.split(" | ")[0]
+        for line in report.splitlines()
+        if line.startswith(("| r1 | `", "| r2 | `"))
+    ]
+    assert provenance == [f"| {label}" for label in order]
+    assert (given / "results.json").read_bytes() == (
+        canonical / "results.json"
+    ).read_bytes()
+    assert (given / "report.md").read_bytes() == (canonical / "report.md").read_bytes()
+    assert payload["reading"]["rule_applies_to"] == "r2"
+
+
+def test_the_reading_applies_its_rule_to_r2_when_the_run_reads_r2(
+    one_game_run: tuple[Path, Path, str],
+) -> None:
+    _, out, _ = one_game_run
+    payload = json.loads((out / "results.json").read_text())
+    assert [column["label"] for column in payload["columns"]] == ["r2"]
+    assert payload["reading"]["rule_applies_to"] == "r2"
+
+
+def _movement_meeting(
+    *opening: ObservationClaim, regroup_ticks: frozenset[int]
+) -> rcr.MeetingInputs:
+    """p-1 saw p-5 move from West Hall into Admin, arriving at 12, and holds it.
+
+    The speaker's own movement record grounds the arrival, so the live clause
+    places p-5 in Admin at 12; the origin, West Hall at 11, is the placement only
+    the informational origin leg adds. The two are one door and one tick apart.
+    """
+
+    move = SawMoveObservation(
+        type="saw_move",
+        tick=12,
+        subject=_SUBJECT,
+        from_room="WEST_HALL",
+        to_room="ADMIN",
+    )
+    inputs = _inputs(
+        _turn(0, "p-1", observations=(*opening, move), claims=(_accuses(_SUBJECT),)),
+        regroup_ticks=regroup_ticks,
+    )
+    record = MoveWitnessRecord(
+        subject=_SUBJECT, from_room="WEST_HALL", to_room="ADMIN", tick=12
+    )
+    return replace(inputs, move_witness_records={"p-1": (record,)})
+
+
+def _arrival_alone(inputs: rcr.MeetingInputs) -> bool:
+    """Whether the live clause places the subject in Admin at 12, and nowhere else."""
+
+    path = rcr.ledger_call(inputs).stated_paths()[_SUBJECT]
+    return [(spot.tick, spot.rooms) for spot in path] == [(12, frozenset({"ADMIN"}))]
+
+
+def test_a_movement_origin_in_the_regroup_window_is_no_placement() -> None:
+    # A public regroup at 10 gathers the table at 10 and 11, so the origin, West
+    # Hall at 11, falls in its window; the arrival at 12 does not. Only the
+    # origin pairs with the arrival, so only the regroup ticks decide the leg.
+    gated = _movement_meeting(regroup_ticks=frozenset({10}))
+    ungated = replace(gated, regroup_ticks=frozenset())
+    earlier = replace(gated, regroup_ticks=frozenset({9}))
+    for inputs in (gated, ungated, earlier):
+        assert _arrival_alone(inputs)
+    assert not rcr.walkable_with_movement_origins(gated, _SUBJECT)
+    assert rcr.walkable_with_movement_origins(ungated, _SUBJECT)
+    # A regroup at 9 gathers the table at 9 and 10: the origin at 11 is placed.
+    assert rcr.walkable_with_movement_origins(earlier, _SUBJECT)
+
+
+def test_a_movement_origin_at_the_kill_scene_is_no_placement() -> None:
+    # The body was found in West Hall, the origin's room: at a report meeting the
+    # origin sits at the kill scene and is no placement; at a button meeting the
+    # same opening names no kill scene, and the origin pairs with the arrival.
+    body = FoundBodyObservation(
+        type="found_body", tick=12, body_of="p-2", room="WEST_HALL"
+    )
+    button = _movement_meeting(body, regroup_ticks=frozenset())
+    report = replace(button, trigger_kind="report")
+    for inputs in (button, report):
+        assert _arrival_alone(inputs)
+    assert rcr.walkable_with_movement_origins(button, _SUBJECT)
+    assert not rcr.walkable_with_movement_origins(report, _SUBJECT)
