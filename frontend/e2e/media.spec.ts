@@ -68,13 +68,14 @@ const BUILD_TIMEOUT_MS = 300_000;
  * The moment the hero pictures, chosen from the recorded corpus this repository
  * ships and re-checked against those bytes below.
  *
- * 9p2i seed 19 is the featured strip's head on the shown 9-player set
- * (ReplayPicker.tsx above FEATURED_GAMES); this capture names its game id
- * directly and does not read the strip. At tick 9 the omniscient map carries two
- * bodies and both impostors: one in Medbay with the player it has just killed,
- * the other inside the vents between Storage and Engineering. The fog subject,
- * in Labs, saw one other player and none of it, and then spent the meeting
- * accusing that fellow crewmate — which is the whole point of the picture.
+ * 9p2i seed 19 is the game the guided tour opens on in the shown 9-player set,
+ * the first entry of FEATURED_GAMES (ReplayPicker.tsx); this capture names its
+ * game id directly and does not read that list. At tick 9 the omniscient map
+ * carries two bodies and both impostors: one in Medbay with the player it has
+ * just killed, the other inside the vents between Storage and Engineering. The
+ * fog subject, in Labs, saw one other player and none of it, and then spent the
+ * meeting at tick 12 accusing that fellow crewmate — which is the whole point of
+ * the picture.
  */
 const HERO = {
   set: "9p2i",
@@ -800,7 +801,7 @@ test.describe("README media capture", () => {
     const leftUrl = new URL(omniscientPage.url());
     await omniscient.close();
 
-    // ── right: everything the fog subject was allowed to know ────────────────
+    // ── right: what the fog subject could see at the same tick ───────────────
     const fogged = await browser.newContext({ ...PART_CONTEXT });
     const foggedPage = await fogged.newPage();
     await openMoment(
@@ -864,8 +865,9 @@ test.describe("README media capture", () => {
         leftLabel: `What happened — tick ${String(HERO.tick)}`,
         rightLabel: `Everything ${HERO.fogSubject} could see — tick ${String(HERO.tick)}`,
         caption:
-          `Left: what happened. Right: everything ${HERO.fogSubject} was allowed to know ` +
-          `when it voted — and the accusation it wrote at the meeting that followed.`,
+          `Left: what happened at tick ${String(HERO.tick)}. Right: what ${HERO.fogSubject} ` +
+          `could see at the same tick. Below: the accusation ${HERO.fogSubject} wrote at ` +
+          `the meeting that followed, at tick ${String(HERO.meetingTick)}.`,
       },
     );
     const path = writeAsset("spectator-two-truths.png", sheet);

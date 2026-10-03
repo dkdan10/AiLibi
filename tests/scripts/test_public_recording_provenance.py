@@ -157,11 +157,11 @@ def _recording_mismatch(root: Path, provenance: dict[str, Any]) -> bool:
 
 
 def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
-    # The captures show the featured head of the shown 9-player set, 9p2i seed
-    # 19, since the promotion of 2026-10-02 (they were a historical seed-2
-    # capture from the baseline-7 record before it): the captured recording is
-    # the replay this checkout serves, byte for byte, and the README caption
-    # names that game, its set and its record.
+    # The captures show the game the guided tour opens on in the shown 9-player
+    # set, 9p2i seed 19, since the promotion of 2026-10-02 (they were a
+    # historical seed-2 capture from the baseline-7 record before it): the
+    # captured recording is the replay this checkout serves, byte for byte, and
+    # the README caption names that game, its set and its record.
     root = Path(__file__).resolve().parents[2]
     media = root / "docs/media"
     assert not _asset_mismatches(media)
@@ -176,7 +176,8 @@ def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
     )
     readme = (root / "README.md").read_text()
     assert (
-        "9p2i seed 19, the featured strip's head, from the 2026-10-01 record" in readme
+        "9p2i seed 19, the game the demo's guided tour opens on, from the "
+        "2026-10-01 record" in readme
     )
     assert "earlier recording" not in readme
     # A capture of a recording the checkout no longer serves must fail.
@@ -190,6 +191,129 @@ def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
     changed = tmp_path / names[0]
     changed.write_bytes(changed.read_bytes() + b"changed")
     assert _asset_mismatches(tmp_path) == [names[0]]
+
+
+#: The two pages that describe the pictured game to a first reader.
+_FRONT_DOOR_PAGES = ("README.md", "docs/media/README.md")
+
+#: The picker's internal words for the featured list and its first entry; a
+#: first reader has no glossary entry for either.
+_PICKER_WORDS = re.compile(r"\b(?:strip|head)\b", re.IGNORECASE)
+
+#: The README caption as `59bbd1be` published it: the jargon and the claim
+#: that both impostors stood on the map, when one was inside a vent.
+_CAPTION_AT_59BBD1BE = (
+    "*9p2i seed 19, the featured strip's head, from the 2026-10-01 record (9p2i): "
+    "at tick 9 two players lie dead and both impostors are on the map, while p-5 "
+    "can see only p-4, whom p-5 accuses at the meeting that follows."
+)
+
+
+def _front_door_jargon(root: Path) -> list[str]:
+    """The front-door pages that name the picked game with the picker's words."""
+
+    return [
+        page
+        for page in _FRONT_DOOR_PAGES
+        if _PICKER_WORDS.search((root / page).read_text())
+    ]
+
+
+def _readme_caption(readme: str) -> str:
+    """The italic caption under the README's picture."""
+
+    lines = [line for line in readme.splitlines() if line.startswith("*9p2i seed ")]
+    assert len(lines) == 1, lines
+    return lines[0]
+
+
+def test_the_front_door_names_the_pictured_game_in_plain_words(
+    tmp_path: Path,
+) -> None:
+    # The pictured game is the one the guided tour opens on
+    # (tests/api/test_sets.py pins it as the featured list's first entry), and
+    # the caption's scene keeps one impostor inside a vent, as the capture
+    # harness checks against the served bytes.
+    root = Path(__file__).resolve().parents[2]
+    assert _front_door_jargon(root) == []
+    readme = (root / "README.md").read_text()
+    caption = _readme_caption(readme)
+    assert "the game the demo's guided tour opens on" in caption
+    assert "the other is inside a vent" in caption
+    assert "both impostors are on the map" not in caption
+    assert (
+        "The picture above is from the 9-player game the guided tour opens on."
+        in readme
+    )
+    assert (
+        "the game the demo's guided tour opens on"
+        in (root / "docs/media/README.md").read_text()
+    )
+
+    # Planted: the `59bbd1be` caption, put back into a scratch README.
+    for page in _FRONT_DOOR_PAGES:
+        copied = tmp_path / page
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        copied.write_bytes((root / page).read_bytes())
+    assert _front_door_jargon(tmp_path) == []
+    planted = tmp_path / "README.md"
+    planted.write_text(readme.replace(caption, _CAPTION_AT_59BBD1BE))
+    assert _front_door_jargon(tmp_path) == ["README.md"]
+    assert "inside a vent" not in _readme_caption(planted.read_text())
+
+
+_MEDIA_SPEC = "frontend/e2e/media.spec.ts"
+
+#: The sheet's caption, as the spec builds it: one or more template literals
+#: joined by `+`, after `caption:`.
+_CAPTION_TEMPLATE = re.compile(r"\bcaption:\s*((?:`[^`]*`\s*\+?\s*)+),")
+
+#: The hero sheet's caption and comment as `59bbd1be` wrote them: the right half
+#: is the fog view at tick 9, not everything p-5 knew when it voted at tick 12.
+_SPEC_AT_59BBD1BE = (
+    "    // ── right: everything the fog subject was allowed to know ────────────────\n"
+    "        caption:\n"
+    "          `Left: what happened. Right: everything ${HERO.fogSubject} was allowed"
+    " to know ` +\n"
+    "          `when it voted — and the accusation it wrote at the meeting that"
+    " followed.`,\n"
+)
+
+
+def _hero_caption_problems(spec: str) -> list[str]:
+    """Why the hero sheet's caption claims more than the picture shows."""
+
+    templates = _CAPTION_TEMPLATE.findall(spec)
+    if len(templates) != 1:
+        return [f"expected one caption template, found {len(templates)}"]
+    caption = "".join(re.findall(r"`([^`]*)`", templates[0]))
+    problems = [
+        f"says {phrase!r}"
+        for phrase in ("when it voted", "allowed to know")
+        if phrase in spec
+    ]
+    problems += [
+        f"lacks {placeholder}"
+        for placeholder in ("${String(HERO.tick)}", "${String(HERO.meetingTick)}")
+        if placeholder not in caption
+    ]
+    return problems
+
+
+def test_the_hero_caption_claims_only_what_the_picture_shows() -> None:
+    # Both halves are tick 9 (the capture asserts both deep links carry it); the
+    # card below is from the meeting at tick 12. So the caption names both ticks
+    # and never calls the fog half what p-5 knew when it voted.
+    root = Path(__file__).resolve().parents[2]
+    spec = (root / _MEDIA_SPEC).read_text()
+    assert _hero_caption_problems(spec) == []
+    # Planted: the `59bbd1be` caption and comment fail by name.
+    assert _hero_caption_problems(_SPEC_AT_59BBD1BE) == [
+        "says 'when it voted'",
+        "says 'allowed to know'",
+        "lacks ${String(HERO.tick)}",
+        "lacks ${String(HERO.meetingTick)}",
+    ]
 
 
 def _media_placement_mismatches(root: Path) -> list[str]:

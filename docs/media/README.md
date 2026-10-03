@@ -3,8 +3,8 @@
 Five visual assets are kept here. The repository [README](../../README.md)
 shows the two-perspective PNG and links the WebM clip. The architecture note
 embeds the diagram; the meeting still and GIF are archive assets no page embeds.
-The four spectator captures show the featured strip's head on the shown 9-player
-set, 9p2i seed 19, a game the current demo serves.
+The four spectator captures show the game the demo's guided tour opens on, 9p2i
+seed 19 from the shown 9-player set, a game the current demo serves.
 [provenance.json](provenance.json) identifies their source and exact asset bytes:
 
 Placement below refers to the README and architecture note.
