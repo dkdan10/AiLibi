@@ -93,6 +93,68 @@ def test_each_eras_record_exists() -> None:
         assert (_REPO_ROOT / era.record).is_file(), era.record
 
 
+def test_eras_is_the_registrys_eras_oldest_first() -> None:
+    assert eras.ERAS == eras.registered_eras()
+    assert eras.registered_eras() == (eras.BASELINE_9, eras.STAGE_B_R2)
+
+
+#: An era no committed set belongs to, recorded after both committed eras.
+_THIRD_ERA = eras.Era(
+    id="planted-third",
+    record="audits/planted.md",
+    recorded_on="2026-10-05",
+    declared_config=None,
+)
+
+
+def test_eras_held_to_the_registry_turns_red_on_either_side() -> None:
+    """Planted: ERAS without the promoted era, and a registry naming a third.
+
+    Either way the registry's eras and ERAS differ, so the pin above is red.
+    """
+
+    assert (eras.BASELINE_9,) != eras.registered_eras()
+    widened = (*eras.COMMITTED_SETS, eras.CommittedSet("replays/x/9p2i", _THIRD_ERA))
+    assert eras.ERAS != eras.registered_eras(widened)
+    assert eras.registered_eras(widened) == (*eras.ERAS, _THIRD_ERA)
+
+
+def test_registered_eras_sort_by_date_then_first_appearance() -> None:
+    """Planted: a registry listing the newest era first still reads oldest first.
+
+    Two eras of one date keep the order the registry first names them in.
+    """
+
+    newest_first = (
+        eras.CommittedSet("replays/x/9p2i", _THIRD_ERA),
+        *reversed(eras.COMMITTED_SETS),
+    )
+    assert eras.registered_eras(newest_first) == (*eras.ERAS, _THIRD_ERA)
+    same_day = eras.Era("same-day", "audits/planted.md", "2026-09-22", None)
+    paired = (
+        eras.CommittedSet("replays/y/9p2i", same_day),
+        *eras.COMMITTED_SETS,
+    )
+    assert eras.registered_eras(paired) == (same_day, *eras.ERAS)
+
+
+def test_two_eras_filed_under_one_id_are_refused() -> None:
+    """Planted: a second era spelled with the baseline-9 id but another date."""
+
+    impostor = eras.Era(
+        id=eras.BASELINE_9.id,
+        record=eras.BASELINE_9.record,
+        recorded_on="2026-09-23",
+        declared_config=None,
+    )
+    doubled = (*eras.COMMITTED_SETS, eras.CommittedSet("replays/x/9p2i", impostor))
+    with pytest.raises(
+        ValueError,
+        match="^the era registry files two different eras under the id baseline-9$",
+    ):
+        eras.registered_eras(doubled)
+
+
 def test_a_registry_filing_samples_9p2i_under_baseline_9_is_refused() -> None:
     """Planted: the promoted set named baseline-9 folds to a different key."""
 
