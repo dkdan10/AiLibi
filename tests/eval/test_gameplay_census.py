@@ -7859,10 +7859,11 @@ def _cited(
 def test_ballots_citing_a_rebuttal_read_their_own_meetings_rebuttal_turns() -> None:
     """Planted: two meetings, each with one rebuttal (``t2``, then ``t3``).
 
-    At the first meeting ``p-3`` cites the rebuttal, ``p-4`` cites the rebuttal
-    speaker's first turn, ``p-0`` counters with the rebuttal and ``p-1`` cites
-    ``t3``, the second meeting's rebuttal id. At the second, ``p-2`` cites
-    ``t2``, a first turn there.
+    At the first meeting ``p-3`` and ``p-2`` cite the rebuttal, ``p-4`` cites
+    the rebuttal speaker's first turn, ``p-0`` counters with the rebuttal and
+    ``p-1`` cites ``t3``, the second meeting's rebuttal id. At the second,
+    ``p-2`` cites ``t2``, a first turn there. Two ballots cite a rebuttal and one
+    counters with it, so each cell reads its own slot.
     """
 
     rebuttal = {"bounded_rebuttal_version": 1}
@@ -7880,6 +7881,7 @@ def test_ballots_citing_a_rebuttal_read_their_own_meetings_rebuttal_turns() -> N
             _cited("p-4", primary="t0"),
             _cited("p-0", counter="t2"),
             _cited("p-1", primary="t3"),
+            _cited("p-2", primary="t2"),
         ),
     )
     second = meeting(
@@ -7896,8 +7898,8 @@ def test_ballots_citing_a_rebuttal_read_their_own_meetings_rebuttal_turns() -> N
         ballots=(_cited("p-2", primary="t2", counter="t1"), _cited("p-4")),
     )
     planted = game(rebuttal, meetings=(first, second))
-    assert counts("ballots_citing_a_rebuttal", planted) == (1, 6, 0)
-    assert counts("ballots_countering_with_a_rebuttal", planted) == (1, 6, 0)
+    assert counts("ballots_citing_a_rebuttal", planted) == (2, 7, 0)
+    assert counts("ballots_countering_with_a_rebuttal", planted) == (1, 7, 0)
     without = game(
         rebuttal, meetings=(meeting(ballots=(_cited("p-3", primary="t2"),)),)
     )

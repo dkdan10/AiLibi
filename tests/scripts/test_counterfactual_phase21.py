@@ -602,6 +602,20 @@ def test_a_registered_set_of_a_third_era_is_refused_with_that_eras_id(
         cf.run(["./samples/4p1i"])
     with pytest.raises(_PastTheEraCheck):
         cf.run(["ml_corpus/4p1i"])
+    # The registry's own path is resolved too: an entry spelled through another
+    # directory still names the directory the set lies in.
+    spelled = tuple(
+        CommittedSet("replays/candidates/../samples/4p1i", third)
+        if entry.path == "replays/samples/4p1i"
+        else entry
+        for entry in COMMITTED_SETS
+    )
+    monkeypatch.setattr(cf, "REGISTERED_SETS", spelled)
+    with pytest.raises(
+        SystemExit,
+        match=r"^samples/4p1i is a committed set of the planted-third era; ",
+    ):
+        cf.run(["samples/4p1i"])
 
 
 def test_the_pooled_on_column_is_withdrawn_when_any_set_disagrees() -> None:
