@@ -1,6 +1,6 @@
 # Offline replay of the route checks on the committed recordings
 
-**Status:** active
+**Status:** done
 
 ## Outcome
 
@@ -253,7 +253,7 @@ census `kills_seen_by_crew`, 3, 4 and 14).
   the head that states it, with its command; guarantees stated at delivered strength; no live-tense sentence
   about older behaviour left in a touched file. Mechanism: Results' neuter and mutation tables. Proof: each
   row names its red test.
-- [ ] **Every gate, green.** `bash scripts/check.sh` in a clean worktree, run to its end, plus the commands in
+- [x] **Every gate, green.** `bash scripts/check.sh` in a clean worktree, run to its end, plus the commands in
   Validation, each with its real exit code in Results. Perturbed: the instrument's tests run against a build
   whose (a) leg ignores regroup ticks exit non-zero.
 
@@ -859,7 +859,7 @@ journeys were not required.
 | `uv run pytest -m campaign` | 0 | 337 passed, 10,172 deselected |
 | `build_demo_bundle.py --out <scratch>/base` at `5877adb4`, then `--out <scratch>/head` at this branch, one checkout; `diff -rq` | 0, 0, 0 | no difference across 109 files: nothing publishes |
 
-The first full gate, `bash scripts/check.sh` at `8b18aa53`, exited 1 (624 s): 10,148 passed, 20 skipped, 3 xfailed and 1 failed, `tests/_helpers/test_committed_single_home.py::test_every_committed_walk_goes_through_the_shared_cache`, which flagged the scan helper's census walk over a column read from a committed path. `5d227914` reworks the helper to walk nothing itself (the scan probes 148 to 162 re-run red against it). The final gate runs once, at the head of the commit carrying this sentence; its exit code lands in the commit after it.
+The first full gate, `bash scripts/check.sh` at `8b18aa53`, exited 1 (624 s): 10,148 passed, 20 skipped, 3 xfailed and 1 failed, `tests/_helpers/test_committed_single_home.py::test_every_committed_walk_goes_through_the_shared_cache`, which flagged the scan helper's census walk over a column read from a committed path. `5d227914` reworks the helper to walk nothing itself (the scan probes 148 to 162 re-run red against it). **The final gate, `bash scripts/check.sh` at `14eb297f` in this clean worktree, run to its end: exit 0 (927 s)**: ruff check and format, import contracts 4 kept and 0 broken, task docs (390 phase tasks, 96 work cards), prompt sync, strict mypy over 524 sources, pytest 10,149 passed, 20 skipped and 3 xfailed, and the frontend lint, type check, 649 tests in 25 files and production build. This commit changes only this card and the derived `tasks/README.md` sentence; `scripts/validate_task_docs.py` re-runs on it (exit 0). The evolution-strategy hash pin, Linux-only by its own note, did not fail here; the PR's CI carries the Linux run.
 
 ### Limitations
 
