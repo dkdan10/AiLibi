@@ -626,7 +626,7 @@ row and the inventory sentence), each to its end with its exit code captured dir
 | `uv run pytest -m campaign -n 6` | 0: 337 passed |
 | the census's other readers (`test_kill_cooldown_readers.py`, `test_vent_witness_readers.py`, `test_ballot_arms.py`, `test_report_body_handle.py`, `test_meeting_reset_coherence.py`, `test_scripted_meeting.py`, both look-and-wait suites, `test_verify_ml_evidence.py`) | 0: 550 passed, none edited; the JSON's additive cells break no in-tree reader |
 | demo bundle: `build_demo_bundle.py --out` at `5877adb4`, then at the head, in this one checkout; `diff -rq` | 0: the two bundles' 109 files are byte-identical; nothing ships |
-| `bash scripts/check.sh` at the pushed head | recorded in the last card commit and the PR body (this card cannot carry the run of the commit that writes it) |
+| `bash scripts/check.sh` at the pushed head `6a745209`, run once, its exit code captured directly | 0: ruff and format clean (551 files), the four import-linter contracts kept, task docs valid, strict mypy clean (522 source files), 10,106 Python tests passed (20 skipped, 3 xfailed), frontend lint and type checks clean, 649 frontend tests passed (25 files), the frontend build green. The commit recording this changes only this row |
 
 No frontend file changed, so `npm --prefix frontend test` and the e2e were not run.
 
