@@ -20,6 +20,7 @@ import shutil
 import socket
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Final
@@ -42,6 +43,7 @@ from agents.memory.store import (
     AgentMemory,
     _latest_self_guard_fields,
     absorb_reported_testimony,
+    render_for_prompt,
 )
 from agents.perception import ingest_packet
 from engine.world import load_canonical_map
@@ -517,7 +519,9 @@ def test_r2s_tree_under_the_s9_label_is_refused(
 ) -> None:
     repo, sha = _column_repo(tmp_path)
     assert _run(repo, tmp_path, f"s9={sha}:replays/samples/9p2i") == 1
-    assert "(no experiment config)" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "column s9: seed 2 recorded settings" in err
+    assert "(no experiment config)" in err
 
 
 def test_a_declared_config_that_is_no_config_is_refused(
@@ -1915,7 +1919,7 @@ def test_a_regroup_lines_ends_take_their_rooms_from_the_memory() -> None:
     ]
     assert line.ends is not None
     assert [sorted(end.rooms) for end in line.ends] == [["LABS"], ["CAFETERIA"]]
-    assert line.two_rooms
+    assert line.two_rooms and line.kept and rcr._reaching(line)
 
 
 def test_the_b_render_takes_the_voters_pre_vote_suspicion(
@@ -2192,3 +2196,77 @@ def test_a_report_that_differs_from_its_recomputation_fails_check(
     )
     assert code == 1
     assert "the recomputed report differs" in capsys.readouterr().err
+
+
+def test_a_census_with_no_meeting_for_a_games_first_raises() -> None:
+    game = _r2_game(_RUN_SEED)
+    with pytest.raises(
+        rcr.RouteCheckReplayError, match=r"r2 seed 2 meeting 0: the census holds no"
+    ):
+        rcr.read_game(
+            SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl",
+            label="r2",
+            game=replace(game, meetings=()),
+            renderers=_canonical_renderers(),
+        )
+
+
+def test_an_r1_columns_tree_mismatch_names_r1(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, sha = _column_repo(tmp_path, with_r1=True)
+    assert _run(repo, tmp_path, f"r1={sha}:replays/candidates/stage-b-r1/9p2i") == 0
+    payload = json.loads((tmp_path / "results.json").read_text())
+    payload["columns"][0]["tree"] = "0" * 40
+    copy = tmp_path / "copy.json"
+    copy.write_text(rcr.serialize(payload))
+    assert _check(repo, tmp_path, copy) == 1
+    assert "column r1: the recorded tree id" in capsys.readouterr().err
+
+
+def _readable(inputs: rcr.MeetingInputs) -> rcr.MeetingInputs:
+    """Give a built meeting one voter whose ballot holds its own memory block."""
+
+    memory = _memory()
+    block = render_for_prompt(
+        deepcopy(memory), token_budget=DEFAULT_TOKEN_BUDGET, suspicion_override={}
+    )
+    roster = sorted(inputs.roster)
+    return replace(
+        inputs,
+        memories={voter: deepcopy(memory) for voter in roster},
+        ballot_overrides={voter: {} for voter in roster},
+        ballot_prompts={voter: (f"<memory>\n{block}\n</memory>",) for voter in roster},
+    )
+
+
+def test_charges_are_counted_for_living_targets_only() -> None:
+    turns = (
+        _turn(
+            0,
+            "p-1",
+            observations=(_saw("p-9", "WEST_HALL", 14),),
+            claims=(_accuses("p-9"),),
+        ),
+        _turn(1, "p-3", observations=(_saw("p-9", "ADMIN", 15),)),
+    )
+    flag = ContradictionRef(
+        contradiction_id="c-1",
+        kind="alibi_vs_sighting",
+        event_a_id="turn:m-1:turn-0:obs:0",
+        event_b_id="turn:m-1:turn-1:obs:0",
+        subjects=("p-9",),
+        description="planted",
+    )
+    inputs = _readable(
+        _inputs(*turns, roster=frozenset({"p-1", "p-3"}), contradictions=(flag,))
+    )
+    record, _ = rcr.read_meeting(
+        inputs, seed=0, index=1, tick=15, kind="button", witness_meeting=False
+    )
+    assert record.charges == 0
+    living = _readable(replace(inputs, roster=frozenset({"p-1", "p-3", "p-9"})))
+    record, _ = rcr.read_meeting(
+        living, seed=0, index=1, tick=15, kind="button", witness_meeting=False
+    )
+    assert (record.charges, record.charges_on_reconcilable_pair) == (1, 1)
