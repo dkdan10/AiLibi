@@ -661,9 +661,94 @@ def test_the_page_says_what_it_is_not_and_defines_its_terms() -> None:
         "opener",
         "trigger tick",
         "by construction",
+        "seat",
+        "living witnesses",
+        "held kill",
+        "re-tally",
+        "holds-nothing label",
+        "rebuttal citation",
     ):
         assert f"* **{term}**:" in opening, term
     assert id_shapes(page) == []
+    retally = census.TERMS["re-tally"]
+    assert "Every other ballot is held fixed" in retally
+    assert "real voters would have heard different speech" in retally
+    assert "not a checked fact" in census.CELLS["skips_holding_nothing"].definition
+
+
+#: What restating the reporter line, or relating one rate to another, reads like:
+#: the envelope and its pre-registered line, a ratio, a relative risk, a rate
+#: put over another rate. The census shows counts side by side and draws none.
+_RESTATEMENTS = (
+    re.compile(r"\benvelope\b", re.IGNORECASE),
+    re.compile(r"\bpre-?registered\b", re.IGNORECASE),
+    re.compile(r"\b0\.104\b"),
+    re.compile(r"\bratios?\b", re.IGNORECASE),
+    re.compile(r"\brelative\b", re.IGNORECASE),
+    re.compile(r"\brisk\b", re.IGNORECASE),
+    re.compile(r"\btimes (?:as|more|less) likely\b", re.IGNORECASE),
+    re.compile(
+        r"\brates?\b[^.|\n]*\b(?:divided by|over|against)\b[^.|\n]*\brates?\b",
+        re.IGNORECASE,
+    ),
+)
+
+
+def restatements(text: str) -> list[str]:
+    """Every phrase in ``text`` that restates a line or relates two rates."""
+
+    return sorted(
+        {match.group(0) for shape in _RESTATEMENTS for match in shape.finditer(text)}
+    )
+
+
+def _published_text(published: GameplayCensus, page: str) -> str:
+    """The page, plus every title, definition and term the JSON carries."""
+
+    words = [page, *published.terms.values()]
+    for section in published.sets:
+        words.extend(cell.title for cell in section.cells.values())
+        words.extend(cell.definition for cell in section.cells.values())
+        words.extend(table.title for table in section.tables.values())
+        words.extend(table.definition for table in section.tables.values())
+    return "\n".join(words)
+
+
+def test_the_census_names_no_line_and_relates_no_two_rates() -> None:
+    """The committed page and JSON show the reporter's and the other seats'
+    rates side by side, with no line, ratio or verdict between them."""
+
+    page = (ROOT / command.MARKDOWN_PATH).read_text(encoding="utf-8")
+    published = GameplayCensus.model_validate(_committed())
+    assert restatements(_published_text(published, page)) == []
+    assert "| Reporter seats ejected |" in page
+    assert "| Other crewmate seats ejected |" in page
+
+
+def test_a_relative_risk_cell_turns_the_restatement_scan_red(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: a relative-risk cell added to the cell table."""
+
+    planted_cell = census.CellSpec(
+        "Reporter relative risk",
+        census._SEATS,
+        "The reporter seats' ejection rate divided by the other crewmate seats' "
+        "ejection rate.",
+        ("meeting row",),
+    )
+    monkeypatch.setattr(
+        census,
+        "CELLS",
+        MappingProxyType({**census.CELLS, "reporter_relative_risk": planted_cell}),
+    )
+    planted = census_from_inputs([_planted_inputs()])
+    page = command.render_markdown(planted)
+    assert restatements(_published_text(planted, page)) == [
+        "rate divided by the other crewmate seats' ejection rate",
+        "relative",
+        "risk",
+    ]
 
 
 def test_a_title_carrying_a_memo_style_id_fails_the_copy_scan() -> None:
