@@ -1432,6 +1432,15 @@ unless named; no frontend file changed.
 | the lab row's byte total: `ls-tree -r -l 400361d3 -- experiments/lab experiments/model_probe`, summed by the Decisions command | 0 | `167 7196210` (`167 7195798` at `bc8d6ff1`) |
 | `build_demo_bundle.py --out <scratch>/base` at `a0fdb570` (`main`), then `--out <scratch>/head` at `400361d3`, one checkout; `diff -rq` | 0, 0, 0 | no difference across 109 files: nothing publishes |
 
+**The gate, round 3: `bash scripts/check.sh` at `96694a77` in this clean worktree, run once to its end, exit 0**
+(about six minutes by the clock, 04:31 to 04:37), its exit code captured directly with no pipe: ruff check and
+format (553 files), import contracts 4 kept and 0 broken, task docs (390 phase tasks, 96 work cards), prompt sync,
+strict mypy over 524 sources, pytest 10,249 passed, 20 skipped and 3 xfailed (on the merged tree: the census
+card's tests from `main` and this round's 4 on top of round 2's 10,184), and the frontend lint, type check, 649
+tests in 25 files and production build. `96694a77` is the merged head plus this round's code and card commits;
+the commit after it changes only this card. The evolution-strategy hash pin, Linux-only by its own note, did not
+fail here; the PR's CI carries the Linux run.
+
 Deviations, round 3: the two findings that name the same mutant share one planted test, with an Acceptance item
 each. The body-room half of the origin gate (C2, C3) was not a finding; it is planted because the corrected neuter
 claim names both of the gate's call-site arguments. The bundle's base is now `a0fdb570`, `main` after the census
