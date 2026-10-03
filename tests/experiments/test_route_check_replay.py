@@ -1513,13 +1513,19 @@ def test_a_charge_rests_on_a_cited_placement_or_a_flag_of_placements() -> None:
         description="planted",
     )
     stray = flag.model_copy(update={"event_b_id": "turn:m-1:turn-2:claim:0"})
+    elsewhere = flag.model_copy(
+        update={"contradiction_id": "c-3", "subjects": ("p-3",)}
+    )
     ballots = (
         _ballot("p-3", _SUBJECT, "m-1:turn-0"),
         _ballot("p-7", _SUBJECT, "m-1:turn-2"),
         _ballot("p-1", "SKIP", "m-1:turn-1"),
     )
     charges = rcr.charges_against(
-        _SUBJECT, ballots=ballots, contradictions=(flag, stray), universe=universe
+        _SUBJECT,
+        ballots=ballots,
+        contradictions=(flag, stray, elsewhere),
+        universe=universe,
     )
     assert [(c.source, sorted(p.tick for p in c.placements)) for c in charges] == [
         ("ballot", [14]),
@@ -1549,14 +1555,16 @@ def test_the_universe_is_ungated_and_typed() -> None:
                     tick=1,
                     subject=_SUBJECT,
                     room="CAFETERIA",
-                    co_present=("p-7",),
+                    co_present=("p-7", _SUBJECT),
                 ),
                 SawVentObservation(
                     type="saw_vent", tick=12, subject=_SUBJECT, room="MEDBAY"
                 ),
                 _saw(_SUBJECT, "nowhere in particular", 13),
             ),
-            claims=(_alibi(_SUBJECT, ("LABS", 2, 4), ("LABS", 5, 9)),),
+            claims=(
+                _alibi(_SUBJECT, ("LABS", 2, 4), ("LABS", 5, 9), ("nowhere", 10, 11)),
+            ),
         ),
     )
     kinds = sorted(
@@ -1784,3 +1792,403 @@ def test_the_committed_s9_column_meets_the_agreement() -> None:
     (s9,) = [column for column in payload["columns"] if column["label"] == "s9"]
     assert s9["s9_agreement"]["a"] == list(rcr.S9_WALKABLE_PAIR_EJECTIONS)
     assert s9["sha"] == "d41c90067a0023d08997231f181cc02deb6461bc"
+
+
+# ---------------------------------------------------------------------------
+# Planted cases the neuter pass called for
+# ---------------------------------------------------------------------------
+
+
+def test_an_r1_column_reads_under_its_rounds_config(tmp_path: Path) -> None:
+    repo, sha = _column_repo(tmp_path, with_r1=True)
+    assert _run(repo, tmp_path, f"r1={sha}:replays/candidates/stage-b-r1/9p2i") == 0
+    (column,) = json.loads((tmp_path / "results.json").read_text())["columns"]
+    assert column["declared_config"] == rcr.R1_CONFIG_PATH
+    assert column["recorded_experiment_config"] == json.loads(
+        (_R1_CONFIG / "experiment-config.json").read_text()
+    )
+
+
+def test_a_pair_out_of_tick_order_is_refused() -> None:
+    first, second = rcr.spoken_placements(
+        MeetingTranscript(turns=_pair_transcript(("ADMIN", 14), ("CAFETERIA", 17)))
+    )
+    with pytest.raises(ValueError, match="ordered by tick"):
+        rcr.reconcilable(second, first, regroup_ticks=frozenset())
+
+
+def test_the_first_meeting_is_marked_and_a_later_one_is_not() -> None:
+    meeting = _first_meeting(_RUN_SEED)
+    assert rcr.meeting_inputs(meeting, regroup_ticks=frozenset()).first_meeting
+    later = replace(meeting, meeting_index=1)
+    assert not rcr.meeting_inputs(later, regroup_ticks=frozenset()).first_meeting
+
+
+def test_a_subject_outside_the_roster_gets_no_row() -> None:
+    turns = (
+        _turn(
+            0,
+            "p-1",
+            observations=(_saw("p-9", "WEST_HALL", 14),),
+            claims=(_accuses("p-9"),),
+        ),
+        _turn(1, "p-3", observations=(_saw("p-9", "ADMIN", 15),)),
+    )
+    assert rcr.a_readings(rcr.ledger_call(_inputs(*turns)))["p-9"].shown == ()
+    roster = frozenset({"p-1", "p-3", "p-9"})
+    assert rcr.a_readings(rcr.ledger_call(_inputs(*turns, roster=roster)))["p-9"].shown
+
+
+def test_a_button_meetings_opening_body_is_no_kill_scene() -> None:
+    from meetings.schemas import FoundBodyObservation
+
+    opening = _turn(
+        0,
+        "p-1",
+        observations=(
+            FoundBodyObservation(
+                type="found_body", tick=13, body_of="p-2", room="ADMIN"
+            ),
+            _saw(_SUBJECT, "ADMIN", 14),
+        ),
+        claims=(_accuses(_SUBJECT),),
+    )
+    turns = (opening, _turn(1, "p-3", observations=(_saw(_SUBJECT, "WEST_HALL", 15),)))
+    button = _inputs(*turns)
+    assert _a_shown(button) == (("ADMIN", "WEST_HALL"),)
+    report = replace(button, trigger_kind="report")
+    assert _a_shown(report) == ()
+
+
+def test_a_shown_pair_resting_on_no_stated_pair_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inputs = _inputs(*_pair_transcript(("WEST_HALL", 14), ("ADMIN", 16)))
+    real = vars(rcr)["build_testimony_ledger"]
+
+    def fabricated(*args: Any, **kwargs: Any) -> Any:
+        ledger = real(*args, **kwargs)
+        rows = tuple(
+            replace(row, walkable_transits=(("WEST_HALL", "ADMIN"),))
+            for row in ledger.rows
+        )
+        return replace(ledger, rows=rows)
+
+    monkeypatch.setattr(rcr, "build_testimony_ledger", fabricated)
+    with pytest.raises(rcr.RouteCheckReplayError, match="rests on no pair"):
+        rcr.a_readings(rcr.ledger_call(inputs))
+
+
+def test_a_one_room_line_neither_reaches_nor_counts_two_rooms() -> None:
+    memory = _memory()
+    _see(memory, 4, "WEST_HALL")
+    memory.episodic.append(
+        EpisodicEvent(
+            tick=5,
+            type="reported_testimony",
+            payload={
+                "speaker": "p-3",
+                "kind": "saw_player",
+                "subject": _SUBJECT,
+                "from_tick": 5,
+                "to_tick": 5,
+                "room": "WEST_HALL",
+            },
+            provenance="reported",
+        )
+    )
+    (line,) = [
+        line
+        for line in _b_lines(memory, snapshot=False)
+        if line.ends is not None and (line.ends[0].tick, line.ends[1].tick) == (4, 5)
+    ]
+    assert line.verdict == "fits" and line.kept
+    assert not line.two_rooms and not rcr._reaching(line)
+
+
+def test_a_regroup_lines_ends_take_their_rooms_from_the_memory() -> None:
+    memory = _sighting_memory(("LABS", 10), ("CAFETERIA", 11), regroup=11)
+    (line,) = [
+        line
+        for line in _b_lines(memory, snapshot=False)
+        if line.verdict == "crosses_regroup"
+    ]
+    assert line.ends is not None
+    assert [sorted(end.rooms) for end in line.ends] == [["LABS"], ["CAFETERIA"]]
+    assert line.two_rooms
+
+
+def test_the_b_render_takes_the_voters_pre_vote_suspicion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[Any] = []
+    real = vars(rcr)["render_for_prompt"]
+
+    def spy(memory: AgentMemory, **kwargs: Any) -> str:
+        seen.append(kwargs.get("suspicion_override"))
+        rendered: str = real(memory, **kwargs)
+        return rendered
+
+    monkeypatch.setattr(rcr, "render_for_prompt", spy)
+    override = {_SUBJECT: 0.25}
+    rcr.b_voter_reading(
+        _memory(), voter=_VOTER, snapshot=False, suspicion_override=override
+    )
+    assert seen == [override]
+
+
+def test_a_qualifying_pair_the_cap_cuts_is_given_the_cap() -> None:
+    turns = (
+        _turn(
+            0,
+            "p-1",
+            observations=(_saw(_SUBJECT, "MEDBAY", 14),),
+            claims=(_accuses(_SUBJECT),),
+        ),
+        _turn(1, "p-3", observations=(_saw(_SUBJECT, "WEST_HALL", 15),)),
+        _turn(2, "p-7", observations=(_saw(_SUBJECT, "ADMIN", 16),)),
+        _turn(3, "p-1", observations=(_saw(_SUBJECT, "UPPER_HALL", 17),)),
+    )
+    inputs = _inputs(*turns)
+    reading = rcr.a_readings(rcr.ledger_call(inputs))[_SUBJECT]
+    assert len(reading.qualifying_pairs) == 3 and len(reading.shown) == 2
+    by_tick = {spot.tick: spot for spot in rcr.spoken_placements(inputs.transcript)}
+    assert rcr._a_pair_reason((by_tick[16], by_tick[17]), reading) == "cap"
+
+
+def test_an_input_of_a_kind_the_check_is_not_read_to_take_raises() -> None:
+    turns = (
+        _turn(
+            0,
+            "p-1",
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player",
+                    tick=14,
+                    subject="p-3",
+                    room="ADMIN",
+                    co_present=(_SUBJECT,),
+                ),
+            ),
+            claims=(_accuses(_SUBJECT),),
+        ),
+    )
+    inputs = _inputs(*turns)
+    universe = rcr.spoken_placements(inputs.transcript)
+    paths = {
+        subject: [spot.event_id for spot in reading.path]
+        for subject, reading in rcr.a_readings(rcr.ledger_call(inputs)).items()
+    }
+    rcr._require_input_kinds(universe, paths, rcr.A_INPUT_KINDS, check="(a)")
+    with pytest.raises(rcr.RouteCheckReplayError, match="not read to take"):
+        rcr._require_input_kinds(
+            universe, paths, rcr.A_INPUT_KINDS - {"company"}, check="(a)"
+        )
+
+
+def test_reading_a_meeting_checks_the_first_meetings_claims_first() -> None:
+    memory = _memory()
+    absorb_reported_testimony(
+        memory, statements=derive_reported_testimony(_claims_meeting())
+    )
+    inputs = replace(
+        _inputs(*_pair_transcript(("WEST_HALL", 14), ("ADMIN", 15))),
+        first_meeting=True,
+        roster=frozenset({_VOTER}),
+        memories={_VOTER: memory},
+        ballot_overrides={_VOTER: {}},
+        ballot_prompts={_VOTER: ()},
+    )
+    with pytest.raises(rcr.RouteCheckReplayError, match="reported claim at a first"):
+        rcr.read_meeting(
+            inputs, seed=0, index=0, tick=15, kind="button", witness_meeting=False
+        )
+
+
+def _case_of(
+    inputs: rcr.MeetingInputs,
+    b_readings: Mapping[bool, Mapping[str, rcr.BVoterReading]] | None = None,
+) -> rcr.CaseRecord:
+    """One ejection read through the production case reader."""
+
+    spots = rcr.c_spots(inputs)
+    return rcr._read_case(
+        inputs,
+        universe=rcr.spoken_placements(inputs.transcript),
+        a_by_leg={
+            leg: rcr.a_readings(rcr.ledger_call(inputs, leg=leg)) for leg in rcr.A_LEGS
+        },
+        spots=spots,
+        c_lines={
+            subject: rcr.c_pairs(found, regroup_ticks=inputs.regroup_ticks)
+            for subject, found in spots.items()
+        },
+        b_readings=b_readings
+        or {
+            snapshot: {
+                ballot.voter: rcr.b_voter_reading(
+                    _memory(),
+                    voter=ballot.voter,
+                    snapshot=snapshot,
+                    suspicion_override=None,
+                )
+                for ballot in inputs.ballots
+            }
+            for snapshot in (False, True)
+        },
+    )
+
+
+def test_a_line_reaches_only_a_voter_who_voted_to_eject() -> None:
+    turns = _pair_transcript(("WEST_HALL", 14), ("ADMIN", 15))
+    unvoted = _case_of(_inputs(*turns, ejected=_SUBJECT))
+    assert not unvoted.check("a").reaches and not unvoted.check("c").reaches
+    voted = _case_of(
+        _inputs(*turns, ejected=_SUBJECT, ballots=(_ballot("p-3", _SUBJECT, None),))
+    )
+    assert voted.check("a").reaches and voted.check("c").reaches
+
+
+def test_a_button_meetings_ejected_opener_is_no_reporter() -> None:
+    turns = _pair_transcript(("WEST_HALL", 14), ("ADMIN", 15))
+    ballots = (_ballot("p-3", "p-1", None),)
+    button = _inputs(*turns, ejected="p-1", ballots=ballots)
+    assert not _case_of(button).reporter
+    assert _case_of(replace(button, trigger_kind="report")).reporter
+
+
+def test_an_insufficient_line_counts_only_over_two_rooms() -> None:
+    memory = _memory()
+    _see(memory, 4, "WEST_HALL")
+    _see(memory, 5, "ADMIN")
+    memory.episodic.append(
+        EpisodicEvent(
+            tick=6,
+            type="reported_testimony",
+            payload={
+                "speaker": "p-3",
+                "kind": "saw_player",
+                "subject": _SUBJECT,
+                "from_tick": 7,
+                "to_tick": 7,
+                "room": "the vents",
+            },
+            provenance="reported",
+        )
+    )
+    readings = {
+        snapshot: {
+            _VOTER: rcr.b_voter_reading(
+                memory, voter=_VOTER, snapshot=snapshot, suspicion_override=None
+            )
+        }
+        for snapshot in (False, True)
+    }
+    insufficient = [
+        line
+        for line in readings[False][_VOTER].lines
+        if line.verdict == "insufficient_timing"
+    ]
+    assert len(insufficient) == 2 and sum(line.two_rooms for line in insufficient) == 1
+    inputs = _inputs(
+        *_pair_transcript(("WEST_HALL", 4), ("ADMIN", 5)),
+        ejected=_SUBJECT,
+        ballots=(_ballot(_VOTER, _SUBJECT, "m-1:turn-0"),),
+    )
+    assert _case_of(inputs, readings).check("b").insufficient_lines == 1
+
+
+def test_vent_proof_names_a_living_player_and_a_witness_reports() -> None:
+    inputs = census_inputs(SAMPLES_9P2I)
+    game = next(g for g in inputs.games if g.seed == 28)
+    fact = game.meetings[0]
+    assert rcr.is_witness_meeting(fact, kills=game.kills, previous_tick=None)
+    button = replace(fact, trigger_kind="emergency")
+    assert not rcr.is_witness_meeting(button, kills=game.kills, previous_tick=None)
+    living = next(iter(fact.living))
+    proof = replace(fact, vent_flag_subjects=(frozenset({living}),))
+    assert rcr.meeting_kind(proof) == "report_vent_proof"
+    dead = replace(fact, vent_flag_subjects=(frozenset({"p-gone"}),))
+    assert rcr.meeting_kind(dead) == "report_no_vent_proof"
+
+
+def test_a_census_that_names_a_different_meeting_raises() -> None:
+    game = _r2_game(_RUN_SEED)
+    renamed = replace(
+        game, meetings=(replace(game.meetings[0], meeting_id="elsewhere"),)
+    )
+    with pytest.raises(rcr.RouteCheckReplayError, match="read different meetings"):
+        rcr.read_game(
+            SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl",
+            label="r2",
+            game=renamed,
+            renderers=_canonical_renderers(),
+        )
+
+
+def test_a_census_of_other_seeds_raises(tmp_path: Path) -> None:
+    _game_copy(tmp_path, _RUN_SEED)
+    with pytest.raises(rcr.RouteCheckReplayError, match="hold different seeds"):
+        rcr.read_set(tmp_path, label="r2", census=census_inputs(SAMPLES_9P2I))
+
+
+def test_a_turn_text_written_into_the_json_fails_the_scan(
+    one_game_run: tuple[Path, Path, str],
+) -> None:
+    repo, out, sha = one_game_run
+    forbidden = _forbidden(repo, sha)
+    text = next(
+        turn.free_text
+        for entry in read_all_entries(SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl")
+        if (transcript := getattr(entry, "transcript", None)) is not None
+        for turn in transcript.turns
+        if len(turn.free_text) >= 40
+    )
+    payload = json.loads((out / "results.json").read_text())
+    payload["note"] = text
+    with pytest.raises(rcr.RouteCheckReplayError, match="carries recorded text"):
+        rcr.scan_outputs((rcr.serialize(payload),), forbidden)
+
+
+def test_a_run_holds_its_outputs_to_every_travel_row_it_read(
+    one_game_run: tuple[Path, Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo, _, sha = one_game_run
+    source = rcr.resolve_column(
+        repo, rcr.ColumnRequest("r2", sha, "replays/samples/9p2i")
+    )
+    _, forbidden = rcr.run_columns(repo, [source])
+    rows = [text for text in forbidden if text.startswith("Travel check for")]
+    assert rows
+    real = rcr.render_report
+
+    def leaking(payload: Mapping[str, object]) -> str:
+        return real(payload) + rows[0] + "\n"
+
+    monkeypatch.setattr(rcr, "render_report", leaking)
+    with pytest.raises(rcr.RouteCheckReplayError, match="carries recorded text"):
+        rcr.outputs_for(repo, [source])
+
+
+def test_a_report_that_differs_from_its_recomputation_fails_check(
+    one_game_run: tuple[Path, Path, str],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo, out, _ = one_game_run
+    report = tmp_path / "report.md"
+    report.write_text((out / "report.md").read_text().replace("Column r2", "Column r9"))
+    code = rcr.main(
+        [
+            "--check",
+            "--json",
+            str(out / "results.json"),
+            "--report",
+            str(report),
+            "--repo",
+            str(repo),
+        ]
+    )
+    assert code == 1
+    assert "the recomputed report differs" in capsys.readouterr().err
