@@ -23,7 +23,8 @@ from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Final
+from types import SimpleNamespace
+from typing import Any, Final, cast
 
 import pytest
 from hypothesis import given, settings
@@ -646,12 +647,14 @@ def test_an_unchanged_copy_of_a_game_reads_cleanly(tmp_path: Path) -> None:
     assert len(records) == len(_r2_game(_WALK_SEED).meetings)
 
 
-def _flip_in_line(path: Path, *, kind: str, key: str) -> None:
-    """Swap the case of one letter inside the first ``key`` value of the first ``kind`` line."""
+def _flip_in_line(path: Path, *, kind: str, key: str, after_tick: int = -1) -> None:
+    """Swap the case of one letter inside the first ``key`` value of the first
+    ``kind`` line later than ``after_tick``."""
 
     lines = path.read_text().splitlines(keepends=True)
     for number, line in enumerate(lines):
-        if json.loads(line).get("kind", "tick") != kind:
+        record = json.loads(line)
+        if record.get("kind", "tick") != kind or record["tick"] <= after_tick:
             continue
         start = line.index(f'"{key}":') + len(key) + 3
         position = next(
@@ -699,6 +702,65 @@ def test_a_state_hash_the_walk_cannot_reproduce_raises(tmp_path: Path) -> None:
         )
 
 
+#: Seed 1's meetings sit at ticks 10, 29 and 41: a flip after tick 29 lands in
+#: the walk toward its third meeting, index 2.
+_SECOND_MEETING_TICK: Final[int] = 29
+
+
+def test_a_state_hash_flipped_after_the_second_meeting_names_the_third(
+    tmp_path: Path,
+) -> None:
+    copy = _game_copy(tmp_path, _WALK_SEED)
+    _flip_in_line(copy, kind="tick", key="state_hash", after_tick=_SECOND_MEETING_TICK)
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^r1 seed 1 meeting 2: the walk did not reproduce the recording \(",
+    ):
+        rcr.read_game(
+            copy,
+            label="r1",
+            game=_r2_game(_WALK_SEED),
+            renderers=_canonical_renderers(),
+        )
+
+
+def test_a_prompt_flipped_in_the_third_meeting_names_it(tmp_path: Path) -> None:
+    copy = _game_copy(tmp_path, _WALK_SEED)
+    _flip_in_line(copy, kind="meeting", key="prompt", after_tick=_SECOND_MEETING_TICK)
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^r1 seed 1 meeting 2: \d+ recorded prompt\(s\) were not re-rendered "
+        r"by the walk$",
+    ):
+        rcr.read_game(
+            copy,
+            label="r1",
+            game=_r2_game(_WALK_SEED),
+            renderers=_canonical_renderers(),
+        )
+
+
+def test_a_missed_prompt_count_is_the_meetings_own(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def meeting(recorded: Sequence[str], hit: Sequence[str]) -> SimpleNamespace:
+        return SimpleNamespace(
+            entry=SimpleNamespace(
+                llm_calls=[SimpleNamespace(prompt=prompt) for prompt in recorded]
+            ),
+            hit_prompts=frozenset(hit),
+        )
+
+    walked = (meeting(("a", "b"), ("a", "b")), meeting(("a", "b", "c"), ("a",)))
+    monkeypatch.setattr(rcr, "walk_replay_meetings", lambda *a, **k: iter(walked))
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^r1 seed 7 meeting 1: 2 recorded prompt\(s\) were not re-rendered "
+        r"by the walk$",
+    ):
+        list(rcr.walk_game(Path("unread.jsonl"), label="r1", seed=7, renderers={}))
+
+
 def test_a_census_with_one_meeting_removed_raises() -> None:
     game = _r2_game(_WALK_SEED)
     short = replace(game, meetings=game.meetings[:-1])
@@ -717,7 +779,8 @@ def test_a_census_with_one_meeting_more_raises() -> None:
     game = _r2_game(_RUN_SEED)
     longer = replace(game, meetings=(*game.meetings, game.meetings[-1]))
     with pytest.raises(
-        rcr.RouteCheckReplayError, match=r"r2 seed 2 meeting 1: the census holds 2"
+        rcr.RouteCheckReplayError,
+        match=r"^r2 seed 2 meeting 1: the census holds 2 meetings and the walk read 1$",
     ):
         rcr.read_game(
             SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl",
@@ -825,7 +888,11 @@ def _first_meeting(seed: int) -> Any:
 def test_a_meeting_the_walk_threaded_no_trigger_or_ballot_for_raises() -> None:
     meeting = _first_meeting(_RUN_SEED)
     rcr.meeting_inputs(meeting, regroup_ticks=frozenset())
-    with pytest.raises(rcr.RouteCheckReplayError, match="threaded no trigger"):
+    assert meeting.meeting_id == "headless-seed-2:meeting-0"
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^headless-seed-2:meeting-0: the walk threaded no trigger$",
+    ):
         rcr.meeting_inputs(
             replace(meeting, trigger_kind=None), regroup_ticks=frozenset()
         )
@@ -834,6 +901,23 @@ def test_a_meeting_the_walk_threaded_no_trigger_or_ballot_for_raises() -> None:
             replace(
                 meeting,
                 renders=tuple(r for r in meeting.renders if r.kind != "vote_ballot"),
+            ),
+            regroup_ticks=frozenset(),
+        )
+    unrendered = meeting.participants[3].agent_id
+    assert unrendered not in {_VOTER, meeting.participants[0].agent_id}
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=rf"^headless-seed-2:meeting-0: no ballot render for {unrendered}$",
+    ):
+        rcr.meeting_inputs(
+            replace(
+                meeting,
+                renders=tuple(
+                    r
+                    for r in meeting.renders
+                    if r.kind != "vote_ballot" or r.agent_id != unrendered
+                ),
             ),
             regroup_ticks=frozenset(),
         )
@@ -1019,7 +1103,9 @@ def test_the_s9_agreement_holds_at_the_committed_figure() -> None:
 @pytest.mark.parametrize("found", ((12, 90), (14, 90), (13, 89)))
 def test_a_different_s9_figure_stops_the_run(found: tuple[int, int]) -> None:
     with pytest.raises(
-        rcr.RouteCheckReplayError, match="the committed cells say 13 of 90"
+        rcr.RouteCheckReplayError,
+        match=rf"^s9: \(a\) as built reads {found[0]} of {found[1]} ejections with "
+        r"a walkable pair; the committed cells say 13 of 90$",
     ):
         rcr.s9_agreement(_s9_counts(*found))
 
@@ -1236,6 +1322,16 @@ def test_a_claim_held_at_a_first_meeting_raises() -> None:
     ):
         rcr.require_no_claim_at_first_meeting(inputs)
     rcr.require_no_claim_at_first_meeting(replace(inputs, first_meeting=False))
+    named = replace(
+        inputs,
+        roster=frozenset({_VOTER, "p-7"}),
+        memories={_VOTER: _memory(), "p-7": memory},
+    )
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^voter p-7 holds a reported claim at a first meeting$",
+    ):
+        rcr.require_no_claim_at_first_meeting(named)
 
 
 def test_relabelling_marks_plain_sightings_only() -> None:
@@ -1894,7 +1990,11 @@ def test_a_shown_pair_resting_on_no_stated_pair_raises(
         return replace(ledger, rows=rows)
 
     monkeypatch.setattr(rcr, "build_testimony_ledger", fabricated)
-    with pytest.raises(rcr.RouteCheckReplayError, match="rests on no pair"):
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^subject p-5: a shown walkable pair rests on no pair of the stated "
+        r"path the ledger read$",
+    ):
         rcr.a_readings(rcr.ledger_call(inputs))
 
 
@@ -2002,6 +2102,13 @@ def test_an_input_of_a_kind_the_check_is_not_read_to_take_raises() -> None:
     with pytest.raises(rcr.RouteCheckReplayError, match="not read to take"):
         rcr._require_input_kinds(
             universe, paths, rcr.A_INPUT_KINDS - {"company"}, check="(a)"
+        )
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^\(c\) placed p-5 by an event of a kind it is not read to take$",
+    ):
+        rcr._require_input_kinds(
+            universe, paths, rcr.A_INPUT_KINDS - {"company"}, check="(c)"
         )
 
 
@@ -2145,10 +2252,43 @@ def test_a_census_that_names_a_different_meeting_raises() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("meeting_id", "elsewhere"),
+        ("opener", "p-gone"),
+        ("ejected", "p-gone"),
+        ("trigger_kind", "elsewhere"),
+    ),
+)
+def test_a_later_meeting_the_census_reads_differently_is_named(
+    field: str, value: str
+) -> None:
+    game = _r2_game(_WALK_SEED)
+    changes: dict[str, Any] = {field: value}
+    third = replace(game.meetings[2], **changes)
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^r1 seed 1 meeting 2: the census and the walk read different "
+        r"meetings$",
+    ):
+        rcr.read_game(
+            SAMPLES_9P2I / f"replay-seed-{_WALK_SEED}.jsonl",
+            label="r1",
+            game=replace(game, meetings=(*game.meetings[:2], third)),
+            renderers=_canonical_renderers(),
+        )
+
+
 def test_a_census_of_other_seeds_raises(tmp_path: Path) -> None:
     _game_copy(tmp_path, _RUN_SEED)
     with pytest.raises(rcr.RouteCheckReplayError, match="hold different seeds"):
         rcr.read_set(tmp_path, label="r2", census=census_inputs(SAMPLES_9P2I))
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^r1: the census and the set hold different seeds$",
+    ):
+        rcr.read_set(tmp_path, label="r1", census=census_inputs(SAMPLES_9P2I))
 
 
 def test_a_turn_text_written_into_the_json_fails_the_scan(
@@ -2285,3 +2425,132 @@ def test_charges_are_counted_for_living_targets_only() -> None:
         living, seed=0, index=1, tick=15, kind="button", witness_meeting=False
     )
     assert (record.charges, record.charges_on_reconcilable_pair) == (1, 1)
+
+
+# ---------------------------------------------------------------------------
+# Planted cases review round 1 called for
+# ---------------------------------------------------------------------------
+
+
+def test_a_flag_whose_second_event_places_only_another_player_is_no_charge() -> None:
+    turns = (
+        _turn(
+            0,
+            "p-1",
+            observations=(_saw(_SUBJECT, "WEST_HALL", 14),),
+            claims=(_accuses(_SUBJECT),),
+        ),
+        _turn(1, "p-3", observations=(_saw("p-7", "ADMIN", 15),)),
+    )
+    flag = ContradictionRef(
+        contradiction_id="c-1",
+        kind="alibi_vs_sighting",
+        event_a_id="turn:m-1:turn-0:obs:0",
+        event_b_id="turn:m-1:turn-1:obs:0",
+        subjects=(_SUBJECT,),
+        description="planted",
+    )
+    universe = rcr.spoken_placements(MeetingTranscript(turns=turns))
+    placed = {(spot.event_id, spot.player) for spot in universe}
+    assert (flag.event_a_id, _SUBJECT) in placed
+    assert (flag.event_b_id, "p-7") in placed
+    assert (flag.event_b_id, _SUBJECT) not in placed
+    assert (
+        rcr.charges_against(
+            _SUBJECT, ballots=(), contradictions=(flag,), universe=universe
+        )
+        == ()
+    )
+    inputs = _readable(_inputs(*turns, contradictions=(flag,)))
+    record, _ = rcr.read_meeting(
+        inputs, seed=0, index=1, tick=15, kind="button", witness_meeting=False
+    )
+    assert record.charges == 0
+
+
+def test_a_rerender_that_is_not_the_ballots_block_names_its_voter() -> None:
+    inputs = _readable(_inputs(*_pair_transcript(("WEST_HALL", 14), ("ADMIN", 15))))
+    rcr.require_faithful_rerender(inputs)
+    assert sorted(inputs.roster)[-1] == "p-7"
+    prompts = {**inputs.ballot_prompts, "p-7": ("<memory>\nanother block\n</memory>",)}
+    with pytest.raises(
+        rcr.RouteCheckReplayError,
+        match=r"^voter p-7: the memory re-render is not the ballot's memory block$",
+    ):
+        rcr.require_faithful_rerender(replace(inputs, ballot_prompts=prompts))
+
+
+def test_the_json_labels_b_snapshot_an_approximation() -> None:
+    committed = json.loads(_COMMITTED_JSON.read_text())["checks"]
+    assert committed == rcr.checks_payload()
+    built = cast(dict[str, Any], rcr.build_payload([])["checks"])
+    for checks in (committed, built):
+        assert set(checks) == set(rcr.CHECKS)
+        approximations = {c for c, label in checks.items() if label["approximation"]}
+        assert approximations == {"b_snapshot"}
+        snapshot = checks["b_snapshot"]
+        assert snapshot["name"] == "(b-snapshot), approximation"
+        assert snapshot["approximates"].startswith(
+            "the temporal observation delivery that evidence version 2 requires"
+        )
+        assert all(
+            label["approximates"] is None
+            for check, label in checks.items()
+            if check != "b_snapshot"
+        )
+
+
+def test_the_report_names_each_check_as_the_json_does() -> None:
+    payload = json.loads(_COMMITTED_JSON.read_text())
+    report = rcr.render_report(payload)
+    named = report.count("(b-snapshot), approximation")
+    assert named > 0
+    payload["checks"]["b_snapshot"]["name"] = "(b-snapshot) renamed"
+    renamed = rcr.render_report(payload)
+    assert "(b-snapshot), approximation" not in renamed
+    assert renamed.count("(b-snapshot) renamed") == named
+
+
+#: An r2 game whose recorded ballots and turns hold non-ASCII text, which the
+#: JSON writes escaped.
+_ESCAPED_SEED: Final[int] = 12
+
+
+def _escaped_recorded_texts(directory: Path) -> tuple[frozenset[str], dict[str, str]]:
+    """The scan set of one game, and a recorded rationale and turn text the JSON escapes."""
+
+    copy = _game_copy(directory, _ESCAPED_SEED)
+    entries = read_all_entries(copy)
+    texts = {
+        "rationale": next(
+            ballot.rationale_text
+            for entry in entries
+            for ballot in getattr(entry, "ballots", ())
+            if len(ballot.rationale_text) >= 40 and not ballot.rationale_text.isascii()
+        ),
+        "turn text": next(
+            turn.free_text
+            for entry in entries
+            if (transcript := getattr(entry, "transcript", None)) is not None
+            for turn in transcript.turns
+            if len(turn.free_text) >= 40 and not turn.free_text.isascii()
+        ),
+    }
+    return rcr.forbidden_strings(directory), texts
+
+
+@pytest.mark.parametrize("which", ("rationale", "turn text"))
+def test_a_recorded_text_the_json_escapes_fails_the_scan(
+    tmp_path: Path, which: str
+) -> None:
+    forbidden, texts = _escaped_recorded_texts(tmp_path)
+    text = texts[which]
+    payload = json.loads(_COMMITTED_JSON.read_text())
+    payload["note"] = text
+    written = rcr.serialize(payload)
+    escaped_only = text not in written and json.dumps(text)[1:-1] in written
+    assert escaped_only, "the planted text reaches the JSON only escaped"
+    with pytest.raises(rcr.RouteCheckReplayError, match="carries recorded text"):
+        rcr.scan_outputs((written,), forbidden)
+    with pytest.raises(rcr.RouteCheckReplayError, match="carries recorded text"):
+        rcr.scan_outputs((f"# report\n\n{text}\n",), forbidden)
