@@ -12,86 +12,53 @@ Without **argmax-independence** the headline certifies an arithmetic aggregator 
 
 ## Recording provenance
 
-These four sets are one era — baseline 9, recorded after the substrate wave (the route claim, the grounded SKIP with its labelling guards, and the weighing channel) by [the process re-record](../audits/audit-2026-09-22-process-rerecord.md). They are labelled, never averaged across a boundary: the column on the recordings made before that wave is committed in that record's section 1, the SKIP row read 0 there by instruction, and row 3's claims became routes across the same line, so no row pools with that column.
+The four sets span 2 recorded eras, grouped by the era registry (`eval/eras.py`). An era is pooled only with itself and is never averaged across a boundary:
 
-* `replays/ml_corpus/9p2i`
-* `replays/samples/9p2i`
-* `replays/ml_corpus/4p1i`
-* `replays/samples/4p1i`
+* **baseline-9**, recorded 2026-09-22: `replays/ml_corpus/9p2i`, `replays/ml_corpus/4p1i`, `replays/samples/4p1i`. Owning record: [`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md).
+* **stage-b-r2**, recorded 2026-10-01: `replays/samples/9p2i`. Owning record: [`audits/audit-2026-10-01-stage-b-r2.md`](../audits/audit-2026-10-01-stage-b-r2.md).
 
-Report format version 2; scorecard schema version 1; decision date 2026-09-19.
+The baseline-9 sets are the process re-record made after the substrate wave (the route claim, the grounded SKIP with its labelling guards, and the weighing channel); the column on the recordings made before that wave is committed in that record's section 1, the SKIP row read 0 there by instruction, and row 3's claims became routes across the same line, so no row pools with that column. A set whose bytes replaced an earlier recording carries that recording's published rows as a dated before column, read from [`process-scorecard-before.json`](process-scorecard-before.json) and never recomputed.
 
-## Pooled
+Report format version 2; scorecard schema version 2; decision date 2026-09-19.
 
-### pooled: all four committed sets
+## Pooled within an era
 
-300 games, 676 meetings, 3630 ballots (2098 EJECT, 1532 SKIP). Sources: `replays/ml_corpus/9p2i`, `replays/samples/9p2i`, `replays/ml_corpus/4p1i`, `replays/samples/4p1i`.
+### pooled: the baseline-9 sets
 
-| # | row | value |
-| --- | --- | --- |
-| 1 | grounded-decision rate, EJECT | 2083/2098 = 0.9929 |
-| 1 | grounded-decision rate, SKIP | 351/1532 = 0.2291 |
-| 1 | grounded-decision rate, all ballots | 2434/3630 = 0.6705 |
-| 2 | argmax-independence: deviating EJECTs | 178/1775 = 10.0% |
-| 2 | argmax-independence: role-correct, followers vs deviators | 1537/1597 = 96.2% vs 17/178 = 9.6% (chance 31.5%) |
-| 3 | manufactured-contradiction rate | 0/74 = 0.0000 (not evaluable 74) |
-| 4 | unexplained-decision rate | 17/3630 = 0.0047 |
-| 5 | evidence-quality mix | contradiction_flag 5, first_hand 70, hearsay 10, vent_flag 326 over 411 ejections |
-| 6 | rationale faithfulness (TOKENS) | 3015/3017 = 0.9993 (not evaluable 613) |
-| 7 | agent-authored share | 3609/3630 = 0.9942 |
-| 8 | wrong-but-believable rate | 462/2098 = 0.2202 — reported, never penalised |
-| 9 | role-correct ejection rate | 369/411 = 0.8978 — reported beside, never a gate |
-
-Row 2 detail: followers 1597, deviators 178, ties excluded 140, no rendered row inside the valid-target list 0. In meetings where the engine minted no contradiction at all, role-correct: followers 203/254, deviators 8/143.
-
-Row 3 detail: manufactured flags contradicting an account the engine route makes true at EVERY tick, 0 of 0; the rest are the span-envelope artifact proper.
-
-Row 3 claim census: 1021 self-alibi claims (1020 spanning more than one tick), 11 false under the envelope test of which 11 are multi-tick, 0 false under the strict test (in that room at NO tick the claim covers), 0 unresolvable, and 0 further alibi claims name another player and are out of the census.
-
-Row 4 detail: EJECT ballots whose citation does not resolve, 0; SKIP ballots naming no player at all, 17 (1513 SKIPs carry considered_alternatives and 929 name a player in prose).
-
-Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 2/5, first_hand 36/70, hearsay 5/10, vent_flag 326/326.
-
-Row 6 detail: 2 of 7458 extracted tokens are absent from what the voter held.
-
-Row 7 detail: typed guard rewrites invalid_target 8, teammate_coerced 13; 0 unwound from a marker with no typed reason; 5 citation nulled, target intact; redirect-marker census 0 (0 EJECT, 0 coerced SKIP).
-
-Context: impostor alibis 145/155 survived contradiction detection; reporter slots 37/623 ejected against innocent non-reporter slots 4/1841.
-
-### pooled: the two 9p2i sets
-
-200 games, 594 meetings, 3384 ballots (1983 EJECT, 1401 SKIP). Sources: `replays/ml_corpus/9p2i`, `replays/samples/9p2i`.
+250 games, 531 meetings, 2785 ballots (1602 EJECT, 1183 SKIP). Sources: `replays/ml_corpus/9p2i`, `replays/ml_corpus/4p1i`, `replays/samples/4p1i`.
 
 | # | row | value |
 | --- | --- | --- |
-| 1 | grounded-decision rate, EJECT | 1970/1983 = 0.9934 |
-| 1 | grounded-decision rate, SKIP | 309/1401 = 0.2206 |
-| 1 | grounded-decision rate, all ballots | 2279/3384 = 0.6735 |
-| 2 | argmax-independence: deviating EJECTs | 178/1677 = 10.6% |
-| 2 | argmax-independence: role-correct, followers vs deviators | 1440/1499 = 96.1% vs 17/178 = 9.6% (chance 30.4%) |
-| 3 | manufactured-contradiction rate | 0/74 = 0.0000 (not evaluable 74) |
-| 4 | unexplained-decision rate | 17/3384 = 0.0050 |
-| 5 | evidence-quality mix | contradiction_flag 5, first_hand 67, hearsay 10, vent_flag 281 over 363 ejections |
-| 6 | rationale faithfulness (TOKENS) | 2843/2844 = 0.9996 (not evaluable 540) |
-| 7 | agent-authored share | 3363/3384 = 0.9938 |
-| 8 | wrong-but-believable rate | 446/1983 = 0.2249 — reported, never penalised |
-| 9 | role-correct ejection rate | 322/363 = 0.8871 — reported beside, never a gate |
+| 1 | grounded-decision rate, EJECT | 1589/1602 = 0.9919 |
+| 1 | grounded-decision rate, SKIP | 272/1183 = 0.2299 |
+| 1 | grounded-decision rate, all ballots | 1861/2785 = 0.6682 |
+| 2 | argmax-independence: deviating EJECTs | 147/1362 = 10.8% |
+| 2 | argmax-independence: role-correct, followers vs deviators | 1178/1215 = 97.0% vs 14/147 = 9.5% (chance 32.0%) |
+| 3 | manufactured-contradiction rate | 0/57 = 0.0000 (not evaluable 57) |
+| 4 | unexplained-decision rate | 12/2785 = 0.0043 |
+| 5 | evidence-quality mix | contradiction_flag 3, first_hand 54, hearsay 8, vent_flag 256 over 321 ejections |
+| 6 | rationale faithfulness (TOKENS) | 2307/2309 = 0.9991 (not evaluable 476) |
+| 7 | agent-authored share | 2768/2785 = 0.9939 |
+| 8 | wrong-but-believable rate | 343/1602 = 0.2141 — reported, never penalised |
+| 9 | role-correct ejection rate | 288/321 = 0.8972 — reported beside, never a gate |
 
-Row 2 detail: followers 1499, deviators 178, ties excluded 139, no rendered row inside the valid-target list 0. In meetings where the engine minted no contradiction at all, role-correct: followers 196/246, deviators 8/143.
+Row 2 detail: followers 1215, deviators 147, ties excluded 103, no rendered row inside the valid-target list 0. In meetings where the engine minted no contradiction at all, role-correct: followers 151/183, deviators 5/118.
 
 Row 3 detail: manufactured flags contradicting an account the engine route makes true at EVERY tick, 0 of 0; the rest are the span-envelope artifact proper.
 
-Row 3 claim census: 955 self-alibi claims (954 spanning more than one tick), 11 false under the envelope test of which 11 are multi-tick, 0 false under the strict test (in that room at NO tick the claim covers), 0 unresolvable, and 0 further alibi claims name another player and are out of the census.
+Row 3 claim census: 781 self-alibi claims (781 spanning more than one tick), 9 false under the envelope test of which 9 are multi-tick, 0 false under the strict test (in that room at NO tick the claim covers), 0 unresolvable, and 0 further alibi claims name another player and are out of the census.
 
-Row 4 detail: EJECT ballots whose citation does not resolve, 0; SKIP ballots naming no player at all, 17 (1382 SKIPs carry considered_alternatives and 872 name a player in prose).
+Row 4 detail: EJECT ballots whose citation does not resolve, 0; SKIP ballots naming no player at all, 12 (1169 SKIPs carry considered_alternatives and 714 name a player in prose).
 
-Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 2/5, first_hand 34/67, hearsay 5/10, vent_flag 281/281.
+Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 1/3, first_hand 26/54, hearsay 5/8, vent_flag 256/256.
 
-Row 6 detail: 1 of 7068 extracted tokens are absent from what the voter held.
+Row 6 detail: 2 of 5736 extracted tokens are absent from what the voter held.
 
-Row 7 detail: typed guard rewrites invalid_target 8, teammate_coerced 13; 0 unwound from a marker with no typed reason; 5 citation nulled, target intact; redirect-marker census 0 (0 EJECT, 0 coerced SKIP).
+Row 7 detail: typed guard rewrites invalid_target 5, teammate_coerced 12; 0 unwound from a marker with no typed reason; 3 citation nulled, target intact; redirect-marker census 0 (0 EJECT, 0 coerced SKIP).
 
-Context: impostor alibis 143/153 survived contradiction detection; reporter slots 36/551 ejected against innocent non-reporter slots 4/1769.
+Context: impostor alibis 106/114 survived contradiction detection; reporter slots 30/488 ejected against innocent non-reporter slots 2/1390.
+
+The stage-b-r2 era holds one set, `replays/samples/9p2i`; its rows are under Per set.
 
 ## Per set
 
@@ -132,38 +99,40 @@ Context: impostor alibis 104/112 survived contradiction detection; reporter slot
 
 ### samples/9p2i
 
-50 games, 145 meetings, 845 ballots (496 EJECT, 349 SKIP). Sources: `replays/samples/9p2i`.
+50 games, 117 meetings, 691 ballots (410 EJECT, 281 SKIP). Sources: `replays/samples/9p2i`.
 
-| # | row | value |
-| --- | --- | --- |
-| 1 | grounded-decision rate, EJECT | 494/496 = 0.9960 |
-| 1 | grounded-decision rate, SKIP | 79/349 = 0.2264 |
-| 1 | grounded-decision rate, all ballots | 573/845 = 0.6781 |
-| 2 | argmax-independence: deviating EJECTs | 31/413 = 7.5% |
-| 2 | argmax-independence: role-correct, followers vs deviators | 359/382 = 94.0% vs 3/31 = 9.7% (chance 29.8%) |
-| 3 | manufactured-contradiction rate | 0/17 = 0.0000 (not evaluable 17) |
-| 4 | unexplained-decision rate | 5/845 = 0.0059 |
-| 5 | evidence-quality mix | contradiction_flag 2, first_hand 16, hearsay 2, vent_flag 70 over 90 ejections |
-| 6 | rationale faithfulness (TOKENS) | 708/708 = 1.0000 (not evaluable 137) |
-| 7 | agent-authored share | 841/845 = 0.9953 |
-| 8 | wrong-but-believable rate | 119/496 = 0.2399 — reported, never penalised |
-| 9 | role-correct ejection rate | 81/90 = 0.9000 — reported beside, never a gate |
+Before (baseline-9, as published at `d41c9006`): 50 games, 145 meetings, 845 ballots (496 EJECT, 349 SKIP).
 
-Row 2 detail: followers 382, deviators 31, ties excluded 37, no rendered row inside the valid-target list 0. In meetings where the engine minted no contradiction at all, role-correct: followers 52/71, deviators 3/25.
+| # | row | before: baseline-9, as published at `d41c9006` | value |
+| --- | --- | --- | --- |
+| 1 | grounded-decision rate, EJECT | 494/496 = 0.9960 | 407/410 = 0.9927 |
+| 1 | grounded-decision rate, SKIP | 79/349 = 0.2264 | 44/281 = 0.1566 |
+| 1 | grounded-decision rate, all ballots | 573/845 = 0.6781 | 451/691 = 0.6527 |
+| 2 | argmax-independence: deviating EJECTs | 31/413 = 7.5% | 65/292 = 22.3% |
+| 2 | argmax-independence: role-correct, followers vs deviators | 359/382 = 94.0% vs 3/31 = 9.7% (chance 29.8%) | 215/227 = 94.7% vs 4/65 = 6.2% (chance 34.0%) |
+| 3 | manufactured-contradiction rate | 0/17 = 0.0000 (not evaluable 17) | 1/15 = 0.0667 (not evaluable 14) |
+| 4 | unexplained-decision rate | 5/845 = 0.0059 | 11/691 = 0.0159 |
+| 5 | evidence-quality mix | contradiction_flag 2, first_hand 16, hearsay 2, vent_flag 70 over 90 ejections | contradiction_flag 2, first_hand 39, hearsay 1, vent_flag 24 over 66 ejections |
+| 6 | rationale faithfulness (TOKENS) | 708/708 = 1.0000 (not evaluable 137) | 580/580 = 1.0000 (not evaluable 111) |
+| 7 | agent-authored share | 841/845 = 0.9953 | 674/691 = 0.9754 |
+| 8 | wrong-but-believable rate | 119/496 = 0.2399 — reported, never penalised | 189/410 = 0.4610 — reported, never penalised |
+| 9 | role-correct ejection rate | 81/90 = 0.9000 — reported beside, never a gate | 44/66 = 0.6667 — reported beside, never a gate |
 
-Row 3 detail: manufactured flags contradicting an account the engine route makes true at EVERY tick, 0 of 0; the rest are the span-envelope artifact proper.
+Row 2 detail: followers 227, deviators 65, ties excluded 7, no rendered row inside the valid-target list 0. In meetings where the engine minted no contradiction at all, role-correct: followers 100/108, deviators 3/63.
 
-Row 3 claim census: 240 self-alibi claims (239 spanning more than one tick), 2 false under the envelope test of which 2 are multi-tick, 0 false under the strict test (in that room at NO tick the claim covers), 0 unresolvable, and 0 further alibi claims name another player and are out of the census.
+Row 3 detail: manufactured flags contradicting an account the engine route makes true at EVERY tick, 1 of 1; the rest are the span-envelope artifact proper.
 
-Row 4 detail: EJECT ballots whose citation does not resolve, 0; SKIP ballots naming no player at all, 5 (344 SKIPs carry considered_alternatives and 215 name a player in prose).
+Row 3 claim census: 310 self-alibi claims (308 spanning more than one tick), 2 false under the envelope test of which 2 are multi-tick, 0 false under the strict test (in that room at NO tick the claim covers), 0 unresolvable, and 0 further alibi claims name another player and are out of the census.
 
-Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 1/2, first_hand 10/16, hearsay 0/2, vent_flag 70/70.
+Row 4 detail: EJECT ballots whose citation does not resolve, 0; SKIP ballots naming no player at all, 11 (269 SKIPs carry considered_alternatives and 165 name a player in prose).
 
-Row 6 detail: 0 of 1722 extracted tokens are absent from what the voter held.
+Row 5 detail (role-correct beside each band, gating nothing): contradiction_flag 0/2, first_hand 20/39, hearsay 0/1, vent_flag 24/24.
 
-Row 7 detail: typed guard rewrites invalid_target 3, teammate_coerced 1; 0 unwound from a marker with no typed reason; 2 citation nulled, target intact; redirect-marker census 0 (0 EJECT, 0 coerced SKIP).
+Row 6 detail: 0 of 1512 extracted tokens are absent from what the voter held.
 
-Context: impostor alibis 39/41 survived contradiction detection; reporter slots 7/135 ejected against innocent non-reporter slots 2/451.
+Row 7 detail: typed guard rewrites invalid_target 1, teammate_coerced 16; 0 unwound from a marker with no typed reason; 0 citation nulled, target intact; redirect-marker census 0 (0 EJECT, 0 coerced SKIP).
+
+Context: impostor alibis 36/36 survived contradiction detection; reporter slots 17/114 ejected against innocent non-reporter slots 5/367.
 
 ### ml_corpus/4p1i
 

@@ -145,7 +145,7 @@ def test_one_edited_cell_turns_check_red(
     published = root / command.JSON_PATH
     original = published.read_text(encoding="utf-8")
     payload = json.loads(original)
-    payload["pooled"]["cells"]["impostor_wins"]["numerator"] -= 1
+    payload["sets"][0]["cells"]["impostor_wins"]["numerator"] -= 1
     published.write_text(
         json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
         encoding="utf-8",
@@ -473,10 +473,11 @@ def test_set_dir_lets_a_failure_other_than_a_breach_propagate(
 def test_main_publishes_and_checks_the_tree_it_is_given(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Planted: a four-player set beside the nine-player one, so the pools differ.
+    """Planted: two baseline-9 sets beside the promoted set, so only one era pools.
 
-    The printed summary names the all-sets pool: two games and three meetings,
-    where the nine-player pool holds one game and no meeting.
+    The printed summary adds every set (three games, three meetings) and names
+    both eras; the baseline-9 pool holds two games and three meetings, and the
+    one-set promoted era pools nothing.
     """
 
     from tests.eval.test_gameplay_census import meeting
@@ -485,6 +486,7 @@ def test_main_publishes_and_checks_the_tree_it_is_given(
     planted = census_from_inputs(
         [
             _planted_inputs(),
+            _planted_inputs(label="ml_corpus/4p1i"),
             _planted_inputs(
                 meeting(opener="p-1", living=held),
                 meeting(meeting_id="meeting-1", tick=30, opener="p-1", living=held),
@@ -493,8 +495,11 @@ def test_main_publishes_and_checks_the_tree_it_is_given(
             ),
         ]
     )
-    assert (planted.pooled.games, planted.pooled.meetings) == (2, 3)
-    assert (planted.pooled_9p2i.games, planted.pooled_9p2i.meetings) == (1, 0)
+    promoted, baseline_9 = planted.eras
+    assert (promoted.era_id, promoted.pooled) == ("stage-b-r2", None)
+    assert baseline_9.era_id == "baseline-9"
+    assert baseline_9.pooled is not None
+    assert (baseline_9.pooled.games, baseline_9.pooled.meetings) == (2, 3)
     received: list[Path] = []
 
     def computed(tree: Path, load: Any) -> GameplayCensus:
@@ -508,8 +513,9 @@ def test_main_publishes_and_checks_the_tree_it_is_given(
     assert command.main([]) == 0
     printed = capsys.readouterr().out
     assert printed == (
-        f"Wrote {command.MARKDOWN_PATH} and {command.JSON_PATH}: 2 games, "
-        "3 meetings; role-correctness is reported and gates nothing.\n"
+        f"Wrote {command.MARKDOWN_PATH} and {command.JSON_PATH}: 3 games, "
+        "3 meetings, eras stage-b-r2, baseline-9; role-correctness is reported "
+        "and gates nothing.\n"
     )
     assert (root / command.JSON_PATH).read_text(
         encoding="utf-8"
@@ -730,7 +736,7 @@ def test_a_table_out_of_its_scope_reads_n_a_and_in_scope_reads_its_count() -> No
 
     title = census.TABLES["trigger_tick_events_dropped_by_regroup"].title
     without = command.render_markdown(_planted())
-    assert _table_block(without, title) == ["| (none) | n/a | n/a | n/a |"]
+    assert _table_block(without, title) == ["| (none) | n/a |"]
     regroup_era = EraKey(
         settings=(("meeting_reset", "hub_with_grace"),),
         temporal_observation_version=None,
@@ -740,11 +746,11 @@ def test_a_table_out_of_its_scope_reads_n_a_and_in_scope_reads_its_count() -> No
     with_regroup = command.render_markdown(
         census_from_inputs([_planted_inputs(era=regroup_era)])
     )
-    assert _table_block(with_regroup, title) == ["| (none) | 0 | 0 | 0 |"]
+    assert _table_block(with_regroup, title) == ["| (none) | 0 |"]
     beneficiaries = census.TABLES["rebuttal_beneficiaries"].title
-    assert _table_block(without, beneficiaries) == ["| (none) | n/a | n/a | n/a |"]
+    assert _table_block(without, beneficiaries) == ["| (none) | n/a |"]
     thrown = census.TABLES["actions_thrown_away_on_trigger_ticks"].title
-    assert _table_block(without, thrown)[0] == "| move | 1 | 1 | 1 |"
+    assert _table_block(without, thrown)[0] == "| move | 1 |"
 
 
 def test_the_definitions_name_the_setting_a_scoped_count_needs() -> None:
@@ -769,27 +775,28 @@ def test_a_definition_names_its_guard_whatever_the_guard_reads() -> None:
 
     planted = _planted()
     key = "kills_seen_by_crew"
+    (section,) = planted.sets
     for guard, by_construction, sentence in (
         ("a = 1", None, " Zero by construction while `a = 1`."),
         ("a = 1", "a = 1", " Zero by construction while `a = 1`."),
         ("always", None, " Zero by construction in every recording."),
     ):
-        cell = planted.pooled.cells[key].model_copy(
+        cell = section.cells[key].model_copy(
             update={"guard": guard, "by_construction": by_construction}
         )
-        pooled = planted.pooled.model_copy(
-            update={"cells": {**planted.pooled.cells, key: cell}}
+        edited = section.model_copy(update={"cells": {**section.cells, key: cell}})
+        lines = command._definition_lines(
+            planted.model_copy(update={"sets": (edited,)})
         )
-        lines = command._definition_lines(planted.model_copy(update={"pooled": pooled}))
         line = next(item for item in lines if f"(`{key}`)." in item)
         assert sentence in line, (guard, by_construction)
 
 
 def test_the_page_renders_tables_and_their_not_evaluable_rows() -> None:
     page = command.render_markdown(_planted())
-    assert "| move | 1 | 1 | 1 |" in page
-    assert "| not evaluable | 1 | 1 | 1 |" in page
-    assert "| (none) | 0 | 0 | 0 |" in page
+    assert "| move | 1 |" in page
+    assert "| not evaluable | 1 |" in page
+    assert "| (none) | 0 |" in page
     assert "Zero by construction in every recording." in page
     assert "Zero by construction while `self_report = off and" in page
     assert (
@@ -813,17 +820,17 @@ def test_a_not_evaluable_row_shows_when_any_group_has_one() -> None:
     page = command.render_markdown(
         census_from_inputs(
             [
-                _planted_inputs(),
-                _planted_inputs(label="samples/4p1i", rows_without_dispositions=0),
+                _planted_inputs(label="samples/4p1i"),
+                _planted_inputs(label="ml_corpus/4p1i", rows_without_dispositions=0),
             ]
         )
     )
-    assert "| not evaluable | 1 | 1 | 1 | 0 |" in page
+    assert "| not evaluable | 1 | 1 | 0 |" in page
 
 
 def test_a_table_with_no_rows_lists_none_before_its_not_evaluable_row() -> None:
     page = command.render_markdown(census_from_inputs([_planted_inputs(discarded=())]))
-    assert "| (none) | 0 | 0 | 0 |\n| not evaluable | 1 | 1 | 1 |\n" in page
+    assert "| (none) | 0 |\n| not evaluable | 1 |\n" in page
 
 
 def test_the_era_lines_name_every_recorded_part_or_say_none() -> None:
@@ -845,7 +852,7 @@ def test_the_era_lines_name_every_recorded_part_or_say_none() -> None:
     assert "substrate flags on: absence_prior, temporal_observations; off: none;" in (
         stamped
     )
-    assert "held a meeting: none." in stamped
+    assert "held a meeting: none;" in stamped
     bare = era_text(
         EraKey(
             settings=(),
@@ -883,7 +890,8 @@ def test_the_era_lines_list_settings_and_flags_in_name_order() -> None:
         prompt_stamps=None,
     )
     planted = census_from_inputs([_planted_inputs(era=unsorted_flags)])
-    pooled_era = planted.pooled.era.model_copy(
+    (section,) = planted.sets
+    set_era = section.era.model_copy(
         update={
             "settings": {
                 "vent_witness_rule": "physical",
@@ -892,7 +900,7 @@ def test_the_era_lines_list_settings_and_flags_in_name_order() -> None:
         }
     )
     reordered = planted.model_copy(
-        update={"pooled": planted.pooled.model_copy(update={"era": pooled_era})}
+        update={"sets": (section.model_copy(update={"era": set_era}),)}
     )
     text = "\n".join(command._era_lines(reordered))
     assert (
@@ -904,13 +912,18 @@ def test_the_era_lines_list_settings_and_flags_in_name_order() -> None:
     )
 
 
-def test_a_row_only_a_four_player_set_holds_is_published_for_every_group() -> None:
-    """Planted: only the four-player set throws a report away or lacks dispositions."""
+def test_a_row_only_one_set_holds_is_published_for_every_group() -> None:
+    """Planted: only one baseline-9 set throws a report away or lacks dispositions.
+
+    The columns run era by era in first-appearance order: the promoted set, then
+    the baseline-9 pool and its two sets; the row reads 0 in every other column.
+    """
 
     page = command.render_markdown(
         census_from_inputs(
             [
                 _planted_inputs(rows_without_dispositions=0),
+                _planted_inputs(label="ml_corpus/4p1i", rows_without_dispositions=0),
                 _planted_inputs(
                     label="samples/4p1i",
                     discarded=("move", "report"),
@@ -920,11 +933,31 @@ def test_a_row_only_a_four_player_set_holds_is_published_for_every_group() -> No
         )
     )
     thrown = census.TABLES["actions_thrown_away_on_trigger_ticks"].title
+    lines = page.splitlines()
+    assert lines[lines.index(f"**{thrown}.**") + 2] == (
+        "| row | samples/9p2i (stage-b-r2) | baseline-9, pooled | "
+        "ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) |"
+    )
     assert _table_block(page, thrown) == [
-        "| move | 2 | 1 | 1 | 1 |",
-        "| report | 1 | 0 | 0 | 1 |",
-        "| not evaluable | 2 | 0 | 0 | 2 |",
+        "| move | 1 | 2 | 1 | 1 |",
+        "| report | 0 | 1 | 0 | 1 |",
+        "| not evaluable | 0 | 2 | 0 | 2 |",
     ]
+
+
+def test_an_era_naming_a_set_the_census_does_not_hold_is_refused() -> None:
+    """Planted: the published era lists a set whose section is missing."""
+
+    planted = _planted()
+    (era,) = planted.eras
+    widened = era.model_copy(update={"sets": (*era.sets, "samples/4p1i")})
+    with pytest.raises(ValueError, match="the stage-b-r2 era names sets"):
+        command.render_markdown(planted.model_copy(update={"eras": (widened,)}))
+
+
+def test_a_census_with_no_set_has_no_cells_to_publish() -> None:
+    with pytest.raises(ValueError, match="no set has no cells"):
+        command.render_markdown(_planted().model_copy(update={"sets": (), "eras": ()}))
 
 
 def test_a_tables_rows_are_listed_numeric_first_then_alphabetically() -> None:

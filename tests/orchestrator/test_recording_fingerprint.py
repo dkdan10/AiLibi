@@ -33,9 +33,12 @@ _SAMPLES = _REPO_ROOT / "replays" / "samples"
 # The published fingerprints ``api.public_results._source_url`` maps to a source
 # URL. A pattern change that moved either one would silently republish a
 # different claim about which bytes the results came from.
-# Baseline 9; was 85fb119e... (9p2i) and 8bbf89bf... (4p1i) on baseline 8.
+# 4p1i at baseline 9; was 85fb119e... (9p2i) and 8bbf89bf... (4p1i) on
+# baseline 8. 9p2i holds candidate round 2's bytes since 2026-10-02, and its
+# fingerprint is the round's at d41c9006 (the in-tree experiment-config.json is
+# not a recording); it read cde794ab... on the baseline-9 bytes.
 _PUBLISHED_9P2I = (
-    "sha256:cde794abe57af44da0fd3e16652435b7b1af88aaf7310d495cf3108ae80cd09f"
+    "sha256:ebb629f67c36607e39733660db7e069729fff198adcf34c091a4d6252d796ae2"
 )
 _PUBLISHED_4P1I = (
     "sha256:2abab5c07eafb01c5efeef4d1234a77a6b57939a6923f3aee240349e0c0b1566"
@@ -64,6 +67,19 @@ def recording_dir(completed_recording: Path, tmp_path: Path) -> Path:
 def test_committed_sets_keep_their_source_fingerprint() -> None:
     assert recording_fingerprint(_SAMPLES / "9p2i") == _PUBLISHED_9P2I
     assert recording_fingerprint(_SAMPLES / "4p1i") == _PUBLISHED_4P1I
+
+
+def test_a_declared_experiment_config_is_not_a_recording(
+    recording_dir: Path,
+) -> None:
+    """The era's declared config sits beside the replays and moves nothing."""
+
+    before = recording_fingerprint(recording_dir)
+    shutil.copyfile(
+        _SAMPLES / "9p2i" / "experiment-config.json",
+        recording_dir / "experiment-config.json",
+    )
+    assert recording_fingerprint(recording_dir) == before
 
 
 def test_negative_seed_recording_changes_the_fingerprint(recording_dir: Path) -> None:

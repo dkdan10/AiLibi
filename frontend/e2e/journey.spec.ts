@@ -35,9 +35,11 @@ const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
  *
  * `want` names a specific card instead, matched on the pill's EXACT text. Exact
  * matters: `seed 2` is a prefix of `seed 23`, and a substring match would open
- * whichever of the two the strip happens to list first. The one caller that
- * passes it is the evidence guard's planted case, which needs the zero-flag game
- * specifically and no longer gets it from the head.
+ * whichever of the two the strip happens to list first. `set` lands on that
+ * set's strip through the set switch (`?set=`) instead of the served default.
+ * The one caller that passes them is the evidence guard's planted case, which
+ * needs a zero-flag game specifically: the one-card 9p2i strip has none, so it
+ * opens `4p1i` seed 11.
  *
  * The tour is marked seen before the first paint. Not because it is untested
  * territory to be avoided, but because on a virgin visit it AUTO-LOADS its own
@@ -52,8 +54,8 @@ const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
  * join: the card you click opens that seed's workspace.
  */
 //: The featured card's text, captured by `openFeaturedReplay` before the strip
-//: unmounts — the head's for the main leg, and seed 2's for the planted case
-//: that opens it by name. The evidence leg holds the rendered meeting to what
+//: unmounts — the head's for the main leg, and 4p1i seed 11's for the planted
+//: case that opens it by name. The evidence leg holds the rendered meeting to what
 //: that card PROMISES, in both directions, so a card and its game cannot drift
 //: apart.
 let headCardCopy = "";
@@ -63,11 +65,15 @@ let headCardCopy = "";
 // that changed copy or changed flags fail this check.
 const NO_FLAGGED_CONTRADICTIONS_PROMISE = /no flagged contradictions/i;
 
-async function openFeaturedReplay(page: Page, want: number | null = null): Promise<number> {
+async function openFeaturedReplay(
+  page: Page,
+  want: number | null = null,
+  set: string | null = null,
+): Promise<number> {
   await page.addInitScript((key) => {
     window.localStorage.setItem(key, "1");
   }, TOUR_SEEN_KEY);
-  await page.goto("/");
+  await page.goto(set === null ? "/" : `/?set=${set}`);
 
   const featured = page.getByRole("region", { name: "Featured games" });
   await expect(featured).toBeVisible();
@@ -573,13 +579,14 @@ test.describe("spectator journey", () => {
     // MISMATCH actually goes red — so both mismatches are constructed here
     // against the real rendered meeting, with no bytes and no copy touched.
     //
-    // 9p2i seed 2 is the zero-flag game, and it is no longer the head: the strip
-    // now leads with a game whose first meeting ejects on a role-proof flag
-    // (ReplayPicker.tsx above FEATURED_GAMES), so the main leg above exercises
-    // the "has evidence" branch and this one opens seed 2 by name to keep the
-    // "no evidence" branch covered. Both directions still run on every suite.
-    const seed = await openFeaturedReplay(page, 2);
-    expect(seed).toBe(2);
+    // The 9p2i strip is one card since 2026-10-02, a head whose first meeting
+    // ejects on a role-proof flag (ReplayPicker.tsx above FEATURED_GAMES), so
+    // the main leg above exercises the "has evidence" branch. This one opens
+    // 4p1i seed 11, whose card promises no flagged contradictions, through the
+    // set switch, to keep the "no evidence" branch covered. Both directions
+    // still run on every suite.
+    const seed = await openFeaturedReplay(page, 11, "4p1i");
+    expect(seed).toBe(11);
 
     await resetFocus(page);
     await page.keyboard.press("]");
@@ -794,7 +801,15 @@ test.describe("spectator journey", () => {
   });
 
   test("As-agent fog hides every omniscient-only fact", async ({ page }) => {
+    // The replay the app itself fetches when the head opens: the vent-route
+    // guard below holds the feed to its exit events.
+    const served = page.waitForResponse((response) =>
+      /\/replays\/headless-seed-\d+(?:\.json)?$/.test(new URL(response.url()).pathname),
+    );
     await openFeaturedReplay(page);
+    const replay = (await (await served).json()) as {
+      ticks: { events: { type: string; phase?: string; actor_id?: string; from_room_id?: string; to_room_id?: string }[] }[];
+    };
 
     const roster = page.getByRole("complementary");
     const perspective = page.locator('[aria-label^="Perspective:"]');
@@ -854,18 +869,28 @@ test.describe("spectator journey", () => {
     const omniscientBeats = omniscientRows.length;
     expect(omniscientBeats).toBeGreaterThan(0);
 
-    // No vent route may name the same room twice. On a real traversal the engine
+    // Every vent route is read off an EXIT event. On a real traversal the engine
     // repeats the SOURCE in the dive event's `to_room_id` — the destination is
     // only resolved on the exit event — so a route read off the dive renders
-    // `STORAGE → STORAGE`. Unit fixtures can encode the right byte shape, but
-    // only the committed corpus proves the shape; this is the guard that reads
-    // it. Vacuous on a game with no vents, which is the correct behaviour.
-    for (const row of omniscientRows) {
-      const route = /([A-Z_]+) → ([A-Z_]+)/.exec(row);
-      if (route !== null) {
-        expect(route[1]).not.toBe(route[2]);
-      }
-    }
+    // `STORAGE → STORAGE`. A same-room route is not the defect on its own: the
+    // shown 9-player set's impostors also look out and come back up where they
+    // dived (44 of its 72 exits), so the routes the feed renders are held, as a
+    // multiset, to the served exit events' own routes. Unit fixtures can encode
+    // the right byte shape, but only the committed corpus proves the shape; this
+    // is the guard that reads it. Vacuous on a game with no vents, which is the
+    // correct behaviour.
+    const renderedRoutes = omniscientRows
+      .map((row) => /(p-\d+) emerged from a vent · ([A-Z_]+) → ([A-Z_]+)/.exec(row))
+      .filter((route) => route !== null)
+      .map((route) => `${route[1]} ${route[2]} ${route[3]}`)
+      .sort();
+    const servedRoutes = replay.ticks
+      .flatMap((tick) => tick.events)
+      .filter((event) => event.type === "vent" && event.phase === "exit")
+      .map((event) => `${event.actor_id ?? ""} ${event.from_room_id ?? ""} ${event.to_room_id ?? ""}`)
+      .sort();
+    expect(renderedRoutes).toEqual(servedRoutes);
+    expect(omniscientRows.filter((row) => row.includes("→")).length).toBe(servedRoutes.length);
 
     await page.getByRole("button", { name: "As-agent" }).click();
     await expect(ticker(page)).toContainText(/as p-\d+ · fog/);

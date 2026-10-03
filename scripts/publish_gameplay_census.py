@@ -39,6 +39,7 @@ from _report_output import atomic_write_report, preflight_report_output  # noqa:
 from eval.gameplay_census import (  # noqa: E402
     HEADINGS,
     CensusCell,
+    CensusEra,
     CensusInputs,
     CensusSection,
     GameplayCensus,
@@ -87,12 +88,35 @@ def _value(cell: CensusCell) -> str:
     return f"{cell.numerator}/{cell.denominator} ({cell.rate * 100:.1f}%){suffix}"
 
 
+def _era_sections(census: GameplayCensus, era: CensusEra) -> tuple[CensusSection, ...]:
+    """The published sections of ``era``'s sets, in publication order."""
+
+    sections = tuple(section for section in census.sets if section.label in era.sets)
+    if tuple(section.label for section in sections) != era.sets:
+        raise ValueError(f"the {era.era_id} era names sets the census does not hold")
+    return sections
+
+
 def _groups(census: GameplayCensus) -> tuple[tuple[str, CensusSection], ...]:
-    return (
-        ("all four sets", census.pooled),
-        ("the two nine-player sets", census.pooled_9p2i),
-        *((section.label, section) for section in census.sets),
-    )
+    """Every column, era by era: the era's pool when it has one, then its sets."""
+
+    columns: list[tuple[str, CensusSection]] = []
+    for era in census.eras:
+        if era.pooled is not None:
+            columns.append((f"{era.era_id}, pooled", era.pooled))
+        columns.extend(
+            (f"{section.label} ({era.era_id})", section)
+            for section in _era_sections(census, era)
+        )
+    return tuple(columns)
+
+
+def _reference(census: GameplayCensus) -> CensusSection:
+    """A section whose cell and table order every section shares."""
+
+    if not census.sets:
+        raise ValueError("a census with no set has no cells to publish")
+    return census.sets[0]
 
 
 def _heading_block(census: GameplayCensus, heading: str) -> list[str]:
@@ -100,13 +124,13 @@ def _heading_block(census: GameplayCensus, heading: str) -> list[str]:
     header = "| cell | " + " | ".join(name for name, _ in groups) + " |"
     rule = "| --- |" + " --- |" * len(groups)
     lines = [f"### {heading}", "", header, rule]
-    for key, cell in census.pooled.cells.items():
+    for key, cell in _reference(census).cells.items():
         if cell.heading != heading:
             continue
         values = " | ".join(_value(section.cells[key]) for _, section in groups)
         lines.append(f"| {cell.title} | {values} |")
     lines.append("")
-    for key, table in census.pooled.tables.items():
+    for key, table in _reference(census).tables.items():
         if table.heading != heading:
             continue
         rows = sorted(
@@ -115,8 +139,13 @@ def _heading_block(census: GameplayCensus, heading: str) -> list[str]:
         )
         lines.extend([f"**{table.title}.**", "", header.replace("cell", "row"), rule])
         for row in rows:
+            # A column out of the table's scope (an era without the setting the
+            # table counts) reads n/a beside another era's rows, never 0.
             values = " | ".join(
-                str(section.tables[key].counts.get(row, 0)) for _, section in groups
+                str(section.tables[key].counts.get(row, 0))
+                if section.tables[key].in_scope
+                else "n/a"
+                for _, section in groups
             )
             lines.append(f"| {row} | {values} |")
         if not rows:
@@ -134,35 +163,63 @@ def _heading_block(census: GameplayCensus, heading: str) -> list[str]:
 
 
 def _era_lines(census: GameplayCensus) -> list[str]:
-    era = census.pooled.era
-    settings = (
-        ", ".join(f"`{name} = {value}`" for name, value in sorted(era.settings.items()))
-        or "none beyond the historical defaults"
-    )
-    flags = era.substrate_flags or {}
-    on = ", ".join(sorted(name for name, value in flags.items() if value)) or "none"
-    off = (
-        ", ".join(sorted(name for name, value in flags.items() if not value)) or "none"
-    )
-    stamps = ", ".join(f"`{stamp}`" for stamp in era.prompt_stamps or ()) or "none"
-    temporal = (
-        "not delivered"
-        if era.temporal_observation_version is None
-        else f"version {era.temporal_observation_version}"
-    )
-    return [
-        "## One era",
+    """Each era: its sets, its recording date, and what its games recorded."""
+
+    lines = [
+        "## Eras",
         "",
-        "Every set below pooled, so every game shares one era, derived from the "
-        "recordings themselves rather than stated:",
-        "",
-        f"* recorded experiment settings: {settings};",
-        f"* temporal observations: {temporal};",
-        f"* substrate flags on: {on}; off: {off};",
-        f"* prompt stamps, read from the MANIFEST rows of games that held a "
-        f"meeting: {stamps}.",
+        "The committed sets are grouped by the era registry (`eval/eras.py`), and "
+        "a count is pooled only with the other sets of its own era. Each era's "
+        "settings below are derived from its recordings themselves rather than "
+        "stated, and the named windows follow its recorded kill cooldown.",
         "",
     ]
+    for era in census.eras:
+        sections = _era_sections(census, era)
+        view = (era.pooled if era.pooled is not None else sections[0]).era
+        settings = (
+            ", ".join(
+                f"`{name} = {value}`" for name, value in sorted(view.settings.items())
+            )
+            or "none beyond the historical defaults"
+        )
+        flags = view.substrate_flags or {}
+        on = ", ".join(sorted(name for name, value in flags.items() if value)) or "none"
+        off = (
+            ", ".join(sorted(name for name, value in flags.items() if not value))
+            or "none"
+        )
+        stamps = ", ".join(f"`{stamp}`" for stamp in view.prompt_stamps or ()) or "none"
+        temporal = (
+            "not delivered"
+            if view.temporal_observation_version is None
+            else f"version {view.temporal_observation_version}"
+        )
+        declared = (
+            f"`{era.declared_config}`"
+            if era.declared_config is not None
+            else "none, every experimental switch off"
+        )
+        windows = ", ".join(
+            f"`{name}` {value}" for name, value in sorted(era.constants.items())
+        )
+        lines.extend(
+            [
+                f"### {era.era_id}",
+                "",
+                f"Sets: {', '.join(f'`{label}`' for label in era.sets)}, recorded "
+                f"{era.recorded_on}. Declared config: {declared}.",
+                "",
+                f"* recorded experiment settings: {settings};",
+                f"* temporal observations: {temporal};",
+                f"* substrate flags on: {on}; off: {off};",
+                "* prompt stamps, read from the MANIFEST rows of games that held a "
+                f"meeting: {stamps};",
+                f"* named windows, in ticks: {windows}.",
+                "",
+            ]
+        )
+    return lines
 
 
 def _scope_sentence(scope: str | None) -> str:
@@ -178,7 +235,7 @@ def _scope_sentence(scope: str | None) -> str:
 
 def _definition_lines(census: GameplayCensus) -> list[str]:
     lines = ["## Definitions", ""]
-    for key, cell in census.pooled.cells.items():
+    for key, cell in _reference(census).cells.items():
         reads = ", ".join(f"`{kind}`" for kind in cell.reads)
         guard = (
             ""
@@ -195,7 +252,7 @@ def _definition_lines(census: GameplayCensus) -> list[str]:
                 "",
             ]
         )
-    for key, table in census.pooled.tables.items():
+    for key, table in _reference(census).tables.items():
         reads = ", ".join(f"`{kind}`" for kind in table.reads)
         scope = _scope_sentence(table.scope)
         lines.extend(
@@ -259,10 +316,6 @@ def render_markdown(census: GameplayCensus) -> str:
     )
     lines.extend(
         f"| `{name}` | {use} |" for name, use in census.field_classification.items()
-    )
-    lines.extend(["", "Named windows, in ticks:", ""])
-    lines.extend(
-        f"* `{name}`: {value}" for name, value in sorted(census.constants.items())
     )
     lines.append("")
     lines.extend(_era_lines(census))
@@ -355,10 +408,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.check:
         return check_report(_REPO_ROOT)
     census = publish(_REPO_ROOT)
-    pooled = census.pooled
+    games = sum(section.games for section in census.sets)
+    meetings = sum(section.meetings for section in census.sets)
+    eras = ", ".join(era.era_id for era in census.eras)
     print(
-        f"Wrote {MARKDOWN_PATH} and {JSON_PATH}: {pooled.games} games, "
-        f"{pooled.meetings} meetings; role-correctness is reported and gates nothing."
+        f"Wrote {MARKDOWN_PATH} and {JSON_PATH}: {games} games, {meetings} "
+        f"meetings, eras {eras}; role-correctness is reported and gates nothing."
     )
     return 0
 

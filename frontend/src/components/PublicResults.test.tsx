@@ -70,8 +70,29 @@ describe("public result interpretation", () => {
       const html = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [{ ...base, experiment_config: { ...older, ...change } }] }} />);
       expect(html).toContain(`Recorded experiments: ${phrase}.`);
     }
-    const defaults: ExperimentConfigView = { ...older, vent_witness_rule: "both_rooms", vent_entry_policy: "any_body", report_body_handle_version: null, ballot_kill_row_version: null, impostor_ballot_version: null };
+    const defaults: ExperimentConfigView = { ...older, vent_witness_rule: "both_rooms", vent_entry_policy: "any_body", report_body_handle_version: null, ballot_kill_row_version: null, impostor_ballot_version: null, kill_cooldown_ticks: null };
     const spelled = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [{ ...base, experiment_config: defaults }] }} />);
     expect(spelled).toContain("No enabled experiments recorded. This alone does not certify the default behavior.");
+  });
+  it("names a recorded kill cooldown with its tick count, so a group set apart by it alone reads as an experiment", () => {
+    const base = { game_ids: ["headless-seed-1"], agent_factory_kind: "experimental" as const, substrate_flags: null, tactical_policy: null, crew_tactical_policy: null, temporal_observation_version: null };
+    const plain: ExperimentConfigView = { format_version: 1, redistribution_policy: "lowest_id", meeting_reset: "preserve", crew_idle_policy: "hub_wait", vent_exit_policy: "target_distance", post_meeting_retarget: false, self_report: false, sabotage_threshold: "six_sevenths", evidence_reasoning_version: null, bounded_rebuttal_version: null, public_account_version: null, attributed_testimony_version: null };
+    const render = (config: ExperimentConfigView) => renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [{ ...base, experiment_config: config }] }} />);
+    // The two groups differ only by the cooldown: one names it, the other has no experiment.
+    const cooled = render({ ...plain, kill_cooldown_ticks: 6 });
+    expect(cooled).toContain("Recorded experiments: a kill cooldown of 6 ticks set for these recordings.");
+    const unset = render(plain);
+    expect(unset).not.toContain("kill cooldown");
+    expect(unset).toContain("No enabled experiments recorded.");
+    expect(render({ ...plain, kill_cooldown_ticks: 1 })).toContain("a kill cooldown of 1 tick set for these recordings");
+  });
+  it("heads the cases without a count, however many the set publishes", () => {
+    const one = renderToStaticMarkup(<PublicResultsView results={summary} />);
+    expect(summary.cases).toHaveLength(1);
+    expect(one).toContain("Decisions to investigate");
+    expect(one).not.toMatch(/\b(?:three|two|one) decisions\b/i);
+    const none = renderToStaticMarkup(<PublicResultsView results={{ ...summary, cases: [] }} />);
+    expect(none).not.toContain("Decisions to investigate");
+    expect(none).toContain("No source-matched editorial cases are published for this set.");
   });
 });

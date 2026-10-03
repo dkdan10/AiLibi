@@ -23,7 +23,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType, ModuleType
-from typing import Any, get_args, get_origin
+from typing import Any, Final, get_args, get_origin
 
 import pytest
 from hypothesis import given
@@ -919,53 +919,97 @@ def _pair(section: Mapping[str, Any], key: str) -> tuple[int, int]:
     return (folded["numerator"], folded["denominator"])
 
 
+def _era_pool(payload: Mapping[str, Any], era_id: str) -> Mapping[str, Any]:
+    (era,) = (item for item in payload["eras"] if item["era_id"] == era_id)
+    pooled: Mapping[str, Any] = era["pooled"]
+    return pooled
+
+
+def _set_section(payload: Mapping[str, Any], label: str) -> Mapping[str, Any]:
+    (section,) = (item for item in payload["sets"] if item["label"] == label)
+    found: Mapping[str, Any] = section
+    return found
+
+
 def test_the_committed_json_reproduces_the_figures() -> None:
-    """The acceptance figures, re-measured at the branch head through the fold."""
+    """The acceptance figures, re-measured at the branch head through the fold.
+
+    Per era since the promotion of candidate round 2 (2026-10-02): the three
+    baseline-9 sets pooled, and samples/9p2i (stage-b-r2) on its own. The
+    four-set figures the census first published (kills seen 20 of 849, vent
+    proof in 330 of 676 meetings, 521 of 676 first replies accusing the opener)
+    pooled samples/9p2i's baseline-9 bytes, which left the tree.
+    """
 
     payload = _published()
-    pooled = payload["pooled"]
-    nine = payload["pooled_9p2i"]
-    assert _pair(pooled, "kills_seen_by_crew") == (20, 849)
-    assert _pair(pooled, "vent_entries_seen_by_crew") == (73, 587)
-    assert _pair(pooled, "vent_exits_seen_by_crew") == (313, 512)
-    assert _pair(pooled, "vent_exits_seen_from_exit_room") == (251, 512)
-    assert _pair(pooled, "vent_exits_seen_only_from_room_left") == (62, 512)
-    assert _pair(pooled, "impostors_seen_venting_ejected") == (330, 355)
-    assert _pair(pooled, "impostors_vented_unseen_ejected") == (13, 89)
-    assert _pair(pooled, "impostors_never_vented_ejected") == (26, 56)
+    pooled = _era_pool(payload, "baseline-9")
+    promoted = _set_section(payload, "samples/9p2i")
+    assert _pair(pooled, "kills_seen_by_crew") == (17, 674)
+    assert _pair(pooled, "vent_entries_seen_by_crew") == (54, 482)
+    assert _pair(pooled, "vent_exits_seen_by_crew") == (251, 427)
+    assert _pair(pooled, "vent_exits_seen_from_exit_room") == (198, 427)
+    assert _pair(pooled, "vent_exits_seen_only_from_room_left") == (53, 427)
+    assert _pair(pooled, "impostors_seen_venting_ejected") == (260, 278)
+    assert _pair(pooled, "impostors_vented_unseen_ejected") == (10, 81)
+    assert _pair(pooled, "impostors_never_vented_ejected") == (18, 41)
     proof = _pair(pooled, "meetings_with_vent_proof")
-    assert proof == (330, 676) and proof[1] - proof[0] == 346
-    assert _pair(pooled, "vent_band_impostor_ejections") == (326, 369)
+    assert proof == (260, 531) and proof[1] - proof[0] == 271
+    assert _pair(pooled, "vent_band_impostor_ejections") == (256, 288)
     assert pooled["tables"]["vent_band_by_moment"]["counts"] == {
-        "both": 10,
-        "entry only": 63,
-        "exit only": 253,
+        "both": 8,
+        "entry only": 46,
+        "exit only": 202,
     }
-    assert _pair(pooled, "impostor_ejections_without_vent_proof") == (43, 369)
-    assert _pair(pooled, "vent_band_resting_only_on_room_left") == (50, 326)
-    assert _pair(nine, "stale_report_meetings") == (167, 551)
+    assert _pair(pooled, "impostor_ejections_without_vent_proof") == (32, 288)
+    assert _pair(pooled, "vent_band_resting_only_on_room_left") == (42, 256)
+    assert _pair(pooled, "stale_report_meetings") == (124, 488)
     assert _pair(pooled, "meetings_opening_with_another_unreported_corpse") == (
-        335,
-        676,
+        261,
+        531,
     )
-    assert _pair(pooled, "first_reply_accuses_opener") == (521, 676)
-    assert _pair(pooled, "opener_speaks_again") == (0, 676)
-    assert _pair(pooled, "openers_among_innocent_ejections") == (38, 42)
+    assert _pair(pooled, "first_reply_accuses_opener") == (401, 531)
+    assert _pair(pooled, "opener_speaks_again") == (0, 531)
+    assert _pair(pooled, "openers_among_innocent_ejections") == (31, 33)
     assert pooled["tables"]["innocent_opener_ejections_by_trigger"]["counts"] == {
         "emergency": 1,
-        "report": 37,
+        "report": 30,
     }
     thrown = pooled["tables"]["actions_thrown_away_on_trigger_ticks"]
-    assert thrown["counts"]["move"] == 809
+    assert thrown["counts"]["move"] == 621
     assert thrown["not_evaluable"] == 0
+
+    # The promoted set, its own era: the physical vent witness rule leaves no
+    # exit seen only from the room left, the regroup leaves no stale report,
+    # and the one reply gives the opener a second turn in 87 of 117 meetings.
+    assert _pair(promoted, "kills_seen_by_crew") == (14, 195)
+    assert _pair(promoted, "vent_exits_seen_only_from_room_left") == (0, 72)
+    assert _pair(promoted, "meetings_with_vent_proof") == (24, 117)
+    assert _pair(promoted, "stale_report_meetings") == (0, 114)
+    assert _pair(promoted, "first_reply_accuses_opener") == (80, 117)
+    assert _pair(promoted, "opener_speaks_again") == (87, 117)
+    assert _pair(promoted, "openers_among_innocent_ejections") == (17, 22)
+    assert promoted["tables"]["innocent_opener_ejections_by_trigger"]["counts"] == {
+        "report": 17,
+    }
 
 
 def test_the_two_meeting_structure_counts_the_direction_cites() -> None:
-    """The dated direction sentence cites these two; editing either reddens this."""
+    """The dated direction sentence cites two four-set counts, now history.
 
-    pooled = _published()["pooled"]
-    assert _pair(pooled, "first_reply_accuses_opener") == (521, 676)
-    assert _pair(pooled, "opener_speaks_again") == (0, 676)
+    The direction's dated sentence quotes the census as first published over the
+    four baseline-9 sets (521 of 676 first replies accuse the opener; the opener
+    speaks again in 0 of 676). The census now reads per era, and samples/9p2i's
+    baseline-9 bytes left the tree at the promotion, so the sentence stands as
+    dated history: its words are held here, and the per-era cells beside them.
+    """
+
+    payload = _published()
+    pooled = _era_pool(payload, "baseline-9")
+    assert _pair(pooled, "first_reply_accuses_opener") == (401, 531)
+    assert _pair(pooled, "opener_speaks_again") == (0, 531)
+    promoted = _set_section(payload, "samples/9p2i")
+    assert _pair(promoted, "first_reply_accuses_opener") == (80, 117)
+    assert _pair(promoted, "opener_speaks_again") == (87, 117)
     direction = (
         repo_root / "tasks" / "direction-2026-09-19-process-over-outcome.md"
     ).read_text(encoding="utf-8")
@@ -974,22 +1018,41 @@ def test_the_two_meeting_structure_counts_the_direction_cites() -> None:
     assert "uv run python scripts/publish_gameplay_census.py --check" in direction
 
 
-def test_the_committed_sets_are_one_era() -> None:
+def test_the_committed_sets_fall_in_their_registered_eras() -> None:
+    """Each era publishes its own sets, settings and windows; one-set eras pool nothing."""
+
     payload = _published()
-    eras = [section["era"] for section in payload["sets"]]
-    assert all(item == payload["pooled"]["era"] for item in eras)
-    assert payload["pooled"]["era"]["settings"] == {}
+    assert [era["era_id"] for era in payload["eras"]] == ["baseline-9", "stage-b-r2"]
+    baseline_9, promoted = payload["eras"]
+    assert baseline_9["sets"] == ["ml_corpus/9p2i", "ml_corpus/4p1i", "samples/4p1i"]
+    assert promoted["sets"] == ["samples/9p2i"]
+    assert promoted["pooled"] is None
+    for label in baseline_9["sets"]:
+        assert _set_section(payload, label)["era"] == baseline_9["pooled"]["era"]
+    assert baseline_9["pooled"]["era"]["settings"] == {}
+    declared = json.loads(
+        (repo_root / str(promoted["declared_config"])).read_text(encoding="utf-8")
+    )
+    declared.pop("format_version")
+    assert _set_section(payload, "samples/9p2i")["era"]["settings"] == declared
+    assert baseline_9["constants"]["grace_window_ticks"] == MAP.kill_cooldown_ticks
+    assert promoted["constants"]["grace_window_ticks"] == 6
 
 
 def test_on_baseline_9_every_scoped_cell_and_table_reads_n_a() -> None:
-    """No committed recording carries the in-vent cap, a regroup or a rebuttal.
+    """No baseline-9 recording carries the in-vent cap, a regroup or a rebuttal.
 
     So each cell and table counted only under one of those settings publishes
-    nothing in every column, and the page shows n/a rather than a measured 0.
+    nothing in every baseline-9 column, and the page shows n/a rather than a
+    measured 0. The promoted stage-b-r2 set records all three, so its column
+    counts them.
     """
 
     payload = _published()
-    for section in (*payload["sets"], payload["pooled_9p2i"], payload["pooled"]):
+    baseline_9 = [
+        _set_section(payload, label) for label in payload["eras"][0]["sets"]
+    ] + [_era_pool(payload, "baseline-9")]
+    for section in baseline_9:
         for key, view in section["cells"].items():
             scope = SCOPED_CELLS.get(key)
             assert view["scope"] == (None if scope is None else scope.describe()), key
@@ -1004,11 +1067,21 @@ def test_on_baseline_9_every_scoped_cell_and_table_reads_n_a() -> None:
             assert view["in_scope"] is (scope is None), key
             if scope is not None:
                 assert (view["counts"], view["not_evaluable"]) == ({}, 0), key
+    promoted = _set_section(payload, "samples/9p2i")
+    assert all(view["in_scope"] for view in promoted["cells"].values())
     page = (repo_root / "docs" / "gameplay-census.md").read_text(encoding="utf-8")
-    six = " n/a |" * 6
-    assert f"| Vent trips ended by a regroup |{six}" in page
-    assert f"| Surfacings at the cap |{six}" in page
-    assert page.count(f"| (none) |{six}") == len(SCOPED_TABLES)
+    four = " n/a |" * 4
+    assert f"| Vent trips ended by a regroup |{four} 47/140 (33.6%) |" in page
+    assert f"| Surfacings at the cap |{four} 5/72 (6.9%) |" in page
+    # Each scoped table lists the promoted set's rows, and every baseline-9
+    # column beside them reads n/a, never a measured 0.
+    assert page.count(f"| (none) |{four}") == 0
+    assert f"| the opener, answering an impostor |{four} 59 |" in page
+    assert f"| Moved |{four} 46 |" in page
+    assert all(
+        _set_section(payload, "samples/9p2i")["tables"][key]["counts"]
+        for key in SCOPED_TABLES
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -2637,12 +2710,17 @@ def test_a_surfacing_with_no_recorded_state_before_it_raises() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_the_grace_window_is_the_maps_kill_cooldown() -> None:
+def test_the_grace_window_is_each_eras_kill_cooldown() -> None:
     assert census_inputs(SAMPLES_4P1I).kill_cooldown_ticks == MAP.kill_cooldown_ticks
-    constants = _published()["constants"]
-    assert constants["grace_window_ticks"] == MAP.kill_cooldown_ticks
-    assert constants["in_vent_cap_ticks"] == IN_VENT_CAP_TICKS
-    assert constants["fresh_kill_window_ticks"] == FRESH_KILL_WINDOW_TICKS
+    assert census_inputs(SAMPLES_9P2I).kill_cooldown_ticks == 6
+    baseline_9, promoted = (era["constants"] for era in _published()["eras"])
+    # The baseline-9 era recorded no cooldown: the map's. The promoted set
+    # recorded six.
+    assert baseline_9["grace_window_ticks"] == MAP.kill_cooldown_ticks
+    assert promoted["grace_window_ticks"] == 6
+    for constants in (baseline_9, promoted):
+        assert constants["in_vent_cap_ticks"] == IN_VENT_CAP_TICKS
+        assert constants["fresh_kill_window_ticks"] == FRESH_KILL_WINDOW_TICKS
 
 
 def test_a_kill_at_the_first_legal_tick_is_an_ordinary_post_meeting_kill() -> None:
@@ -2683,7 +2761,8 @@ def test_the_grace_window_follows_the_kill_cooldown_the_carrier_holds() -> None:
     grace = outside.cells["kills_in_grace_window_after_regroup"]
     assert (grace.numerator, grace.denominator) == (0, 1)
     published = census_from_inputs([walked_on_it(10 + cooldown + 1)])
-    assert published.constants["grace_window_ticks"] == cooldown
+    (era,) = published.eras
+    assert era.constants["grace_window_ticks"] == cooldown
 
 
 @pytest.mark.parametrize(
@@ -2827,7 +2906,7 @@ def test_the_constants_bound_from_a_source_follow_it(
     """Planted: each source moves, and the census constant bound to it follows."""
 
     from agents.tactical import crewmate_policy
-    from eval import balance_eval, process_scorecard
+    from eval import balance_eval, eras
 
     class _Moved(RecordedExperimentConfig):
         vent_entry_policy: typing.Literal["any_body", "own_fresh_kill"] = (
@@ -2835,17 +2914,20 @@ def test_the_constants_bound_from_a_source_follow_it(
         )
 
     button = crewmate_policy.EMERGENCY_COOLDOWN_TICKS + 3
-    sets = ("replays/planted/9p2i", "replays/planted/4p1i")
+    sets = (
+        eras.CommittedSet("replays/planted/9p2i", eras.STAGE_B_R2),
+        eras.CommittedSet("replays/planted/4p1i", eras.BASELINE_9),
+    )
     base = replace(_CURRENT_REPORT_WALK_CONFIG, supports_temporal_observations=False)
     monkeypatch.setattr(crewmate_policy, "EMERGENCY_COOLDOWN_TICKS", button)
-    monkeypatch.setattr(process_scorecard, "COMMITTED_SETS", sets)
-    monkeypatch.setattr(process_scorecard, "NINE_PLAYER_SETS", sets[:1])
+    registered = eras.COMMITTED_SETS  # the registry the loaded module bound
+    monkeypatch.setattr(eras, "COMMITTED_SETS", sets)
     monkeypatch.setattr(experiment_config, "RecordedExperimentConfig", _Moved)
     monkeypatch.setattr(balance_eval, "_CURRENT_REPORT_WALK_CONFIG", base)
     again = _census_executed_again(monkeypatch)
     assert again.BUTTON_COOLDOWN_TICKS == button
-    assert again.CENSUS_SETS == sets
-    assert again.CENSUS_NINE_PLAYER_SETS == sets[:1]
+    assert again.CENSUS_SETS == tuple(entry.path for entry in sets)
+    assert census.CENSUS_SETS == tuple(entry.path for entry in registered)
     assert again.SETTING_DEFAULTS["vent_entry_policy"] == "own_fresh_kill"
     assert census.SETTING_DEFAULTS["vent_entry_policy"] == "any_body"
     assert again.setting_value({}, "vent_entry_policy") == "own_fresh_kill"
@@ -2886,11 +2968,62 @@ def test_the_own_kill_join_reads_the_scorecards_clock_offset(
 
 
 def test_census_from_inputs_refuses_sets_walked_on_different_maps() -> None:
-    first = inputs(game())
-    with pytest.raises(ValueError, match="different kill cooldowns"):
-        census_from_inputs([first, replace(first, kill_cooldown_ticks=5)])
+    first = inputs(game(), label="samples/4p1i")
+    second = inputs(game(), label="ml_corpus/4p1i")
+    with pytest.raises(GameplayCensusEraError, match="different kill cooldowns"):
+        census_from_inputs([first, replace(second, kill_cooldown_ticks=5)])
     with pytest.raises(ValueError, match="no replay sets"):
         census_from_inputs([])
+    with pytest.raises(ValueError, match="given twice"):
+        census_from_inputs([first, first])
+
+
+#: Two of the promoted set's recorded settings: enough to make its era differ.
+_PROMOTED_SETTINGS: Final[Mapping[str, SettingValue]] = MappingProxyType(
+    {"meeting_reset": "hub_with_grace", "kill_cooldown_ticks": 6}
+)
+
+
+def test_each_era_pools_only_its_own_sets_and_names_its_windows() -> None:
+    """The registry groups hand-built sets: one pool per era, none across eras."""
+
+    four = inputs(game(), label="samples/4p1i")
+    corpus = inputs(game(), label="ml_corpus/4p1i")
+    promoted = replace(
+        inputs(game(dict(_PROMOTED_SETTINGS)), label="samples/9p2i"),
+        kill_cooldown_ticks=6,
+    )
+    published = census_from_inputs([four, promoted, corpus])
+    baseline_9, stage = published.eras
+    assert (baseline_9.era_id, stage.era_id) == ("baseline-9", "stage-b-r2")
+    assert baseline_9.sets == ("samples/4p1i", "ml_corpus/4p1i")
+    assert baseline_9.pooled is not None and baseline_9.pooled.games == 2
+    assert stage.sets == ("samples/9p2i",) and stage.pooled is None
+    assert baseline_9.constants["grace_window_ticks"] == MAP.kill_cooldown_ticks
+    assert stage.constants["grace_window_ticks"] == 6
+    assert [section.label for section in published.sets] == [
+        "samples/4p1i",
+        "samples/9p2i",
+        "ml_corpus/4p1i",
+    ]
+
+
+def test_a_set_filed_under_the_wrong_era_is_refused() -> None:
+    """Planted: a registry naming samples/9p2i baseline-9 pools two eras, and raises."""
+
+    from eval import eras
+
+    misfiled = tuple(
+        eras.CommittedSet(entry.path, eras.BASELINE_9) for entry in eras.COMMITTED_SETS
+    )
+    four = inputs(game(), label="samples/4p1i")
+    promoted = replace(
+        inputs(game(dict(_PROMOTED_SETTINGS)), label="samples/9p2i"),
+        kill_cooldown_ticks=6,
+    )
+    assert len(census_from_inputs([four, promoted]).eras) == 2
+    with pytest.raises(GameplayCensusEraError, match="never pools across eras"):
+        census_from_inputs([four, promoted], registry=misfiled)
 
 
 # --------------------------------------------------------------------------- #
@@ -4293,14 +4426,16 @@ def test_the_loader_counts_task_events_on_committed_trigger_ticks_that_hold_them
 ):
     """Pinned on committed bytes whose trigger ticks hold task events.
 
-    The harness game above holds only moves on its trigger tick. On
-    ``samples/9p2i``, 42 of the 145 trigger ticks hold a task event. Seed 19
-    opens its first meeting on a tick where two players moved, one task
-    progressed and two completed, beside the trigger itself, which the loader
-    does not count. Its third meeting opens on a tick with one progress, one
-    completion and no move. The counts were measured once, count-only, from the
-    walk's own event types, and are written here as literals, never derived
-    from the event types the loader reads.
+    The harness game above holds only moves on its trigger tick. On the
+    promoted ``samples/9p2i`` bytes, 20 of the 117 trigger ticks hold a task
+    event. Seed 19 opens its first meeting on a tick where one player moved and
+    one task completed, beside the trigger itself, which the loader does not
+    count; its third meeting opens on a tick that held nothing else. Seed 44's
+    first meeting opens on a tick with two moves, three progress steps and one
+    completion. (On the baseline-9 bytes 42 of 145 trigger ticks held one.) The
+    counts were measured once, count-only, from the walk's own event types, and
+    are written here as literals, never derived from the event types the loader
+    reads.
     """
 
     opened = next(
@@ -4310,24 +4445,16 @@ def test_the_loader_counts_task_events_on_committed_trigger_ticks_that_hold_them
     )
     assert Counter(event.type for event in opened.events) == {
         "MeetingTriggered": 1,
-        "Moved": 2,
-        "TaskProgressed": 1,
-        "TaskCompleted": 2,
+        "Moved": 1,
+        "TaskCompleted": 1,
     }
     dropped = {
         meeting.meeting_id: dict(meeting.trigger_tick_dropped_events)
         for game in census_inputs(SAMPLES_9P2I).games
         for meeting in game.meetings
     }
-    assert dropped[opened.entry.meeting_id] == {
-        "Moved": 2,
-        "TaskProgressed": 1,
-        "TaskCompleted": 2,
-    }
-    assert dropped["headless-seed-19:meeting-2"] == {
-        "TaskProgressed": 1,
-        "TaskCompleted": 1,
-    }
+    assert dropped[opened.entry.meeting_id] == {"Moved": 1, "TaskCompleted": 1}
+    assert dropped["headless-seed-19:meeting-2"] == {}
     assert dropped["headless-seed-44:meeting-0"] == {
         "Moved": 2,
         "TaskProgressed": 3,
@@ -4336,14 +4463,15 @@ def test_the_loader_counts_task_events_on_committed_trigger_ticks_that_hold_them
     totals: Counter[str] = Counter()
     for kinds in dropped.values():
         totals.update(kinds)
-    assert len(dropped) == 145
-    assert totals == {"Moved": 89, "TaskProgressed": 43, "TaskCompleted": 17}
+    assert len(dropped) == 117  # was 145
+    # was Moved 89, TaskProgressed 43, TaskCompleted 17
+    assert totals == {"Moved": 50, "TaskProgressed": 22, "TaskCompleted": 10}
     with_task_events = [
         kinds
         for kinds in dropped.values()
         if "TaskProgressed" in kinds or "TaskCompleted" in kinds
     ]
-    assert len(with_task_events) == 42
+    assert len(with_task_events) == 20  # was 42
 
 
 def test_the_loader_takes_the_selector_pick_and_the_turn_facts(
@@ -5341,9 +5469,9 @@ def test_the_in_vent_cap_is_the_policys_constant_not_the_maps_kill_cooldown() ->
     assert _counts_on(on_it(capped), "forced_surfacings") == (1, 1, 0)
     beside = game(vents=(entry(10), exit_(15)), frames={15: frame({"p-2": ROOM})})
     assert _counts_on(on_it(beside), "surfacings_before_cap_in_view") == (0, 1, 0)
-    constants = census_from_inputs([on_it(five)]).constants
-    assert constants["in_vent_cap_ticks"] == IN_VENT_CAP_TICKS
-    assert constants["grace_window_ticks"] == cooldown
+    (era,) = census_from_inputs([on_it(five)]).eras
+    assert era.constants["in_vent_cap_ticks"] == IN_VENT_CAP_TICKS
+    assert era.constants["grace_window_ticks"] == cooldown
 
 
 def test_a_short_surfacing_in_view_is_before_the_cap_and_not_forced() -> None:
@@ -6468,11 +6596,11 @@ def test_the_published_schema_version_is_the_modules(
     """Planted: the schema version moves, and the published payload follows it."""
 
     assert (
-        census_from_inputs([inputs(game(), label="samples/9p2i")]).schema_version == 1
-    )
-    monkeypatch.setattr(census, "SCHEMA_VERSION", 2)
-    assert (
         census_from_inputs([inputs(game(), label="samples/9p2i")]).schema_version == 2
+    )  # was 1: version 2 groups the sets by era
+    monkeypatch.setattr(census, "SCHEMA_VERSION", 3)
+    assert (
+        census_from_inputs([inputs(game(), label="samples/9p2i")]).schema_version == 3
     )
 
 

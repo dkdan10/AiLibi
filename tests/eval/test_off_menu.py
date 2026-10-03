@@ -2,7 +2,9 @@
 
 Two layers, mirroring ``tests/eval/test_funnel_pooling.py``:
 
-* **Committed-bytes all-on-menu pins.** The committed replay sets were recorded
+* **Committed-bytes all-on-menu pins.** The committed replay sets the instrument
+  reads (those recorded with every experiment switch off; the promoted
+  samples/9p2i is refused by name) were recorded
   by the scripted FSM, whose emitted action space is a strict subset of the
   oracle menu (the menu is a structural superset of the ``decide()`` ladder), so
   the instrument MUST read rate 0 on every one — the "all-on-menu fixture" that
@@ -66,11 +68,6 @@ def samples_four() -> OffMenuActionReport:
 
 
 @pytest.fixture(scope="module")
-def samples_nine() -> OffMenuActionReport:
-    return compute_off_menu_report(_SAMPLES_NINE)
-
-
-@pytest.fixture(scope="module")
 def corpus_four() -> OffMenuActionReport:
     return compute_off_menu_report(_CORPUS_FOUR)
 
@@ -110,11 +107,21 @@ def test_samples_four_all_on_menu(samples_four: OffMenuActionReport) -> None:
     assert (samples_four.num_players, samples_four.num_impostors) == (4, 1)
 
 
-def test_samples_nine_all_on_menu(samples_nine: OffMenuActionReport) -> None:
-    """samples/9p2i (50 games): all-on-menu, N == 1754 impostor decisions."""
+def test_samples_nine_is_refused_by_name() -> None:
+    """samples/9p2i is outside the instrument's reading; it refuses the set by name.
 
-    _assert_all_on_menu(samples_nine, games=50, decisions=1754)  # was 1826
-    assert (samples_nine.num_players, samples_nine.num_impostors) == (9, 2)
+    The set holds candidate round 2's bytes since 2026-10-02, recorded with its
+    era's experiment config, and the historical feature reconstruction reads
+    recordings made with every switch off. On its baseline-9 bytes the set read
+    all-on-menu over 1754 impostor decisions.
+    """
+
+    with pytest.raises(
+        ValueError,
+        match="^historical feature reconstruction does not support experimental "
+        "recordings$",
+    ):
+        compute_off_menu_report(_SAMPLES_NINE)
 
 
 def test_corpus_four_all_on_menu(corpus_four: OffMenuActionReport) -> None:

@@ -24,6 +24,7 @@ from agents.tactical.impostor_policy import (
 from eval.evidence_honesty import (
     LIVE_POLICY_FOLD,
     RATIFIED_BASELINE,
+    RECORDED_ARM_POLICY_FOLD,
     RATIFIED_I11_CELLS,
     ImpostorTargetingCells,
     compute_evidence_honesty,
@@ -2135,23 +2136,24 @@ class TestImpostorRefutedSighting:
         assert [target.player_id for target in ranking] == ["ghost"]
 
     @pytest.mark.slow
-    def test_seed_20_refutes_a_living_lead_and_keeps_it_dropped(self) -> None:
+    def test_seed_0_refutes_a_living_lead_and_keeps_it_dropped(self) -> None:
         # The demonstrable case for the LIVING half of C-4, the half the ejection
-        # barrier does not cover: p-8 stands in WEST_HALL at tick 5 without seeing
-        # p-5 there, so p-5 leaves the ranking -- and stays out at tick 6, after
-        # p-8 has moved on to ADMIN.
-        # was seed 7 p-2 ticks 13-14; on baseline 9 p-2 decides only through tick 10
+        # barrier does not cover: p-8 stands in WEST_HALL at tick 8 without seeing
+        # p-4 there, so p-4 leaves the ranking -- and stays out at tick 9, after
+        # p-8 has moved on to ADMIN. Re-read on the promoted bytes (candidate round
+        # 2, 2026-10-02); was seed 20 p-8 ticks 5-6 on the baseline-9 bytes, and
+        # seed 7 p-2 ticks 13-14 before them.
         rows = {
             row.tick: row
-            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=20)
-            if row.actor == "p-8" and row.tick in (5, 6)
+            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=0)
+            if row.actor == "p-8" and row.tick in (8, 9)
         }
-        for tick in (5, 6):
+        for tick in (8, 9):
             frozen = _frozen_static_ranking(rows[tick].memory)
-            assert frozen[0].player_id == "p-5" and frozen[0].room == "WEST_HALL"
-            assert all(target.player_id != "p-5" for target in rows[tick].ranked)
-        assert _own_room(rows[5].memory) == "WEST_HALL"
-        assert _own_room(rows[6].memory) == "ADMIN"
+            assert frozen[0].player_id == "p-4" and frozen[0].room == "WEST_HALL"
+            assert all(target.player_id != "p-4" for target in rows[tick].ranked)
+        assert _own_room(rows[8].memory) == "WEST_HALL"
+        assert _own_room(rows[9].memory) == "ADMIN"
 
 
 class TestCommittedCorpusTargetingPins:
@@ -2172,8 +2174,13 @@ class TestCommittedCorpusTargetingPins:
 
     @pytest.mark.slow
     def test_free_zero_witness_kills_declined_pins(self) -> None:
+        # The repair is a claim about the LIVE policy, so its "after" is read on the
+        # baseline-9 era's nine-player set, where the fold is the live policy's.
+        # samples/9p2i carries its era's tactical arms since 2026-10-02 and folds
+        # under its recorded arm policy instead (pinned in the next test).
         before = RATIFIED_I11_CELLS["samples/9p2i"]
-        after = self._targeting("samples/9p2i")
+        after = self._targeting("ml_corpus/9p2i")
+        assert after.policy_mode == LIVE_POLICY_FOLD
 
         # Before: 190/415 = 45.8% of the policy's own legal, zero-witness kill
         # opportunities declined, 168 of them purely on the id tie-break.
@@ -2192,32 +2199,58 @@ class TestCommittedCorpusTargetingPins:
         # because the ranking's head was not the victim, and with the head no
         # longer deciding they resolve to the deliberate defer they always were.
         # Predicted residual and measured residual differ; the measured one is the
-        # pin. On the baseline-9 bytes it reads 9/232 = 3.9%: 7 defers, 2 COVER.
+        # pin. On ml_corpus/9p2i it reads 44/747 = 5.9%: 36 defers, 8 COVER (the
+        # baseline-9 samples/9p2i read 9/232 = 3.9%: 7 defers, 2 COVER).
         assert (
             after.free_kills_declined.numerator,
             after.free_kills_declined.denominator,
-        ) == (9, 232)  # was (8, 237)
+        ) == (44, 747)
         assert after.free_kills_declined.rate is not None
         assert after.free_kills_declined.rate < 0.10
         assert after.decline_reason_ranking == 0
         assert after.decline_reason_other == 0
-        assert after.decline_reason_fellow_defer == 7  # was 6
-        assert after.decline_reason_cover == 2
+        assert after.decline_reason_fellow_defer == 36
+        assert after.decline_reason_cover == 8
         # The reconstruction still walks every decision the recording holds. The
         # frozen ``before`` describes the BASELINE-6 bytes (2,461 decisions, 130
         # in-vent), which the record replaced, so the two are no longer
         # comparable and only the measured side is pinned.
-        assert after.decisions_reconstructed == 1754  # was 1826
-        assert after.in_vent_decisions == 109  # was 119
+        assert after.decisions_reconstructed == 5748
+        assert after.in_vent_decisions == 406
+
+    @pytest.mark.slow
+    def test_the_promoted_set_folds_under_its_recorded_arm_policy(self) -> None:
+        # Observed, never gated (I-11 rides no bar). samples/9p2i was recorded with
+        # its era's tactical arms, so the fold re-decides each impostor turn with
+        # the arm policy the recording ran and reproduces every one of them. Its
+        # free-kill declines read 55/297 = 18.5%, above the live repair's 10% mark,
+        # and every one lands in a named branch (46 fellow defers, 9 COVER bodies,
+        # none on the ranking): the arms change when an impostor strikes, and this
+        # cell describes that era rather than the repair.
+        after = self._targeting("samples/9p2i")
+
+        assert after.policy_mode == RECORDED_ARM_POLICY_FOLD
+        assert after.reconstruction_mismatches == 0
+        assert (
+            after.free_kills_declined.numerator,
+            after.free_kills_declined.denominator,
+        ) == (55, 297)
+        assert after.decline_reason_ranking == 0
+        assert after.decline_reason_other == 0
+        assert after.decline_reason_fellow_defer == 46
+        assert after.decline_reason_cover == 9
+        assert after.decisions_reconstructed == 3230  # was 1754 on baseline 9
+        assert after.in_vent_decisions == 242  # was 109
 
     @pytest.mark.slow
     def test_no_recorded_kill_is_lost(self) -> None:
         # The loss guard: a repair that gains free kills must not silently drop one
         # the recording made. Every recorded kill state re-emits the same intent.
-        # Baseline 6 recorded 225 / 640 / 64 / 57.
-        # was 229 / 678 / 64 / 62.
+        # Baseline 6 recorded 225 / 640 / 64 / 57, baseline 8 229 / 678 / 64 / 62;
+        # samples/9p2i read 223 on the baseline-9 bytes and holds candidate round
+        # 2's bytes since 2026-10-02.
         for name, recorded_kills in (
-            ("samples/9p2i", 223),
+            ("samples/9p2i", 242),
             ("ml_corpus/9p2i", 703),
             ("samples/4p1i", 68),
             ("ml_corpus/4p1i", 62),
@@ -2247,13 +2280,13 @@ class TestCommittedCorpusTargetingPins:
             (after[name].ghost_top.numerator, after[name].ghost_top.denominator)
             for name in names
         ] == [
-            (5, 1754),
+            (5, 3230),
             (5, 5748),
             (0, 558),
             (0, 531),
-        ]  # was [(3, 1826), (4, 5584), (0, 536), (0, 526)]
+        ]  # samples/9p2i read (5, 1754) on the baseline-9 bytes
         assert after["samples/9p2i"].ghost_top_ejected == 0
-        assert after["samples/9p2i"].ghost_top_unseen_death == 5  # was 3
+        assert after["samples/9p2i"].ghost_top_unseen_death == 5
         assert after["ml_corpus/9p2i"].ghost_top_ejected == 0
         # 4p1i was clean on both sets before and stays clean: the defect was a
         # 9p2i-roster phenomenon, which is to say it biased the eval baseline.
@@ -2274,8 +2307,10 @@ class TestCommittedCorpusTargetingPins:
     def test_the_counterfactual_labels_itself_and_counts_its_own_size(self) -> None:
         # The fold is no longer a reproduction of the recorded policy and says so:
         # the block carries the mode that produced it and the mismatch count IS the
-        # behaviour change, not a broken recording.
-        after = self._targeting("samples/9p2i")
+        # behaviour change, not a broken recording. Read on the baseline-9 era's
+        # nine-player set, where the fold is the live policy's (samples/9p2i folds
+        # under its recorded arm policy since 2026-10-02).
+        after = self._targeting("ml_corpus/9p2i")
 
         assert after.policy_mode == LIVE_POLICY_FOLD
         assert RATIFIED_I11_CELLS["samples/9p2i"].policy_mode == RATIFIED_BASELINE

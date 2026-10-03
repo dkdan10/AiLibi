@@ -2477,18 +2477,21 @@ class TestRelevanceGatedFoldOnCommittedBytes:
     why this class re-anchors rather than re-pins: baseline 5 read it at seed-11
     p-9, the Task-18.12 baseline-6 vent widening moved it to seed-9 p-9, baseline 7
     moved it to seed-42 p-9 (seed-9 folded identically gated and ungated by then),
-    baseline 8 moved it to seed-37 p-2, and baseline 9 moves it again.
+    baseline 8 moved it to seed-37 p-2, baseline 9 moved it to seed-34 p-9, and
+    the promotion of candidate round 2 as the committed 9p2i set (2026-10-02)
+    moves it again.
     ``test_the_anchor_is_the_only_shape_that_bites``
     below re-derives the whole set and states what the anchor is one of, so a reader
     can see that the re-anchoring is a choice among equals rather than a search for
     the one seed that still works.
 
-    The current anchor is another CREWMATE, seed-34 p-9, three committed
-    meetings. (The baseline-8 anchor, seed-37 p-2, now folds identically gated
-    and ungated at 0.45, so it is re-anchored rather than re-pinned. Of the six
-    coordinates the census below finds, seed-34 p-9 is the only crewmate whose
-    carries both start at the prior and whose gated carry lifts without reaching
-    the §4.6 gate or ending in the subject's ejection.) WITH the gate that
+    The current anchor is another CREWMATE, seed-19 p-1, three committed
+    meetings. (Seed 34 of the promoted bytes is a different game, so the
+    baseline-9 anchor is re-anchored rather than re-pinned. Of the fourteen
+    coordinates the census below finds, two crewmates have carries that both
+    start at the prior and a gated carry that lifts without reaching the §4.6
+    gate or ending in the subject's ejection: seed-3 p-1 over four meetings and
+    seed-19 p-1 over three, the anchor's shape.) WITH the gate that
     kill-scene presence vouch is dropped and the accusation lands: meeting 0 is
     quiet at the prior, then the carry rises to 0.55 at the accused meeting and
     stays above the prior through the next meeting's decay
@@ -2500,10 +2503,10 @@ class TestRelevanceGatedFoldOnCommittedBytes:
     """
 
     #: The anchor coordinate, named once so the tests below read as one story.
-    _SEED = 34  # was 37
-    _SUBJECT = "p-9"  # was "p-2"
-    _GATED = [0.5, 0.55, 0.5375]  # was [0.5, 0.55, 0.55]
-    _UNGATED = [0.5, 0.5, 0.5]  # was [0.5, 0.5, 0.5, 0.55]
+    _SEED = 19  # was 34 on the baseline-9 bytes
+    _SUBJECT = "p-1"  # was "p-9"
+    _GATED = [0.5, 0.55, 0.5375]  # was [0.5, 0.55, 0.5375]
+    _UNGATED = [0.5, 0.5, 0.5]  # was [0.5, 0.5, 0.5]
 
     def _trajectory(
         self, *, seed: int | None = None, gate_killscene_vouches: bool = True
@@ -2597,7 +2600,7 @@ class TestRelevanceGatedFoldOnCommittedBytes:
         # rises once the accusation lands and stays ABOVE the 0.5 prior through the
         # last meeting's decay, still under the §4.6 gate -- the divergence is the
         # signal, not a conviction.
-        assert len(trajectory) == 3  # was 4
+        assert len(trajectory) == 3
         assert trajectory == pytest.approx(self._GATED)
         assert trajectory[-1] > _DEFAULT_SUSPICION  # stays above prior, not flat
 
@@ -2701,7 +2704,8 @@ class TestRelevanceGatedFoldOnCommittedBytes:
         assert (self._SEED, self._SUBJECT) in lifting
         # Non-vacuous, and small: the gate bites on a handful of coordinates, which
         # is why this class re-anchors after a re-record instead of re-pinning.
-        assert 1 < len(lifting) <= 12
+        # Fourteen on the promoted bytes; six on the baseline-9 bytes.
+        assert len(lifting) == 14
 
     def test_corroboration_magnitude_is_untouched(self) -> None:
         # "No constant changes": the gate filters subjects, never re-tunes
@@ -3689,7 +3693,8 @@ class TestEvidenceQualityLiftOnCommittedBytes:
 class TestReporterExculpationOnCommittedBytes:
     """The Task-15.5 reporter-exculpation lever (graduated to unconditional at Task
     15.7), measured on the committed 9p2i bytes (first on BASELINE 6, re-recorded at
-    Task 18.12; the pins below read baseline 9).
+    Task 18.12; the pins below read the promoted set, candidate round 2, since
+    2026-10-02, each ``was`` the baseline-9 reading).
 
     Baseline 6 was recorded WITH the lever unconditionally ON, so the committed
     fold IS the damped fold. The lever is no longer env-toggleable, so the
@@ -3859,13 +3864,14 @@ class TestReporterExculpationOnCommittedBytes:
         # graduated whereabouts-interior exemption's single-tick false positives), and
         # both are also innocent-reporter ejections. The impostor self-report rate is
         # still EXACTLY ZERO (no report meeting had the killer as its reporter).
-        # This record (baseline 9) reads 7 of 80, every one an innocent reporter.
-        # Prior baselines: 7 of 85 (baseline 8), 10 of 91 (baseline 7), 2 of 87
-        # (baseline 6), 0 of 61 (baseline 5), 1 of 79 (baseline 4), 4 of 95
-        # (baseline 3), 22 of 106 (baseline 2).
-        assert funnel.report_ejections == 80  # was 85
-        assert funnel.reporter_ejected == 7  # was 10
-        assert funnel.reporter_ejected_innocent == 7  # was 10
+        # The promoted set reads 17 of 63, every one an innocent reporter (the
+        # reporter flag its record states). Prior readings: 7 of 80 (baseline 9),
+        # 7 of 85 (baseline 8), 10 of 91 (baseline 7), 2 of 87 (baseline 6), 0 of
+        # 61 (baseline 5), 1 of 79 (baseline 4), 4 of 95 (baseline 3), 22 of 106
+        # (baseline 2).
+        assert funnel.report_ejections == 63  # was 80
+        assert funnel.reporter_ejected == 17  # was 7
+        assert funnel.reporter_ejected_innocent == 17  # was 7
         assert funnel.killer_self_reported == 0
 
     # -- (a) the damp's effect on the innocent-reporter convictions ----------
@@ -3876,23 +3882,23 @@ class TestReporterExculpationOnCommittedBytes:
         funnel: InformationFunnelReport,
         roles_by_seed: dict[int, dict[str, str]],
     ) -> None:
-        # The recorded innocent-reporter census is SEVEN on this record (SEVEN at
-        # baseline 8, TEN at baseline 7, TWO at baseline 6). The census splits three
-        # ways, and the split is the finding: on TWO a standing prior already carries
-        # the reporter over the §4.6 gate, so the damp -- one accusation's worth of
-        # lift -- cannot reach the outcome, though it never raises the reporter's
-        # suspicion either. On FOUR the soft accusation lift WAS the deciding one and
-        # the damp exculpates the reporter outright, which is the case baseline 6
-        # never produced (its two convictions were both hard-flag-backed, so the damp
-        # had nothing it could win). The remaining ONE is already sub-gate before the
-        # damp runs at all -- a bucket baseline 7 left empty; the render side handles
-        # it. NOTE the bucket name: ``hard_convicted`` means only
+        # The recorded innocent-reporter census is SEVENTEEN on the promoted set
+        # (SEVEN at baselines 9 and 8, TEN at baseline 7, TWO at baseline 6). The
+        # census splits three ways, and the split is the finding: on ONE a standing
+        # prior already carries the reporter over the §4.6 gate, so the damp -- one
+        # accusation's worth of lift -- cannot reach the outcome, though it never
+        # raises the reporter's suspicion either. On SEVEN the soft accusation lift
+        # WAS the deciding one and the damp exculpates the reporter outright, which
+        # is the case baseline 6 never produced (its two convictions were both
+        # hard-flag-backed, so the damp had nothing it could win). The remaining
+        # NINE are already sub-gate before the damp runs at all -- a bucket
+        # baseline 7 left empty; the render side handles them. NOTE the bucket name: ``hard_convicted`` means only
         # that the damp could not move the outcome; whether a HARD FLAG backs the
         # conviction is a stricter question, asked by the next test. The bucket split
         # is asserted below; test_damp_touches_only_the_reporter and the over-damping
         # canary guard it structurally.
         meetings = self._innocent_reporter_meetings(funnel)
-        assert len(meetings) == 7  # was 10
+        assert len(meetings) == 17  # was 7
 
         kept = 0
         already_sub_gate = 0
@@ -3916,9 +3922,9 @@ class TestReporterExculpationOnCommittedBytes:
                     1  # a standing prior/flag carries it; damp cannot reach
                 )
 
-        # Two convictions the damp cannot reach, four the damp exculpates, one
+        # One conviction the damp cannot reach, seven the damp exculpates, nine
         # already sub-gate before it ran.
-        assert (kept, already_sub_gate, hard_convicted) == (4, 1, 2)  # was (2, 3, 2)
+        assert (kept, already_sub_gate, hard_convicted) == (7, 9, 1)  # was (4, 1, 2)
         assert kept + already_sub_gate + hard_convicted == len(meetings)
 
     def test_no_innocent_reporter_conviction_is_hard_flag_backed(
@@ -3933,7 +3939,7 @@ class TestReporterExculpationOnCommittedBytes:
         # exemption promoted a single-tick roll-call self-alibi to a STRONG
         # alibi_vs_sighting false positive, and Task 18.12 adopted that as a
         # documented precision cost. On this record the census is EMPTY
-        # again -- across all seven innocent-reporter convictions, not one is carried
+        # again -- across all seventeen innocent-reporter convictions, not one is carried
         # by a strong flag or a vent/kill prior; every one of them rests on
         # accumulated soft lift. The pin is the empty list, so a fresh false positive
         # of that class fails here loudly.
@@ -3976,7 +3982,7 @@ class TestReporterExculpationOnCommittedBytes:
         funnel: InformationFunnelReport,
     ) -> None:
         # The planted case behind the empty census above. There is no strong flag and
-        # no vent/kill prior anywhere in the seven innocent-reporter meetings -- which
+        # no vent/kill prior anywhere in the seventeen innocent-reporter meetings -- which
         # IS the finding -- so the plant supplies each in turn, on a real entry, and
         # asserts the predicate says yes to both. Without it, an empty census could
         # equally mean the predicate stopped working.
@@ -4037,9 +4043,10 @@ class TestReporterExculpationOnCommittedBytes:
         funnel: InformationFunnelReport,
         roles_by_seed: dict[int, dict[str, str]],
     ) -> None:
-        # The canary: over ALL 80 committed report-ejections, every hard-flag-
-        # backed ejectee (a STRONG contradiction or a witnessed vent/kill pin; 64
-        # of them on this record) keeps its §4.6 gate outcome under the damp --
+        # The canary: over ALL 63 committed report-ejections, every hard-flag-
+        # backed ejectee (a STRONG contradiction or a witnessed vent/kill pin; 31
+        # of them on this record, 64 of 80 on the baseline-9 bytes) keeps its §4.6
+        # gate outcome under the damp --
         # ZERO outcome changes. On baseline 6 this included the seed-17 m0 and
         # seed-39 m0 p-1 cases: each STRONG-flag conviction stood damp-ON and
         # damp-OFF, so both were among that record's 78 hard-backed ejectees.
@@ -4048,7 +4055,7 @@ class TestReporterExculpationOnCommittedBytes:
             for row in funnel.per_meeting
             if row.outcome == "EJECTED" and row.ejected is not None
         ]
-        assert len(report_ejections) == 80  # was 85
+        assert len(report_ejections) == 63  # was 80
         hard_backed = 0
         outcome_changes = 0
         for row in report_ejections:
@@ -4066,5 +4073,6 @@ class TestReporterExculpationOnCommittedBytes:
             on_convicts = self._subject_max(on_rows, ejected) >= _GATE
             if off_convicts != on_convicts:
                 outcome_changes += 1
-        assert hard_backed >= 40  # non-vacuous: there ARE hard convictions to guard
+        # Non-vacuous: there ARE hard convictions to guard (was 64, bounded >= 40).
+        assert hard_backed == 31
         assert outcome_changes == 0  # the contract's hard line

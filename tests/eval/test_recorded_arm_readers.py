@@ -1421,8 +1421,15 @@ _SURROGATE: Final[str] = (
 
 
 def _kept_refusals() -> dict[str, tuple[str, Callable[[Path], object]]]:
+    """The instruments that still refuse an experiment recording, by name.
+
+    The watchability referee left this list when the shown 9-player set moved to
+    a later era (2026-10-02): its walk now declares the layers it reads
+    (``eval.watchability.REFEREE_READS``), and ``tests/eval/test_watchability.py``
+    holds its refusal of a setting outside them.
+    """
+
     from eval.off_menu import compute_off_menu_report
-    from eval.watchability import _reconstruct_game_kills
     from training.anchor_study import walk_corpus_game
     from training.conviction.dataset import build_conviction_table
     from training.surrogate.dataset import build_meeting_table
@@ -1430,26 +1437,12 @@ def _kept_refusals() -> dict[str, tuple[str, Callable[[Path], object]]]:
     def _anchor(directory: Path) -> object:
         return walk_corpus_game(next(directory.glob("replay-seed-*.jsonl")), **_ROSTER)
 
-    def _referee(directory: Path) -> object:
-        return _reconstruct_game_kills(
-            next(directory.glob("replay-seed-*.jsonl")),
-            seed=_SEED,
-            roles=_roles(directory),
-            game_map=load_canonical_map(),
-            **_ROSTER,
-        )
-
     return {
         "off-menu": (_HISTORICAL, compute_off_menu_report),
         "anchor study": (_HISTORICAL, _anchor),
         "surrogate meeting table": (_SURROGATE, build_meeting_table),
         # The conviction table is built through the surrogate meeting table.
         "conviction table": (_SURROGATE, build_conviction_table),
-        "watchability referee": (
-            "replay profile 'watchability-referee' does not support experimental "
-            "recordings",
-            _referee,
-        ),
     }
 
 
@@ -1476,12 +1469,18 @@ def test_a_frozen_or_policy_rerunning_instrument_keeps_refusing(
         run(recordings["reset_rebuttal"])
 
 
-def test_the_referee_floors_an_experiment_recording(
+def test_the_referee_reads_an_experiment_recording_and_scores_it_on_its_floors(
     recordings: dict[str, Path],
 ) -> None:
+    # The referee's walk declares the layers it reads (2026-10-02), so a
+    # recording made with the regroup reset and the rebuttal reconstructs
+    # (integrity holds) instead of flooring as a breach; one fake game then
+    # misses the supply floors, so the verdict is still a rejection.
     from eval.watchability import compute_watchability
 
     report = compute_watchability(recordings["reset_rebuttal"])
+    assert report.integrity_ok is True
+    assert report.supply_floors_passed is False
     assert not report.referee_passed
 
 

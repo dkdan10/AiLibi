@@ -79,7 +79,7 @@ that CONTRADICTS row 0 is refused, and so is a stamp that first appears after an
 UNSTAMPED row 0 — inheriting backwards would let a re-stamped suffix claim
 provenance the recorded prefix never carried. Writing it once rather than on
 every row is what keeps the guarantee affordable: the repeated slate measures
-+3.5% over the committed 9p2i sample set, +13-15% over the 4p1i sets and up to
++3.5% over the baseline-8 9p2i sample set, +13-15% over the 4p1i sets and up to
 +166% on the smallest committed 4p1i file. The remaining stamps
 (``tactical_policy``, ``crew_tactical_policy``, ``experiment_config``) are
 unchanged; ``experiment_config`` still rides every tick row.
@@ -1707,7 +1707,7 @@ class ReplayLog:
         # recording that never reached ``game_over`` still self-describes, from
         # tick 0, because the very first row it wrote carries the pair — at a
         # fraction of the bytes: stamping EVERY tick row measures +3.5% over the
-        # committed 9p2i sample set, +13-15% over the two 4p1i sets, and up to
+        # baseline-8 9p2i sample set, +13-15% over the two 4p1i sets, and up to
         # +166% on the smallest committed 4p1i file, where a dozen 794-byte
         # repetitions of one unchanging slate dwarf the game. Rows 1..N-1 stay
         # silent and INHERIT row 0 (``recorded_agent_factory_kind`` /

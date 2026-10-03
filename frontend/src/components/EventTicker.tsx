@@ -114,8 +114,8 @@ const KIND_LABEL: Record<TickerKind, string> = {
  *
  * WHY THIS IS A SURGICAL SWAP AND NOT A SORT BY KIND. Arrival order is the
  * engine's deterministic emission order, which IS chronological, so ranking
- * independent events by kind corrupts real information: 9p2i seed 1 tick 7 emits
- * p-6's vent EXIT before p-7's kill, and a kill-before-vent rank flips two
+ * independent events by kind corrupts real information: 9p2i seed 0 tick 27 emits
+ * p-6's vent EXIT before p-8's kill, and a kill-before-vent rank flips two
  * unrelated acts — then the reversed feed shows the earlier vent above the later
  * kill. Only the report/meeting pair is known to arrive inverted, so only it
  * moves; every other event keeps its position.
@@ -181,7 +181,7 @@ const EMPTY_TIMELINE: TickerTimeline = { entries: [], countAtFrame: [] };
  * told from a right one is precisely what AGENTS.md's "raise, do not paper over"
  * exists for.
  *
- * Verified rather than assumed before tightening: across all 18,649 agent-frames
+ * Verified rather than assumed before tightening: across all 20,783 agent-frames
  * in the committed 9p2i + 4p1i sets, `alive && visibility === null` occurs zero
  * times, and so does `!alive && visibility !== null`. The invariant is exact on
  * served data, so the guard cannot fire on a compliant payload.
@@ -393,10 +393,10 @@ export function projectTickerTimeline(
           // before the body pass below runs. Without this the fog narrates the
           // same discovery twice on one frame: the loader deliberately reopens
           // the reported body in `visible_bodies` for co-located agents, so a
-          // report tick reads "p-8 reported p-4's body" immediately followed by
-          // "Found p-4's body". Real on committed bytes — 9p2i seed 1, tick 8,
-          // for p-1 and p-6 (not p-8, whose earlier sighting already accounted
-          // it, which is exactly why the duplicate is easy to miss).
+          // report tick reads "p-4 reported p-8's body" immediately followed by
+          // "Found p-8's body". Real on committed bytes — 9p2i seed 1, tick 10,
+          // for p-1 (not p-4, whose earlier sighting already accounted it,
+          // which is exactly why the duplicate is easy to miss).
           //
           // Unconditional rather than fog-only: `accountedVictims` is read only
           // by the fog body pass, so this costs Omniscient nothing and keeps the

@@ -1445,3 +1445,186 @@ the promotion, so it is not listed here.
   come from the recorder's logs and the husk files, kept outside the
   repository; every other count reproduces from the committed bytes with the
   commands above.
+
+## 9. The promotion (2026-10-02)
+
+Card: [`tasks/work/promote-round-2.md`](../tasks/work/promote-round-2.md). A dated
+addendum: sections 1 to 8 above are unchanged, byte for byte, from `d41c9006`,
+the merge of PR #494 that committed them.
+
+### 9.1 The ruling
+
+The owner ruled on 2026-10-02, verbatim: "1. Merge 2. Promote and run the
+diagnostics." The merge is `d41c9006`. This section records the promotion; the
+diagnostics are separate, read-only work and gate nothing here.
+
+### 9.2 The rule's reading, and the flag the promoted set carries
+
+The round-3 rule (1.10) named no step. Every Conf. cell read 0 and the impostor
+win share, 24/50 = 0.48, sat inside the envelope, but reporters ejected per
+report meeting read 17/114 = 0.149 (0.10-0.23), flagged above the pre-registered
+0.104, so the rule's promotion branch did not fire (6.4, 7). The owner's ruling
+promotes regardless. The flag is a stated limitation of the promoted set; no
+reading is re-run or re-worded.
+
+### 9.3 The bytes, file by file
+
+Round 2's 50 replays, `MANIFEST.md`, `roster.json` and report gz moved from
+`replays/candidates/stage-b-r2/9p2i/` to `replays/samples/9p2i/`, and the round's
+`experiment-config.json` moved beside them, as the era's declared config. Each
+file's sha256 at the promoting head equals the candidate file's at `d41c9006`
+(`shasum -a 256` over both, compared name by name: 54 files, 0 differing):
+
+| file in `replays/samples/9p2i/` | at `d41c9006` | sha256 |
+|---|---|---|
+| `MANIFEST.md` | `replays/candidates/stage-b-r2/9p2i/MANIFEST.md` | `78941baa36a6ac33e166e2cae979f1ff424c84dce6956e9e3bab11e0c510758d` |
+| `roster.json` | `replays/candidates/stage-b-r2/9p2i/roster.json` | `01ba485b9aed3cc7517a813afe919581861ccc1439c7249db0cbb06a84644340` |
+| `tournament-eval-report.json.gz` | `replays/candidates/stage-b-r2/9p2i/tournament-eval-report.json.gz` | `ce05afee46e85019e5ec98ccfd223705c11654152b711fab55515e0502fafd8c` |
+| `replay-seed-0.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-0.jsonl` | `155126d2c1a8c8dfc0876f0347ed399570cc0d29c611e068c12be2720217bc62` |
+| `replay-seed-1.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-1.jsonl` | `266fbac33f1971674e108ba8c4da3b8621edc8ead9d971eabc72fe633f494d3a` |
+| `replay-seed-2.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-2.jsonl` | `d08bb5da0fc947ea96ea3d1e45aa5b046b0eda0ee2920cb0cfe27b747b64b22b` |
+| `replay-seed-3.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-3.jsonl` | `cb6107b392b1ac6d5ad0e7ab6833e165a83e867dee6859eefd281145d79192f1` |
+| `replay-seed-4.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-4.jsonl` | `562ca5846f8a29b2444b2c810b42300580f745823c6ab8646f84086be1fcf336` |
+| `replay-seed-5.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-5.jsonl` | `01ef9eb75d30f331621fb892d2ccea3ef52b05343873cf3062907a7ff671655b` |
+| `replay-seed-6.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-6.jsonl` | `254aa95e2dd6f7698515307d4090454a8e020faadbe8c92758c544c2f9d56de3` |
+| `replay-seed-7.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-7.jsonl` | `08b911e579d7539c19850efcb34f075aa8d541f5215f73c9563165855101b01d` |
+| `replay-seed-8.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-8.jsonl` | `0a8e56248b053ce44de880ae19111f965054228b18e1764b0e25212198b91e5c` |
+| `replay-seed-9.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-9.jsonl` | `f0fdb66ed38945e23e2fe8bd03026e05cf1cf8993117816790ec059c1a2a39a0` |
+| `replay-seed-10.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-10.jsonl` | `48cb758e4516ff90754ab4d4699a98e347e234e10f0c1352f1c8e3b79079a64e` |
+| `replay-seed-11.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-11.jsonl` | `63792832f75fd2e5ed9beb8839b8c9d9350394ab0c2f11fc8fb82ead2e452657` |
+| `replay-seed-12.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-12.jsonl` | `4dc586360f54f8c445de35ede4b4dba076906793621f4e2825a45a9a87f805da` |
+| `replay-seed-13.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-13.jsonl` | `1063f3fa59473e3ea55cfb7fca7ac0fd4a0f4ae4af2c9e4268c030960bcae498` |
+| `replay-seed-14.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-14.jsonl` | `0b02948a4e25de188a39872567ffa13580f68a6f60dde070c81c0e90f29b4392` |
+| `replay-seed-15.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-15.jsonl` | `4374910278c49ea406326164ef0e3028d5c64b0b9712ebf77e72a41c1dd65a01` |
+| `replay-seed-16.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-16.jsonl` | `a0c0151ebd58ab2016d82b7abee4fb6b387b40d8239d4831e5d2270e47eb6411` |
+| `replay-seed-17.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-17.jsonl` | `239c6821fcdba105e59db0a7d28f2540a92d6dc56e1dd145be2fe14358bfce14` |
+| `replay-seed-18.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-18.jsonl` | `b6de226b5dcf3a7b87c7a28041f9909100bc1e8cb61c78159e5e1b64d53aa5c6` |
+| `replay-seed-19.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-19.jsonl` | `3c2f045f761eeb5bb5d02c8bfeeae9559cd7999b75937f25572e772949b31e64` |
+| `replay-seed-20.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-20.jsonl` | `9eb758b49def9cbff03177242687d9154451a08fe9ae7edd4225b4d5144ec025` |
+| `replay-seed-21.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-21.jsonl` | `73396964aee3adaef25dd0aa5b2660aa3a222fdf9d1354058bd04828a8c2beca` |
+| `replay-seed-22.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-22.jsonl` | `1f6f7d96fa7ff933965611c43ba7036ab5414849f8b83ab7461a53456ef3108f` |
+| `replay-seed-23.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-23.jsonl` | `d298f23ac0ff061ea77bbc44ac6828420a2c33dc156fc11ea56fab3be33b6c50` |
+| `replay-seed-24.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-24.jsonl` | `bd7006e7098b61fca0d41f98ad3334d33b2c21337cd16026821736b6e1d1f771` |
+| `replay-seed-25.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-25.jsonl` | `6a82683c71e77a8d6dfe7e344168fea18358752071defd5647fc12661c43c6a8` |
+| `replay-seed-26.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-26.jsonl` | `442b6db851e87079ae1bdccfc68ebc9a52b6dfbefadcb58dd4d4e76dcf1c2a2a` |
+| `replay-seed-27.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-27.jsonl` | `a6e0ca34c12a9091dca11795ee02c27b403af8effec547238cfba25b240b4aa1` |
+| `replay-seed-28.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-28.jsonl` | `24523d6e57ff2c020a02f68de04a64b8d5f2b22ffe98248ad5b54d73c9b509a3` |
+| `replay-seed-29.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-29.jsonl` | `6606b40aec5f10a6d47971d9d4ef642087e83bca6ba00df48a19728ddb3cbb28` |
+| `replay-seed-30.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-30.jsonl` | `8c18a6dc325953ad0b92e2c842fd20bddf7e85350ece9b66a06c130643cd0f94` |
+| `replay-seed-31.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-31.jsonl` | `e62391a8d9fd74b519c1aeca780cb7cbcd3ede22a18d563d1d0dc6950c37ec87` |
+| `replay-seed-32.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-32.jsonl` | `d71297584feb57b328712982ec4dce8074bb4311e21bb49a65bcad13006000cb` |
+| `replay-seed-33.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-33.jsonl` | `4063270a26974de1a0134a6ebd38491b8fceb3b0b6f40b19204da700dcce5f42` |
+| `replay-seed-34.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-34.jsonl` | `1a130de676363be202ed2693b7899b20daab368ec46940f860ca9cb487dd020e` |
+| `replay-seed-35.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-35.jsonl` | `6ee9459a4da0f0702082e2a66fcfdcf9c85e5f6635957858531497775696b009` |
+| `replay-seed-36.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-36.jsonl` | `39123907fe06a01b97f6d1b4a82c29fd03df1113e9a47817f987f22b8e0b048f` |
+| `replay-seed-37.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-37.jsonl` | `cf23571d8904a90e6cd1e24f199bf974e3c72cee313754b5d03064bd781fbe21` |
+| `replay-seed-38.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-38.jsonl` | `ec88a94b38549d2856b32fd22c9222145c221128f31ffe76b2ffda61046ac54c` |
+| `replay-seed-39.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-39.jsonl` | `7f3a88e6fa136ce0f3d365be15c1cfef989a542fbc48ee2bfc4251bfc959440b` |
+| `replay-seed-40.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-40.jsonl` | `1530708b78f56d3af1599faf13307d727062423ecb3581e8fe7baee956bda983` |
+| `replay-seed-41.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-41.jsonl` | `1b30086fe06f1798f3e8002d15ab88fa9fd4a012154a897779aff077be9633ad` |
+| `replay-seed-42.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-42.jsonl` | `60d23f9f7c77158efe691fab69703fce714440d0a08ae1d8273a79b49393508a` |
+| `replay-seed-43.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-43.jsonl` | `5c48bda2e0707cfc3430f5c678a154bdef812705940740b3f60a39a79122a983` |
+| `replay-seed-44.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-44.jsonl` | `4cd837f4a10045ea46518a60a451bd9b3887e5527bb83583f0af33c27249519d` |
+| `replay-seed-45.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-45.jsonl` | `19a01db30cf49770bf56855b233df57ad4112580b440cdf09e73c33cfc2110a4` |
+| `replay-seed-46.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-46.jsonl` | `5dbdd08e9ab41267ccedc42632f15c2a41b4670932064330b751d8510ed25af5` |
+| `replay-seed-47.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-47.jsonl` | `eaa1dcee4750a72dd20375aea4b918383eeebb04be0c5029fcde28d2e92b0fc8` |
+| `replay-seed-48.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-48.jsonl` | `81fe976f0d33862c4a18cb2ee17a2f82d7759a09e3cd8dbf3ed1cd50e9ecc6d1` |
+| `replay-seed-49.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-49.jsonl` | `e121c74f6d0ad752c4b34e47b5759d188d0297589d2cc28bcf95a45604d5bb42` |
+| `experiment-config.json` | `replays/candidates/stage-b-r2/experiment-config.json` | `0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b` |
+
+The set's baseline-9 bytes, and its `results-rubric-score.json`, left
+`replays/samples/9p2i/` in the same change; they remain at `d41c9006`.
+
+### 9.4 The era, and what did not move
+
+`eval/eras.py` names two eras. **baseline-9** owns `replays/samples/4p1i`,
+`replays/ml_corpus/9p2i` and `replays/ml_corpus/4p1i`: the process re-record
+([`audit-2026-09-22-process-rerecord.md`](audit-2026-09-22-process-rerecord.md)),
+recorded 2026-09-22 with every experimental switch off. **stage-b-r2** owns
+`replays/samples/9p2i`: this record, recorded 2026-10-01 under the declared
+config `replays/samples/9p2i/experiment-config.json` (sha256
+`0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b`, 1.4). The
+substrate ladder tip stays at baseline 9: no substrate lever moved, and baseline
+10 stays reserved for the full re-record that re-freezes the corpus. No
+instrument pools across the two eras. The corpus and every ML artifact keep
+their bytes and keys.
+
+### 9.5 The win split
+
+| set | baseline-9 impostor rate | promoted impostor rate |
+|---|---|---|
+| `samples/9p2i` | 22% (11/50) | **48% (24/50)** |
+
+Read from the set's `MANIFEST.md` `winner` column, at `d41c9006` and at the
+promoting head. Win split is not a gate and is published only because the
+front door quotes it.
+
+### 9.6 The cells the front door quotes, for the promoted set
+
+Read off the promoted set's eval report, its `deduction.ejectee_proof_cross_tab`
+block: 66 ejections, 44 of an impostor and 22 of an innocent. The before column
+is the baseline-9 record's own `samples/9p2i` rows
+([its §6.2](audit-2026-09-22-process-rerecord.md)). Intervals are Wilson 95%.
+
+#### Published cell 1 — non-direct conviction accuracy
+
+| set | before | after |
+|---|---|---|
+| `samples/9p2i` | 11/20 = 0.5500 | **20/42 = 0.4762** [0.3336, 0.6228] |
+
+The direct-proof cell for `samples/9p2i` stays perfect: **24/24 = 1.0000**
+[0.8620, 1.0], against 70/70 = 1.0000 at baseline 9.
+
+#### Published cell 2 — innocent ejections
+
+| set | before | after |
+|---|---|---|
+| `samples/9p2i` | 9 | **22** |
+
+Every innocent ejection sits in the non-direct cell: the proof-present cell is
+innocent-free, 0 of 24, and 42 − 20 = 22.
+
+### 9.7 The before columns, and the column that no longer reproduces
+
+The process scorecard's before column for `samples/9p2i` is that set's entry of
+`docs/process-scorecard.json` at `d41c9006`, carried verbatim in
+`docs/process-scorecard-before.json` and pinned by its sha256 in
+`eval/process_scorecard.py`; the front door's before cells read the baseline-9
+record's rows above. This round's "s9 at baseline 9" column (1.9) reproduces at
+`d41c9006`, where those bytes are `replays/samples/9p2i`, and not after the
+promotion, whose tree no longer holds them.
+
+### 9.8 Pins re-derived over the baseline-9 era's three sets
+
+`scripts/counterfactual_phase21.py` reads the baseline-9 era's sets only and
+refuses `samples/9p2i` by name, so its corroboration pins are re-derived by its
+own walk over the three sets; this section is their committed source:
+
+| cell | four baseline-9 sets | three baseline-9 sets |
+|---|---|---|
+| accused without a first-hand source | 529 / 1,516 | **422 / 1,192** |
+| ejected without a first-hand source | 16 / 409 | **12 / 321** |
+| ejected on an answering turn | 36 / 411 | **29 / 321** |
+| ejected with a walkable pair | 69 / 411 | **56 / 321** |
+
+Its innocent-ejection pins are the baseline-9 record's three per-set cells (32,
+0, 1).
+
+### 9.9 The candidate-round rule, and where it departs from the memo
+
+A round whose bytes become a committed set is deleted in the promoting change,
+and its record cites the commit that held it: round 2's directory is deleted
+here, its bytes held at `d41c9006`. Any other round stays until a later card
+names its retirement. Round 1 (`replays/candidates/stage-b-r1/`) stays as the
+comparison record that this audit and round 1's both read as a column. This
+departs from the decision memo's proposal
+([`tasks/decision-2026-09-24-stage-b-wave.md`](../tasks/decision-2026-09-24-stage-b-wave.md)
+section 1, item 7) that the card landing round r+1 deletes round r.
+
+### 9.10 What the promoted set does not ship
+
+The gameplay-facts extractor reads only recordings made without experiment
+settings, so the set ships no `results-rubric-score.json`, and the 15.2 parity
+pin is history until a card widens the extractor. The three curated cases on the
+public results page were written against the baseline-9 bytes and are withheld
+by their source check; the tour card re-curates them.

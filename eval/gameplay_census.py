@@ -56,7 +56,10 @@ default; they never build a ``RecordedExperimentConfig``.
 Each game carries an :class:`EraKey`: its settings, its temporal-observation
 version, its substrate-flag stamp and its prompt stamps, the last taken only
 from MANIFEST rows of games that recorded a meeting. A set whose games carry two
-eras raises, and :func:`pool` raises across eras.
+eras raises, and :func:`pool` raises across eras. The committed sets are grouped
+by the era registry (:mod:`eval.eras`); each era is published with its own named
+windows, a pool exists only inside one era, and :func:`verify_era_registry`
+holds the registry to the keys the recordings fold to.
 
 A cell that a recorded setting makes zero by construction carries that
 setting's predicate. While the predicate holds, the fold raises
@@ -103,7 +106,9 @@ from engine.events import (
 )
 from engine.world import Map, WorldState, load_canonical_map, resolve_kill_cooldown
 from eval.balance_eval import _CURRENT_REPORT_WALK_CONFIG
-from eval.process_scorecard import AGENT_CLOCK_OFFSET, COMMITTED_SETS, NINE_PLAYER_SETS
+from eval.eras import COMMITTED_SETS as REGISTERED_SETS
+from eval.eras import CommittedSet, era_groups
+from eval.process_scorecard import AGENT_CLOCK_OFFSET
 from eval.replay_walk import (
     MeetingApplied,
     MeetingOpened,
@@ -127,8 +132,10 @@ from meetings.schemas import (
 from orchestrator.experiment_config import ConfigLayer, RecordedExperimentConfig
 from orchestrator.replay import (
     GameEndReplayEntry,
+    MeetingReplayEntry,
     ReplayLogEntry,
     WinnerSide,
+    read_all_entries,
     recorded_experiment_config,
     recorded_substrate_flags,
     recorded_temporal_observation_version,
@@ -136,8 +143,9 @@ from orchestrator.replay import (
 from orchestrator.replay_integrity import resolve_ballot_tally_threshold
 
 #: Bumped only when the published JSON changes shape in a way an older reader
-#: cannot interpret. Version 1 is the first publication.
-SCHEMA_VERSION: Final[int] = 1
+#: cannot interpret. Version 1 is the first publication; version 2 groups the
+#: sets by recorded era (the promotion of candidate round 2, 2026-10-02).
+SCHEMA_VERSION: Final[int] = 2
 
 #: A plain recorded setting value, as the recording serializes it.
 SettingValue: TypeAlias = str | int | bool | None
@@ -3152,6 +3160,24 @@ class CensusSection(_FrozenModel):
     tables: dict[str, CensusTable]
 
 
+class CensusEra(_FrozenModel):
+    """One recorded era of the committed sets, as the era registry names it.
+
+    ``constants`` are the era's named windows (the grace window is its recorded
+    kill cooldown, else the map's). ``pooled`` adds the counts of the era's sets
+    when it holds more than one and is ``None`` for a one-set era, whose own
+    section is its only reading; no pool crosses two eras.
+    """
+
+    era_id: str
+    record: str
+    recorded_on: str
+    declared_config: str | None
+    constants: dict[str, int]
+    sets: tuple[str, ...]
+    pooled: CensusSection | None
+
+
 class GameplayCensus(_FrozenModel):
     schema_version: int
     not_the_scorecard_note: str
@@ -3159,11 +3185,9 @@ class GameplayCensus(_FrozenModel):
     count_only_note: str
     terms: dict[str, str]
     setting_meanings: dict[str, str]
-    constants: dict[str, int]
     field_classification: dict[str, str]
+    eras: tuple[CensusEra, ...]
     sets: tuple[CensusSection, ...]
-    pooled_9p2i: CensusSection
-    pooled: CensusSection
 
 
 def _era_view(era: EraKey) -> EraView:
@@ -3261,28 +3285,56 @@ def _constants(kill_cooldown_ticks: int) -> dict[str, int]:
     }
 
 
-#: The committed sets in publication order, and the nine-player pair, taken from
-#: the scorecard so the two reports name one list.
-CENSUS_SETS: Final[tuple[str, ...]] = COMMITTED_SETS
-CENSUS_NINE_PLAYER_SETS: Final[tuple[str, ...]] = NINE_PLAYER_SETS
+#: The committed sets in publication order, from the era registry.
+CENSUS_SETS: Final[tuple[str, ...]] = tuple(entry.path for entry in REGISTERED_SETS)
 
 
-def census_from_inputs(inputs: Sequence[CensusInputs]) -> GameplayCensus:
-    """Fold every set, pool the nine-player sets and all sets, and publish."""
+def census_from_inputs(
+    inputs: Sequence[CensusInputs],
+    *,
+    registry: Sequence[CommittedSet] = REGISTERED_SETS,
+) -> GameplayCensus:
+    """Fold every set, pool each era's sets inside that era, and publish.
+
+    Each input's ``source`` must be a committed set ``registry`` names, and the
+    registry decides its era. Pooling an era's sets raises
+    :class:`GameplayCensusEraError` when their recorded keys differ, which is
+    what a set filed under the wrong era does; no pool crosses two eras.
+    """
 
     if not inputs:
         raise ValueError("no replay sets to fold")
-    cooldowns = {item.kill_cooldown_ticks for item in inputs}
-    if len(cooldowns) != 1:
-        raise ValueError(
-            "the sets ran at different kill cooldowns (recorded, else the map's)"
-        )
     tallies = [fold_set(item) for item in inputs]
-    nine = [
-        tally
-        for tally, item in zip(tallies, inputs, strict=True)
-        if item.source in CENSUS_NINE_PLAYER_SETS
-    ]
+    by_source = {
+        item.source: (item, tally) for item, tally in zip(inputs, tallies, strict=True)
+    }
+    if len(by_source) != len(inputs):
+        raise ValueError("one set was given twice")
+    eras: list[CensusEra] = []
+    for era, members in era_groups([item.source for item in inputs], registry=registry):
+        group = [by_source[source] for source in members]
+        pooled = (
+            pool([tally for _, tally in group], label=f"pooled: the {era.id} sets")
+            if len(group) > 1
+            else None
+        )
+        cooldowns = {item.kill_cooldown_ticks for item, _ in group}
+        if len(cooldowns) != 1:
+            raise GameplayCensusEraError(
+                f"the {era.id} sets ran at different kill cooldowns (recorded, "
+                "else the map's); the census never pools across eras"
+            )
+        eras.append(
+            CensusEra(
+                era_id=era.id,
+                record=era.record,
+                recorded_on=era.recorded_on,
+                declared_config=era.declared_config,
+                constants=_constants(cooldowns.pop()),
+                sets=tuple(tally.label for _, tally in group),
+                pooled=section_from_tally(pooled) if pooled is not None else None,
+            )
+        )
     return GameplayCensus(
         schema_version=SCHEMA_VERSION,
         not_the_scorecard_note=NOT_THE_SCORECARD_NOTE,
@@ -3290,15 +3342,9 @@ def census_from_inputs(inputs: Sequence[CensusInputs]) -> GameplayCensus:
         count_only_note=COUNT_ONLY_NOTE,
         terms=dict(TERMS),
         setting_meanings=dict(SETTING_MEANINGS),
-        constants=_constants(cooldowns.pop()),
         field_classification=_field_classification_view(),
+        eras=tuple(eras),
         sets=tuple(section_from_tally(tally) for tally in tallies),
-        pooled_9p2i=section_from_tally(
-            pool(nine, label="pooled: the two nine-player sets")
-        ),
-        pooled=section_from_tally(
-            pool(tallies, label="pooled: all four committed sets")
-        ),
     )
 
 
@@ -3311,6 +3357,85 @@ def compute_gameplay_census(
     """
 
     return census_from_inputs([load(root / name) for name in CENSUS_SETS])
+
+
+def recorded_game_eras(set_dir: Path) -> Mapping[int, EraKey]:
+    """Every game's :class:`EraKey` in ``set_dir``, read without an engine walk.
+
+    The key :func:`load_census_inputs` gives the same game: its recorded
+    settings, temporal version and substrate stamp, plus the MANIFEST row's
+    prompt stamps when the recording holds a meeting row. The rows alone are
+    enough, because the key states what was recorded rather than what was played.
+    """
+
+    cells = _manifest_prompt_cells(set_dir)
+    keys: dict[int, EraKey] = {}
+    for seed in seeds_on_disk(set_dir):
+        if seed in UNSEEN_SEED_BAND:
+            raise ValueError(f"{set_dir}: a seed in a band no census read may touch")
+        entries = read_all_entries(set_dir / f"replay-seed-{seed}.jsonl")
+        held_meeting = any(isinstance(entry, MeetingReplayEntry) for entry in entries)
+        if held_meeting and seed not in cells:
+            raise ValueError(f"{set_dir}: seed {seed} has no MANIFEST row")
+        stamps = prompt_stamps_from_cell(cells[seed]) if held_meeting else None
+        keys[seed] = _game_era(entries, stamps)
+    if not keys:
+        raise ValueError(f"{set_dir}: no replay to read an era from")
+    return MappingProxyType(keys)
+
+
+def verify_era_registry(
+    root: Path, *, registry: Sequence[CommittedSet] = REGISTERED_SETS
+) -> Mapping[str, EraKey]:
+    """Hold the era registry to the recordings: each set's key, or a refusal.
+
+    Every set's games must fold to one key; the sets of one era id must share
+    it and sets of different ids must not; every game of an era with a declared
+    config must have recorded exactly that config, and every game of an era with
+    none must have recorded no setting off its default. Raises
+    :class:`GameplayCensusEraError` naming the set, and the seed for a config
+    breach.
+    """
+
+    keys: dict[str, EraKey] = {}
+    by_era: dict[str, EraKey] = {}
+    for entry in registry:
+        games = recorded_game_eras(root / entry.path)
+        try:
+            key = resolve_era(tuple(games.values()))
+        except GameplayCensusEraError as error:
+            raise GameplayCensusEraError(f"{entry.path}: {error}") from error
+        declared = entry.era.declared_config
+        expected = (
+            canonical_settings(
+                RecordedExperimentConfig.model_validate_json(
+                    (root / declared).read_bytes()
+                ).model_dump(mode="json")
+            )
+            if declared is not None
+            else ()
+        )
+        for seed, game in games.items():
+            if game.settings != expected:
+                raise GameplayCensusEraError(
+                    f"{entry.path}: seed {seed} recorded settings that differ from "
+                    f"the {entry.era.id} era's declared config"
+                )
+        if by_era.setdefault(entry.era.id, key) != key:
+            raise GameplayCensusEraError(
+                f"{entry.path}: its recordings fold to a different era from the "
+                f"other {entry.era.id} sets"
+            )
+        keys[entry.path] = key
+    ids_by_key: dict[EraKey, str] = {}
+    for era_id, key in by_era.items():
+        other = ids_by_key.setdefault(key, era_id)
+        if other != era_id:
+            raise GameplayCensusEraError(
+                f"the {other} and {era_id} eras fold to one recorded key; one "
+                "recorded era carries one id"
+            )
+    return MappingProxyType(keys)
 
 
 def serialize_json(model: BaseModel) -> str:
@@ -3329,7 +3454,6 @@ __all__ = [
     "BOUNDED_REBUTTAL",
     "BUTTON_COOLDOWN_TICKS",
     "CELLS",
-    "CENSUS_NINE_PLAYER_SETS",
     "CENSUS_SETS",
     "CENSUS_THREADED_LAYERS",
     "CENSUS_WALK_CONFIG",
@@ -3364,6 +3488,7 @@ __all__ = [
     "CellCount",
     "CellSpec",
     "CensusCell",
+    "CensusEra",
     "CensusInputs",
     "CensusSection",
     "CensusTable",
@@ -3399,6 +3524,7 @@ __all__ = [
     "load_census_inputs",
     "pool",
     "prompt_stamps_from_cell",
+    "recorded_game_eras",
     "recorded_kill_cooldown",
     "resolve_era",
     "section_from_tally",
@@ -3406,4 +3532,5 @@ __all__ = [
     "serialize_json",
     "served_own_kill_rows",
     "setting_value",
+    "verify_era_registry",
 ]

@@ -14,10 +14,10 @@
 // Firewall (BINDING): the card keys on drama / score, NEVER on who won. The score
 // badge + sub-scores are role-neutral ink — they never reuse the suspicion (amber)
 // / trust (blue) / kill (red) channels, and the winner is a neutral label, never a
-// guilt hue. 4p1i is the fast technical fixture — served only on an explicit
-// `?set=4p1i` since Task 19.9 flipped the default to 9p2i — and it ships no
-// rubric; 11 of its 50 games hold no meeting at all. So the UNSCORED and
-// ZERO-MEETING states are first-class here, not afterthoughts.
+// guilt hue. No committed set ships a rubric since 2026-10-02, and 4p1i — the
+// fast technical fixture, served only on an explicit `?set=4p1i` — holds games
+// with no meeting at all. So the UNSCORED and ZERO-MEETING states are
+// first-class here, not afterthoughts.
 //
 // REVEAL GATING (Task 19.10): this grid renders BEFORE anything is opened, so it
 // is the corpus's biggest pre-play spoiler surface. The card therefore takes a
@@ -44,7 +44,7 @@ export interface HighlightCardData {
   readonly winner: Winner | null;
   readonly completionStatus?: ReplayMetadataView["completion_status"];
   readonly totalTicks: number | null;
-  /** `null` = unscored (the set ships no rubric, e.g. the 4p1i fixture set). */
+  /** `null` = unscored (the set ships no rubric). */
   readonly rubric: RubricGameView | null;
 }
 

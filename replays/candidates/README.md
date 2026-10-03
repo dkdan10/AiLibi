@@ -2,7 +2,7 @@
 
 This directory holds recordings made to assess experimental switches before
 anyone decides to adopt them. They are kept in the tree so every change
-re-verifies them, and they are not the canonical sample sets.
+re-verifies them, and while they are here they are not committed sets.
 
 **An experimental switch** is one setting of a recording's experiment config: a
 field that is off by default and, when turned on, changes how the game is played
@@ -18,9 +18,13 @@ fixed before it started.
 
 ## What a candidate is not
 
-- **Not canonical.** The committed sets under `replays/samples/` and
-  `replays/ml_corpus/` are recorded with every switch off, and a candidate never
-  replaces one of their bytes.
+- **Not canonical while it is here.** The committed sets under
+  `replays/samples/` and `replays/ml_corpus/` are the canonical bytes, each in
+  its own era (`eval/eras.py`). A round becomes one only by promotion, the
+  owner's ruling, which moves its bytes into a committed set with its config
+  beside them as that era's declared config: candidate round 2 became
+  `replays/samples/9p2i` on 2026-10-02, recorded in section 9 of the round's own
+  record. The other three committed sets are recorded with every switch off.
 - **Not served or published.** The spectator API looks for a set of recordings
   directly under `replays/` or `replays/samples/`, and the static demo reads
   `replays/samples/` alone. A candidate set sits at
@@ -28,11 +32,10 @@ fixed before it started.
   changes nothing a viewer sees.
 - **Not adopted by being here.** Adopting a switch is the owner's decision,
   made after the round is assessed. The adopting change either re-records the
-  committed sets with the switch on or promotes a candidate, and in both cases it
-  lifts the recorder's refusal of a switched-on config aimed at
-  `replays/samples/` or `replays/ml_corpus/`. A later round lands in its own
-  directory; the change that lands it, or the adopting change, decides whether
-  an earlier round is removed.
+  committed sets with the switch on or promotes a candidate. A round whose bytes
+  become a committed set is deleted in the promoting change, and its record
+  cites the commit that held it; any other round stays until a later change
+  names its retirement. A later round lands in its own directory.
 
 ## Layout
 
@@ -83,8 +86,11 @@ AILIBI_NUM_PLAYERS=9 AILIBI_NUM_IMPOSTORS=2 AILIBI_TASKS_PER_CREWMATE=2 \
 The recorder checks the config before anything stages, refuses any
 meeting-experiment environment variable, copies the config into its stage once
 and records every seed from that copy. It refuses a switched-on config aimed at
-the committed sets, at the default target, or anywhere inside `replays/` other
-than `replays/candidates/<round>/<set>/`.
+`replays/ml_corpus/`, at the default target, or anywhere inside `replays/` other
+than `replays/candidates/<round>/<set>/`. A committed sample set whose era
+declares a config (`eval/eras.py`) records exactly that file's bytes, and a
+bare run into it is refused; a sample set whose era declares none takes no
+switched-on config.
 
 **Record in a dedicated worktree, and run no test suite and no `check.sh` in a
 checkout while a recording is running there.** The recorder stages each seed

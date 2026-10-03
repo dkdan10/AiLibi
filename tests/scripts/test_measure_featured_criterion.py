@@ -43,26 +43,30 @@ _criterion: Any = importlib.import_module("measure_featured_criterion")
     "seed,shape,why",
     [
         # (ballots, recorded entries, ballots naming the voter, naming the target)
-        (2, (7, 9, 1, 0), "one voter lists ITSELF in the only meeting"),
-        (13, (7, 10, 1, 0), "one voter lists itself; none lists its own target"),
-        (23, (26, 29, 0, 0), "the tour's landing game carries neither shape"),
+        (2, (7, 10, 2, 0), "two voters list THEMSELVES in the only meeting"),
+        (13, (13, 22, 1, 0), "one voter lists itself; none lists its own target"),
+        (3, (19, 26, 1, 0), "the tour's landing game: one voter lists itself"),
+        (23, (12, 24, 0, 0), "the old landing game carries neither shape"),
     ],
 )
 def test_alternatives_shape_reads_the_committed_duplicates(
     seed: int, shape: tuple[int, int, int, int], why: str
 ) -> None:
     # The annotation in `frontend/src/components/BallotCard.tsx` exists because
-    # these bytes exist. Seed 2 is the case in the flesh: one voter records
-    # ITSELF among the players it weighed, which without a note renders as a
-    # second identical pill beside the one in the ballot's header.
+    # these bytes exist. Seed 2 is the case in the flesh: a voter records ITSELF
+    # among the players it weighed, which without a note renders as a second
+    # identical pill beside the one in the ballot's header.
     #
-    # The TARGET shape is recorded by no committed ballot on the baseline-9
-    # bytes — 0 in each of the four sets
+    # The TARGET shape is recorded by no committed ballot — 0 of the promoted
+    # 9p2i set's 691 ballots (candidate round 2, since 2026-10-02) and 0 in each
+    # of the three baseline-9 sets
     # (`scripts/measure_featured_criterion.py --alternatives`, and the same count
     # over `--parent replays/ml_corpus`) — so no game here can name it, and the
     # "(the vote cast)" note is proved only by its constructed case in
     # `frontend/src/components/PrivateReasoning.test.tsx`.
-    # (Was 2: (7, 13, 2, 0); 13: (18, 35, 1, 2); 23: (26, 36, 0, 0) on baseline 8.)
+    # (Was 2: (7, 9, 1, 0); 13: (7, 10, 1, 0); 23: (26, 29, 0, 0) on the
+    # baseline-9 bytes, and 2: (7, 13, 2, 0); 13: (18, 35, 1, 2);
+    # 23: (26, 36, 0, 0) on baseline 8.)
     replay = SetLoaderRegistry(_PARENT).get("9p2i").load_replay(f"headless-seed-{seed}")
     assert _criterion.alternatives_shape(replay) == shape
 

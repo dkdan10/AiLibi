@@ -366,29 +366,53 @@ def _projected_rebuttals(directory: Path) -> dict[str, int]:
     return {key: counts[key] for key in _PROJECTED_COUNTS}
 
 
+def _recorded_rebuttal_version(directory: Path) -> int | None:
+    """The rebuttal setting every recording in ``directory`` was made with.
+
+    A directory whose recordings disagree raises rather than reading as either.
+    """
+
+    versions: set[int | None] = set()
+    for path in sorted(directory.glob("replay-seed-*.jsonl")):
+        config = recorded_experiment_config(read_all_entries(path))
+        versions.add(None if config is None else config.bounded_rebuttal_version)
+    (version,) = versions
+    return version
+
+
 def test_the_rule_the_owner_is_asked_to_confirm_projected_on_the_committed_sets() -> (
     None
 ):
-    # MEASURED, count-only, on the four committed sets: the one reply goes to the
-    # opener in most meetings, and to a non-opener (mostly an accused impostor)
-    # wherever an earlier new charge named someone else. Every row of the card's
-    # table is pinned here, each set's meeting count included.
+    # MEASURED, count-only, on the committed sets recorded without the setting:
+    # the one reply goes to the opener in most meetings, and to a non-opener
+    # (mostly an accused impostor) wherever an earlier new charge named someone
+    # else. Every row of the card's table is pinned here, each set's meeting
+    # count included. The promoted samples/9p2i (candidate round 2, since
+    # 2026-10-02) recorded the setting at version 1, so its transcripts already
+    # hold the reply and a projection over them would count it twice; its
+    # baseline-9 bytes projected to 145 meetings, 144 fires (123 to the opener,
+    # 19 to an impostor, 2 to another crewmate), 125 opener-accused and 2 slots
+    # lost.
     from tests._helpers.committed import COMMITTED_SETS
 
+    versions = {
+        f"{directory.parent.name}/{directory.name}": _recorded_rebuttal_version(
+            directory
+        )
+        for directory in COMMITTED_SETS
+    }
+    assert versions == {
+        "samples/9p2i": 1,
+        "samples/4p1i": None,
+        "ml_corpus/9p2i": None,
+        "ml_corpus/4p1i": None,
+    }
     projected = {
         f"{directory.parent.name}/{directory.name}": _projected_rebuttals(directory)
         for directory in COMMITTED_SETS
+        if versions[f"{directory.parent.name}/{directory.name}"] is None
     }
     assert projected == {
-        "samples/9p2i": {
-            "meetings": 145,
-            "fires": 144,
-            "to_opener": 123,
-            "to_impostor": 19,
-            "to_other_crewmate": 2,
-            "opener_accused": 125,
-            "opener_accused_loses_slot": 2,
-        },
         "samples/4p1i": {
             "meetings": 39,
             "fires": 39,
@@ -420,14 +444,16 @@ def test_the_rule_the_owner_is_asked_to_confirm_projected_on_the_committed_sets(
     pooled: Counter[str] = Counter()
     for counts in projected.values():
         pooled.update(counts)
+    # The three baseline-9 sets; the four-set pool read 676 / 673 / 548 / 113 /
+    # 12 / 561 / 13.
     assert {key: pooled[key] for key in _PROJECTED_COUNTS} == {
-        "meetings": 676,
-        "fires": 673,
-        "to_opener": 548,
-        "to_impostor": 113,
-        "to_other_crewmate": 12,
-        "opener_accused": 561,
-        "opener_accused_loses_slot": 13,
+        "meetings": 531,
+        "fires": 529,
+        "to_opener": 425,
+        "to_impostor": 94,
+        "to_other_crewmate": 10,
+        "opener_accused": 436,
+        "opener_accused_loses_slot": 11,
     }
 
 

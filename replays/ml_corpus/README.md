@@ -115,6 +115,15 @@ substrate — **S9** (`replays/samples/9p2i`, 50 games), **S4**
 games), **C4** (`replays/ml_corpus/4p1i`, 50 games). Together: 300 games, 676
 meetings, 3,630 transcript turns and 3,630 ballots.
 
+> **S9 is history (2026-10-02).** `replays/samples/9p2i` now holds the shown
+> 9-player set, a later era (`eval/eras.py`;
+> [its record](../../audits/audit-2026-10-01-stage-b-r2.md) section 9). Here, S9
+> means that path's baseline-9 bytes as of `d41c9006`, the last commit that held
+> them, and every S9 figure is a record of those bytes; `scripts/check_doc_facts.py`
+> holds the headline S9 cells to their `d41c9006` values. The corpus did not
+> move, and the one-rung and pairing notes above now hold, among the samples,
+> for `replays/samples/4p1i` alone.
+
 **Which figures below are current.** Every figure in this section was
 re-derived on these baseline-9 bytes, the totals above and items 1 to 9 alike.
 Only the cells named under "Which item comes from which" are re-derived by the

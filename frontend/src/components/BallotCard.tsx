@@ -108,11 +108,11 @@ function PlayerPill({
  * The note an entry earns when the card's HEADER already shows it, or `null`.
  *
  * The recorded list is not a list of OTHER players, and the bytes say so: over
- * `replays/samples/9p2i`, 24 of 845 ballots list the voter itself
+ * `replays/samples/9p2i`, 28 of 691 ballots list the voter itself
  * (`scripts/measure_featured_criterion.py --alternatives`). Such an entry
  * renders a second pill identical to one in the header, which without a note
  * reads as a different player at the table. The target the vote applied to
- * duplicates the header the same way: no committed ballot lists it (0 of 845),
+ * duplicates the header the same way: no committed ballot lists it (0 of 691),
  * but the ballot schema does not exclude it. The entry is kept — the block is
  * the record — and named instead.
  *

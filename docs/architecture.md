@@ -105,24 +105,25 @@ compare owned tasks to engine truth. Strict mypy covers the repository;
 A seed, configuration, agent factory and provider responses determine replay
 bytes within their recorded runtime scope. The fake provider is deterministic;
 fresh hosted generation is not. For hosted runs, the recording is the
-reproducibility boundary. The README distinguishes replay integrity,
-same-runtime repeatability and optimizer portability; these claims are separate.
+reproducibility boundary. The README separates replay integrity, same-runtime
+repeatability and optimizer portability.
 
 `orchestrator/replay.py` owns twenty-one graduated keys in
 `_RETIRED_ALWAYS_ON_LEVERS` and five live toggles:
 `impostor_roll_call`, `reporter_reasoning`, `corroboration_discipline`,
 `testimony_shapes` and `temporal_observations`. Each toggle has a default-OFF
 `AILIBI_*` variable. Recordings and manifests stamp the substrate; readers refuse
-incompatible settings. Graduation deletes the resolver and env mechanism while
-retaining its provenance key, following `docs/agent-procedures.md`.
+incompatible settings. Graduation deletes the resolver and env mechanism but
+keeps its provenance key (`docs/agent-procedures.md`).
 
 Baselines are adopting records. Baseline 9, the current one, is the process
-re-record that adopted the substrate wave
-(`audits/audit-2026-09-22-process-rerecord.md`). Baseline 8 is the maintenance
-re-record on corrected behavior (`audits/audit-phase-21-rerecord.md`).
+re-record adopting the substrate wave
+(`audits/audit-2026-09-22-process-rerecord.md`) and holds three sets;
+`replays/samples/9p2i` is a later era (`eval/eras.py`), promoted candidate round
+2 (`audits/audit-2026-10-01-stage-b-r2.md` §9), and instruments never pool eras.
+Baseline 8 is the maintenance re-record (`audits/audit-phase-21-rerecord.md`).
 Baseline 7 followed an explicit FINDING override
-(`audits/audit-phase-20-baseline-7.md` §6.1), not a claim that its missed bars
-passed.
+(`audits/audit-phase-20-baseline-7.md` §6.1); its missed bars did not pass.
 
 ### Observation timing and public identities
 
@@ -163,7 +164,8 @@ walking feasibility from the observer's own records and public topology.
 walking feasibility without consulting other speakers' private observations.
 Attributed testimony retains its speaker and does not become first-hand proof.
 `engine/meeting_reset.py` owns the reset transition. These helpers have actual
-callers and semantic controls; their experiments remain OFF and unadopted.
+callers and semantic controls; their experiments stay default-OFF, ON only in
+the 9p2i era's reply and reset.
 
 Experiment format 3 adds independent bounded investigation and contextual
 self-report, requiring temporal/evidence version 2. The search reducer uses owned

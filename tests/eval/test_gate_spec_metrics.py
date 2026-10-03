@@ -20,8 +20,10 @@ layers, mirroring :mod:`tests.eval.test_gate_metrics`:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
+from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -106,13 +108,39 @@ _BASELINE_FIXTURE = (
 _W1_BASELINE_FIXTURE = (
     _REPO_ROOT / "tests" / "fixtures" / "phase10" / "corrected_w1_baseline.json"
 )
-# The Wave-2 (10.17) re-record's corrected baseline, the current-era pin produced
-# by the same operator command over the committed 9p2i bytes. This W2 file is what
-# the committed bytes now re-derive to; corrected_w0_* / corrected_w1_* stay frozen
-# as the prior-era A/B anchors.
+# The Wave-2 (10.17) re-record's corrected baseline, produced by the same operator
+# command over the committed 9p2i bytes and re-derived at every re-record through
+# baseline 9. Those bytes left replays/samples/9p2i at the promotion of candidate
+# round 2 (2026-10-02) and tests/fixtures does not move, so it is now FROZEN like
+# corrected_w0_* / corrected_w1_*: a prior-era anchor pinned by content below,
+# never re-derived.
 _W2_BASELINE_FIXTURE = (
     _REPO_ROOT / "tests" / "fixtures" / "phase10" / "corrected_w2_baseline.json"
 )
+# The whole corrected baseline the operator command re-derives from the promoted
+# samples/9p2i bytes (its seven blocks and ``sample_dir``), as the sha256 of its
+# serialized bytes, and its 44-site channel map as the sha256 of the map's
+# sorted-key JSON. Before the promotion the re-derivation was byte-equal to
+# corrected_w2_baseline.json, whose bytes and 81-site map digest to the _W2_*
+# values (held by the W2 anchor test).
+_PROMOTED_BASELINE_SHA256 = (
+    "3a556a56c0f9c76d5838169bc357cbe760dc4a5d17c55d246b9c0f6172eb10e0"
+)
+_PROMOTED_CHANNEL_MAP_SHA256 = (
+    "52ab23881ed37f687bd5e8c5b4c5bfbaa798d0fb06fcdb00f22a9ac490b90dec"
+)
+_W2_BASELINE_SHA256 = "a472a70d820d0ad61d51140c1b12734910ebe662d73db9dd598b1ad54542fb5d"
+_W2_CHANNEL_MAP_SHA256 = (
+    "2d54603723aeb76f2c3ede44fa8e15740dbb9e536ba783b8f2ae55d2c36cb6ed"
+)
+
+
+def _channel_map_sha256(channels_by_site: Mapping[str, object]) -> str:
+    """The sha256 of a site-to-channels map's sorted-key JSON."""
+
+    return hashlib.sha256(
+        json.dumps(channels_by_site, sort_keys=True).encode("utf-8")
+    ).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -927,14 +955,12 @@ class TestCommittedW2GateSpecPins:
     ``test_w*_baseline_fixture_carries_the_anchor_rows`` tests below.
     """
 
-    def test_committed_ejections_decompose_as_the_w2_baseline(self) -> None:
-        # W2 (baseline-9, qwen3_6_27b: three templates at v6, vote_ballot at v8):
-        # 81 impostor ejections, each site's channel set keyed
-        # "seed-{seed}:m{index}". Sourced from the committed W2 baseline fixture
-        # rather than transcribed, so the pin is the rederived-channels ==
-        # committed-baseline equality the operator command produced. The W1
-        # 11-ejection map remains pinned in corrected_w1_baseline.json (anchor
-        # test below).
+    def test_committed_ejections_decompose_into_channels(self) -> None:
+        # The promoted stage-b-r2 bytes (qwen3_6_27b: three templates at v6,
+        # vote_ballot at v8 with the two ballot arms): 44 impostor ejections,
+        # each site's channel set keyed "seed-{seed}:m{index}", counted by
+        # channel. The baseline-9 map of 81 sites stays pinned by content in
+        # corrected_w2_baseline.json (anchor test below), with the W0 and W1 maps.
         report = _load_committed_9p2i()
         channels_by_site = {
             f"seed-{game.seed}:m{index}": sorted(channels)
@@ -942,70 +968,140 @@ class TestCommittedW2GateSpecPins:
             for index in range(len(game.meetings))
             if (channels := decompose_ejection_channels(game, index)) is not None
         }
-        expected = json.loads(_W2_BASELINE_FIXTURE.read_text(encoding="utf-8"))[
-            "impostor_ejection_channels"
-        ]
-        assert channels_by_site == expected
+        assert len(channels_by_site) == 44  # was 81
+        # The whole map, every site's channel set (was _W2_CHANNEL_MAP_SHA256,
+        # the 81-site map equal to the W2 fixture's).
+        assert _channel_map_sha256(channels_by_site) == _PROMOTED_CHANNEL_MAP_SHA256
+        counts = Counter(
+            channel for channels in channels_by_site.values() for channel in channels
+        )
+        # was body_proximity 21, contradiction_flag 1, prior_meeting_carry 20,
+        # single-witness inform 2, vent_witness 59 on the baseline-9 bytes
+        assert dict(counts) == {
+            "body_proximity": 16,
+            "prior_meeting_carry": 10,
+            "vent_witness": 28,
+        }
 
-    def test_multi_signal_conversion_reads_18_of_64(self) -> None:
-        # The gate ejects 81 impostors on the committed 9p2i bytes. Reading the
-        # RECORDED flag channel rather than a transcript re-derivation, 22 of the
-        # 81 rows carry MULTIPLE signal channels, 59 carry a single channel and 0
-        # are unattributed. The channel decomposition per site is pinned above
-        # against the committed W2 baseline fixture.
+    def test_multi_signal_conversion_reads_the_committed_split(self) -> None:
+        # The gate ejects 44 impostors on the committed 9p2i bytes. Reading the
+        # RECORDED flag channel rather than a transcript re-derivation, 10 of the
+        # 44 rows carry MULTIPLE signal channels, 34 carry a single channel and 0
+        # are unattributed (first pinned at 18 of 64; the baseline-9 bytes read
+        # 22 / 59 of 81). The channel counts are pinned above.
         report = _load_committed_9p2i()
         result = compute_multi_signal_conversion(report.report.games)
 
-        assert result.impostor_ejections == 81  # was 82
-        assert result.multi_signal_conversions == 22  # was 27
-        assert result.single_signal_conversions == 59  # was 55
+        assert result.impostor_ejections == 44  # was 81
+        assert result.multi_signal_conversions == 10  # was 22
+        assert result.single_signal_conversions == 34  # was 59
         assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(22 / 81)  # was 27 / 82
+        assert result.multi_signal_rate == pytest.approx(10 / 44)  # was 22 / 81
 
     def test_supply_gauges_read_the_corrected_instrument(self) -> None:
         # The supply row off the RECORDED non-vent census on the committed 9p2i
-        # bytes: 17 flags split 11w/6s across 145 meetings, role split 13 CREW /
-        # 4 IMP, 135 zero-contradiction meetings, genuine-subject supply 4,
-        # accused-impostor 111, and 421 over-gate §6.6 listener rows. The vent
+        # bytes: 15 flags split 13w/2s across 117 meetings, role split 13 CREW /
+        # 2 IMP, 106 zero-contradiction meetings, genuine-subject supply 4,
+        # accused-impostor 105, and 242 over-gate §6.6 listener rows. The vent
         # class is excluded here and rides the referee's own vent term, so this
-        # is the deduction-flag half of the record. The baseline-9 re-record
-        # shrinks the weak band (50 -> 11) and the genuine-subject supply
-        # (7 -> 4) that the baseline-8 bytes had re-opened.
+        # is the deduction-flag half of the record. (The baseline-9 bytes read 17
+        # flags, 11w/6s, over 145 meetings.)
         report = _load_committed_9p2i()
         gauges = compute_supply_gauges(report.report.games)
 
-        assert gauges.meetings_total == 145  # was 151
-        assert gauges.total_flags == 17  # was 57
-        assert gauges.weak_flags == 11  # was 50
-        assert gauges.strong_flags == 6  # was 7
-        assert gauges.zero_contradiction_meetings == 135  # was 126
-        assert gauges.genuine_subject_meetings == 4  # was 7
-        assert gauges.flag_subjects_crew == 13  # was 50
-        assert gauges.flag_subjects_impostor == 4  # was 7
-        assert gauges.accused_impostor_meetings == 111  # was 118
-        assert gauges.over_gate_listener_rows == 421  # was 432
+        assert gauges.meetings_total == 117  # was 145
+        assert gauges.total_flags == 15  # was 17
+        assert gauges.weak_flags == 13  # was 11
+        assert gauges.strong_flags == 2  # was 6
+        assert gauges.zero_contradiction_meetings == 106  # was 135
+        assert gauges.genuine_subject_meetings == 4
+        assert gauges.flag_subjects_crew == 13
+        assert gauges.flag_subjects_impostor == 2  # was 4
+        assert gauges.accused_impostor_meetings == 105  # was 111
+        assert gauges.over_gate_listener_rows == 242  # was 421
 
-    def test_corrected_w2_baseline_matches_a_rederivation(
+    def test_the_corrected_baseline_rederivation_is_pinned_whole(
         self, committed_9p2i_report: TournamentEvalReport
     ) -> None:
-        # ONE home: corrected_w2_baseline.json IS the current-era baseline,
-        # produced by the operator command
+        # The operator command
         #   scripts/build_sample_report.py --sample-dir replays/samples/9p2i
-        #     --baseline-out tests/fixtures/phase10/corrected_w2_baseline.json
-        # (originally under the Task-14.7 all-ON flag export; since Task 14.9
-        # that substrate is the unconditional default, so the re-derivation
-        # runs under the bare env and needs no flag export.)
-        # A byte-identical re-derivation here proves (a) the committed W2 fixture
-        # has not drifted from the committed bytes and (b) the whole derivation
-        # chain — detector, predicate, metrics — is deterministic end to end.
-        # corrected_w0/w1_baseline.json are the frozen prior-era A/B anchors,
-        # decoupled from the W2 bytes by the re-record (rows pinned below).
-        rederived = serialize_corrected_baseline(
-            corrected_baseline_from_report(
-                committed_9p2i_report, sample_dir=_COMMITTED_9P2I_DIR
+        #     --baseline-out <path>
+        # re-derives a corrected baseline from the committed bytes. Its whole
+        # serialized output — all seven blocks and sample_dir — is pinned by
+        # sha256 (was: byte-equal to corrected_w2_baseline.json, sha256
+        # _W2_BASELINE_SHA256), so any one block moving fails here; two
+        # derivations are byte-identical, so the whole derivation chain —
+        # detector, predicate, metrics — is deterministic end to end. The
+        # committed corrected_w2_baseline.json describes the baseline-9 bytes and
+        # is a frozen anchor now (content pinned below), never re-derived.
+        def derive() -> str:
+            return serialize_corrected_baseline(
+                corrected_baseline_from_report(
+                    committed_9p2i_report, sample_dir=_COMMITTED_9P2I_DIR
+                )
             )
+
+        rederived = derive()
+        assert rederived == derive()
+        assert (
+            hashlib.sha256(rederived.encode("utf-8")).hexdigest()
+            == _PROMOTED_BASELINE_SHA256
         )
-        assert rederived == _W2_BASELINE_FIXTURE.read_text(encoding="utf-8")
+        payload = json.loads(rederived)
+        assert sorted(payload) == [
+            "conversion_per_meeting",
+            "effective_deflection",
+            "genuine_class_conversion",
+            "impostor_ejection_channels",
+            "indistinguishability",
+            "multi_signal_conversion",
+            "sample_dir",
+            "supply_gauges",
+        ]
+        assert (
+            _channel_map_sha256(payload["impostor_ejection_channels"])
+            == _PROMOTED_CHANNEL_MAP_SHA256
+        )
+        assert payload["conversion_per_meeting"] == {
+            "conversion_per_meeting": 44 / 117,
+            "impostor_ejections": 44,
+            "resolved_meetings": 117,
+        }
+        assert rederived != _W2_BASELINE_FIXTURE.read_text(encoding="utf-8")
+
+    def test_w2_baseline_fixture_carries_the_anchor_rows(self) -> None:
+        # The frozen W2 anchor: corrected_w2_baseline.json keeps the baseline-9
+        # rows the samples-9p2i bytes re-derived to until the promotion of
+        # 2026-10-02. Pinned by content so the anchor cannot silently drift to a
+        # later era — mirrors the W0 and W1 anchor tests.
+        raw = _W2_BASELINE_FIXTURE.read_bytes()
+        # The pre-promotion pins, held: the rederivation's old bytes and map.
+        assert hashlib.sha256(raw).hexdigest() == _W2_BASELINE_SHA256
+        baseline = json.loads(raw)
+        assert (
+            _channel_map_sha256(baseline["impostor_ejection_channels"])
+            == _W2_CHANNEL_MAP_SHA256
+        )
+        assert baseline["sample_dir"] == "9p2i"
+        assert baseline["conversion_per_meeting"]["impostor_ejections"] == 81
+        assert baseline["conversion_per_meeting"]["resolved_meetings"] == 145
+        assert baseline["multi_signal_conversion"]["multi_signal_conversions"] == 22
+        assert baseline["multi_signal_conversion"]["impostor_ejections"] == 81
+        assert baseline["supply_gauges"]["total_flags"] == 17
+        assert baseline["supply_gauges"]["weak_flags"] == 11
+        assert baseline["supply_gauges"]["strong_flags"] == 6
+        assert len(baseline["impostor_ejection_channels"]) == 81
+        assert Counter(
+            channel
+            for channels in baseline["impostor_ejection_channels"].values()
+            for channel in channels
+        ) == {
+            "body_proximity": 21,
+            "contradiction_flag": 1,
+            "prior_meeting_carry": 20,
+            "single-witness inform": 2,
+            "vent_witness": 59,
+        }
 
     def test_w0_baseline_fixture_carries_the_anchor_rows(self) -> None:
         # The frozen 10.9 A/B anchor: corrected_w0_baseline.json keeps the W0

@@ -30,7 +30,7 @@ import type {
   WilsonRateCell,
 } from "../types/api";
 
-// ── mock builders (realistic 9p2i numbers; see replays/samples/9p2i) ──────────
+// ── mock builders (illustrative 9p2i-sized numbers, not read from a recording) ──
 
 function makeBin(index: number, count: number, hits: number): CalibrationBin {
   const lo = index / 10;

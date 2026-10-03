@@ -15,7 +15,11 @@ carry exactly that re-run, a replica of the definition the shipped metric
 dropped, and the check failed on every set recorded since. The extractor now
 reads the record through the one-home ``genuine_class_subjects``.
 
-Three cases, each running the real extractor over the committed 9p2i bytes:
+The extractor reads only recordings made without experiment settings, so since
+the promotion of candidate round 2 (2026-10-02) it refuses the shown
+``samples/9p2i`` set by name (pinned below) and that set ships no rubric. The
+three cases run the real extractor over the baseline-9 era's nine-player set,
+``ml_corpus/9p2i``, which it reads (read only; nothing under it is written):
 
 * at head the check passes and no self-check fails (green);
 * the historical replica planted in place of the one-home rule turns it red
@@ -89,13 +93,30 @@ def _shipped_plus_one_pair(report: Any) -> GenuineClassConversionReport:
     )
 
 
+#: The committed nine-player set the extractor reads (the baseline-9 era).
+_READ_SET = Path(__file__).resolve().parents[2] / "replays" / "ml_corpus" / "9p2i"
+
+
+def test_the_extractor_refuses_the_promoted_set_by_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    with pytest.raises(
+        SystemExit,
+        match="this extractor reads only recordings made without experiment settings",
+    ):
+        _facts.main()
+    assert not (tmp_path / "ailibi-gameplay-facts-9p2i.json").exists()
+
+
 def _extract(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Run the extractor over the committed 9p2i set; return (facts, summary)."""
+    """Run the extractor over the read nine-player set; return (facts, summary)."""
 
+    monkeypatch.setattr(_facts, "SAMPLE_DIR", _READ_SET)
     monkeypatch.setenv("TMPDIR", str(tmp_path))
     assert _facts.main() == 0
     summary: dict[str, Any] = json.loads(capsys.readouterr().out)
@@ -151,17 +172,19 @@ def test_a_transcript_rerun_in_place_of_the_record_fails_the_check(
     monkeypatch.setattr(_facts, "genuine_class_subjects", _transcript_rerun_subjects)
     facts, summary = _extract(tmp_path, monkeypatch, capsys)
 
-    # The exact line that floored the committed rubric on the baseline-9 bytes:
-    # the re-run mints a genuine flag naming an impostor the first meeting of
-    # seed 7 ejected, which the record does not carry. A re-record that removes
-    # the divergence re-anchors this exhibit on its own bytes.
-    assert _genuine_line(facts).endswith("(supplied 1/0, converted 1/0): FAIL")
+    # The re-run mints genuine flags the record does not carry: on the corpus
+    # nine-player set it supplies 12 where the record supplies 1. (On the
+    # baseline-9 samples bytes the exact line that floored the committed rubric
+    # read "(supplied 1/0, converted 1/0)", a flag naming an impostor the first
+    # meeting of seed 7 ejected.) A re-record that removes the divergence
+    # re-anchors this exhibit on its own bytes.
+    assert _genuine_line(facts).endswith("(supplied 12/1, converted 4/1): FAIL")
     assert _crosscheck(facts)["match"] is False
     assert _genuine_findings(summary) == ["blocking"]
     assert _facts_integrity_ok(facts) is False
     # One failing self-check floors every game, whatever its dimensions.
     rows = interestingness(facts)["per_game"]
-    assert len(rows) == 50
+    assert len(rows) == 150
     assert all(row["score"] == 0.0 for row in rows)
 
 

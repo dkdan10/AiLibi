@@ -127,9 +127,8 @@ function highlightsHref(set: string, bucket: ScoreBucket): string {
 // ---------------------------------------------------------------------------
 // Rubric fetch state (the `/eval/rubric` surface; staleness-guarded per set).
 // `absent` is the 404 an UNSCORED set answers with (no rubric → first-class
-// empty histogram). Since Task 19.9 the default set is the curated 9p2i, which
-// ships a rubric, so the 404 is now reached only by an explicit `?set=` onto an
-// unscored set — 4p1i, the fast fixture, and both ml_corpus sets.
+// empty histogram). Since 2026-10-02 no committed set ships a rubric, so the
+// served default answers 404 as well as every explicit `?set=`.
 // ---------------------------------------------------------------------------
 
 export type RubricState =
@@ -259,8 +258,8 @@ function VoteCorrectness({
   // rate tile carries the scope note that says what the rate is for.
   //
   // The rate is NOT structurally 1.0, whatever this file used to tell a reader:
-  // the committed 9p2i report records 72 evidence-backed of 78 impostor
-  // ejections (0.923). So the copy says what a value below 1 means and stops
+  // the committed 9p2i report records 35 evidence-backed of 44 impostor
+  // ejections (0.795). So the copy says what a value below 1 means and stops
   // short of naming a cause.
   const smallN = report.vote_correctness_small_n ? (
     <MetricCaveat tone="warn" title={DASHBOARD_COPY.voteCorrectnessSmallNTitle}>
@@ -883,12 +882,9 @@ function InterestingnessHistogram({ rubric }: { rubric: RubricState }) {
           {DASHBOARD_COPY.interestingnessLoading}
         </p>
       ) : rubric.status === "absent" ? (
-        // Post-flip copy (Task 19.13, sweeping what Task 19.9's default flip
-        // falsified). This panel used to say the DEFAULT-served set was 4p1i and
-        // that its games were "mostly zero-meeting" — both wrong now: the default
-        // is the curated 9p2i, which ships a rubric, and 4p1i's games are mostly
-        // ONE-meeting (39 of 50 hold exactly one, 11 hold none). So this state is
-        // reached by an explicit switch onto an unscored set, and it says which.
+        // Set-neutral copy: since 2026-10-02 no committed set ships a rubric,
+        // the served default included, so this state names no set as the
+        // unscored one and claims no rubric elsewhere.
         <div className="rounded-lg border border-ink-200 bg-paper-1 px-4 py-6 text-center shadow-data">
           <p className="font-semibold text-ink-900">
             {DASHBOARD_COPY.interestingnessAbsentTitle}
@@ -1190,8 +1186,8 @@ function DetailedTournamentDashboard() {
 
   // The rubric is fetched here (not via the tournament store, which is frozen to
   // the report) — a load-time projection served per set, 404 when the SELECTED
-  // set ships none (4p1i and the ml_corpus sets; not the 9p2i default, which
-  // ships one since Task 19.9's flip). `reloadNonce` re-triggers the fetch on
+  // set ships none (since 2026-10-02 no committed set ships one, the served
+  // default included). `reloadNonce` re-triggers the fetch on
   // Refresh; `seedSet` re-triggers it on a live set switch. It goes through
   // `api/client`'s `getRubric`, so this panel reads the live API in a normal
   // build and the pre-baked JSON in the static demo bundle — and gets the

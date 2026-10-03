@@ -42,9 +42,13 @@ if str(_REPO_ROOT) not in sys.path:
 
 from _report_output import atomic_write_report, preflight_report_output  # noqa: E402
 from eval.process_scorecard import (  # noqa: E402
+    BEFORE_COLUMNS_PATH,
     COMMITTED_SETS,
     FIFTH_RUN_ARCHIVE,
     RECORDINGS_ROOT,
+    BeforeColumn,
+    BeforeColumnsError,
+    EraScorecard,
     ProcessScorecard,
     RateCell,
     SetScorecard,
@@ -92,6 +96,7 @@ def protected_inputs(root: Path) -> list[Path]:
         *sorted(directories),
         *(path for path in root.glob(f"{RECORDINGS_ROOT}/**/*") if path.is_file()),
         *scorecard_source_paths(root),
+        root / BEFORE_COLUMNS_PATH,
     ]
 
 
@@ -107,8 +112,75 @@ def _pct(value: float | None) -> str:
     return "n/a" if value is None else f"{value * 100:.1f}%"
 
 
-def _set_section(card: SetScorecard) -> list[str]:
-    """One group's nine rows, in the order the direction memo's section 8 lists."""
+def _row_cells(card: SetScorecard) -> list[tuple[str, str, str]]:
+    """``(number, row, value)`` for the nine rows, in the direction memo's order."""
+
+    argmax = card.argmax_independence
+    mix = card.evidence_quality_mix
+    return [
+        ("1", "grounded-decision rate, EJECT", _rate(card.grounded_eject)),
+        ("1", "grounded-decision rate, SKIP", _rate(card.grounded_skip)),
+        ("1", "grounded-decision rate, all ballots", _rate(card.grounded_all)),
+        (
+            "2",
+            "argmax-independence: deviating EJECTs",
+            f"{argmax.deviators}/{argmax.unambiguous_ballots} = "
+            f"{_pct(argmax.deviator_share)}",
+        ),
+        (
+            "2",
+            "argmax-independence: role-correct, followers vs deviators",
+            f"{argmax.follower_role_correct}/{argmax.followers} = "
+            f"{_pct(argmax.follower_role_correct_share)} vs "
+            f"{argmax.deviator_role_correct}/{argmax.deviators} = "
+            f"{_pct(argmax.deviator_role_correct_share)} (chance "
+            f"{_pct(argmax.chance_baseline)})",
+        ),
+        (
+            "3",
+            "manufactured-contradiction rate",
+            _rate(card.manufactured_contradiction.flags),
+        ),
+        ("4", "unexplained-decision rate", _rate(card.unexplained_decision.decisions)),
+        (
+            "5",
+            "evidence-quality mix",
+            ", ".join(
+                f"{band} {count}" for band, count in sorted(mix.band_counts.items())
+            )
+            + f" over {mix.ejections} ejections",
+        ),
+        (
+            "6",
+            "rationale faithfulness (TOKENS)",
+            _rate(card.rationale_faithfulness.ballots),
+        ),
+        ("7", "agent-authored share", _rate(card.agent_authored_share.ballots)),
+        (
+            "8",
+            "wrong-but-believable rate",
+            f"{_rate(card.wrong_but_believable)} — {card.wrong_but_believable_label}",
+        ),
+        (
+            "9",
+            "role-correct ejection rate",
+            f"{_rate(card.role_correct_ejection)} — {card.role_correct_ejection_label}",
+        ),
+    ]
+
+
+def _before_heading(before: BeforeColumn) -> str:
+    """The before column's header: which era it read, as published when."""
+
+    return f"before: {before.era_id}, as published at `{before.commit}`"
+
+
+def _set_section(card: SetScorecard, before: BeforeColumn | None = None) -> list[str]:
+    """One group's nine rows, in the order the direction memo's section 8 lists.
+
+    A set whose bytes replaced an earlier recording carries that recording's
+    published rows as a dated before column, copied and never recomputed.
+    """
 
     argmax = card.argmax_independence
     manufactured = card.manufactured_contradiction
@@ -116,6 +188,22 @@ def _set_section(card: SetScorecard) -> list[str]:
     mix = card.evidence_quality_mix
     faith = card.rationale_faithfulness
     authored = card.agent_authored_share
+    if before is None:
+        table = ["| # | row | value |", "| --- | --- | --- |"]
+        table.extend(
+            f"| {number} | {row} | {value} |" for number, row, value in _row_cells(card)
+        )
+    else:
+        table = [
+            f"| # | row | {_before_heading(before)} | value |",
+            "| --- | --- | --- | --- |",
+        ]
+        table.extend(
+            f"| {number} | {row} | {old} | {value} |"
+            for (number, row, value), (_, _, old) in zip(
+                _row_cells(card), _row_cells(before.scorecard), strict=True
+            )
+        )
     lines = [
         f"### {card.label}",
         "",
@@ -124,104 +212,102 @@ def _set_section(card: SetScorecard) -> list[str]:
         + ", ".join(f"`{source}`" for source in card.sources)
         + ".",
         "",
-        "| # | row | value |",
-        "| --- | --- | --- |",
-        f"| 1 | grounded-decision rate, EJECT | {_rate(card.grounded_eject)} |",
-        f"| 1 | grounded-decision rate, SKIP | {_rate(card.grounded_skip)} |",
-        f"| 1 | grounded-decision rate, all ballots | {_rate(card.grounded_all)} |",
-        f"| 2 | argmax-independence: deviating EJECTs | "
-        f"{argmax.deviators}/{argmax.unambiguous_ballots} = "
-        f"{_pct(argmax.deviator_share)} |",
-        f"| 2 | argmax-independence: role-correct, followers vs deviators | "
-        f"{argmax.follower_role_correct}/{argmax.followers} = "
-        f"{_pct(argmax.follower_role_correct_share)} vs "
-        f"{argmax.deviator_role_correct}/{argmax.deviators} = "
-        f"{_pct(argmax.deviator_role_correct_share)} (chance "
-        f"{_pct(argmax.chance_baseline)}) |",
-        f"| 3 | manufactured-contradiction rate | {_rate(manufactured.flags)} |",
-        f"| 4 | unexplained-decision rate | {_rate(unexplained.decisions)} |",
-        "| 5 | evidence-quality mix | "
-        + ", ".join(
-            f"{band} {count}" for band, count in sorted(mix.band_counts.items())
-        )
-        + f" over {mix.ejections} ejections |",
-        f"| 6 | rationale faithfulness (TOKENS) | {_rate(faith.ballots)} |",
-        f"| 7 | agent-authored share | {_rate(authored.ballots)} |",
-        f"| 8 | wrong-but-believable rate | {_rate(card.wrong_but_believable)} "
-        f"— {card.wrong_but_believable_label} |",
-        f"| 9 | role-correct ejection rate | {_rate(card.role_correct_ejection)} "
-        f"— {card.role_correct_ejection_label} |",
-        "",
-        "Row 2 detail: followers "
-        f"{argmax.followers}, deviators {argmax.deviators}, ties excluded "
-        f"{argmax.ties_excluded}, no rendered row inside the valid-target list "
-        f"{argmax.no_rendered_row}. In meetings where the engine minted no "
-        "contradiction at all, role-correct: followers "
-        f"{argmax.zero_flag_follower_role_correct}/{argmax.zero_flag_followers}, "
-        f"deviators {argmax.zero_flag_deviator_role_correct}/"
-        f"{argmax.zero_flag_deviators}.",
-        "",
-        "Row 3 detail: manufactured flags contradicting an account the engine "
-        "route makes true at EVERY tick, "
-        f"{manufactured.manufactured_on_a_wholly_true_claim} of "
-        f"{manufactured.flags.numerator}; the rest are the span-envelope "
-        "artifact proper.",
-        "",
-        "Row 3 claim census: "
-        f"{manufactured.self_alibi_claims} self-alibi claims "
-        f"({manufactured.self_alibi_claims_multi_tick} spanning more than one "
-        f"tick), {manufactured.self_alibi_claims_envelope_false} false under the "
-        f"envelope test of which "
-        f"{manufactured.self_alibi_claims_envelope_false_multi_tick} are "
-        f"multi-tick, {manufactured.self_alibi_claims_strict_false} false under "
-        "the strict test (in that room at NO tick the claim covers), "
-        f"{manufactured.self_alibi_claims_unresolvable} unresolvable, and "
-        f"{manufactured.other_subject_alibi_claims} further alibi claims name "
-        "another player and are out of the census.",
-        "",
-        "Row 4 detail: EJECT ballots whose citation does not resolve, "
-        f"{unexplained.uncited_ejects}; SKIP ballots naming no player at all, "
-        f"{unexplained.skips_naming_no_player} "
-        f"({unexplained.skips_with_considered_alternatives} SKIPs carry "
-        f"considered_alternatives and {unexplained.skips_naming_a_player_in_prose} "
-        "name a player in prose).",
-        "",
-        "Row 5 detail (role-correct beside each band, gating nothing): "
-        + ", ".join(
-            f"{band} {mix.band_role_correct.get(band, 0)}/{count}"
-            for band, count in sorted(mix.band_counts.items())
-        )
-        + ".",
-        "",
-        "Row 6 detail: "
-        f"{faith.tokens_absent} of {faith.tokens_checked} extracted tokens are "
-        "absent from what the voter held.",
-        "",
-        "Row 7 detail: typed guard rewrites "
-        + (
-            ", ".join(
-                f"{reason} {count}"
-                for reason, count in sorted(authored.rewrite_reasons.items())
-            )
-            or "none"
-        )
-        + f"; {authored.marker_unwound_without_typed_reason} unwound from a marker "
-        "with no typed reason; "
-        f"{authored.citation_nulled_target_intact} citation nulled, target "
-        f"intact; redirect-marker census {authored.redirect_marker_ballots} "
-        f"({authored.redirect_marker_eject_ballots} EJECT, "
-        f"{authored.redirect_marker_coerced_skip_ballots} coerced SKIP).",
-        "",
-        "Context: impostor alibis "
-        f"{card.context.impostor_alibis_survived}/{card.context.impostor_alibis} "
-        "survived contradiction detection; reporter slots "
-        f"{card.context.reporter_ejections}/{card.context.reporter_slots} ejected "
-        "against innocent non-reporter slots "
-        f"{card.context.innocent_non_reporter_ejections}/"
-        f"{card.context.innocent_non_reporter_slots}.",
-        "",
     ]
+    if before is not None:
+        old = before.scorecard
+        lines.extend(
+            [
+                f"Before ({before.era_id}, as published at `{before.commit}`): "
+                f"{old.games} games, {old.meetings} meetings, {old.ballots} "
+                f"ballots ({old.eject_ballots} EJECT, {old.skip_ballots} SKIP).",
+                "",
+            ]
+        )
+    lines.extend(table)
+    lines.extend(
+        [
+            "",
+            "Row 2 detail: followers "
+            f"{argmax.followers}, deviators {argmax.deviators}, ties excluded "
+            f"{argmax.ties_excluded}, no rendered row inside the valid-target list "
+            f"{argmax.no_rendered_row}. In meetings where the engine minted no "
+            "contradiction at all, role-correct: followers "
+            f"{argmax.zero_flag_follower_role_correct}/{argmax.zero_flag_followers}, "
+            f"deviators {argmax.zero_flag_deviator_role_correct}/"
+            f"{argmax.zero_flag_deviators}.",
+            "",
+            "Row 3 detail: manufactured flags contradicting an account the engine "
+            "route makes true at EVERY tick, "
+            f"{manufactured.manufactured_on_a_wholly_true_claim} of "
+            f"{manufactured.flags.numerator}; the rest are the span-envelope "
+            "artifact proper.",
+            "",
+            "Row 3 claim census: "
+            f"{manufactured.self_alibi_claims} self-alibi claims "
+            f"({manufactured.self_alibi_claims_multi_tick} spanning more than one "
+            f"tick), {manufactured.self_alibi_claims_envelope_false} false under the "
+            f"envelope test of which "
+            f"{manufactured.self_alibi_claims_envelope_false_multi_tick} are "
+            f"multi-tick, {manufactured.self_alibi_claims_strict_false} false under "
+            "the strict test (in that room at NO tick the claim covers), "
+            f"{manufactured.self_alibi_claims_unresolvable} unresolvable, and "
+            f"{manufactured.other_subject_alibi_claims} further alibi claims name "
+            "another player and are out of the census.",
+            "",
+            "Row 4 detail: EJECT ballots whose citation does not resolve, "
+            f"{unexplained.uncited_ejects}; SKIP ballots naming no player at all, "
+            f"{unexplained.skips_naming_no_player} "
+            f"({unexplained.skips_with_considered_alternatives} SKIPs carry "
+            f"considered_alternatives and {unexplained.skips_naming_a_player_in_prose} "
+            "name a player in prose).",
+            "",
+            "Row 5 detail (role-correct beside each band, gating nothing): "
+            + ", ".join(
+                f"{band} {mix.band_role_correct.get(band, 0)}/{count}"
+                for band, count in sorted(mix.band_counts.items())
+            )
+            + ".",
+            "",
+            "Row 6 detail: "
+            f"{faith.tokens_absent} of {faith.tokens_checked} extracted tokens are "
+            "absent from what the voter held.",
+            "",
+            "Row 7 detail: typed guard rewrites "
+            + (
+                ", ".join(
+                    f"{reason} {count}"
+                    for reason, count in sorted(authored.rewrite_reasons.items())
+                )
+                or "none"
+            )
+            + f"; {authored.marker_unwound_without_typed_reason} unwound from a marker "
+            "with no typed reason; "
+            f"{authored.citation_nulled_target_intact} citation nulled, target "
+            f"intact; redirect-marker census {authored.redirect_marker_ballots} "
+            f"({authored.redirect_marker_eject_ballots} EJECT, "
+            f"{authored.redirect_marker_coerced_skip_ballots} coerced SKIP).",
+            "",
+            "Context: impostor alibis "
+            f"{card.context.impostor_alibis_survived}/{card.context.impostor_alibis} "
+            "survived contradiction detection; reporter slots "
+            f"{card.context.reporter_ejections}/{card.context.reporter_slots} ejected "
+            "against innocent non-reporter slots "
+            f"{card.context.innocent_non_reporter_ejections}/"
+            f"{card.context.innocent_non_reporter_slots}.",
+            "",
+        ]
+    )
     return lines
+
+
+def _era_lines(era: EraScorecard) -> list[str]:
+    """One era's provenance bullet: its id, sets, recording date and record."""
+
+    sets = ", ".join(f"`{source}`" for source in era.sets)
+    return [
+        f"* **{era.era_id}**, recorded {era.recorded_on}: {sets}. Owning record: "
+        f"[`{era.record}`](../{era.record}).",
+    ]
 
 
 def render_markdown(scorecard: ProcessScorecard) -> str:
@@ -262,33 +348,51 @@ def render_markdown(scorecard: ProcessScorecard) -> str:
         "",
         "## Recording provenance",
         "",
-        "These four sets are one era — baseline 9, recorded after the substrate "
-        "wave (the route claim, the grounded SKIP with its labelling guards, and "
-        "the weighing channel) by "
-        "[the process re-record](../audits/audit-2026-09-22-process-rerecord.md). "
-        "They are labelled, never averaged across a boundary: the column on the "
-        "recordings made before that wave is committed in that record's section "
-        "1, the SKIP row read 0 there by instruction, and row 3's claims became "
-        "routes across the same line, so no row pools with that column.",
+        f"The four sets span {len(scorecard.eras)} recorded eras, grouped by the "
+        "era registry (`eval/eras.py`). An era is pooled only with itself and "
+        "is never averaged across a boundary:",
         "",
     ]
-    lines.extend(f"* `{source}`" for source in scorecard.recording_provenance)
+    for era in scorecard.eras:
+        lines.extend(_era_lines(era))
     lines.extend(
         [
+            "",
+            "The baseline-9 sets are the process re-record made after the "
+            "substrate wave (the route claim, the grounded SKIP with its "
+            "labelling guards, and the weighing channel); the column on the "
+            "recordings made before that wave is committed in that record's "
+            "section 1, the SKIP row read 0 there by instruction, and row 3's "
+            "claims became routes across the same line, so no row pools with "
+            "that column. A set whose bytes replaced an earlier recording "
+            "carries that recording's published rows as a dated before column, "
+            f"read from [`{BEFORE_COLUMNS_PATH.removeprefix('docs/')}`]"
+            f"({BEFORE_COLUMNS_PATH.removeprefix('docs/')}) and never recomputed.",
             "",
             f"Report format version {scorecard.report_format_version}; scorecard "
             f"schema version {scorecard.schema_version}; decision date "
             f"{scorecard.decision_date}.",
             "",
-            "## Pooled",
+            "## Pooled within an era",
             "",
         ]
     )
-    lines.extend(_set_section(scorecard.pooled))
-    lines.extend(_set_section(scorecard.pooled_9p2i))
+    for era in scorecard.eras:
+        if era.pooled is not None:
+            lines.extend(_set_section(era.pooled))
+        else:
+            lines.extend(
+                [
+                    f"The {era.era_id} era holds one set, "
+                    + ", ".join(f"`{source}`" for source in era.sets)
+                    + "; its rows are under Per set.",
+                    "",
+                ]
+            )
+    before_by_set = {before.set: before for before in scorecard.before}
     lines.extend(["## Per set", ""])
     for card in scorecard.sets:
-        lines.extend(_set_section(card))
+        lines.extend(_set_section(card, before_by_set.get(card.sources[0])))
     lines.extend(["## Row definitions", ""])
     for name, definition in scorecard.row_definitions.items():
         lines.extend([f"**{name}.** {definition}", ""])
@@ -351,7 +455,11 @@ def check_report(root: Path) -> int:
         if not path.exists():
             print(f"--check: no committed scorecard at {path}")
             return 1
-    scorecard = compute_process_scorecard(root)
+    try:
+        scorecard = compute_process_scorecard(root)
+    except BeforeColumnsError as error:
+        print(f"--check: {error}")
+        return 1
     if markdown_path.read_text(encoding="utf-8") != render_markdown(scorecard):
         stale.append(str(MARKDOWN_PATH))
     if json_path.read_text(encoding="utf-8") != serialize_scorecard(scorecard):
@@ -438,18 +546,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         return check_report(_REPO_ROOT)
     scorecard = publish(_REPO_ROOT)
-    pooled = scorecard.pooled
-    print(
-        f"Wrote {MARKDOWN_PATH} and {JSON_PATH}: {pooled.ballots} ballots over "
-        f"{pooled.meetings} meetings; grounded "
-        f"{pooled.grounded_all.numerator}/{pooled.grounded_all.denominator}; "
-        f"deviating EJECTs {pooled.argmax_independence.deviators}/"
-        f"{pooled.argmax_independence.unambiguous_ballots}; manufactured flags "
-        f"{pooled.manufactured_contradiction.flags.numerator}/"
-        f"{pooled.manufactured_contradiction.flags.denominator}; "
-        "role-correctness is reported and gates nothing."
-    )
+    for era in scorecard.eras:
+        group = era.pooled if era.pooled is not None else _only_set(scorecard, era)
+        print(
+            f"Wrote {MARKDOWN_PATH} and {JSON_PATH}, era {era.era_id}: "
+            f"{group.ballots} ballots over {group.meetings} meetings; grounded "
+            f"{group.grounded_all.numerator}/{group.grounded_all.denominator}; "
+            f"deviating EJECTs {group.argmax_independence.deviators}/"
+            f"{group.argmax_independence.unambiguous_ballots}; manufactured flags "
+            f"{group.manufactured_contradiction.flags.numerator}/"
+            f"{group.manufactured_contradiction.flags.denominator}; "
+            "role-correctness is reported and gates nothing."
+        )
     return 0
+
+
+def _only_set(scorecard: ProcessScorecard, era: EraScorecard) -> SetScorecard:
+    """A one-set era's own rows."""
+
+    (card,) = (card for card in scorecard.sets if card.sources == era.sets)
+    return card
 
 
 if __name__ == "__main__":

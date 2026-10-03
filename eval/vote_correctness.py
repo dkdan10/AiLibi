@@ -27,8 +27,9 @@ prompt A/B on this rate: the published conversion leads live on
 PRECISION lead, defined below) and the impostor-accused -> impostor-ejected
 conversion rate (the RECALL lead).
 
-What the recorded sets read (evidence-backed / impostor ejections). All four were
-recorded at the ``baseline-9`` substrate -- model ``Qwen/Qwen3.6-27B``, the
+What the recorded sets read (evidence-backed / impostor ejections), each in its
+own era (``eval/eras.py``); the two eras' rates are never pooled. Three sets
+were recorded at the ``baseline-9`` substrate -- model ``Qwen/Qwen3.6-27B``, the
 ``accusation_round``, ``crewmate_report`` and ``impostor_report`` templates at
 ``qwen3_6_27b.v6`` and ``vote_ballot`` at ``qwen3_6_27b.v8``, the twenty-one
 retired levers unconditional and ``impostor_roll_call`` OFF -- as each set's
@@ -38,24 +39,31 @@ wave's code, registered no bars and decided nothing
 (``audits/audit-2026-09-22-process-rerecord.md``). The settings under it trace
 back to baseline 7, which was adopted by explicit owner override of a FINDING
 verdict, its record having missed two of its own pre-registered bars
-(``audits/audit-phase-20-baseline-7.md`` §6.1).
+(``audits/audit-phase-20-baseline-7.md`` §6.1). The shown 9-player set sits in
+the later ``stage-b-r2`` era: recorded 2026-10-01 on the same model and the same
+three ``qwen3_6_27b.v6`` templates under one declared experiment config, whose
+two ballot arms stamp ``vote_ballot`` as ``qwen3_6_27b.v8.ballot_kill_row_v1``
+and ``qwen3_6_27b.v8.impostor_ballot_v1``
+(``audits/audit-2026-10-01-stage-b-r2.md`` §9).
 
-* ``replays/samples/9p2i``: 76/81 = 0.9383
+* ``replays/samples/9p2i``: 35/44 = 0.7955
 * ``replays/samples/4p1i``: 19/20 = 0.9500
 * ``replays/ml_corpus/9p2i``: 219/241 = 0.9087
 * ``replays/ml_corpus/4p1i``: 26/27 = 0.9630
 
 ``scripts/check_doc_facts.py`` re-derives all four rates from the committed
-reports and the model and prompt-set tokens from the four manifests, and fails
-when a stamp or the provenance drifts, or when this module claims a structural
-pin the data contradicts -- so a re-record re-stamps these lines rather than
-rotting them. The five samples/9p2i ejections behind the shortfall are censused
-seed by seed -- and classified -- in ``tests/eval/test_vote_correctness.py``.
-Mind the two populations: **10** of those 81 impostor ejections carry no naming
-``ContradictionRef`` at all, and 5 of the 10 are evidence-backed anyway through
-the kill-witness disjunct, so "zero-flag" is a strictly wider set than "not
-evidence-backed" -- 10 zero-flag against 5 unbacked. (Baseline 8 read 13 of 82,
-6 rescued, 7 unbacked; baseline 6 read 8 of 78, 2 rescued, 6 unbacked.)
+reports and the model and prompt-set tokens from the four manifests, era by
+era, and fails when a stamp or the provenance drifts, or when this module claims
+a structural pin the data contradicts -- so a re-record re-stamps these lines
+rather than rotting them. The nine samples/9p2i ejections behind the shortfall
+are censused seed by seed -- and classified -- in
+``tests/eval/test_vote_correctness.py``. Mind the two populations: **20** of
+those 44 impostor ejections carry no naming ``ContradictionRef`` at all, and 11
+of the 20 are evidence-backed anyway through the kill-witness disjunct, so
+"zero-flag" is a strictly wider set than "not evidence-backed" -- 20 zero-flag
+against 9 unbacked. (The set's baseline-9 recording read 10 of 81, 5 rescued, 5
+unbacked; baseline 8 read 13 of 82, 6 rescued, 7 unbacked; baseline 6 read 8 of
+78, 2 rescued, 6 unbacked.)
 
 The module reads only :mod:`eval.report_schema` data (composed of
 :mod:`meetings.schemas` leaf types) and the post-game ``roles`` ground truth on
@@ -124,8 +132,8 @@ Decisions baked into this metric (recorded in the PR's ``## Decisions`` block):
   ejections) while ``ejection_accuracy`` was ``0.5`` (3 impostor / 6 total
   ejections), because the rate silently dropped the 3 wrong crewmate
   ejections. The gap survives on the recorded sets: samples/9p2i reads
-  ``vote_correctness_rate`` 0.9176 beside ``ejection_accuracy`` 85/99 =
-  0.8586, because 14 of those 99 ejections took a crewmate.
+  ``vote_correctness_rate`` 0.7955 beside ``ejection_accuracy`` 44/66 =
+  0.6667, because 22 of those 66 ejections took a crewmate.
   Like the rate it is :data:`None` (undefined, not ``0.0``) when there were
   zero ejections at all. :class:`eval.meeting_quality.ConversionReport`
   mirrors it (same fold, never recomputed) so both Wave-1 leads read from one
@@ -265,7 +273,7 @@ class VoteCorrectnessReport(BaseModel):
     one to SKIP. Its denominator also
     excludes the wrong crewmate ejections,
     so even a ``1.0`` cannot be read as full ejection accuracy. The recorded
-    values per sample set, and the census of the six samples/9p2i ejections the
+    values per sample set, and the census of the nine samples/9p2i ejections the
     predicate does not account for, are in the module docstring.
 
     ``ejection_accuracy`` is ``impostor_ejections / total_ejections`` -- the

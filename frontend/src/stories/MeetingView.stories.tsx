@@ -291,7 +291,7 @@ const CHAIN_BALLOTS: BallotView[] = [
   // observation, giving the "cites" chip visual story coverage.
   // The third shape, and the one the copy had to stop mis-describing: a
   // recorded list can hold the voter ITSELF, and the ballot schema admits the
-  // target the vote applied to as well. 24 of 845 `samples/9p2i` ballots carry
+  // target the vote applied to as well. 28 of 691 `samples/9p2i` ballots carry
   // the first — 9p2i seed 2's first meeting among them — and none the second
   // (`scripts/measure_featured_criterion.py --alternatives`), so the target
   // entry here is a constructed example. This ballot carries both and the story

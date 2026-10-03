@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 from collections import Counter, defaultdict
 from collections.abc import Mapping
@@ -1903,24 +1904,27 @@ def test_committed_9p2i_fake_tasks_emergencies_and_repairs_are_named() -> None:
     # §"BUG — B3") measured what the stale label cost over the committed sets;
     # these are the same three intent classes, recomputed here from the same
     # bytes under the fixed projection.
+    # Re-measured on the promoted bytes (candidate round 2, 2026-10-02); each
+    # ``was`` is the baseline-9 set's reading.
     census = _committed_9p2i_action_census()
 
     fake_tasks = census.by_intent["impostor_do_task"]
-    assert sum(fake_tasks.values()) == 365  # was 373
+    assert sum(fake_tasks.values()) == 967  # was 365
     # Not one of them still renders as a stale label.
     assert fake_tasks.get("IDLE", 0) == 0
     assert fake_tasks.get("MOVING", 0) == 0
     assert fake_tasks.get("TASK", 0) == 0
-    # The 11 that read BLOCKED share a tick with an earlier meeting trigger, so
+    # The 6 that read BLOCKED share a tick with an earlier meeting trigger, so
     # the engine never attempted them at all.
-    assert fake_tasks["PRETEND_TASK"] == 354  # was 365
-    assert fake_tasks["BLOCKED"] == 11  # was 8
+    assert fake_tasks["PRETEND_TASK"] == 961  # was 354
+    assert fake_tasks["BLOCKED"] == 6  # was 11
 
-    # 12 emergency intents: 10 pressed the button, 2 were foreclosed or refused.
-    assert census.by_intent["emergency"] == {"EMERGENCY": 10, "BLOCKED": 2}
-    # 34 repair intents: 22 landed.
-    # was {"REPAIR": 26, "BLOCKED": 12}
-    assert census.by_intent["repair_sabotage"] == {"REPAIR": 22, "BLOCKED": 12}
+    # 3 emergency intents, and all 3 pressed the button.
+    # was {"EMERGENCY": 10, "BLOCKED": 2}
+    assert census.by_intent["emergency"] == {"EMERGENCY": 3}
+    # 172 repair intents: 123 landed.
+    # was {"REPAIR": 22, "BLOCKED": 12}
+    assert census.by_intent["repair_sabotage"] == {"REPAIR": 123, "BLOCKED": 49}
 
 
 def test_committed_9p2i_labels_never_outlive_their_tick() -> None:
@@ -2145,9 +2149,11 @@ def test_committed_turn_marker_census_and_zero_served_leak() -> None:
     # unconditional now, so the guards record annotations instead of splicing
     # prose, and the accusation guard itself fires far less on the bespoke
     # openings.
-    # was (869, 2, {invalid_accusation_target: 2}) and (117, 0, {}).
+    # was (869, 2, {invalid_accusation_target: 2}) and (117, 0, {}) on baseline
+    # 8, and (845, 1, ...) for 9p2i on the baseline-9 bytes; 9p2i holds candidate
+    # round 2's bytes since 2026-10-02.
     expected = {
-        _COMMITTED_9P2I_DIR: (845, 1, {"invalid_accusation_target": 1}),
+        _COMMITTED_9P2I_DIR: (808, 1, {"invalid_accusation_target": 1}),
         _COMMITTED_4P1I_DIR: (117, 0, {}),
     }
     for directory, (
@@ -2181,6 +2187,19 @@ def test_committed_turn_marker_census_and_zero_served_leak() -> None:
 # snapshot at the SECOND meeting must already carry the FIRST meeting's outcome.
 _MULTI_MEETING_SEED = 0
 _MEETINGS_HEADER = "## Meetings so far:"
+# The meetings block's announcement of one public regroup, which the promoted
+# 9p2i recording makes at every meeting's close (its era's ``meeting_reset``).
+_REGROUP_LINE = re.compile(
+    r"^- Public regroup at the start of tick (\d+): living players were placed "
+    r"in [A-Z_]+; this was not a walking journey\.$"
+)
+
+
+def _regroup_tick(line: str) -> int | None:
+    """The tick a meetings-block regroup line announces, or ``None``."""
+
+    match = _REGROUP_LINE.match(line)
+    return None if match is None else int(match.group(1))
 
 
 def _meetings_block(rendered: str) -> str:
@@ -2264,7 +2283,16 @@ def test_meeting_outcome_memory_on_reconstruction_matches_the_store_render(
 
     expected = _expected_meetings_block(replay, upto=1)
     assert expected != ""
-    assert _meetings_block(view.rendered_memory_text) == expected
+    served = _meetings_block(view.rendered_memory_text).splitlines()
+    outcomes = [line for line in served if _regroup_tick(line) is None]
+    regroups = [line for line in served if _regroup_tick(line) is not None]
+    assert "\n".join(outcomes) == expected
+    # The announced relocation follows the outcomes, one per concluded meeting,
+    # at the tick play resumed.
+    assert served == outcomes + regroups
+    assert [_regroup_tick(line) for line in regroups] == [
+        meeting.tick + 1 for meeting in replay.meetings[:1]
+    ]
 
 
 def test_the_meeting_outcome_channel_reaches_the_served_memory(

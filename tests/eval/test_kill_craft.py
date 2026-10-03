@@ -99,29 +99,31 @@ def test_corpus_means_and_correlations(corpus_report: KillCraftReport) -> None:
 
 def test_samples_9p2i_fold1(samples_9p2i_report: KillCraftReport) -> None:
     assert samples_9p2i_report.games_total == 50
-    assert samples_9p2i_report.kills_total == 175  # was 182
-    assert samples_9p2i_report.crew_witnessed_kills == 3
-    assert dict(samples_9p2i_report.co_present_histogram) == {0: 175}  # was {0: 182}
+    # The promoted stage-b-r2 bytes: the physical vent witness rule and the
+    # regroup put more crew in sight of a kill (14 of 195 against 3 of 175).
+    assert samples_9p2i_report.kills_total == 195  # was 175
+    assert samples_9p2i_report.crew_witnessed_kills == 14  # was 3
+    assert dict(samples_9p2i_report.co_present_histogram) == {0: 195}  # was {0: 175}
     assert dict(samples_9p2i_report.one_hop_histogram) == {
-        0: 76,  # was 79
-        1: 41,  # was 43
-        2: 39,
-        3: 13,  # was 15
+        0: 92,  # was 76
+        1: 53,  # was 41
+        2: 30,  # was 39
+        3: 14,  # was 13
         4: 5,
         5: 1,
     }
     assert samples_9p2i_report.mean_co_present_witnessed == pytest.approx(0.0)
     assert samples_9p2i_report.mean_co_present_unwitnessed == pytest.approx(0.0)
     assert samples_9p2i_report.mean_one_hop_witnessed == pytest.approx(
-        2.3333333333333335
-    )
+        2.0
+    )  # was 2.3333333333333335
     assert samples_9p2i_report.mean_one_hop_unwitnessed == pytest.approx(
-        1.0232558139534884
-    )  # was 1.0279329608938548
+        0.8397790055248618
+    )  # was 1.0232558139534884
     assert samples_9p2i_report.witnessed_point_biserial_co_present is None
     assert samples_9p2i_report.witnessed_point_biserial_within_one_hop == pytest.approx(
-        0.14910217657587682
-    )  # was 0.14517805353760363
+        0.2711931109032807
+    )  # was 0.14910217657587682
 
 
 def test_samples_4p1i_fold1(samples_4p1i_report: KillCraftReport) -> None:
@@ -213,24 +215,24 @@ def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
 def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:
     crew = samples_9p2i_report.entropy_by_side["CREWMATE"]
     assert crew.agents == 350
-    assert crew.decisions == 5886  # was 6060
+    assert crew.decisions == 9421  # was 5886
     assert crew.mean_conditional_entropy == pytest.approx(
-        0.7648116236248577
-    )  # was 0.7680841109079299
+        0.9388376985686127
+    )  # was 0.7648116236248577
     assert crew.mean_unconditional_entropy == pytest.approx(
-        1.0855651571448535
-    )  # was 1.0858638804767753
+        1.2466557697609324
+    )  # was 1.0855651571448535
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
 
     impostor = samples_9p2i_report.entropy_by_side["IMPOSTOR"]
     assert impostor.agents == 100
-    assert impostor.decisions == 1754  # was 1826
+    assert impostor.decisions == 3230  # was 1754
     assert impostor.mean_conditional_entropy == pytest.approx(
-        0.6225941441852371
-    )  # was 0.6146999448089693
+        0.9011289447439224
+    )  # was 0.6225941441852371
     assert impostor.mean_unconditional_entropy == pytest.approx(
-        1.8912428720636205
-    )  # was 1.9132140380058222
+        1.872315522794211
+    )  # was 1.8912428720636205
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",

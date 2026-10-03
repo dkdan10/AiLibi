@@ -14,7 +14,7 @@ Eight things are pinned, each with a case proving it bites:
    afterwards.
 4. **The OFF column IS the committed record.** The fast slice's OFF cells equal
    the record audit's published cells and the committed instrument pins, and a
-   four-set run's four corroboration cells equal
+   full run's four corroboration cells (over the baseline-9 era's three sets) equal
    ``cf.COMMITTED_CORROBORATION_CELLS``
    (``test_the_corroboration_cells_equal_the_committed_record``). Planted cases
    move each committed cell by one and feed the pin an unchecked payload.
@@ -127,6 +127,16 @@ import counterfactual_phase21 as cf
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _MEMO: Final[Path] = _REPO_ROOT / "audits" / "audit-phase-21-counterfactual.md"
 _FAST_SET: Final[str] = "samples/4p1i"
+
+# The four sets the memo priced, in the record audit's order. The memo is dated
+# history: samples/9p2i left the baseline-9 era when candidate round 2 was
+# promoted (2026-10-02), and the script reads the other three.
+_MEMO_SETS: Final[tuple[str, ...]] = (
+    "samples/9p2i",
+    "ml_corpus/9p2i",
+    "samples/4p1i",
+    "ml_corpus/4p1i",
+)
 
 # A lever the tree already graduated, used as the planted case for the
 # graduation half of the guard.
@@ -277,7 +287,7 @@ def fast_run() -> dict[str, object]:
 
 @pytest.fixture(scope="module")
 def full_run() -> dict[str, object]:
-    """One four-set walk, shared by the corroboration, tripwire and block pins."""
+    """One walk over the baseline-9 era's three sets, shared by the pins."""
 
     return cf.run(list(cf.CANONICAL_SETS))
 
@@ -365,11 +375,12 @@ def test_a_reconstruction_that_misses_the_record_refuses(
 def test_the_corroboration_cells_equal_the_committed_record(
     full_run: Mapping[str, object],
 ) -> None:
-    """The four corroboration cells a four-set run measures are the record's.
+    """The four corroboration cells a full run measures are the record's.
 
-    ``cf.COMMITTED_CORROBORATION_CELLS`` holds the cells the baseline-9 record
-    published; the run's own pin check compares them only over all four sets,
-    so the payload must say it was checked as well as carry the four readings.
+    ``cf.COMMITTED_CORROBORATION_CELLS`` holds the cells re-derived over the
+    baseline-9 era's three sets when ``samples/9p2i`` left it; the run's own pin
+    check compares them only over all of ``cf.CANONICAL_SETS``, so the payload
+    must say it was checked as well as carry the four readings.
     """
 
     _assert_corroboration_pins(full_run, cf.COMMITTED_CORROBORATION_CELLS)
@@ -505,7 +516,42 @@ def test_the_memo_table_parses_into_rows() -> None:
     per_set, pooled = _memo_tables()
     assert pooled, "the memo publishes no pooled table"
     assert per_set, "the memo publishes no per-set rows"
-    assert {name for name, _ in per_set} == set(cf.CANONICAL_SETS)
+    assert {name for name, _ in per_set} == set(_MEMO_SETS)
+    # The script reads the memo's four sets less the one that left the era.
+    assert cf.CANONICAL_SETS == tuple(
+        name for name in _MEMO_SETS if name != "samples/9p2i"
+    )
+
+
+def test_a_committed_set_of_another_era_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the promoted set named among the sets; refused before any walk.
+
+    A sentinel replaces the first step after the era check, so a name the check
+    lets through (a baseline-9 set, or a directory the registry does not name)
+    reaches it, and the promoted set never does.
+    """
+
+    class _PastTheCheck(Exception):
+        pass
+
+    def sentinel() -> None:
+        raise _PastTheCheck
+
+    monkeypatch.setattr(cf, "_assert_slate_is_the_three_wave_2_keys", sentinel)
+    with pytest.raises(
+        SystemExit,
+        match=(
+            r"^samples/9p2i is a committed set of the stage-b-r2 era; this "
+            r"counterfactual reads the baseline-9 era's sets only "
+            r"\(ml_corpus/9p2i, samples/4p1i, ml_corpus/4p1i\)$"
+        ),
+    ):
+        cf.run(["samples/4p1i", "samples/9p2i"])
+    for passing in (list(cf.CANONICAL_SETS), ["candidates/stage-b-r1/9p2i"]):
+        with pytest.raises(_PastTheCheck):
+            cf.run(passing)
 
 
 def test_the_pooled_on_column_is_withdrawn_when_any_set_disagrees() -> None:
@@ -874,19 +920,23 @@ def test_a_split_over_the_wrong_population_refuses(
 
 @pytest.mark.slow
 def test_the_baseline_9_tripwire_readings(full_run: Mapping[str, object]) -> None:
-    """The three readings the pre-registration's §8.1 and §5 will be read on."""
+    """The three readings the pre-registration's §8.1 and §5 will be read on.
+
+    Pooled over the three baseline-9 sets since the promotion of candidate round
+    2 (2026-10-02); each ``was`` is the four-set pool at ``d41c9006``.
+    """
 
     rows = {row["cell"]: row for row in _rows(full_run, "pooled_tripwire_rows")}
     published = {row["cell"]: row for row in _rows(full_run, "pooled")}
     # T5, both halves. No `saw_kill` was ever spoken on these bytes.
-    assert rows["T-9a"]["on"] == [2011, 2011]  # was [2023, 2023]
-    assert rows["T-9b"]["on"] == [0, 943]  # was [0, 936]
+    assert rows["T-9a"]["on"] == [1521, 1521]  # was [2011, 2011], four sets
+    assert rows["T-9b"]["on"] == [0, 733]  # was [0, 943], four sets
     # The split partitions T-9's own population exactly, which is what makes it
     # a decomposition of that row rather than a second measurement.
     assert (
         rows["T-9a"]["on"][1] + rows["T-9b"]["on"][1]
         == published["T-9"]["on"][1]
-        == 2954  # was 2959
+        == 2254  # was 2954, four sets
     )
     # On THESE bytes the elicitation reading and the byte diff coincide. That is
     # a property of a corpus holding no spoken kill, not an invariant: the first
@@ -897,11 +947,11 @@ def test_the_baseline_9_tripwire_readings(full_run: Mapping[str, object]) -> Non
         rows["B-1m1"]["recorded_off"]
         == rows["B-1m1"]["reconstructed_off"]
         == rows["B-1m1"]["on"]
-        == [68305, 3369]  # was [68288, 3368]
+        == [53217, 2645]  # was [68305, 3369], four sets
     )
     # Bar 1's cell split by a spoken kill: empty, over bar 1's own denominator.
-    assert rows["P-1k"]["recorded_off"] == [0, 85]  # was [0, 96]
-    assert published["P-1"]["recorded_off"][1] == 85  # was 96
+    assert rows["P-1k"]["recorded_off"] == [0, 65]  # was [0, 85], four sets
+    assert published["P-1"]["recorded_off"][1] == 65  # was 85, four sets
     assert rows["P-1ka"]["recorded_off"] == [0, 0]
 
 
@@ -2694,14 +2744,15 @@ def test_the_block_level_cells_equal_the_byte_cells_on_the_committed_bytes(
 
     This is the whole warrant for reading these three cells at block level: on
     the baseline-9 bytes, as on baseline 8's, the block-level column equals the
-    byte column on every set and pooled.
+    byte column on every set and pooled. The pool is the three baseline-9 sets.
     """
 
     pooled = {row["cell"]: row for row in _rows(full_run, "pooled")}
-    # was [620, 620], [2715, 2715] and [3614, 3631] on the baseline-8 bytes
-    assert pooled["R-13"]["on"] == pooled["R-13"]["byte_diff"] == [623, 623]
-    assert pooled["R-14"]["on"] == pooled["R-14"]["byte_diff"] == [2704, 2704]
-    assert pooled["C-9"]["on"] == pooled["C-9"]["byte_diff"] == [3628, 3630]
+    # was [620, 620], [2715, 2715] and [3614, 3631] on the baseline-8 bytes, and
+    # [623, 623], [2704, 2704] and [3628, 3630] over the four sets at d41c9006
+    assert pooled["R-13"]["on"] == pooled["R-13"]["byte_diff"] == [488, 488]
+    assert pooled["R-14"]["on"] == pooled["R-14"]["byte_diff"] == [2059, 2059]
+    assert pooled["C-9"]["on"] == pooled["C-9"]["byte_diff"] == [2784, 2785]
     sets = full_run["sets"]
     assert isinstance(sets, dict)
     for block in sets.values():
@@ -2796,7 +2847,7 @@ def _parse_tables(
         fields = [field.strip() for field in stripped.strip("|").split("|")]
         if len(fields) != 5:
             continue
-        if fields[0] in cf.CANONICAL_SETS and _CELL_ID.match(fields[1]):
+        if fields[0] in _MEMO_SETS and _CELL_ID.match(fields[1]):
             per_set[(fields[0], fields[1])] = _values(fields[2:5])
         elif _CELL_ID.match(fields[0]):
             pooled[fields[0]] = _values(fields[2:5])

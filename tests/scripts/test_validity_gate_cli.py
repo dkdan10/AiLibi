@@ -29,6 +29,11 @@ from orchestrator.replay import LLMCallRecord
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
+#: The promoted 9p2i set's era config (candidate round 2, 2026-10-02): every gate
+#: run over its bytes, or over a mini-set copied from them, declares it, as the
+#: recorder declared it. A run that does not is refused on provenance
+#: (``test_the_promoted_set_requires_its_declared_config``).
+_ERA_CONFIG = ("--expected-experiment-config", str(_NINE / "experiment-config.json"))
 
 
 def _mini(tmp_path: Path, *, seeds: Sequence[int] = (0, 1, 2)) -> Path:
@@ -65,7 +70,7 @@ def _rewrite_lines(
 
 
 def test_committed_sets_pass(capsys: pytest.CaptureFixture[str]) -> None:
-    assert validity_gate.main([str(_NINE)]) == 0
+    assert validity_gate.main([str(_NINE), *_ERA_CONFIG]) == 0
     assert validity_gate.main([str(_FOUR)]) == 0
     out = capsys.readouterr().out
     assert "Validity gate PASSED" in out
@@ -92,6 +97,22 @@ def test_json_output_is_machine_readable(
     ]
 
 
+def test_the_promoted_set_requires_its_declared_config(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Planted: the promoted bytes gated bare, as if recorded with every switch off."""
+
+    assert validity_gate.main([str(_NINE), "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    (failing,) = [c for c in payload["checks"] if not c["passed"]]
+    assert failing["name"] == "cost_and_provenance_exact"
+    assert len(failing["violations"]) == 50
+    assert (
+        "differs from the declared config (none: historical defaults)"
+        in (failing["violations"][0])
+    )
+
+
 def test_missing_dir_is_usage_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -105,7 +126,7 @@ def test_empty_dir_is_usage_error(
 
 
 def test_mini_set_passes(tmp_path: Path) -> None:
-    assert validity_gate.main([str(_mini(tmp_path))]) == 0
+    assert validity_gate.main([str(_mini(tmp_path)), *_ERA_CONFIG]) == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -116,7 +137,7 @@ def test_mini_set_passes(tmp_path: Path) -> None:
 def _fail_and_get_check(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> dict[str, Any]:
-    assert validity_gate.main([str(tmp_path), "--json"]) == 1
+    assert validity_gate.main([str(tmp_path), *_ERA_CONFIG, "--json"]) == 1
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
     return payload
 
@@ -393,10 +414,17 @@ def test_verifier_crash_reported_not_raised(
 def test_expected_model_flag_pins_provenance(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert validity_gate.main([str(_NINE), "--expected-model", "Qwen/Qwen3.6-27B"]) == 0
+    assert (
+        validity_gate.main(
+            [str(_NINE), *_ERA_CONFIG, "--expected-model", "Qwen/Qwen3.6-27B"]
+        )
+        == 0
+    )
     capsys.readouterr()
     assert (
-        validity_gate.main([str(_NINE), "--expected-model", "WrongModel", "--json"])
+        validity_gate.main(
+            [str(_NINE), *_ERA_CONFIG, "--expected-model", "WrongModel", "--json"]
+        )
         == 1
     )
     payload = json.loads(capsys.readouterr().out)
@@ -465,7 +493,7 @@ def test_fails_on_truncated_tick_stream(
     # keeps the game_over row AND the state-hash chain, so the gate's ONLY
     # remaining lever is the reconstruction-reached-GAME_OVER clause.
     mini = _mini(tmp_path, seeds=(12,))
-    assert validity_gate.main([str(mini)]) == 0  # green before the edit
+    assert validity_gate.main([str(mini), *_ERA_CONFIG]) == 0  # green before the edit
     capsys.readouterr()
 
     path = mini / "replay-seed-12.jsonl"
@@ -478,7 +506,7 @@ def test_fails_on_truncated_tick_stream(
     del lines[last_tick]
     path.write_text("\n".join(lines) + "\n")
 
-    assert validity_gate.main([str(mini)]) == 1
+    assert validity_gate.main([str(mini), *_ERA_CONFIG]) == 1
     text = capsys.readouterr().out
     assert "Validity gate FAILED: all_games_reach_game_over" in text
     assert "truncated_replay" in text
@@ -488,7 +516,7 @@ def test_require_zero_cost_flag(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # The committed Featherless baseline is $0, so the flag passes.
-    assert validity_gate.main([str(_NINE), "--require-zero-cost"]) == 0
+    assert validity_gate.main([str(_NINE), *_ERA_CONFIG, "--require-zero-cost"]) == 0
     capsys.readouterr()
     # A meeting recorded with positive per-call spend fails the flag.
     mini = _mini(tmp_path, seeds=(0,))
@@ -499,7 +527,10 @@ def test_require_zero_cost_flag(
         return obj
 
     _rewrite_lines(mini / "replay-seed-0.jsonl", add_cost)
-    assert validity_gate.main([str(mini), "--require-zero-cost", "--json"]) == 1
+    assert (
+        validity_gate.main([str(mini), *_ERA_CONFIG, "--require-zero-cost", "--json"])
+        == 1
+    )
     payload = json.loads(capsys.readouterr().out)
     assert "cost_and_provenance_exact" in _failing_names(payload)
 
@@ -515,7 +546,7 @@ def test_json_failure_names_failing_checks(
         "_reconstruct_set",
         lambda _d: _synthetic_reconstruction(0, kill_tick=0, victim_role="IMPOSTOR"),
     )
-    assert validity_gate.main([str(mini)]) == 1
+    assert validity_gate.main([str(mini), *_ERA_CONFIG]) == 1
     text = capsys.readouterr().out
     assert "Validity gate FAILED" in text
     assert "no_tick_1_kills" in text
@@ -534,24 +565,34 @@ def test_json_failure_names_failing_checks(
 
 
 def _locked_pin() -> str:
-    """The committed sets' own recorded versions, as the CLI takes them.
+    """The promoted 9p2i set's own recorded versions, as the CLI takes them.
 
     Sourced from the byte golden's archive of RECORDED stamps when one is
     open, which is where the corpus's own versions live during a bump-in-flight
-    window, and otherwise from the live registry. The baseline-9 re-record
-    closed the last window: the committed ``9p2i`` corpus stamps the live
-    registry's versions (three templates at ``.qwen3_6_27b.v6``, the ballot at
-    ``.v8``) and the archive is empty. This helper follows whichever holds the
-    recorded stamps rather than being re-pointed by hand each time.
+    window, and otherwise from the live registry under the set's declared
+    config. The baseline-9 re-record closed the last window and the archive is
+    empty. The promoted set (candidate round 2, 2026-10-02) stamps the live
+    registry's versions with its era's ballot arms folded in: three templates at
+    ``.qwen3_6_27b.v6`` and the ballot at its two ``.v8`` arm stamps, joined by
+    ``+``. This helper follows whichever holds the recorded stamps rather than
+    being re-pointed by hand each time.
     """
 
-    from orchestrator.game import PROMPT_VERSION_SETS
+    from orchestrator.experiment_config import RecordedExperimentConfig
+    from orchestrator.game import prompt_versions_for_set
 
     from tests.meetings.test_prompt_byte_golden import ARCHIVED_PROMPT_VERSION_SETS
 
     archived = list(ARCHIVED_PROMPT_VERSION_SETS.values())
     assert len(archived) <= 1, "one archived set at a time, or name the one to read"
-    recorded = archived[0] if archived else PROMPT_VERSION_SETS["qwen3_6_27b"]
+    config = RecordedExperimentConfig.model_validate_json(
+        (_NINE / "experiment-config.json").read_bytes()
+    )
+    recorded = (
+        archived[0]
+        if archived
+        else prompt_versions_for_set("qwen3_6_27b", env={}, experiment_config=config)
+    )
     return ",".join(
         f"{template}={version}" for template, version in sorted(recorded.items())
     )
@@ -559,7 +600,9 @@ def _locked_pin() -> str:
 
 def test_expected_prompt_versions_passes_against_the_recorded_map() -> None:
     assert (
-        validity_gate.main([str(_NINE), "--expected-prompt-versions", _locked_pin()])
+        validity_gate.main(
+            [str(_NINE), *_ERA_CONFIG, "--expected-prompt-versions", _locked_pin()]
+        )
         == 0
     )
 
@@ -573,7 +616,12 @@ def test_expected_prompt_versions_fails_a_homogeneous_wrong_pin(
     wrong = _locked_pin().replace(".v6", ".v5").replace(".v8", ".v7")
     assert wrong != _locked_pin(), "the substitution must actually change the pin"
 
-    assert validity_gate.main([str(_NINE), "--expected-prompt-versions", wrong]) == 1
+    assert (
+        validity_gate.main(
+            [str(_NINE), *_ERA_CONFIG, "--expected-prompt-versions", wrong]
+        )
+        == 1
+    )
 
     text = capsys.readouterr().out
     assert "cost_and_provenance_exact" in text
@@ -587,7 +635,9 @@ def test_expected_prompt_versions_rejects_a_malformed_value(
     # silently degraded to "no pin" is worse than no flag at all. Exit 2 is the
     # file's documented usage code.
     with pytest.raises(SystemExit) as excinfo:
-        validity_gate.main([str(_NINE), "--expected-prompt-versions", "vote_ballot"])
+        validity_gate.main(
+            [str(_NINE), *_ERA_CONFIG, "--expected-prompt-versions", "vote_ballot"]
+        )
 
     assert excinfo.value.code == 2
     assert "expected KEY=VERSION pairs" in capsys.readouterr().err
@@ -595,7 +645,9 @@ def test_expected_prompt_versions_rejects_a_malformed_value(
 
 def test_expected_prompt_versions_rejects_an_empty_value() -> None:
     with pytest.raises(SystemExit) as excinfo:
-        validity_gate.main([str(_NINE), "--expected-prompt-versions", ","])
+        validity_gate.main(
+            [str(_NINE), *_ERA_CONFIG, "--expected-prompt-versions", ","]
+        )
 
     assert excinfo.value.code == 2
 
@@ -604,7 +656,9 @@ def test_expected_prompt_versions_rejects_a_repeated_template() -> None:
     # Two values for one template is ambiguous, and last-wins would silently
     # discard the operator's first answer.
     with pytest.raises(SystemExit) as excinfo:
-        validity_gate.main([str(_NINE), "--expected-prompt-versions", "a=one,a=two"])
+        validity_gate.main(
+            [str(_NINE), *_ERA_CONFIG, "--expected-prompt-versions", "a=one,a=two"]
+        )
 
     assert excinfo.value.code == 2
 

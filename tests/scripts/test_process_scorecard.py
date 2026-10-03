@@ -21,6 +21,7 @@ a temp tree, so the gate itself is exercised end to end without a second walk.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,9 @@ import pytest
 
 import publish_process_scorecard as command
 from _report_output import _check_destination
+from eval import process_scorecard as scorecard_module
 from eval.process_scorecard import (
+    BEFORE_COLUMNS_PATH,
     DECISION_DATE,
     FIFTH_RUN_ARCHIVE,
     NO_CONSUMER_NOTE,
@@ -37,10 +40,14 @@ from eval.process_scorecard import (
     ROLE_CORRECTNESS_NOTE,
     ROW_DEFINITIONS,
     SCHEMA_VERSION,
+    BeforeColumnsError,
+    EraScorecard,
     FifthRunAppendix,
     FifthRunArm,
     ProcessScorecard,
     ProcessTally,
+    compute_process_scorecard,
+    read_before_columns,
     scorecard_from_tally,
 )
 
@@ -106,9 +113,17 @@ def _planted_scorecard() -> ProcessScorecard:
         row_definitions=dict(ROW_DEFINITIONS),
         report_format_version=2,
         recording_provenance=("planted",),
+        eras=(
+            EraScorecard(
+                era_id="planted",
+                record="planted",
+                recorded_on="2026-01-01",
+                sets=("planted",),
+                pooled=card,
+            ),
+        ),
         sets=(card,),
-        pooled=card,
-        pooled_9p2i=card,
+        before=(),
         appendix=appendix,
     )
 
@@ -127,7 +142,7 @@ def test_one_edited_cell_turns_check_red(
 
     published = root / command.JSON_PATH
     payload = json.loads(published.read_text(encoding="utf-8"))
-    payload["pooled"]["role_correct_ejection"]["numerator"] += 1
+    payload["eras"][0]["pooled"]["role_correct_ejection"]["numerator"] += 1
     published.write_text(
         json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
         encoding="utf-8",
@@ -137,6 +152,133 @@ def test_one_edited_cell_turns_check_red(
     message = capsys.readouterr().out
     assert str(command.JSON_PATH) in message
     assert command.REGENERATE_COMMAND in message
+
+
+def test_main_prints_one_line_per_era(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Planted: a pooled era and a one-set era; each prints its own group's counts."""
+
+    planted = _planted_scorecard()
+    (pooled_era,) = planted.eras
+    solo = planted.sets[0].model_copy(
+        update={"label": "solo", "sources": ("solo",), "ballots": 7, "meetings": 5}
+    )
+    two_eras = planted.model_copy(
+        update={
+            "eras": (
+                pooled_era,
+                EraScorecard(
+                    era_id="solo-era",
+                    record="planted",
+                    recorded_on="2026-01-02",
+                    sets=("solo",),
+                    pooled=None,
+                ),
+            ),
+            "sets": (planted.sets[0], solo),
+        }
+    )
+    monkeypatch.setattr(command, "compute_process_scorecard", lambda _root: two_eras)
+    monkeypatch.setattr(command, "_REPO_ROOT", tmp_path)
+    (tmp_path / "docs").mkdir()
+    assert command.main([]) == 0
+    printed = capsys.readouterr().out.splitlines()
+    assert [line.split(":", 1)[0] for line in printed] == [
+        f"Wrote {command.MARKDOWN_PATH} and {command.JSON_PATH}, era planted",
+        f"Wrote {command.MARKDOWN_PATH} and {command.JSON_PATH}, era solo-era",
+    ]
+    assert " 2 ballots over 1 meetings;" in printed[0]
+    assert " 7 ballots over 5 meetings;" in printed[1]
+
+
+def _before_tree(tmp_path: Path) -> Path:
+    """A scratch tree holding the committed pages and the pinned before columns."""
+
+    root = tmp_path / "tree"
+    (root / "docs").mkdir(parents=True)
+    for relative in (command.MARKDOWN_PATH, command.JSON_PATH, BEFORE_COLUMNS_PATH):
+        (root / relative).write_bytes((ROOT / relative).read_bytes())
+    return root
+
+
+def test_the_before_column_is_the_replaced_sets_baseline_9_entry() -> None:
+    """The one before block: ``samples/9p2i`` at baseline 9, as published at d41c9006."""
+
+    (block,) = read_before_columns(ROOT)
+    assert (block.set, block.era_id, block.commit) == (
+        "replays/samples/9p2i",
+        "baseline-9",
+        "d41c9006",
+    )
+    card = block.scorecard
+    assert (card.label, card.games, card.meetings, card.ballots) == (
+        "samples/9p2i",
+        50,
+        145,
+        845,
+    )
+    published = json.loads((ROOT / command.JSON_PATH).read_text(encoding="utf-8"))
+    assert published["before"] == [
+        json.loads((ROOT / BEFORE_COLUMNS_PATH).read_text(encoding="utf-8"))[0]
+    ]
+
+
+def test_one_edited_leaf_of_the_before_column_turns_check_red(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Planted: one integer of the frozen column moves; the fold refuses."""
+
+    root = _before_tree(tmp_path)
+    assert read_before_columns(root) == read_before_columns(ROOT)
+    path = root / BEFORE_COLUMNS_PATH
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload[0]["scorecard"]["role_correct_ejection"]["numerator"] -= 1
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(BeforeColumnsError, match="never edited or recomputed"):
+        read_before_columns(root)
+    assert command.check_report(root) == 1
+    message = capsys.readouterr().out
+    assert message.startswith(f"--check: {BEFORE_COLUMNS_PATH} reads sha256 ")
+    assert "a before column is history and is never edited or recomputed" in message
+
+
+def _pinned_planted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, payload: object
+) -> Path:
+    """A scratch tree whose before file the module's pin is moved to accept."""
+
+    root = tmp_path / "tree"
+    (root / "docs").mkdir(parents=True)
+    data = (json.dumps(payload) + "\n").encode("utf-8")
+    (root / BEFORE_COLUMNS_PATH).write_bytes(data)
+    monkeypatch.setattr(
+        scorecard_module, "BEFORE_COLUMNS_SHA256", hashlib.sha256(data).hexdigest()
+    )
+    return root
+
+
+def test_a_before_file_that_is_not_a_list_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _pinned_planted(tmp_path, monkeypatch, {"set": "replays/samples/9p2i"})
+    with pytest.raises(BeforeColumnsError, match="must hold one JSON list"):
+        read_before_columns(root)
+
+
+def test_a_before_column_for_a_set_the_registry_does_not_name_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: the committed block moved onto a candidate round's path."""
+
+    block = json.loads((ROOT / BEFORE_COLUMNS_PATH).read_text(encoding="utf-8"))[0]
+    moved = {**block, "set": "replays/candidates/stage-b-r1/9p2i"}
+    root = _pinned_planted(tmp_path, monkeypatch, [moved])
+    with pytest.raises(BeforeColumnsError, match="the era registry does not name"):
+        compute_process_scorecard(root)
 
 
 def test_a_missing_published_file_is_red_rather_than_absent(

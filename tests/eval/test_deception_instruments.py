@@ -17,6 +17,7 @@ degenerate anchor.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -67,11 +68,6 @@ def corpus_nine() -> DeceptionInstrumentsReport:
 @pytest.fixture(scope="session")
 def corpus_four() -> DeceptionInstrumentsReport:
     return deception_instruments_report(_CORPUS_FOUR)
-
-
-@pytest.fixture(scope="session")
-def sample_nine() -> DeceptionInstrumentsReport:
-    return deception_instruments_report(_NINE)
 
 
 @pytest.fixture(scope="session")
@@ -208,73 +204,29 @@ def test_corpus_nine_is_the_audit_census(
 
 
 # --------------------------------------------------------------------------- #
-# Samples 9p2i -- full-field pins                                              #
+# Samples 9p2i -- the named refusal                                            #
 # --------------------------------------------------------------------------- #
 
 
-def test_sample_nine_full_pins(sample_nine: DeceptionInstrumentsReport) -> None:
-    r = sample_nine
-    assert r.replay_set_dir == str(_NINE)
-    _check_report(
-        r,
-        {
-            "num_players": 9,
-            "num_impostors": 2,
-            "tasks_per_crewmate": 2,
-            "games_total": 50,
-            "meetings_total": 145,  # was 151
-            "impostor_accusations_total": 183,  # was 188
-            "frame_attempts": 183,  # was 188
-            "impostor_self_accusations": 0,
-            "frame_attempt_meetings": 142,  # was 150
-            "crew_ejected_meetings": 9,  # was 13
-            "impostor_ejected_meetings": 81,  # was 82
-            "no_eject_meetings": 55,  # was 56
-            "vouch_observations_impostor": 123,  # was 136
-            "false_vouch_saw_player_observations": 8,  # was 11
-            "false_vouch_saw_player_rate": 0.06504065040650407,  # was 0.08088235294117647
-            "corroboration_claims_total": 347,  # was 324
-            "corroboration_claims_impostor": 42,  # was 46
-            "false_vouch_corroborations": 7,  # was 11
-            "false_vouch_corroboration_rate": 0.16666666666666666,  # was 0.2391304347826087
-            "false_vouches_total": 15,  # was 22
-            "false_vouch_subject_events": 7,  # was 10
-            "false_vouch_grounded": 6,  # was 8
-            "false_vouch_fabricated": 1,  # was 2
-            "false_vouch_grounded_share": 0.8571428571428571,  # was 0.8
-            # companion join partitions the 8 observations (7 + 1 == 8).
-            "false_vouch_grounded_subject_observations": 7,  # was 9
-            "false_vouch_fabricated_subject_observations": 1,  # was 2
-        },
-    )
-    _check_cell(
-        r.teammate_accusations,
-        numerator=0,
-        denominator=183,  # was 188
-        rate=0.0,
-        wilson_low=1.734723475976807e-18,
-        wilson_high=0.020560731657189836,  # was 0.020024853837749476
-        advisory=True,
-    )
-    _check_cell(
-        r.frame_conversions,
-        numerator=8,  # was 9
-        denominator=142,  # was 150
-        rate=0.056338028169014086,  # was 0.06
-        wilson_low=0.02882037060152546,  # was 0.031883682005327776
-        wilson_high=0.1072286030795093,  # was 0.11009092044290468
-        advisory=False,
-    )
-    assert r.alibi_fabrication.total_impostor_alibis == 41  # was 37
-    assert r.alibi_fabrication.survived == 39  # was 31
-    assert r.alibi_fabrication.survival_rate == pytest.approx(39 / 41)  # was 31 / 37
-    assert r.effective_deflection.accused_impostor_events == 122  # was 132
-    assert r.effective_deflection.accused_impostor_survivals == 42  # was 51
-    assert r.effective_deflection.active_survivals == 40  # was 50
-    assert r.effective_deflection.effective_deflections == 25  # was 38
-    assert r.effective_deflection.named_target_deflections == 15  # was 18
-    assert r.effective_deflection.third_party_deflections == 10  # was 20
-    assert r.effective_deflection.skip_saved_active_survivals == 15  # was 12
+def test_sample_nine_is_refused_by_name() -> None:
+    """The promoted 9p2i set is outside the instrument's reading; it says so.
+
+    samples/9p2i holds candidate round 2's bytes since 2026-10-02, recorded with
+    the regroup reset, and the grounded-vouch split does not apply the regroup
+    window, so the instrument refuses the set before folding it. Its baseline-9
+    pins (145 meetings, 183 impostor accusations, 8 frame conversions of 142) are
+    in this module at d41c9006.
+    """
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "deception instruments do not read the recorded "
+            "meeting_reset='hub_with_grace' (seed 0): their grounded-vouch split "
+            "does not apply the regroup window"
+        ),
+    ):
+        deception_instruments_report(_NINE)
 
 
 # --------------------------------------------------------------------------- #
@@ -841,9 +793,9 @@ def test_report_rejects_broken_accusation_partition(
 
 
 def test_report_rejects_broken_observation_companion_join(
-    sample_nine: DeceptionInstrumentsReport,
+    sample_four: DeceptionInstrumentsReport,
 ) -> None:
-    base = sample_nine.model_dump()
+    base = sample_four.model_dump()
     base["false_vouch_grounded_subject_observations"] = (
         base["false_vouch_grounded_subject_observations"] + 1
     )

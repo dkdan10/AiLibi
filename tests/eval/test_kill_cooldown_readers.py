@@ -632,11 +632,12 @@ def _set_dir_section(
 def test_the_census_reads_the_recorded_window_and_every_write_at_six(
     cooldown_game: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # The publication pools the nine-player sets by source, so the set stands in
-    # for one of them.
+    # The publication groups sets by the era registry's source paths, so the set
+    # stands in for the promoted samples/9p2i, whose era records the cooldown.
     loaded = load_census_inputs(cooldown_game)
     published = census_from_inputs([replace(loaded, source="replays/samples/9p2i")])
-    assert published.constants["grace_window_ticks"] == SIX
+    (era,) = published.eras
+    assert era.constants["grace_window_ticks"] == SIX
     code, section, err = _set_dir_section(cooldown_game, capsys)
     assert (code, err) == (0, "") and section is not None
     grace = section["cells"]["kills_in_grace_window_after_regroup"]
@@ -1054,9 +1055,18 @@ def test_a_recorded_cooldown_that_is_not_a_tick_count_is_refused(value: Any) -> 
 
 
 def test_the_census_refuses_sets_at_different_windows() -> None:
-    six = _carrier(_cooldown_era(**_SIX_ERA), kill_tick=40)
-    four = replace(six, kill_cooldown_ticks=MAP.kill_cooldown_ticks)
-    with pytest.raises(ValueError, match="the sets ran at different kill cooldowns"):
+    # Two sets of one era (by the registry) whose carriers hold different
+    # windows: the era cannot publish one grace window, so it refuses.
+    six = replace(
+        _carrier(_cooldown_era(**_SIX_ERA), kill_tick=40),
+        source="replays/samples/4p1i",
+    )
+    four = replace(
+        six,
+        source="replays/ml_corpus/4p1i",
+        kill_cooldown_ticks=MAP.kill_cooldown_ticks,
+    )
+    with pytest.raises(ValueError, match="sets ran at different kill cooldowns"):
         census_from_inputs([six, four])
 
 

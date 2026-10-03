@@ -139,9 +139,15 @@ The ladder tip stands at baseline 9.
 is candidate round 1, recorded with the experimental switches its README
 names; it adopts nothing and is not a canonical sample set.
 
-## Candidate round 2
+## Candidate round 2, the shown set
 
-[`replays/candidates/stage-b-r2/9p2i`](../replays/candidates/stage-b-r2/README.md)
-is candidate round 2, recorded with the adopted switches, the kept vent exit
-and a longer kill cooldown, as its README names; it adopts nothing and is not a
-canonical sample set.
+Candidate round 2 was recorded with the adopted switches, the kept vent exit
+and a six-tick kill cooldown, under one declared config. On 2026-10-02 the owner
+promoted it: it is now [`replays/samples/9p2i`](../replays/samples/9p2i/MANIFEST.md),
+the shown 9-player set, in its own era (`eval/eras.py`), with that config beside
+its replays as `experiment-config.json`, and its candidate copy is deleted
+([the record](../audits/audit-2026-10-01-stage-b-r2.md), section 9). Promotion
+moves no default. The set carries one flag its record states: reporters ejected
+per report meeting read 17/114, above the pre-registered 0.104, so the round's
+own rule named no promotion step; the owner's ruling promotes it regardless. The
+ladder tip stands at baseline 9.

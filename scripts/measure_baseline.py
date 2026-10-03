@@ -137,12 +137,13 @@ from eval.vote_correctness import (  # noqa: E402
     compute_vote_correctness,
 )
 from eval.watchability import (  # noqa: E402
-    _DEFAULT_BASELINE_ID,
     WatchabilityReport,
     compute_watchability,
 )
 
-# The two canonical committed baseline-2 sets measured when no dir is given.
+# The two committed sample sets measured when no dir is given. Each is measured
+# alone and no mode pools them: samples/9p2i is the stage-b-r2 era and
+# samples/4p1i the baseline-9 era (eval/eras.py).
 _CANONICAL_SETS: tuple[Path, ...] = (
     _REPO_ROOT / "replays" / "samples" / "9p2i",
     _REPO_ROOT / "replays" / "samples" / "4p1i",
@@ -700,11 +701,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--baseline-id",
-        default=_DEFAULT_BASELINE_ID,
+        default=None,
         help=(
-            "the per-baseline supply-floor block the referee reads "
-            f"(default: {_DEFAULT_BASELINE_ID}, the committed canonical set; "
-            "pass baseline-2 to score against the pre-Wave-0 floors)"
+            "the per-baseline supply-floor block the referee reads (default: "
+            "each committed set's own era, as eval/eras.py names it; a directory "
+            "it does not name reads the ladder tip's block, baseline-9; pass "
+            "baseline-2 to score against the pre-Wave-0 floors)"
         ),
     )
     parser.add_argument(

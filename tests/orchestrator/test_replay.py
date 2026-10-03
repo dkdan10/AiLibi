@@ -2034,7 +2034,10 @@ class TestReplayEntryDispositionField:
                     assert all(
                         isinstance(d, str) and d for d in entry.action_dispositions
                     )
-        assert rows == 6110  # was 6064
+        # Counts the four committed sets' tick rows across their two eras since
+        # 2026-10-02 (samples/9p2i holds candidate round 2's bytes): was 6110 on the
+        # baseline-9 bytes, and 6064 before them.
+        assert rows == 6941
 
 
 class TestRecordTickEventsKeyword:

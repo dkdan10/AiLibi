@@ -297,8 +297,8 @@ _FINALE_EVENT_ORDER: Final[Mapping[str, int]] = {
 # ``_VOTE_PARSE_DEFAULT_LABEL``) under which a recorded ballot's TARGET is not
 # the voter's authored choice — the meeting layer redirected, coerced,
 # normalized, or wholly defaulted it — so the finale recap must not present it
-# as evidence of what the voter believed (Task 19.10 review; the committed 9p2i
-# seed 22 carries an ``under_gate_redirect`` whose rationale explicitly opposes
+# as evidence of what the voter believed (Task 19.10 review; the baseline-6 9p2i
+# seed 22 carried an ``under_gate_redirect`` whose rationale explicitly opposes
 # the tallied target). DERIVED from
 # ``meetings.schemas.BallotTargetRewriteReason``, the same union a recording
 # stamps on ``VoteBallot.guard_rewrite_reason``, so the display class and the
@@ -1266,8 +1266,8 @@ class ReplayLoader:
         ``experiments/lab/rubric_score.py``) and serves its
         ``interestingness.per_game[]`` rows, comparing the rubric's ``git_head``
         to the set's ``MANIFEST.md`` git sha to flag staleness (DESIGN.md §3.1,
-        §7). Raises :class:`FileNotFoundError` when the set ships no rubric (e.g.
-        the 4p1i fast technical fixture → the eval route maps that to a 404 /
+        §7). Raises :class:`FileNotFoundError` when the set ships no rubric
+        (every committed set since 2026-10-02) → the eval route maps that to a 404 /
         empty state). A malformed rubric fails loud rather than being silently
         coerced (AGENTS.md "no silent fallbacks").
         """
@@ -3860,7 +3860,7 @@ def _manifest_git_sha(replay_dir: Path) -> str | None:
 
     A uniformly-recorded set returns its one distinct short sha (the historical
     behaviour every single-sha set keeps). A PIECEMEAL-refreshed set — the
-    committed 9p2i carries three distinct recording shas — returns a stable
+    baseline-6 9p2i set carried three distinct recording shas — returns a stable
     ``multi:<digest>`` FINGERPRINT over its sorted ``(seed, sha)`` rows instead
     (Task 19.9). Returning ``None`` there, as this did before, made the rubric
     read stale unconditionally: no re-score could ever clear the banner, because
@@ -3957,8 +3957,8 @@ _REPLAY_GLOB: Final[str] = REPLAY_FILENAME_GLOB
 # fast technical fixture, not a demo — median 12 ticks, at most one meeting (39/50
 # have exactly one, 11/50 none), 23/50 decided by the task timer against the map's
 # own ``dead_task_rule: redistribute`` intent that "the only crew win path becomes
-# ejection" (engine/maps/canonical_1.yaml:39-44), and it ships no rubric. 9p2i is the
-# set with meetings, suspicion arcs, and a scored highlight reel. Deep-links that
+# ejection" (engine/maps/canonical_1.yaml:39-44). 9p2i is the set with meetings and
+# suspicion arcs; neither set ships a rubric since 2026-10-02. Deep-links that
 # omit ``set`` now resolve 9p2i; an explicit ``?set=4p1i`` still serves the fixture.
 DEFAULT_SET: Final[str] = "9p2i"
 

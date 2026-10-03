@@ -225,9 +225,9 @@ def test_content_vs_own_memory_miss_defangs_the_flag_but_still_ejects() -> None:
     """Seed 12 M0: the evidence half held, the outcome half did NOT.
 
     The fatal STRONG flag built from two innocents' statements is still gone —
-    on baseline 9 the meeting carries no flag at all, so nothing here can
-    convict. But this meeting EJECTS the crewmate p-2, where the baseline-7
-    recording skipped. The exhibit's original claim ("no longer ejects an
+    on baseline 9 and on the promoted set the meeting carries no flag at all, so
+    nothing here can convict. But this meeting EJECTS the crewmate p-2, where the
+    baseline-7 recording skipped. The exhibit's original claim ("no longer ejects an
     innocent") is therefore false on these bytes, and this test pins the
     regression rather than the claim: same family as the sole-flag class
     re-opening (audits/audit-phase-21-rerecord.md §5.1.1).
@@ -297,7 +297,8 @@ def test_equal_weight_conflict_has_nothing_left_to_weigh() -> None:
 #:
 #: This class held at ZERO on baseline 7, RE-OPENED at one meeting carrying two
 #: such flags on baseline 8 (seed 41 meeting 2, convicting the CREWMATE p-9), and
-#: is CLOSED again on baseline 9: the walk finds no meeting. Empty is the
+#: is CLOSED again on baseline 9 and on the promoted set (candidate round 2,
+#: since 2026-10-02): the walk finds no meeting. Empty is the
 #: strictest form of the growth tripwire, since any meeting convicting this way
 #: now fails it; the baseline-8 loss is still stated below, on that meeting's
 #: frozen line. Same family as the sole-flag wrongful-conviction class
@@ -306,11 +307,12 @@ def test_equal_weight_conflict_has_nothing_left_to_weigh() -> None:
 _STATEMENT_PAIR_CONVICTIONS: Final[frozenset[str]] = frozenset()
 
 #: The recorded flag the planted case promotes, as (seed, meeting index, flag
-#: index) on samples/9p2i: seed 9 M0's only flag, a weak-banded
+#: index) on samples/9p2i: seed 38 M0's only flag, a weak-banded
 #: ``alibi_vs_sighting`` naming the crewmate p-1 on a meeting that skipped.
-#: Chosen by measurement, because on baseline 9 the exhibits' own anchors carry
-#: no statement-pair flag left to plant (was seed 12 M0's second flag).
-_PLANTED_SOURCE: Final[tuple[int, int, int]] = (9, 0, 0)
+#: Chosen by measurement, because the exhibits' own anchors carry no
+#: statement-pair flag left to plant. Was seed 9 M0's on the baseline-9 bytes,
+#: and seed 12 M0's second flag before them.
+_PLANTED_SOURCE: Final[tuple[int, int, int]] = (38, 0, 0)
 
 
 def test_the_flip_search_finds_exactly_the_named_meetings() -> None:

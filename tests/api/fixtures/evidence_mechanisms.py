@@ -22,9 +22,11 @@ by accident fails loudly here.
 
 The baseline-7 record is that future phase. All four mechanisms FLIPPED on its
 bytes (audits/audit-phase-20-baseline-7.md §4). Each anchor records the reading
-on the current committed bytes (baseline 9), and each carries the baseline-6
-reading it replaced as one frozen line, so the flip is legible here rather than
-only in the audit.
+on the current committed bytes (the 4p1i anchors on baseline 9; the 9p2i anchors
+on the promoted set, candidate round 2, since 2026-10-02, where each reads as it
+did on baseline 9 at a later tick), and each carries the baseline-6 reading it
+replaced as one frozen line, so the flip is legible here rather than only in the
+audit.
 """
 
 from __future__ import annotations
@@ -126,7 +128,7 @@ PROVENANCE_IMPOSSIBLE_SIGHTING: Final[EvidenceMechanism] = EvidenceMechanism(
             seedset="9p2i",
             seed=23,
             meeting_index=1,
-            tick=12,
+            tick=22,  # was 12 on the baseline-9 bytes
             outcome="SKIPPED",
             ejected_player_id=None,
             ejected_role=None,
@@ -163,11 +165,12 @@ CONTENT_VS_OWN_MEMORY_MISS: Final[EvidenceMechanism] = EvidenceMechanism(
         "restated observation passes as evidence against a third party."
     ),
     audit_ref="audits/audit-phase-19-input-claude.md §5.2 (9p2i seed 12 M0)",
-    # PARTLY FLIPPED on baselines 8 and 9, and the halves are stated separately
-    # because they moved in opposite directions. The EVIDENCE half held: the
-    # fatal STRONG flag is still gone, and on baseline 9 the meeting carries no
-    # flag at all. The OUTCOME half did not: this meeting ejects a crewmate (p-2
-    # on baseline 9, p-5 on baseline 8), where the baseline-7 recording skipped.
+    # PARTLY FLIPPED on baselines 8 and 9 and on the promoted set, and the halves
+    # are stated separately because they moved in opposite directions. The
+    # EVIDENCE half held: the fatal STRONG flag is still gone, and since baseline 9
+    # the meeting carries no flag at all. The OUTCOME half did not: this meeting
+    # ejects a crewmate (p-2 on baseline 9 and on the promoted set, p-5 on
+    # baseline 8), where the baseline-7 recording skipped.
     # So the mechanism's own claim — "no longer ejects an innocent" — is false on
     # these bytes, and the exhibit says so rather than keeping a status its
     # anchor contradicts. Same family as the sole-flag class re-opening
@@ -178,7 +181,7 @@ CONTENT_VS_OWN_MEMORY_MISS: Final[EvidenceMechanism] = EvidenceMechanism(
             seedset="9p2i",
             seed=12,
             meeting_index=0,
-            tick=7,
+            tick=12,  # was 7 on the baseline-9 bytes
             outcome="EJECTED",
             ejected_player_id="p-2",
             ejected_role="CREWMATE",

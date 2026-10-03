@@ -14,29 +14,34 @@ Twenty-one checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
-   set's outcomes and refresh date. The impostor win rate is recomputed from the
-   ``winner`` column (rounded to a whole percent) and the newest ``refreshed_at``
-   is taken across both sets. The claims are bound to the README's ONE
-   sample-provenance paragraph (anchored on ``replays/samples/`` plus a
-   ``regenerated YYYY-MM-DD`` clause): its stated date must equal the newest
-   ``refreshed_at``, and it must carry each recomputed rate as the exact
-   substring ``"<rate>% (<set>)"`` — a correct value elsewhere in the file
-   cannot satisfy a drifted paragraph. EVERY ``regenerated YYYY-MM-DD`` clause
-   in the paragraph and EVERY ``"<rate>% (<set>)"`` claim in the file — inside
-   the paragraph or out — must match, so a stale duplicate cannot hide beside
-   the correct value. The paragraph's count claims are re-derived from the
-   same rows — the per-set tournament size (``"<rows>-game"``) and the total
+   set's outcomes and refresh date, and ``eval/eras.py`` names the era each set
+   sits in and the record that owns it; the two sets sit in two eras, recorded
+   on different days, so every fact here is per set. The impostor win rate is
+   recomputed from the ``winner`` column (rounded to a whole percent) and each
+   set's newest ``refreshed_at`` is its own date. The claims are bound to the
+   README's ONE sample-provenance paragraph (anchored on ``replays/samples/``
+   plus a ``regenerated YYYY-MM-DD`` clause): it must date each set with
+   ``"regenerated <date> (<set>)"``, link each set's era record, and carry each
+   recomputed rate as the exact substring ``"<rate>% (<set>)"`` — a correct
+   value elsewhere in the file cannot satisfy a drifted paragraph. EVERY dated
+   claim and EVERY ``"<rate>% (<set>)"`` claim in the file — inside the
+   paragraph or out — must match, so a stale duplicate cannot hide beside the
+   correct value; a dated claim names the set it dates, and one naming none is
+   refused. The paragraph's count claims are re-derived from the same rows —
+   the per-set tournament size (``"<rows>-game"``) and the total
    (``"<sum> sample replays"``), with every count-shaped claim in the
    paragraph held to the row totals — and the recording model plus the
-   prompt-set family/version tokens the ``model`` / ``prompt_versions``
-   columns record must be named in the paragraph as well. Both claim shapes
-   are then scanned across every document allowed to repeat them — README.md,
+   prompt-set family, version and arm tokens the ``model`` /
+   ``prompt_versions`` columns record (a two-arm composite split on ``+``)
+   must be named in the paragraph as well. Both claim shapes are then scanned
+   across every document allowed to repeat them — README.md,
    docs/history.md, docs/glossary.md, audits/README.md,
    docs/reading-guide.md and docs/ml-program.md — because a figure the front
    door states twice rots in the copy nobody re-reads. The results tables'
-   ``At baseline 8`` column is the one span held to a different source: its
-   cells state what the previous recording read, and that recording's own
-   record owns them.
+   ``Before`` column is the one span held to a different source: its cells
+   state what each set's replaced recording read, and that set's era record
+   owns them; so does a sentence naming the ladder tip's baseline about a set
+   a later era replaced.
 2. **Ladder tip.** The audit that adopted the current recording owns which
    baseline the substrate ladder stands at. Every front-door sentence naming
    the "ladder tip" — the whole sentence, however long — must name that
@@ -69,10 +74,11 @@ together, so one run names every drifted fact rather than the first.
    zero. A report whose own ``vote_correctness_rate`` field disagrees with its
    counts fails too. The substrate those rates are attributed to is checked
    with them: the baseline comes from the ladder-tip audit above, the model,
-   the prompt-set token and the substrate-flag stamp from the four
-   ``MANIFEST.md`` files; the sets must agree on all three, and the module must
-   name the baseline, the model and the prompt set (the flag stamp is thirteen
-   keys wide — held to agreement, not copied into prose). Finally, while any
+   the prompt-set tokens and the substrate-flag stamp from the four
+   ``MANIFEST.md`` files; the sets of each era must agree on all three, and the
+   module must name the baseline, each era's id, model and prompt-set tokens
+   (the flag stamp is tens of keys wide — held to agreement, not copied into
+   prose). Finally, while any
    recorded set reads below 1.0 the module may not call the rate
    structurally pinned: a zero-flag EJECT that cites a transcript turn or a
    private observation id is legal by design -- and since ruling D6 of
@@ -94,7 +100,7 @@ together, so one run names every drifted fact rather than the first.
 8. **The results table agrees with the reading guide.** The numbers are stated
    once: every row of README.md's results table must appear in
    docs/reading-guide.md's numbers table with the SAME figure and the same
-   ``At baseline 8`` cell, so a later edit cannot drift one from the other, and
+   ``Before`` cell, so a later edit cannot drift one from the other, and
    neither table may state one claim twice.
 9. **The results figures are re-derived from their sources.** Agreement between
    two documents cannot catch a figure edited identically in both, so every row
@@ -102,9 +108,9 @@ together, so one run names every drifted fact rather than the first.
    the verifier's own file population, the citation figure from the committed
    instrument's pinned assertions, the vent headline as arithmetic over the
    reading guide's cross-tab cells, and the proof-vs-inference conviction pair
-   from BOTH recordings that measured it — the current one's published read
-   for the figure, and the read published by the recording it REPLACED for the
-   ``At baseline 8`` cell. Each is checked against itself first
+   for the 9p2i set alone from BOTH recordings that measured it — its own era
+   record's read for the figure, and the read the recording it REPLACED
+   published for the ``Before`` cell. Each is checked against itself first
    (an accuracy cell fixes its own injustice count), and the published row must
    still say every innocent ejection sits in the no-proof cell, with the count
    the record read. The win rates are re-derived in check 1.
@@ -201,6 +207,7 @@ import sys
 from collections.abc import Callable, Iterator, Mapping, Sequence, Sized
 from datetime import date
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, NamedTuple, cast
 from urllib.parse import unquote
 
@@ -221,6 +228,7 @@ from _manifest_writer import parse_manifest  # noqa: E402
 from _verify_samples import sample_paths  # noqa: E402
 from paired_stats import compute_paired_stats  # noqa: E402
 
+from eval.eras import LADDER_TIP_ERA, Era, era_of  # noqa: E402
 from eval.report_io import REPORT_FILENAME, open_report_text  # noqa: E402
 from meetings.evidence_profile import (  # noqa: E402
     EXPERIMENT_ENV_NAMES,
@@ -340,16 +348,20 @@ _SENTENCE_END: Final = re.compile(r"\.(?=\s|\Z)")
 _REGENERATED_DATE: Final = re.compile(r"regenerated (\d{4}-\d{2}-\d{2})")
 # Any "<rate>% (<set>)" claim, wherever it appears, must match the manifest.
 _WIN_RATE_CLAIM: Final = re.compile(r"(\d+)% \((4p1i|9p2i)\)")
-# The two other shapes the front door dates the current recording in. Both are
-# held to the manifests' newest ``refreshed_at``; a NUMBERED claim naming an
-# older recording is history and is left alone. The number is optional because
-# the front door also dates the recording without numbering it ("the current
-# reference recording, made <date>"), and an unnumbered claim is always about
-# the current one.
+# The two other shapes the front door dates a recording in. An unnumbered one
+# is about a current recording, so it names the set it dates and is held to that
+# set's manifest; a NUMBERED claim naming the ladder tip is held to the tip
+# era's date, and one naming an older recording is history and is left alone.
 _RECORDING_DATE_CLAIM: Final = re.compile(
     r"reference recording(?:\s+(\d+))?,?\s+(?:made\s+)?(\d{4}-\d{2}-\d{2})"
 )
 _RECORD_DATE_CLAIM: Final = re.compile(r"the (\d{4}-\d{2}-\d{2}) record\b")
+# The committed sample sets sit in two eras recorded on different days
+# (``eval/eras.py``), so an unnumbered date claim names the set it dates in the
+# parentheses directly after it: "the 2026-10-01 record (9p2i)". A claim naming
+# no set, or a set recorded on another day, is drift.
+_CLAIM_SETS: Final = re.compile(r"\s*\(([^)]*)\)")
+_SET_NAME: Final = re.compile(r"\b(4p1i|9p2i)\b")
 
 # The .env.example section whose AILIBI_*= assignments must all resolve to a
 # live registry key, delimited by the repo's dashed section banners.
@@ -379,6 +391,7 @@ _BLANK_LINE: Final = re.compile(r"\n[ \t]*\n")
 # defined nowhere in the tree at all.
 _DIALECT_TERMS: Final[tuple[tuple[str, str, str], ...]] = (
     ("baseline", r"\bbaselines?\b", "baseline-n-the-reference-recording"),
+    ("era", r"\beras?\b", "era-recordings-that-share-one-recorded-identity"),
     (
         "adopting record",
         r"\badopting record\b",
@@ -501,10 +514,11 @@ _LINE_CITATION: Final = re.compile(
 # The results tables, located by their header row rather than by heading text,
 # so a section rename does not silently disable the agreement check.
 _RESULTS_TABLE_HEADER: Final[tuple[str, str]] = ("What", "Figure")
-# The column carrying each row's value at the recording this one replaced. Its
+# The column carrying each row's value at the recording that set replaced. Its
 # cells are HISTORY: the claim-shaped scans hold them to what the record itself
-# says the old value was, never to today's committed bytes.
-_BEFORE_COLUMN_HEADER: Final = "At baseline 8"
+# says the old value was, never to today's committed bytes. Since the two sample
+# sets sit in two eras, one cell may name each set's own replaced recording.
+_BEFORE_COLUMN_HEADER: Final = "Before"
 # A markdown link reduced to its text, so a column header may carry its glossary
 # link and still be matched by name.
 _LINK_TEXT: Final = re.compile(r"\[([^\]]*)\]\([^)\s]+\)")
@@ -591,8 +605,10 @@ _MIN_EXHIBIT_SEEDS: Final = 2
 # The conviction partition. The AFTER column is the current record's read; the
 # BEFORE column is the read published by the recording the current one REPLACED,
 # which is the only recording a history column can honestly be about. Both are
-# parsed by :func:`record_partition`, so the two columns are the same cells
-# measured on two recordings rather than two differently-shaped tables.
+# parsed by the same readers, so the two columns are the same cells measured on
+# two recordings rather than two differently-shaped tables. This is the record
+# the ladder tip replaced: the before column of a set the tip still owns, and
+# the pooled population the history paragraph quotes.
 _PROOF_PARTITION_AUDIT: Final = "audits/audit-phase-21-rerecord.md"
 # Each cell of the record's read is its own section, and the pooled row of the
 # table inside it is the cell the front door quotes. Located by the heading, so
@@ -617,14 +633,35 @@ _INNOCENT_BAR: Final = 2
 _DIRECT_PROOF_POOLED: Final = re.compile(
     r"direct-proof cell[^|]*?\*\*(\d+)/(\d+) = [\d.]+\*\* pooled"
 )
-# The record's win-split table: the PREVIOUS baseline's rate each set carried,
-# which is what a before-column win-rate claim is held to. The literal tracks the
-# record being read — baseline 9's history column is baseline 8's rate.
-_WIN_SPLIT_HEADER: Final[tuple[str, str]] = ("set", "baseline-8 impostor rate")
+# Each era's record publishes a win-split table: the rate each of its sets
+# carried at the recording it replaced, then the rate it records. A before-column
+# win-rate claim is held to the first column of its own set's row, read from its
+# own era's record (``eval/eras.py`` names the record). The header literal tracks
+# the record: baseline 9's history column is baseline 8's rate, and the promoted
+# set's is baseline 9's.
+_WIN_SPLIT_HEADERS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        "baseline-9": ("set", "baseline-8 impostor rate"),
+        "stage-b-r2": ("set", "baseline-9 impostor rate", "promoted impostor rate"),
+    }
+)
 _WIN_SPLIT_ROW: Final = "samples/{name}"
 _PROOF_CLAIM: Final = (
     "Ejection accuracy with engine-certified proof of the ejectee's role, "
-    "against without"
+    "against without (9p2i)"
+)
+# The set the proof row reads, alone: its after cells are its own era's record's
+# row for it, its before cells the row the recording it replaced published.
+_PROOF_SET: Final = "9p2i"
+# A per-set direct-proof sentence ("The direct-proof cell for `samples/9p2i`
+# stays perfect: **24/24 = 1.0000**"), and the pooled sentence's per-set summands
+# ("**326/326 = 1.0000** pooled (70 + 211 + 19 + 26)"), listed in the order of
+# the accuracy table's rows.
+_DIRECT_PROOF_SET: Final = re.compile(
+    r"direct-proof cell for `?([\w/]+)`?[^|]*?\*\*(\d+)/(\d+) = [\d.]+\*\*"
+)
+_DIRECT_PROOF_SUMMANDS: Final = re.compile(
+    r"direct-proof cell[^|]*?\*\*(\d+)/(\d+) = [\d.]+\*\* pooled \(([\d\s+]+)\)"
 )
 # One reading of the conviction partition: the direct-proof accuracy, the
 # non-direct accuracy, the innocent ejections and the innocent ejections that
@@ -900,16 +937,31 @@ _FRONT_DOOR_BUDGETS: Final[tuple[tuple[str, int | None, int], ...]] = (
     (_LESSONS, 800, 1_500),
 )
 
-# The ML corpus's capability-disclosures section and the four recorded sets its
-# headline cells are re-derived from. Each cell is located by the label the
+# The ML corpus's capability-disclosures section and the three recorded sets its
+# live headline cells are re-derived from (the fourth, S9, is history: below).
+# Each cell is located by the label the
 # prose writes immediately before it, so a cell is bound to its own claim rather
 # than to a position in a sentence that may be rewritten.
 _CORPUS_README: Final = "replays/ml_corpus/README.md"
 _DISCLOSURE_SETS: Final[tuple[tuple[str, str], ...]] = (
-    ("S9", "replays/samples/9p2i"),
     ("C9", "replays/ml_corpus/9p2i"),
     ("S4", "replays/samples/4p1i"),
     ("C4", "replays/ml_corpus/4p1i"),
+)
+# The disclosures describe the baseline-9 substrate, and S9 is the baseline-9
+# bytes of ``replays/samples/9p2i`` as of ``d41c9006``, the last commit that held
+# them (the promotion of candidate round 2 moved a later era into the set on
+# 2026-10-02). Its cells are therefore HISTORY, held to the values those bytes
+# gave rather than to the reports the set holds now, the way the baseline-2
+# watchability block is kept (``eval/watchability.py``): crew-triggered
+# meetings, then each role's coverage pair, as ``(numerator, denominator)``.
+_DISCLOSURE_HISTORY_COMMIT: Final = "d41c9006"
+_DISCLOSURE_HISTORY: Final[
+    tuple[str, tuple[int, int], tuple[tuple[str, int, int], ...]]
+] = (
+    "S9",
+    (145, 145),
+    (("crew", 635, 635), ("impostor", 104, 210)),
 )
 _COVERAGE_KEY: Final = '"public_response_coverage":'
 # Each role's ``(numerator, denominator)`` field pair in that block.
@@ -966,11 +1018,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(
         f"Doc facts verified: {_README} and {_ENV_EXAMPLE} agree with "
-        f"{len(_SAMPLE_SETS)} sample manifests, {_LADDER_TIP_AUDIT}, and the "
+        f"{len(_SAMPLE_SETS)} sample manifests, each set's era record "
+        f"(eval/eras.py), {_LADDER_TIP_AUDIT}, and the "
         f"{len(SUBSTRATE_FLAG_KEYS)}-lever substrate registry and the "
         f"{len(EXPERIMENT_ENV_NAMES)}-switch experiment registry; "
         f"{_VOTE_CORRECTNESS_MODULE} agrees with {len(_RECORDED_SETS)} "
-        "recorded eval reports."
+        "recorded eval reports, era by era."
     )
     print(
         f"Front door verified: {len(_DIALECT_TERMS)} private-dialect terms are "
@@ -998,7 +1051,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         f"Budgets verified: {len(_FRONT_DOOR_BUDGETS)} front-door pages sit "
         f"inside their word budgets; {_CORPUS_README}'s headline disclosure "
-        f"cells recompute from {len(_DISCLOSURE_SETS)} recorded eval reports."
+        f"cells recompute from {len(_DISCLOSURE_SETS)} recorded eval reports "
+        f"and the {_DISCLOSURE_HISTORY[0]} history as of "
+        f"{_DISCLOSURE_HISTORY_COMMIT}."
     )
     return 0
 
@@ -1094,6 +1149,12 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
     of that label is held to the same value — a stale duplicate beside the
     correct one is drift too — and a disagreement is reported with the README
     line it sits on.
+
+    The S9 cells are history (:data:`_DISCLOSURE_HISTORY`): the baseline-9 bytes
+    they describe left ``replays/samples/9p2i`` at the promotion of candidate
+    round 2, so they are held to the values those bytes gave at
+    :data:`_DISCLOSURE_HISTORY_COMMIT`, and the pooled meeting cell adds them to
+    the three live sets.
     """
 
     readme = read_document(repo_root, _CORPUS_README, errors)
@@ -1102,9 +1163,11 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
 
     check_disclosure_substrate(repo_root, readme, errors)
 
-    crew_triggered = 0
-    meetings = 0
-    cells: list[tuple[str, int, int]] = []
+    history_tag, (crew_triggered, meetings), history_cells = _DISCLOSURE_HISTORY
+    cells: list[tuple[str, int, int]] = [
+        (f"{role} {history_tag}", numerator, denominator)
+        for role, numerator, denominator in history_cells
+    ]
     for tag, set_dir in _DISCLOSURE_SETS:
         report = _EVAL_REPORT_PATH.format(set_dir=set_dir)
         facts = read_disclosure_facts(repo_root, report, errors)
@@ -1147,10 +1210,15 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
                 int(cell.group(2).replace(",", "")),
             )
             if stated != (numerator, denominator):
+                source = (
+                    f"the {history_tag} bytes gave at {_DISCLOSURE_HISTORY_COMMIT}"
+                    if label.endswith(f" {history_tag}")
+                    else "the recorded reports give"
+                )
                 errors.append(
                     f"{_CORPUS_README}:{line_number(readme, cell.start())}: the "
-                    f"'{label}' cell reads {stated[0]}/{stated[1]}, but the "
-                    f"recorded reports give {numerator}/{denominator}."
+                    f"'{label}' cell reads {stated[0]}/{stated[1]}, but "
+                    f"{source} {numerator}/{denominator}."
                 )
 
 
@@ -1317,25 +1385,82 @@ def read_disclosure_facts(
     return crew, meetings, coverage
 
 
+class _SetFacts(NamedTuple):
+    """One sample set's provenance, re-derived from its own ``MANIFEST.md``."""
+
+    wins: int
+    total: int
+    #: The newest ISO ``refreshed_at`` its rows carry, or ``None`` when none does.
+    date: str | None
+    #: The recorded era ``eval/eras.py`` files the set under.
+    era: Era
+
+
+def prompt_stamp_tokens(cell: str) -> tuple[set[str], set[str], set[str]]:
+    """``(families, versions, arms)`` one ``prompt_versions`` cell records.
+
+    A cell is a comma-separated list of ``template.family.version`` entries; a
+    template a switched-on arm re-bodies stamps ``template.family.version.arm``,
+    and one two arms re-body stamps a composite of those joined by ``+``. Each
+    composite is split on ``+`` before its dots are read, so the family is
+    always the second segment, the version the third and every further segment
+    an arm. The no-meetings sentinel and empty cells carry no dotted part.
+    """
+
+    families: set[str] = set()
+    versions: set[str] = set()
+    arms: set[str] = set()
+    for entry in cell.split(","):
+        for part in entry.split("+"):
+            segments = part.strip().split(".")
+            if len(segments) < 3:
+                continue
+            families.add(segments[1])
+            versions.add(segments[2])
+            arms.update(segments[3:])
+    return families, versions, arms
+
+
+def prompt_set_tokens(cell: str) -> frozenset[str]:
+    """Each ``family.version[.arm]`` token one ``prompt_versions`` cell records.
+
+    The same composite-aware split as :func:`prompt_stamp_tokens`, keeping each
+    part whole past its template, so an arm stamp is its own token rather than a
+    second family.
+    """
+
+    return frozenset(
+        ".".join(segments[1:])
+        for entry in cell.split(",")
+        for part in entry.split("+")
+        if len(segments := part.strip().split(".")) >= 3
+    )
+
+
 def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> None:
-    """README's sample refresh date + win rates, re-derived from the MANIFESTs.
+    """README's sample refresh dates, win rates and eras, re-derived per set.
 
     The rate is ``rows won by IMPOSTORS / rows``, rounded to a whole percent —
     the same arithmetic the README paragraph states in prose. A manifest that
     parses to zero rows is a hard failure rather than a vacuous pass: silent
     format drift would otherwise let any claim through.
 
+    The two sample sets sit in two eras (``eval/eras.py``), recorded on different
+    days by different records, so each set's date, rate and record are its own:
+    the paragraph dates each set with its own ``regenerated <date> (<set>)``
+    clause and links each set's era to the record that owns it.
+
     The claims are checked IN the sample-provenance paragraph, not file-wide:
     a correct value surviving somewhere else (a historical note, another
-    section's date) must not alibi a drifted paragraph. Win-rate claims found
-    outside the paragraph are held to the same manifest arithmetic.
+    section's date) must not alibi a drifted paragraph. Win-rate and date
+    claims found outside the paragraph are held to the same manifest arithmetic.
     """
 
-    dates: list[str] = []
-    rates: dict[str, tuple[int, int]] = {}
+    facts: dict[str, _SetFacts] = {}
     models: set[str] = set()
     prompt_families: set[str] = set()
     prompt_versions: set[str] = set()
+    prompt_arms: set[str] = set()
     for name in _SAMPLE_SETS:
         relative_path = _MANIFEST_PATH.format(name=name)
         text = read_document(repo_root, relative_path, errors)
@@ -1353,17 +1478,12 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
         impostor_wins = sum(
             1 for row in rows if row.winner.strip().upper() == _IMPOSTOR_WINNER
         )
-        rates[name] = (impostor_wins, len(rows))
-
         models.update(row.model.strip() for row in rows)
         for row in rows:
-            # Entries are ``template.family.version``; the no-meetings
-            # sentinel and empty cells have no dotted shape and are skipped.
-            for entry in row.prompt_versions.split(","):
-                segments = entry.strip().split(".")
-                if len(segments) >= 3:
-                    prompt_families.add(segments[-2])
-                    prompt_versions.add(segments[-1])
+            families, versions, arms = prompt_stamp_tokens(row.prompt_versions)
+            prompt_families |= families
+            prompt_versions |= versions
+            prompt_arms |= arms
 
         set_dates = [
             row.refreshed_at.strip()
@@ -1375,12 +1495,17 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                 f"{relative_path}: no row carries an ISO refreshed_at date, so "
                 "the sample-set refresh date cannot be re-derived."
             )
-        dates.extend(set_dates)
+        facts[name] = _SetFacts(
+            wins=impostor_wins,
+            total=len(rows),
+            date=max(set_dates) if set_dates else None,
+            era=era_of(_SAMPLE_REPLAY_DIR.format(name=name)),
+        )
 
     # Before the paragraph check, not after: the front door's other documents
     # repeat these facts on their own account, and a README that lost its
     # provenance paragraph must not take their gate down with it.
-    check_repeated_claims(repo_root, rates, max(dates) if dates else None, errors)
+    check_repeated_claims(repo_root, facts, errors)
 
     paragraph = provenance_paragraph(readme)
     if paragraph is None:
@@ -1391,33 +1516,37 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
         )
         return
 
-    if dates:
-        newest = max(dates)
-        # EVERY regenerated-date clause in the paragraph must match — a stale
-        # duplicate beside the correct clause is drift, same as the win rates.
-        for stated in _REGENERATED_DATE.findall(paragraph):
-            if stated != newest:
+    for name, fact in facts.items():
+        if fact.date is not None:
+            dated = f"regenerated {fact.date} ({name})"
+            if dated not in paragraph:
                 errors.append(
-                    f"{_README}: the sample-provenance paragraph claims "
-                    f"'regenerated {stated}', but the newest "
-                    f"refresh date {newest!r} is what "
-                    f"{', '.join(_MANIFEST_PATH.format(name=name) for name in _SAMPLE_SETS)}"
-                    " record."
+                    f"{_README}: the sample-provenance paragraph does not date "
+                    f"the {name} set with {dated!r} — "
+                    f"{_MANIFEST_PATH.format(name=name)} records its newest "
+                    f"refresh on {fact.date}."
                 )
+        if f"]({fact.era.record})" not in paragraph:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph does not link the "
+                f"{name} set's era, {fact.era.id}, to the record that owns it "
+                f"({fact.era.record}) — each set is named with its own era "
+                "(eval/eras.py), never one record for both."
+            )
 
-    for name, (impostor_wins, total) in rates.items():
-        claim = f"{round(100 * impostor_wins / total)}% ({name})"
+    for name, fact in facts.items():
+        claim = f"{round(100 * fact.wins / fact.total)}% ({name})"
         if claim not in paragraph:
             errors.append(
                 f"{_README}: the sample-provenance paragraph is missing the "
                 f"recorded impostor win rate {claim!r} — "
                 f"{_MANIFEST_PATH.format(name=name)} records "
-                f"{impostor_wins}/{total} games won by the impostors."
+                f"{fact.wins}/{fact.total} games won by the impostors."
             )
 
     size_claims: dict[str, list[str]] = {}
-    for name, (_, total) in rates.items():
-        size_claims.setdefault(f"{total}-game", []).append(name)
+    for name, fact in facts.items():
+        size_claims.setdefault(f"{fact.total}-game", []).append(name)
     for games_claim, names in sorted(size_claims.items()):
         if games_claim not in paragraph:
             errors.append(
@@ -1426,7 +1555,7 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                 f"{', '.join(_MANIFEST_PATH.format(name=name) for name in names)} "
                 f"hold that many replay rows per set."
             )
-    set_sizes = {total for _, total in rates.values()}
+    set_sizes = {fact.total for fact in facts.values()}
     for size_match in re.finditer(r"(\d+)-game", paragraph):
         if int(size_match.group(1)) not in set_sizes:
             errors.append(
@@ -1435,8 +1564,8 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                 f"that many rows (per-set row counts: "
                 f"{', '.join(str(size) for size in sorted(set_sizes))})."
             )
-    if len(rates) == len(_SAMPLE_SETS):
-        grand_total = sum(total for _, total in rates.values())
+    if len(facts) == len(_SAMPLE_SETS):
+        grand_total = sum(fact.total for fact in facts.values())
         replays_claim = f"{grand_total} sample replays"
         if replays_claim not in paragraph:
             errors.append(
@@ -1469,6 +1598,7 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
     for kind, tokens in (
         ("prompt-set family", prompt_families),
         ("prompt-set version", prompt_versions),
+        ("prompt arm", prompt_arms),
     ):
         for token in sorted(tokens):
             if token not in paragraph:
@@ -1480,85 +1610,170 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
 
 
 def check_repeated_claims(
-    repo_root: Path,
-    rates: dict[str, tuple[int, int]],
-    newest_date: str | None,
-    errors: list[str],
+    repo_root: Path, facts: Mapping[str, _SetFacts], errors: list[str]
 ) -> None:
-    """The win rates and the recording's date, everywhere the front door says them.
+    """The win rates and the recordings' dates, everywhere the front door says them.
 
     The README is where a claim like "24% (9p2i)" is first written; it is not
     the only place it rots. The reading guide repeats both figures in its own
-    numbers table and the ML page dates the recording its comparator now sits
+    numbers table and the ML page dates the recording its comparator sits
     against, so all of them are held to the manifests here.
 
-    The results tables' before column is the one exception, and it is checked
-    rather than skipped: those cells state what the value was at the recording
-    this one replaced, so they are held to the record's own win-split table.
-    A live figure written into a history cell, or a history figure written into
-    a live one, fails either way.
+    Each set is held to its OWN manifest and its own era's record, because the
+    two sample sets sit in two eras (``eval/eras.py``). An unnumbered date claim
+    ("the <date> record", "regenerated <date>") names the set it dates and must
+    equal that set's manifest date; a claim naming no set is refused, since no
+    one date is true of both. A numbered claim about the ladder tip's recording
+    ("reference recording 9, <date>") is held to the tip era's date.
+
+    The results tables' before column is checked rather than skipped: those
+    cells state what each set read at the recording it replaced, so they are
+    held to its era's record's win-split table. So is a sentence that names the
+    ladder tip's baseline while stating the rate of a set a later era replaced:
+    that sentence is about the replaced recording. A live figure written into a
+    history cell, or a history figure written into a live one, fails either way.
     """
 
-    historical_rates = record_win_rates(repo_root, rates, errors)
+    rates = {name: (fact.wins, fact.total) for name, fact in facts.items()}
+    historical_rates = record_win_rates(repo_root, facts, errors)
     # Which recording is current is the ladder tip's own question, and
     # :func:`check_ladder_tip` already reports it when the audit cannot answer.
     tip = recorded_ladder_tip(repo_root, [])
+    tip_dates = {
+        fact.date
+        for fact in facts.values()
+        if fact.era == LADDER_TIP_ERA and fact.date is not None
+    }
+    tip_date = min(tip_dates) if len(tip_dates) == 1 else None
     for document in _CLAIM_DOCUMENTS:
         text = read_document(repo_root, document, errors)
         if text is None:
             continue
         for number, unit, historical in claim_units(text):
-            expected_rates = historical_rates if historical else rates
-            for match in _WIN_RATE_CLAIM.finditer(unit):
-                name = match.group(2)
-                if name not in expected_rates:
-                    continue
-                wins, total = expected_rates[name]
-                expected = round(100 * wins / total)
-                if int(match.group(1)) == expected:
-                    continue
-                source = (
-                    f"{_LADDER_TIP_AUDIT}'s win-split table"
-                    if historical
-                    else _MANIFEST_PATH.format(name=name)
+            for sentence in [unit] if historical else unit_sentences(unit):
+                names_tip = tip is not None and tip in _BASELINE_MENTION.findall(
+                    sentence
                 )
-                where = " in the before column" if historical else ""
-                errors.append(
-                    f"{document}:{number}: win-rate claim {match.group(0)!r}"
-                    f"{where} disagrees with {source} "
-                    f"({wins}/{total} = {expected}%)."
-                )
-            if historical or newest_date is None:
+                for match in _WIN_RATE_CLAIM.finditer(sentence):
+                    name = match.group(2)
+                    replaced = (
+                        name in facts
+                        and facts[name].era != LADDER_TIP_ERA
+                        and names_tip
+                    )
+                    from_history = historical or replaced
+                    expected_rates = historical_rates if from_history else rates
+                    if name not in expected_rates:
+                        continue
+                    wins, total = expected_rates[name]
+                    expected = round(100 * wins / total)
+                    if int(match.group(1)) == expected:
+                        continue
+                    source = (
+                        f"{facts[name].era.record}'s win-split table"
+                        if from_history
+                        else _MANIFEST_PATH.format(name=name)
+                    )
+                    where = (
+                        " in the before column"
+                        if historical
+                        else f" in a sentence naming baseline {tip}"
+                        if replaced
+                        else ""
+                    )
+                    errors.append(
+                        f"{document}:{number}: win-rate claim {match.group(0)!r}"
+                        f"{where} disagrees with {source} "
+                        f"({wins}/{total} = {expected}%)."
+                    )
+            if historical:
                 continue
-            for stated, claim in current_record_dates(unit, tip):
-                if stated == newest_date:
+            for stated, claim, named, numbered in current_record_dates(unit, tip):
+                if numbered:
+                    if tip_date is not None and stated != tip_date:
+                        errors.append(
+                            f"{document}:{number}: {claim!r} dates the "
+                            f"baseline-{tip} recording {stated!r}, but the "
+                            f"{LADDER_TIP_ERA.id} sets' manifests record "
+                            f"{tip_date!r}."
+                        )
                     continue
-                errors.append(
-                    f"{document}:{number}: {claim!r} dates the current "
-                    f"reference recording {stated!r}, but "
-                    f"{', '.join(_MANIFEST_PATH.format(name=name) for name in _SAMPLE_SETS)}"
-                    f" record {newest_date!r}."
-                )
+                if not named:
+                    errors.append(
+                        f"{document}:{number}: {claim!r} names no sample set — "
+                        "the two sets were recorded on different days ("
+                        + ", ".join(
+                            f"{name} {fact.date}" for name, fact in facts.items()
+                        )
+                        + "), so a dated claim names the set it dates, as "
+                        f"'{claim} (9p2i)'."
+                    )
+                    continue
+                for name in named:
+                    if name not in facts or facts[name].date == stated:
+                        continue
+                    errors.append(
+                        f"{document}:{number}: {claim!r} dates the {name} "
+                        f"recording {stated!r}, but "
+                        f"{_MANIFEST_PATH.format(name=name)} records "
+                        f"{facts[name].date!r}."
+                    )
 
 
-def current_record_dates(text: str, tip: str | None) -> Iterator[tuple[str, str]]:
-    """Each ``(date, claim)`` in ``text`` that dates the CURRENT recording.
+def unit_sentences(unit: str) -> list[str]:
+    """``unit`` split at each sentence end, so a claim is read with its own sentence."""
+
+    sentences: list[str] = []
+    start = 0
+    for end in _SENTENCE_END.finditer(unit):
+        sentences.append(unit[start : end.end()])
+        start = end.end()
+    sentences.append(unit[start:])
+    return sentences
+
+
+def current_record_dates(
+    text: str, tip: str | None
+) -> Iterator[tuple[str, str, tuple[str, ...], bool]]:
+    """Each ``(date, claim, sets, numbered)`` in ``text`` that dates a recording.
 
     A claim NUMBERING an older recording is history and is not yielded:
     "reference recording 6, 2026-07-20" is a true sentence about a recording
     this tree no longer ships, and holding it to today's manifests would force
-    the front door to forget what it replaced. Everything else — an unnumbered
+    the front door to forget what it replaced. A claim numbering the ladder tip
+    is yielded with ``numbered`` set; everything else — an unnumbered
     "reference recording, made <date>", "the <date> record", "regenerated
-    <date>" — is about the current one.
+    <date>" — is yielded with the sample sets named in the parentheses right
+    after it (:data:`_CLAIM_SETS`), empty when it names none.
     """
 
     for match in _RECORDING_DATE_CLAIM.finditer(text):
         numbered = match.group(1)
-        if numbered is None or numbered == tip:
-            yield match.group(2), " ".join(match.group(0).split())
+        if numbered is not None and numbered != tip:
+            continue
+        yield (
+            match.group(2),
+            " ".join(match.group(0).split()),
+            claim_sets(text, match.end()),
+            numbered is not None,
+        )
     for pattern in (_RECORD_DATE_CLAIM, _REGENERATED_DATE):
         for match in pattern.finditer(text):
-            yield match.group(1), match.group(0)
+            yield (
+                match.group(1),
+                match.group(0),
+                claim_sets(text, match.end()),
+                False,
+            )
+
+
+def claim_sets(text: str, end: int) -> tuple[str, ...]:
+    """The sample sets the parentheses at ``text[end:]`` name, in order."""
+
+    parentheses = _CLAIM_SETS.match(text, end)
+    if parentheses is None:
+        return ()
+    return tuple(_SET_NAME.findall(parentheses.group(1)))
 
 
 def claim_units(markdown: str) -> Iterator[tuple[int, str, bool]]:
@@ -1599,55 +1814,92 @@ def strip_links(text: str) -> str:
 
 
 def record_win_rates(
-    repo_root: Path, rates: dict[str, tuple[int, int]], errors: list[str]
+    repo_root: Path, facts: Mapping[str, _SetFacts], errors: list[str]
 ) -> dict[str, tuple[int, int]]:
-    """Each sample set's PREVIOUS impostor win rate, from the record's own table.
+    """Each sample set's PREVIOUS impostor win rate, from its era's record.
 
-    The record publishes both columns of the split it measured, so the front
-    door's before column has a committed source rather than a memory. The after
-    column is checked against the manifests while we are here: a record that
-    disagreed with the bytes it recorded would make every before/after pair on
-    the front door meaningless.
+    Each era's record publishes both columns of the split it measured
+    (:data:`_WIN_SPLIT_HEADERS`), so the front door's before column has a
+    committed source rather than a memory. The after column is checked against
+    the manifest while we are here: a record that disagreed with the bytes it
+    recorded would make every before/after pair on the front door meaningless.
+    A set a later era replaced is checked once more: its before column must be
+    the after column the ladder tip's own record published for it, the
+    recording it replaced.
     """
 
-    audit = read_document(repo_root, _LADDER_TIP_AUDIT, errors)
+    previous: dict[str, tuple[int, int]] = {}
+    # Two sets can read one record's table, so its drift is reported once.
+    found: list[str] = []
+    for name, fact in facts.items():
+        split = era_win_split(repo_root, fact.era, name, found)
+        if split is None:
+            continue
+        before, after = split
+        previous[name] = before
+        if after != (fact.wins, fact.total):
+            errors.append(
+                f"{fact.era.record}: the win-split table records "
+                f"{after[0]}/{after[1]} for {name}, but "
+                f"{_MANIFEST_PATH.format(name=name)} holds "
+                f"{fact.wins}/{fact.total}."
+            )
+        if fact.era == LADDER_TIP_ERA:
+            continue
+        tip_split = era_win_split(repo_root, LADDER_TIP_ERA, name, found)
+        if tip_split is not None and tip_split[1] != before:
+            errors.append(
+                f"{fact.era.record}: the win-split table's before cell for {name} "
+                f"reads {before[0]}/{before[1]}, but {LADDER_TIP_ERA.record} "
+                f"published {tip_split[1][0]}/{tip_split[1][1]} for the "
+                "recording it replaced."
+            )
+    errors.extend(dict.fromkeys(found))
+    return previous
+
+
+def era_win_split(
+    repo_root: Path, era: Era, name: str, errors: list[str]
+) -> tuple[tuple[int, int], tuple[int, int]] | None:
+    """``(before, after)`` for ``name`` from ``era``'s record's win-split table."""
+
+    header = _WIN_SPLIT_HEADERS.get(era.id)
+    if header is None:
+        errors.append(
+            f"{era.record}: no win-split header is registered for the {era.id} "
+            "era, so its before-column win rates have no committed source."
+        )
+        return None
+    audit = read_document(repo_root, era.record, errors)
     if audit is None:
-        return {}
-    rows = labelled_table_rows(audit, _WIN_SPLIT_HEADER)
+        return None
+    rows = labelled_table_rows(audit, header)
     if rows is None:
         errors.append(
-            f"{_LADDER_TIP_AUDIT}: no win-split table with a "
-            f"'{' | '.join(_WIN_SPLIT_HEADER)}' header row — the front door's "
-            "before-column win rates have no committed source."
+            f"{era.record}: no win-split table with a '{' | '.join(header)}' "
+            "header row — the front door's before-column win rates have no "
+            "committed source."
         )
-        return {}
-    previous: dict[str, tuple[int, int]] = {}
-    for name in _SAMPLE_SETS:
-        cells = rows.get(_WIN_SPLIT_ROW.format(name=name))
-        if cells is None or len(cells) < 2:
-            errors.append(
-                f"{_LADDER_TIP_AUDIT}: the win-split table has no "
-                f"{_WIN_SPLIT_ROW.format(name=name)!r} row, so the before-column "
-                f"win rate for {name} cannot be re-derived."
-            )
-            continue
-        before, after = _RATIO_CELL.search(cells[0]), _RATIO_CELL.search(cells[1])
-        if before is None or after is None:
-            errors.append(
-                f"{_LADDER_TIP_AUDIT}: the win-split row for {name} holds no "
-                "before/after pair of the shape '<wins>/<games>'."
-            )
-            continue
-        previous[name] = (int(before.group(1)), int(before.group(2)))
-        recorded = (int(after.group(1)), int(after.group(2)))
-        if name in rates and recorded != rates[name]:
-            errors.append(
-                f"{_LADDER_TIP_AUDIT}: the win-split table records "
-                f"{recorded[0]}/{recorded[1]} for {name}, but "
-                f"{_MANIFEST_PATH.format(name=name)} holds "
-                f"{rates[name][0]}/{rates[name][1]}."
-            )
-    return previous
+        return None
+    cells = rows.get(_WIN_SPLIT_ROW.format(name=name))
+    if cells is None or len(cells) < 2:
+        errors.append(
+            f"{era.record}: the win-split table has no "
+            f"{_WIN_SPLIT_ROW.format(name=name)!r} row, so the before-column "
+            f"win rate for {name} cannot be re-derived."
+        )
+        return None
+    before, after = _RATIO_CELL.search(cells[0]), _RATIO_CELL.search(cells[1])
+    if before is None or after is None:
+        errors.append(
+            f"{era.record}: the win-split row for {name} holds no "
+            "before/after pair of the shape '<wins>/<games>'."
+        )
+        return None
+    return (
+        (int(before.group(1)), int(before.group(2))),
+        (int(after.group(1)), int(after.group(2))),
+    )
 
 
 def labelled_table_rows(
@@ -2146,33 +2398,41 @@ def provenance_lead_in(module: str) -> str | None:
 def check_vote_correctness_provenance(
     repo_root: Path, module: str, errors: list[str]
 ) -> None:
-    """The substrate the vote-correctness stamps are attributed to.
+    """The substrate the vote-correctness stamps are attributed to, per era.
 
     A rate means nothing without the recording it came from. Three columns of
     every recorded set's ``MANIFEST.md`` own that recording — ``model``,
     ``prompt_versions`` and the substrate ``flags`` — and EVERY set must supply
-    all three and agree on them: a set that establishes nothing (a manifest
-    with no dotted prompt entry, say) must not be carried by its siblings, and
-    one provenance line cannot describe two substrates. The baseline comes from
-    the ladder-tip audit.
+    all three: a set that establishes nothing (a manifest with no dotted prompt
+    entry, say) must not be carried by its siblings. The committed sets sit in
+    two eras (``eval/eras.py``), so agreement is held within each era, never
+    across them: the sets of one era must agree on all three columns, and one
+    provenance line describes one era. The baseline comes from the ladder-tip
+    audit.
 
     A recording may run its templates at different versions, so a row's prompt
-    set is the SET of ``<family>.<version>`` tokens its templates carry, and it
-    is that set which every row of every set must repeat: a lone row, or a
-    whole set, carrying one different token is a second substrate.
+    set is the SET of ``<family>.<version>[.<arm>]`` tokens its templates carry
+    (:func:`prompt_set_tokens`, which splits a two-arm composite on ``+``), and
+    it is that set which every row of an era must repeat: a lone row, or a whole
+    set, carrying one different token is a second substrate.
 
-    The baseline, the model and every prompt-set token are short enough to be
+    Each era's id, its model and every prompt-set token are short enough to be
     named in the module and are required there — inside the provenance lead-in
     that introduces the stamps (:func:`provenance_lead_in`), never merely
     somewhere in the file, so a correct token in an unrelated comment cannot
-    alibi a wrong lead-in. The flags stamp is tens of keys wide, so it is held
-    to agreement only: naming it in prose would be a second copy to rot.
+    alibi a wrong lead-in. A token is matched whole (:func:`names_token`), so
+    an arm's longer stamp cannot stand in for the bare version it extends. The
+    flags stamp is tens of keys wide, so it is held to agreement only: naming it
+    in prose would be a second copy to rot.
     """
 
-    models: set[str] = set()
-    prompt_stamps: set[frozenset[str]] = set()
-    flag_stamps: set[str] = set()
+    eras: dict[str, list[str]] = {}
+    era_models: dict[str, set[str]] = {}
+    era_prompts: dict[str, set[frozenset[str]]] = {}
+    era_flags: dict[str, set[str]] = {}
     for set_dir in _RECORDED_SETS:
+        era = era_of(set_dir).id
+        eras.setdefault(era, []).append(set_dir)
         relative_path = _SET_MANIFEST_PATH.format(set_dir=set_dir)
         text = read_document(repo_root, relative_path, errors)
         if text is None:
@@ -2188,16 +2448,10 @@ def check_vote_correctness_provenance(
         set_prompt_stamps: set[frozenset[str]] = set()
         set_flag_stamps: set[str] = set()
         for row in rows:
-            # Entries are ``template.family.version``; the no-meetings sentinel
-            # and empty cells have no dotted shape, and a row carrying nothing
-            # else states no prompt set and is skipped.
-            row_tokens = frozenset(
-                f"{segments[-2]}.{segments[-1]}"
-                for segments in (
-                    entry.strip().split(".") for entry in row.prompt_versions.split(",")
-                )
-                if len(segments) >= 3
-            )
+            # The no-meetings sentinel and empty cells have no dotted shape,
+            # and a row carrying nothing else states no prompt set and is
+            # skipped.
+            row_tokens = prompt_set_tokens(row.prompt_versions)
             if row_tokens:
                 set_prompt_stamps.add(row_tokens)
             # Order-insensitive: the stamp is the SET of flags a row was
@@ -2222,9 +2476,9 @@ def check_vote_correctness_provenance(
                     f"{_VOTE_CORRECTNESS_MODULE} stamps are attributed to — a "
                     "sibling manifest must not vouch for it."
                 )
-        models |= set_models
-        prompt_stamps |= set_prompt_stamps
-        flag_stamps |= set_flag_stamps
+        era_models.setdefault(era, set()).update(set_models)
+        era_prompts.setdefault(era, set()).update(set_prompt_stamps)
+        era_flags.setdefault(era, set()).update(set_flag_stamps)
 
     lead_in = provenance_lead_in(module)
     if lead_in is None:
@@ -2245,34 +2499,63 @@ def check_vote_correctness_provenance(
             "checks out."
         )
 
-    # Each column as its distinct stamps, a stamp being the tokens one row
-    # carries: one token for the model and the flags, the whole token set for
-    # the prompts. Agreement means exactly one stamp across every row.
-    substrates: tuple[tuple[str, set[frozenset[str]], bool], ...] = (
-        ("recording model", {frozenset({model}) for model in models}, True),
-        ("prompt set", prompt_stamps, True),
-        ("substrate flags", {frozenset({stamp}) for stamp in flag_stamps}, False),
-    )
-    for label, stamps, name_in_lead_in in substrates:
-        if len(stamps) > 1:
-            rendered = sorted(" + ".join(sorted(stamp)) for stamp in stamps)
+    for era, set_dirs in eras.items():
+        if not names_token(lead_in, era):
             errors.append(
-                f"{_VOTE_CORRECTNESS_MODULE}: the recorded sets disagree on the "
-                f"{label} ({' | '.join(rendered)}) — one provenance line "
-                f"cannot describe them; {', '.join(_RECORDED_SETS)} should share "
-                "one substrate."
+                f"{_VOTE_CORRECTNESS_MODULE}: the stamps' provenance lead-in "
+                f"does not name the {era!r} era, which "
+                f"{', '.join(set_dirs)} belong to (eval/eras.py) — each era's "
+                "rates are attributed to their own recording."
             )
-            continue
-        if not name_in_lead_in:
-            continue
-        for token in sorted(token for stamp in stamps for token in stamp):
-            if token not in lead_in:
+        # Each column as its distinct stamps, a stamp being the tokens one row
+        # carries: one token for the model and the flags, the whole token set
+        # for the prompts. Agreement means exactly one stamp across the era.
+        substrates: tuple[tuple[str, set[frozenset[str]], bool], ...] = (
+            (
+                "recording model",
+                {frozenset({model}) for model in era_models.get(era, set())},
+                True,
+            ),
+            ("prompt set", era_prompts.get(era, set()), True),
+            (
+                "substrate flags",
+                {frozenset({stamp}) for stamp in era_flags.get(era, set())},
+                False,
+            ),
+        )
+        for label, stamps, name_in_lead_in in substrates:
+            if len(stamps) > 1:
+                rendered = sorted(" + ".join(sorted(stamp)) for stamp in stamps)
                 errors.append(
-                    f"{_VOTE_CORRECTNESS_MODULE}: the stamps' provenance lead-in "
-                    f"does not name the {label} {token!r} they were recorded "
-                    f"on — {_SET_MANIFEST_PATH.format(set_dir=_RECORDED_SETS[0])} "
-                    "and its siblings record it on every row."
+                    f"{_VOTE_CORRECTNESS_MODULE}: the {era} era's sets disagree "
+                    f"on the {label} ({' | '.join(rendered)}) — one provenance "
+                    f"line cannot describe them; {', '.join(set_dirs)} should "
+                    "share one substrate."
                 )
+                continue
+            if not name_in_lead_in:
+                continue
+            for token in sorted(token for stamp in stamps for token in stamp):
+                if not names_token(lead_in, token):
+                    errors.append(
+                        f"{_VOTE_CORRECTNESS_MODULE}: the stamps' provenance "
+                        f"lead-in does not name the {era} era's {label} "
+                        f"{token!r} — "
+                        f"{_SET_MANIFEST_PATH.format(set_dir=set_dirs[0])} "
+                        "records it on every row."
+                    )
+
+
+def names_token(text: str, token: str) -> bool:
+    """Whether ``text`` names ``token`` whole.
+
+    Not inside a longer dotted or word token: ``qwen3_6_27b.v8`` is not named
+    by ``qwen3_6_27b.v8.impostor_ballot_v1``. A sentence's own full stop after
+    the token still counts as naming it.
+    """
+
+    pattern = rf"(?<![\w.]){re.escape(token)}(?!\w|\.\w)"
+    return re.search(pattern, text) is not None
 
 
 def read_vote_correctness_block(
@@ -2735,41 +3018,168 @@ def check_conviction_partition(
     """The proof-vs-inference row, both columns, each from the record that owns it.
 
     The row is the front door's headline pair, and after a recording it is two
-    measurements rather than one: the current record's own pre-registered read
-    of those cells, and the read the recording before it published. Each column
-    is derived from its own audit and neither is copied from the other, so a
-    re-record that moved the figure and left the history behind — or the
-    reverse — fails here.
+    measurements rather than one: the owning record's read of those cells, and
+    the read the recording before it published. Each column is derived from its
+    own audit and neither is copied from the other, so a re-record that moved
+    the figure and left the history behind — or the reverse — fails here.
+
+    The row reads one set, :data:`_PROOF_SET`, never a pool: the committed sets
+    sit in two eras (``eval/eras.py``), and a figure pooled across them would
+    describe no recording. Its after column is that set's rows in its own era's
+    record; its before column is that set's rows in the record of the recording
+    it replaced (:func:`proof_set_records`). The owning record's before cells
+    are held to the replaced record's after cells as well, so the two records
+    cannot disagree about the recording one of them replaced.
     """
 
+    after_record, before_record = proof_set_records()
+    label = _WIN_SPLIT_ROW.format(name=_PROOF_SET)
     before = audit_partition(
-        repo_root, _PROOF_PARTITION_AUDIT, record_partition, errors
+        repo_root,
+        before_record,
+        lambda audit: set_partition(audit, label),
+        errors,
     )
-    after = audit_partition(repo_root, _LADDER_TIP_AUDIT, record_partition, errors)
+    after = audit_partition(
+        repo_root,
+        after_record,
+        lambda audit: set_partition(audit, label),
+        errors,
+    )
     if before is not None:
-        check_record_partition_arithmetic(
-            _PROOF_PARTITION_AUDIT, before[1], before[2], errors
-        )
+        check_record_partition_arithmetic(before_record, before[1], before[2], errors)
         compare_before_figure(
             readme,
             _PROOF_CLAIM,
             partition_figure(before[0], before[1]),
-            f"the pre-registered read in {_PROOF_PARTITION_AUDIT}",
+            f"the {label} rows of {before_record}",
             errors,
         )
-    if after is not None:
-        proof, non_proof, innocent, proof_innocent = after
-        check_record_partition_arithmetic(
-            _LADDER_TIP_AUDIT, non_proof, innocent, errors
+    if after is None:
+        return
+    proof, non_proof, innocent, proof_innocent = after
+    check_record_partition_arithmetic(after_record, non_proof, innocent, errors)
+    compare_result_figure(
+        _PROOF_CLAIM,
+        figures,
+        partition_figure(proof, non_proof),
+        f"the {label} rows of {after_record}",
+        errors,
+    )
+    check_injustice_cell(readme, after_record, innocent, proof_innocent, errors)
+    if before is None or after_record == before_record:
+        return
+    audit = read_document(repo_root, after_record, errors)
+    stated = None if audit is None else set_before_cells(audit, label)
+    replaced = (before[1], before[2])
+    if stated is not None and stated != replaced:
+        errors.append(
+            f"{after_record}: its before cells for {label} read "
+            f"{stated[0][0]}/{stated[0][1]} and {stated[1]} innocent "
+            f"ejections, but {before_record}, the record of the recording it "
+            f"replaced, published {replaced[0][0]}/{replaced[0][1]} and "
+            f"{replaced[1]}."
         )
-        compare_result_figure(
-            _PROOF_CLAIM,
-            figures,
-            partition_figure(proof, non_proof),
-            f"the pre-registered read in {_LADDER_TIP_AUDIT}",
-            errors,
-        )
-        check_injustice_cell(readme, innocent, proof_innocent, errors)
+
+
+def proof_set_records() -> tuple[str, str]:
+    """``(after, before)``: the records the proof row's two columns read.
+
+    The after record is the one that owns :data:`_PROOF_SET`'s era. The before
+    record is the one that owns the recording it replaced: the ladder tip's own
+    record for a set a later era holds, or the record the tip replaced for a set
+    the tip still holds.
+    """
+
+    era = era_of(_SAMPLE_REPLAY_DIR.format(name=_PROOF_SET))
+    if era == LADDER_TIP_ERA:
+        return era.record, _PROOF_PARTITION_AUDIT
+    return era.record, LADDER_TIP_ERA.record
+
+
+def set_partition(audit: str, label: str) -> _Partition | None:
+    """One set's four cells, read off its rows of the record's published cells.
+
+    The non-direct accuracy and the innocent ejections are the set's after
+    cells in the two sections' ``| set | before | after |`` tables. The
+    direct-proof pair is stated in the accuracy section's prose: either a
+    sentence naming the set (:data:`_DIRECT_PROOF_SET`), or the pooled sentence
+    with its per-set summands (:data:`_DIRECT_PROOF_SUMMANDS`), listed in the
+    order of the accuracy table's rows. Summands give each set's denominator
+    only, so they are read only when the pooled cell is perfect, the one case
+    where every set's numerator equals its denominator; a pooled cell below
+    perfect, summands that do not sum to it, or a count of summands that is not
+    the table's row count is ``None``, the drift the caller reports.
+    """
+
+    accuracy = set_after_cell(audit, _ACCURACY_BAR, label)
+    innocent_cell = set_after_cell(audit, _INNOCENT_BAR, label)
+    if accuracy is None or innocent_cell is None:
+        return None
+    ratio = _RATIO_CELL.search(accuracy)
+    count = _COUNT_CELL.search(innocent_cell)
+    section = bar_section(audit, _ACCURACY_BAR)
+    if ratio is None or count is None or section is None:
+        return None
+    proof = set_direct_proof(section, label)
+    if proof is None:
+        return None
+    return (
+        proof,
+        (int(ratio.group(1)), int(ratio.group(2))),
+        int(count.group(1)),
+        proof[1] - proof[0],
+    )
+
+
+def set_direct_proof(section: str, label: str) -> tuple[int, int] | None:
+    """One set's direct-proof pair from the accuracy section's prose."""
+
+    for match in _DIRECT_PROOF_SET.finditer(section):
+        if match.group(1) == label:
+            return int(match.group(2)), int(match.group(3))
+    pooled = _DIRECT_PROOF_SUMMANDS.search(section)
+    rows = labelled_table_rows(section, _BEFORE_AFTER_HEADER)
+    if pooled is None or rows is None or label not in rows:
+        return None
+    correct, total = int(pooled.group(1)), int(pooled.group(2))
+    summands = [int(part) for part in pooled.group(3).split("+")]
+    labels = [row for row in rows if row != _RECORD_POOLED_LABEL]
+    if correct != total or sum(summands) != total or len(summands) != len(labels):
+        return None
+    share = summands[labels.index(label)]
+    return share, share
+
+
+def set_after_cell(audit: str, bar: int, label: str) -> str | None:
+    """One set's ``after`` cell in one published cell's table."""
+
+    cells = set_cells(audit, bar, label)
+    return None if cells is None or len(cells) < 2 else cells[1]
+
+
+def set_cells(audit: str, bar: int, label: str) -> list[str] | None:
+    """One set's ``before`` / ``after`` cells in one published cell's table."""
+
+    section = bar_section(audit, bar)
+    if section is None:
+        return None
+    rows = labelled_table_rows(section, _BEFORE_AFTER_HEADER)
+    return None if rows is None else rows.get(label)
+
+
+def set_before_cells(audit: str, label: str) -> tuple[tuple[int, int], int] | None:
+    """One set's before cells: the non-direct pair and the innocent count."""
+
+    accuracy = set_cells(audit, _ACCURACY_BAR, label)
+    innocent = set_cells(audit, _INNOCENT_BAR, label)
+    if accuracy is None or innocent is None or not accuracy or not innocent:
+        return None
+    ratio = _RATIO_CELL.search(accuracy[0])
+    count = _COUNT_CELL.search(innocent[0])
+    if ratio is None or count is None:
+        return None
+    return (int(ratio.group(1)), int(ratio.group(2))), int(count.group(1))
 
 
 def partition_figure(proof: tuple[int, int], non_proof: tuple[int, int]) -> str:
@@ -2805,7 +3215,7 @@ def check_record_partition_arithmetic(
 
 
 def check_injustice_cell(
-    readme: str, innocent: int, proof_innocent: int, errors: list[str]
+    readme: str, record: str, innocent: int, proof_innocent: int, errors: list[str]
 ) -> None:
     """The proof row's own injustice claim, held to the same partition table.
 
@@ -2827,7 +3237,7 @@ def check_injustice_cell(
     if proof_innocent:
         errors.append(
             f"{_README}: the results row {_PROOF_CLAIM!r} says every innocent "
-            f"ejection sits in the no-proof cell, but {_LADDER_TIP_AUDIT} "
+            f"ejection sits in the no-proof cell, but {record} "
             f"records {proof_innocent} proof-present innocent ejection(s)."
         )
         return
@@ -2835,7 +3245,7 @@ def check_injustice_cell(
     if stated not in " | ".join(row):
         errors.append(
             f"{_README}: the results row {_PROOF_CLAIM!r} does not state "
-            f"{stated!r} — {_LADDER_TIP_AUDIT}'s pre-registered read counts "
+            f"{stated!r} — {record}'s read of {_PROOF_SET} counts "
             f"{innocent} innocent ejections and zero proof-present ones, so "
             "both the count and the cell they landed in have to be stated here."
         )
@@ -3638,18 +4048,49 @@ def check_verdict_figures(repo_root: Path, errors: list[str]) -> None:
     baseline; a sentence about the recording before it says that count instead.
     """
 
-    # Both partitions are located by :func:`check_conviction_partition`, which
-    # already reports a record whose read cannot be found; a second report here
-    # would name the same drift twice.
-    partition = audit_partition(repo_root, _LADDER_TIP_AUDIT, record_partition, [])
-    previous = audit_partition(repo_root, _PROOF_PARTITION_AUDIT, record_partition, [])
-    if partition is None or previous is None:
+    # The pooled reads of the last two reference recordings are read here and
+    # nowhere else since the proof row reads one set, so a pooled read that
+    # cannot be located, or whose two cells contradict each other, is reported
+    # here. The proof set's own two reads are located by
+    # :func:`check_conviction_partition`, which already reports them.
+    pooled: list[_Partition] = []
+    for record in (_LADDER_TIP_AUDIT, _PROOF_PARTITION_AUDIT):
+        read = audit_partition(repo_root, record, record_partition, [])
+        if read is None:
+            errors.append(
+                f"{record}: its pooled conviction-partition cells cannot be "
+                "located — the front door's account of that recording's pooled "
+                "reads has nothing to be checked against."
+            )
+            continue
+        check_record_partition_arithmetic(record, read[1], read[2], errors)
+        pooled.append(read)
+    after_record, before_record = proof_set_records()
+    label = _WIN_SPLIT_ROW.format(name=_PROOF_SET)
+    shown = audit_partition(
+        repo_root, after_record, lambda audit: set_partition(audit, label), []
+    )
+    replaced = audit_partition(
+        repo_root, before_record, lambda audit: set_partition(audit, label), []
+    )
+    if len(pooled) != 2 or shown is None or replaced is None:
         return
-    counts = {str(partition[2]), str(previous[2])}
-    # The four conviction cells, keyed by denominator: a prose fraction over one
-    # of these populations is one of these cells, so an internally consistent
+    partition, previous = pooled
+    # The pooled reads of the last two reference recordings, which the history
+    # paragraph quotes, and the proof set's own two reads, which the results
+    # row quotes.
+    reads = (partition, previous, shown, replaced)
+    counts = {str(read[2]) for read in reads}
+    # The conviction cells, keyed by denominator: a prose fraction over one of
+    # these populations is one of these cells, so an internally consistent
     # rewrite of it ("62 of 103 = 0.6019") still has to be the recorded one.
-    recorded = {cell[1]: cell for cell in (*partition[:2], *previous[:2])}
+    # The pooled populations hold on every line; the proof set's own (as small
+    # as twenty) hold only on a line naming that set, so a sample that happens
+    # to share its size elsewhere is not taken for it.
+    pooled_cells = {
+        cell[1]: cell for read in (partition, previous) for cell in read[:2]
+    }
+    set_cells = {cell[1]: cell for read in (shown, replaced) for cell in read[:2]}
     for document in _CLAIM_DOCUMENTS:
         text = read_document(repo_root, document, errors)
         if text is None:
@@ -3670,13 +4111,16 @@ def check_verdict_figures(repo_root: Path, errors: list[str]) -> None:
                         f"{numerator}/{denominator} is {recomputed} at the "
                         "precision it prints."
                     )
+                names_set = _PROOF_SET in _SET_NAME.findall(line)
+                recorded = {**pooled_cells, **set_cells} if names_set else pooled_cells
                 cell = recorded.get(denominator)
                 if cell is not None and cell[0] != numerator:
                     errors.append(
                         f"{document}:{number}: the claim "
                         f"{match.group(0)!r} is over a conviction population "
-                        f"{_LADDER_TIP_AUDIT} and {_PROOF_PARTITION_AUDIT} "
-                        f"record, whose cell is {cell[0]}/{cell[1]}."
+                        f"{_LADDER_TIP_AUDIT}, {_PROOF_PARTITION_AUDIT} or "
+                        f"{after_record} record, whose cell is "
+                        f"{cell[0]}/{cell[1]}."
                     )
         for match in _INJUSTICE_SENTENCE.finditer(text):
             sentence = sentence_around(text, match.start(), match.end())
@@ -3684,8 +4128,9 @@ def check_verdict_figures(repo_root: Path, errors: list[str]) -> None:
                 continue
             errors.append(
                 f"{document}:{line_number(text, match.start())}: a "
-                "wrongful-ejection sentence names neither the count the record "
-                f"read ({partition[2]}) nor the one before it ({previous[2]}) "
+                "wrongful-ejection sentence names none of the counts the "
+                f"records read (pooled {partition[2]} and {previous[2]}; "
+                f"{_PROOF_SET} {shown[2]} and {replaced[2]}) "
                 f"— “{' '.join(sentence.split())}”."
             )
 
@@ -4598,8 +5043,8 @@ def check_finding_history(
 
     partition = audit_partition(repo_root, _FINDING_BASE_AUDIT, record_partition, [])
     if partition is None:
-        # check_conviction_partition already reports either record it reads
-        # itself; a base record it does not read is reported here instead.
+        # check_verdict_figures already reports the pooled cells of either
+        # record it reads; a base record it does not read is reported here.
         if _FINDING_BASE_AUDIT not in (_LADDER_TIP_AUDIT, _PROOF_PARTITION_AUDIT):
             errors.append(
                 f"{_FINDING_BASE_AUDIT}: its published cells cannot be read, so "

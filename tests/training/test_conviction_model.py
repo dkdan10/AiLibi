@@ -90,20 +90,15 @@ from training.surrogate.dataset import (
 from training.surrogate.runner import SurrogateFitCorpus, fit_corpus_fingerprint
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
+#: samples/9p2i holds candidate round 2's bytes since 2026-10-02 (eval/eras.py);
+#: the conviction table, built on the frozen surrogate walk, refuses it by name.
+_PROMOTED_NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
 _CORPUS = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 _ARTIFACT_DIR = _REPO_ROOT / "training" / "artifacts" / "conviction"
 _CONVICTION_MODULES = tuple(
     sorted((_REPO_ROOT / "training" / "conviction").glob("*.py"))
 )
-
-
-@pytest.fixture(scope="module")
-def nine_conviction() -> ConvictionTable:
-    """The 9p2i sample-set conviction table (~2s; shared)."""
-
-    return build_conviction_table(_NINE)
 
 
 @pytest.fixture(scope="module")
@@ -257,7 +252,7 @@ def test_features_read_only_the_fenced_columns() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("sample_dir", [_NINE, _FOUR])
+@pytest.mark.parametrize("sample_dir", [_CORPUS, _FOUR])
 def test_flag_labels_reproduce_the_referee_census(sample_dir: Path) -> None:
     """The mirrored flag label equals the production census, integer-exact.
 
@@ -288,20 +283,32 @@ def test_flag_labels_reproduce_the_referee_census(sample_dir: Path) -> None:
     assert table.meetings_total == supply.meetings_total
 
 
-def test_sample_conversion_census_pins(
-    nine_conviction: ConvictionTable, four_conviction: ConvictionTable
-) -> None:
-    """The mirrored conversion census on the committed baseline-9 samples.
+def test_the_conviction_table_refuses_the_promoted_nine_player_set() -> None:
+    """The table reads baseline recordings only, and refuses the promoted set by name.
+
+    On its baseline-9 bytes samples/9p2i read 145 meetings, 112 conversion
+    attempts and 79 conversions here (151, 128 and 81 before them).
+    """
+
+    with pytest.raises(
+        ValueError,
+        match="^frozen surrogate meeting table does not support experimental "
+        "recordings$",
+    ):
+        build_conviction_table(_PROMOTED_NINE)
+
+
+def test_sample_conversion_census_pins(four_conviction: ConvictionTable) -> None:
+    """The mirrored conversion census on the committed baseline-9 4p1i sample.
 
     Regression pins (re-derived from bytes, re-pinned at any re-record):
     the observation-backed conversion economy the 18.11 gate shipped stays
     DENSE — conversion is no longer the scarce quantity the
-    §3.1 census measured at baseline 5.
+    §3.1 census measured at baseline 5. The 9p2i sample's pins left with its
+    baseline-9 bytes (see the refusal above); the corpus census is pinned in
+    ``test_corpus_census_pins``.
     """
 
-    assert nine_conviction.meetings_total == 145  # was 151
-    assert nine_conviction.conversion_attempts_total == 112  # was 128
-    assert nine_conviction.conversions_total == 79  # was 81
     assert four_conviction.meetings_total == 39  # was 39
     assert four_conviction.conversion_attempts_total == 37  # was 33
     assert four_conviction.conversions_total == 20  # was 20
@@ -419,10 +426,10 @@ def test_observation_backed_conversion_semantics() -> None:
     ) == frozenset({"P4"})
 
 
-def test_row_invariants_fail_loud(nine_conviction: ConvictionTable) -> None:
+def test_row_invariants_fail_loud(corpus_conviction: ConvictionTable) -> None:
     """The row validators refuse an internally-inconsistent row."""
 
-    row = nine_conviction.rows[0]
+    row = corpus_conviction.rows[0]
     with pytest.raises(ValueError, match="flags_minted"):
         ConvictionMeetingRow(
             **{
@@ -449,24 +456,24 @@ def _fit_rows(table: ConvictionTable) -> list[ConvictionMeetingRow]:
 
 
 def test_fit_is_deterministic_and_serializes_byte_stably(
-    nine_conviction: ConvictionTable,
+    corpus_conviction: ConvictionTable,
 ) -> None:
     """Two fits over the same rows serialize to byte-identical artifacts."""
 
     first = ConvictionEconomyModel()
     second = ConvictionEconomyModel()
-    first.fit(_fit_rows(nine_conviction))
-    second.fit(_fit_rows(nine_conviction))
+    first.fit(_fit_rows(corpus_conviction))
+    second.fit(_fit_rows(corpus_conviction))
     assert first.to_artifact_json() == second.to_artifact_json()
 
 
 def test_artifact_round_trips_with_sha_sidecar(
-    nine_conviction: ConvictionTable, tmp_path: Path
+    corpus_conviction: ConvictionTable, tmp_path: Path
 ) -> None:
     """Write → load is the identity; a tampered sidecar fails loud."""
 
     model = ConvictionEconomyModel()
-    model.fit(_fit_rows(nine_conviction))
+    model.fit(_fit_rows(corpus_conviction))
     digest = write_conviction_model_artifact(model, tmp_path, max_uses=1234)
     loaded, loaded_digest = load_conviction_model_artifact(tmp_path)
     assert loaded_digest == digest
@@ -475,7 +482,7 @@ def test_artifact_round_trips_with_sha_sidecar(
     assert cap == ConvictionStalenessCap(
         weights_sha256=digest, max_uses=1234, unit="meetings"
     )
-    sample = nine_conviction.rows[0].features
+    sample = corpus_conviction.rows[0].features
     assert loaded.predict(sample) == model.predict(sample)
 
     sidecar = tmp_path / "conviction-model.json.sha256"
@@ -485,12 +492,12 @@ def test_artifact_round_trips_with_sha_sidecar(
 
 
 def test_artifact_layout_drift_fails_loud(
-    nine_conviction: ConvictionTable,
+    corpus_conviction: ConvictionTable,
 ) -> None:
     """A drifted format marker or feature layout must never silently load."""
 
     model = ConvictionEconomyModel()
-    model.fit(_fit_rows(nine_conviction))
+    model.fit(_fit_rows(corpus_conviction))
     payload = model.to_artifact_json()
     with pytest.raises(ValueError, match="format"):
         ConvictionEconomyModel.from_artifact_json(
@@ -503,22 +510,24 @@ def test_artifact_layout_drift_fails_loud(
 
 
 def test_unfitted_predict_and_drifted_keys_fail_loud(
-    nine_conviction: ConvictionTable,
+    corpus_conviction: ConvictionTable,
 ) -> None:
     model = ConvictionEconomyModel()
     with pytest.raises(RuntimeError, match="before fit"):
-        model.predict(nine_conviction.rows[0].features)
-    model.fit(_fit_rows(nine_conviction))
+        model.predict(corpus_conviction.rows[0].features)
+    model.fit(_fit_rows(corpus_conviction))
     with pytest.raises(ValueError, match="missing"):
         model.predict({"alive_count": 4.0})
     with pytest.raises(ValueError, match="unexpected"):
-        model.predict({**dict(nine_conviction.rows[0].features), "not_a_feature": 1.0})
+        model.predict(
+            {**dict(corpus_conviction.rows[0].features), "not_a_feature": 1.0}
+        )
     with pytest.raises(ValueError, match="refusing to install"):
         ConvictionEconomyModel().fit([])
 
 
 def test_predict_accepts_any_feature_insertion_order(
-    nine_conviction: ConvictionTable,
+    corpus_conviction: ConvictionTable,
 ) -> None:
     """Insertion order is not part of the public seam (Codex review, PR #302).
 
@@ -528,8 +537,8 @@ def test_predict_accepts_any_feature_insertion_order(
     """
 
     model = ConvictionEconomyModel()
-    model.fit(_fit_rows(nine_conviction))
-    features = nine_conviction.rows[0].features
+    model.fit(_fit_rows(corpus_conviction))
+    features = corpus_conviction.rows[0].features
     reversed_order = dict(reversed(list(features.items())))
     assert tuple(reversed_order) != tuple(features)
     assert model.predict(reversed_order) == model.predict(features)
@@ -603,15 +612,17 @@ def test_walk_gate_refuses_raw_mismatches() -> None:
 
 
 @pytest.mark.campaign
-def test_fidelity_requires_a_committed_split(
-    nine_conviction: ConvictionTable,
-) -> None:
+def test_fidelity_requires_a_committed_split() -> None:
     """The verdict is a single pre-registered held-out evaluation — a
-    split-less baseline sample set has no held-out side to take it on."""
+    split-less baseline sample set has no held-out side to take it on.
 
-    assert nine_conviction.splits is None
+    Read on samples/4p1i, the split-less sample set the table reads; it ran on
+    samples/9p2i until that set's baseline-9 bytes moved out (2026-10-02)."""
+
+    split_less = build_conviction_table(_FOUR)
+    assert split_less.splits is None
     with pytest.raises(ValueError, match="no committed splits.json"):
-        run_conviction_fidelity(nine_conviction)
+        run_conviction_fidelity(split_less)
 
 
 @pytest.mark.campaign

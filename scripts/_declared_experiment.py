@@ -20,10 +20,14 @@ Three rules live here, each raising :class:`DeclaredExperimentError`:
   source of a recording's switches. The sample recorder refuses them with or
   without a config; ``run_tournament.py`` refuses them beside
   ``--experiment-config``.
-* **The target.** A config that turns any switch on records only into an
-  explicitly named sample directory. Its sample directory and its manifest must
-  both lie physically outside ``replays/samples/`` and ``replays/ml_corpus/``;
-  inside ``replays/`` the sample directory must be exactly
+* **The target.** A committed sample set records only its own era's declared
+  config (the era registry, :mod:`eval.eras`): a target inside
+  ``replays/samples/<set>/`` must carry exactly the bytes of that set's
+  ``experiment-config.json`` (compared by sha256), and a set whose era declares
+  none takes no config that turns a switch on. ``replays/ml_corpus/`` refuses
+  every config that turns a switch on. Anywhere else, a config that turns any
+  switch on records only into an explicitly named sample directory: inside
+  ``replays/`` the sample directory must be exactly
   ``replays/candidates/<round>/<set>/`` and the manifest must sit directly in
   such a directory, with round and set names that start with a letter or
   digit. Each target has its symlinks and ``..`` resolved first; then its
@@ -32,8 +36,8 @@ Three rules live here, each raising :class:`DeclaredExperimentError`:
   under ``replays/``, and the segments that do not exist yet follow as
   spelled. So a case-variant spelling on a case-insensitive filesystem, a
   macOS firmlink or a second mount of any of those directories reaches the
-  same verdict as the plain path. A config holding only the historical
-  defaults records nothing new and goes anywhere.
+  same verdict as the plain path. Outside the committed sets, a config holding
+  only the historical defaults records nothing new and goes anywhere.
 
 Every message here is user-facing copy: it names the setting and the rule in
 plain words (``tests/scripts/test_candidate_sets.py`` scans
@@ -59,6 +63,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from pydantic import ValidationError  # noqa: E402
 
+from eval.eras import COMMITTED_SETS, CommittedSet  # noqa: E402
 from meetings.evidence_profile import EXPERIMENT_ENV_NAMES  # noqa: E402
 from orchestrator.experiment_config import (  # noqa: E402
     RecordedExperimentConfig,
@@ -73,8 +78,12 @@ CONFIG_FILENAME: Final[str] = "experiment-config.json"
 CANDIDATE_NAME: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 #: The committed trees a config with switches on may never write into, relative
-#: to the repository's ``replays/`` directory.
+#: to the repository's ``replays/`` directory, except a sample set whose era
+#: declares that config.
 CANONICAL_TREES: Final[tuple[str, ...]] = ("samples", "ml_corpus")
+
+#: The committed tree whose sets may carry an era's declared config.
+SAMPLES_TREE: Final[str] = "samples"
 
 #: The family a candidate round lives in, relative to ``replays/``.
 CANDIDATES_TREE: Final[str] = "candidates"
@@ -103,7 +112,8 @@ _DEFAULT_TARGET: Final[str] = (
 )
 _CANONICAL_TARGET: Final[str] = (
     "Refused: {variable} resolves to {path}, inside {tree}, which holds committed "
-    "recordings made with every experimental switch off. Record into "
+    "recordings. A config that turns experimental switches on records there only "
+    "into a sample set whose era declares that exact config. Record into "
     "replays/candidates/<round>/<set>/ or a scratch directory outside replays/. "
     "Nothing was staged."
 )
@@ -116,6 +126,22 @@ _NAME_TARGET: Final[str] = (
     "Refused: {variable} resolves to {path}, whose round or set name {name!r} "
     "must start with a letter or digit and use only letters, digits, '.', '_' "
     "and '-'. Nothing was staged."
+)
+_ERA_CONFIG_TARGET: Final[str] = (
+    "Refused: {variable} resolves to {path}, inside the committed set {set}, "
+    "whose recordings all carry its era's declared config {config}. Record it "
+    "with exactly that file as --experiment-config, unchanged. Nothing was "
+    "staged."
+)
+_ERA_DEPTH_TARGET: Final[str] = (
+    "Refused: {variable} resolves to {path}, below the committed set {set}. A "
+    "set with a declared config records only into its own directory, with its "
+    "manifest directly inside it. Nothing was staged."
+)
+_ERA_CONFIG_MISSING: Final[str] = (
+    "Refused: {variable} resolves to {path}, inside the committed set {set}, "
+    "whose era's declared config {config} is missing from this checkout, so no "
+    "config can be checked against it. Nothing was staged."
 )
 _CHANGED_FILE: Final[str] = (
     "Refused: {path} changed after it was checked (it now reads sha256 {now}, "
@@ -144,6 +170,9 @@ USER_FACING_TEMPLATES: Final[tuple[str, ...]] = (
     _CANONICAL_TARGET,
     _DEPTH_TARGET,
     _NAME_TARGET,
+    _ERA_CONFIG_TARGET,
+    _ERA_DEPTH_TARGET,
+    _ERA_CONFIG_MISSING,
     _CHANGED_FILE,
     _CHECKED,
     _SETTINGS,
@@ -364,6 +393,50 @@ def target_problem(
     return None
 
 
+def era_target_problem(
+    *,
+    variable: str,
+    path: Path,
+    is_manifest: bool,
+    places: Mapping[tuple[int, int], tuple[str, ...]],
+    config_sha256: str | None,
+    repo_root: Path = _REPO_ROOT,
+    registry: Sequence[CommittedSet] = COMMITTED_SETS,
+) -> str | None:
+    """Why ``path``, inside a sample set with a declared config, may not record.
+
+    ``None`` when ``path`` is not inside a committed sample set whose era
+    declares a config, or when it is that set's own directory (its manifest
+    directly inside it) and ``config_sha256`` is the declared file's. A bare run
+    (``config_sha256`` is ``None``) and any other file, even one that parses to
+    the same settings, are refused: the set's recordings carry exactly one
+    config's bytes.
+    """
+
+    place = _place_in_replays(path, places)
+    if place is None or len(place) < 2 or place[0] != SAMPLES_TREE:
+        return None
+    set_path = f"replays/{SAMPLES_TREE}/{place[1]}"
+    entry = next((item for item in registry if item.path == set_path), None)
+    if entry is None or entry.era.declared_config is None:
+        return None
+    directory = place[:-1] if is_manifest else place
+    if len(directory) != 2:
+        return _ERA_DEPTH_TARGET.format(variable=variable, path=path, set=set_path)
+    declared = entry.era.declared_config
+    declared_path = repo_root / declared
+    if not declared_path.is_file():
+        return _ERA_CONFIG_MISSING.format(
+            variable=variable, path=path, set=set_path, config=declared
+        )
+    expected = hashlib.sha256(declared_path.read_bytes()).hexdigest()
+    if config_sha256 != expected:
+        return _ERA_CONFIG_TARGET.format(
+            variable=variable, path=path, set=set_path, config=declared
+        )
+    return None
+
+
 def refuse_unsafe_target(
     config: RecordedExperimentConfig | None,
     *,
@@ -371,24 +444,55 @@ def refuse_unsafe_target(
     manifest: Path,
     sample_dir_explicit: bool,
     repo_root: Path = _REPO_ROOT,
+    config_sha256: str | None = None,
+    registry: Sequence[CommittedSet] = COMMITTED_SETS,
 ) -> None:
-    """Raise when a config with switches on is aimed at a target it may not use.
+    """Raise when a config is aimed at a target it may not use.
 
-    A config whose every setting is a historical default passes anywhere.
+    A committed sample set whose era declares a config records only that file's
+    bytes (``config_sha256``, the sha256 the declared file read with), bare runs
+    included (:func:`era_target_problem`). Otherwise a config whose every setting
+    is a historical default passes anywhere, and one with switches on records
+    only into an explicit candidate set or a scratch directory
+    (:func:`target_problem`); a sample set whose era declares that very config
+    is the one committed target it may use.
     """
 
+    places = _replays_places(repo_root / "replays")
+    targets = (
+        ("AILIBI_SAMPLE_DIR", Path(os.path.realpath(sample_dir)), False),
+        ("AILIBI_MANIFEST", Path(os.path.realpath(manifest)), True),
+    )
+    era_targets = 0
+    for variable, path, is_manifest in targets:
+        problem = era_target_problem(
+            variable=variable,
+            path=path,
+            is_manifest=is_manifest,
+            places=places,
+            config_sha256=config_sha256,
+            repo_root=repo_root,
+            registry=registry,
+        )
+        if problem is not None:
+            raise DeclaredExperimentError(problem)
+        place = _place_in_replays(path, places)
+        if place is not None and len(place) >= 2 and place[0] == SAMPLES_TREE:
+            set_path = f"replays/{SAMPLES_TREE}/{place[1]}"
+            era_targets += any(
+                item.path == set_path and item.era.declared_config is not None
+                for item in registry
+            )
     if normalize_experiment_config(config) is None:
         return
     if not sample_dir_explicit:
         raise DeclaredExperimentError(_DEFAULT_TARGET)
-    places = _replays_places(repo_root / "replays")
-    for variable, target, is_manifest in (
-        ("AILIBI_SAMPLE_DIR", sample_dir, False),
-        ("AILIBI_MANIFEST", manifest, True),
-    ):
+    if era_targets == len(targets):
+        return
+    for variable, path, is_manifest in targets:
         problem = target_problem(
             variable=variable,
-            path=Path(os.path.realpath(target)),
+            path=path,
             is_manifest=is_manifest,
             places=places,
         )
@@ -471,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
             sample_dir=args.sample_dir,
             manifest=args.manifest,
             sample_dir_explicit=args.sample_dir_explicit,
+            config_sha256=declared.sha256 if declared is not None else None,
         )
     except DeclaredExperimentError as exc:
         print(exc, file=sys.stderr)

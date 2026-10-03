@@ -1418,6 +1418,38 @@ def test_pooling_adds_counts_and_recomputes_every_rate() -> None:
     assert pooled.grounded_eject.rate == 0.25
 
 
+def test_pooling_two_eras_is_refused_and_one_era_pools() -> None:
+    """Planted: the promoted set pooled with a baseline-9 set raises, naming both.
+
+    The era registry decides: two baseline-9 sets pool, the promoted set beside
+    either one does not, and a hand-built group the registry does not name
+    carries no era to check.
+    """
+
+    left = ProcessTally(ballots=1, eject_ballots=1, grounded_eject=1)
+    right = ProcessTally(ballots=3, eject_ballots=3, grounded_eject=0)
+    with pytest.raises(
+        ValueError,
+        match="^mixed: its sets span the stage-b-r2 and baseline-9 eras; the "
+        "scorecard never pools across eras$",
+    ):
+        pool(
+            [left, right],
+            label="mixed",
+            sources=("replays/samples/9p2i", "replays/samples/4p1i"),
+        )
+    within = pool(
+        [left, right],
+        label="baseline-9",
+        sources=("replays/samples/4p1i", "replays/ml_corpus/9p2i"),
+    )
+    assert within.grounded_eject.denominator == 4
+    unregistered = pool(
+        [left, right], label="hand-built", sources=("replays/samples/9p2i", "b")
+    )
+    assert unregistered.sources == ("replays/samples/9p2i", "b")
+
+
 def test_pooling_the_chance_baseline_is_exact_and_order_free() -> None:
     """Carried as an exact sum of per-ballot shares, so pooling cannot drift.
 
@@ -1445,6 +1477,7 @@ def test_pooling_the_chance_baseline_is_exact_and_order_free() -> None:
 # rather than being silently defaulted.
 _ZERO_REPORTER = ReporterJusticeCells(
     set_name="planted",
+    recorded_settings=(),
     games=0,
     meetings=0,
     body_report_meetings=0,
