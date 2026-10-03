@@ -253,37 +253,31 @@ class RouteCheckReplayError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class ColumnLabel:
-    """A column name and the experiment config its rows must have recorded.
+#: The three columns, in the order the report sets them out: s9 is baseline 9,
+#: the 9-player set shown before the promotion; r1 is candidate round 1, the
+#: eight Stage-B rules; r2 is candidate round 2, the same rules with a six-tick
+#: kill cooldown.
+COLUMN_LABELS: Final[tuple[str, ...]] = ("s9", "r1", "r2")
 
-    ``config_path`` is a repository path read at the column's own commit, or
-    ``None`` for a column recorded with every experimental switch off.
+#: The config file candidate round 1 recorded under.
+R1_CONFIG_PATH: Final[str] = "replays/candidates/stage-b-r1/experiment-config.json"
+
+
+def declared_config_path(label: str) -> str | None:
+    """The experiment config a column's rows must have recorded, or ``None``.
+
+    r2 declares its era's config, read from the era registry when asked; r1
+    declares the round's own file; s9 was recorded with every experimental
+    switch off. The path is read at the column's own commit.
     """
 
-    label: str
-    config_path: str | None
-    description: str
-
-
-#: The three columns, in the order the report sets them out.
-COLUMN_LABELS: Final[Mapping[str, ColumnLabel]] = MappingProxyType(
-    {
-        "s9": ColumnLabel(
-            "s9", None, "baseline 9, the 9-player set shown before the promotion"
-        ),
-        "r1": ColumnLabel(
-            "r1",
-            "replays/candidates/stage-b-r1/experiment-config.json",
-            "candidate round 1, the eight Stage-B rules",
-        ),
-        "r2": ColumnLabel(
-            "r2",
-            STAGE_B_R2.declared_config,
-            "candidate round 2, the same rules with a six-tick kill cooldown",
-        ),
-    }
-)
+    if label == "r2":
+        return STAGE_B_R2.declared_config
+    if label == "r1":
+        return R1_CONFIG_PATH
+    if label == "s9":
+        return None
+    raise RouteCheckReplayError(f"column label {label!r} is not one of {COLUMN_LABELS}")
 
 
 @dataclass(frozen=True)
@@ -361,7 +355,7 @@ def resolve_column(repo: Path, request: ColumnRequest) -> ColumnSource:
 
     if request.label not in COLUMN_LABELS:
         raise RouteCheckReplayError(
-            f"column label {request.label!r} is not one of {sorted(COLUMN_LABELS)}"
+            f"column label {request.label!r} is not one of {COLUMN_LABELS}"
         )
     sha = resolve_commit(repo, request.commit)
     return ColumnSource(
@@ -385,7 +379,7 @@ def materialize(repo: Path, source: ColumnSource, destination: Path) -> Path:
 def declared_config(repo: Path, source: ColumnSource) -> dict[str, object] | None:
     """The config file the column's label declares, read at the column's sha."""
 
-    path = COLUMN_LABELS[source.label].config_path
+    path = declared_config_path(source.label)
     if path is None:
         return None
     raw = _git(repo, "show", f"{source.sha}:{path}")
@@ -417,7 +411,7 @@ def require_declared_settings(
     )
     for seed, era in recorded_game_eras(set_dir).items():
         if era.settings != expected:
-            declared = COLUMN_LABELS[label].config_path or "no experiment config"
+            declared = declared_config_path(label) or "no experiment config"
             raise RouteCheckReplayError(
                 f"column {label}: seed {seed} recorded settings that differ from "
                 f"the config its label declares ({declared})"
@@ -2201,7 +2195,7 @@ def column_payload(
         "sha": source.sha,
         "path": source.path,
         "tree": source.tree,
-        "declared_config": COLUMN_LABELS[source.label].config_path,
+        "declared_config": declared_config_path(source.label),
         "recorded_experiment_config": dict(config) if config is not None else None,
         "games": len({record.seed for record in records}),
         "all": whole,

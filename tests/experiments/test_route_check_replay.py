@@ -46,6 +46,7 @@ from agents.memory.store import (
 from agents.perception import ingest_packet
 from engine.world import load_canonical_map
 from engine.entities import Role
+from eval.eras import STAGE_B_R2
 from eval.gameplay_census import GameFacts, fold_set, load_census_inputs
 from meetings.manager import derive_reported_testimony
 from meetings.schemas import (
@@ -443,6 +444,28 @@ def test_an_unknown_commit_is_refused(
     assert "commit '0123456789abcdef' does not resolve" in capsys.readouterr().err
 
 
+def test_a_tree_named_as_the_commit_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, sha = _column_repo(tmp_path)
+    tree = _git(repo, "rev-parse", f"{sha}^{{tree}}")
+    assert _run(repo, tmp_path, f"r2={tree}:replays/samples/9p2i") == 1
+    assert f"commit '{tree}' does not resolve to a commit" in capsys.readouterr().err
+
+
+def test_the_r2_config_is_read_from_the_era_registry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo, sha = _column_repo(tmp_path)
+    moved = replace(STAGE_B_R2, declared_config="replays/samples/9p2i/moved.json")
+    monkeypatch.setattr(rcr, "STAGE_B_R2", moved)
+    assert rcr.declared_config_path("r2") == "replays/samples/9p2i/moved.json"
+    assert _run(repo, tmp_path, f"r2={sha}:replays/samples/9p2i") == 1
+    assert "moved.json" in capsys.readouterr().err
+
+
 def test_a_path_that_does_not_resolve_is_refused(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -559,6 +582,21 @@ def test_one_count_edited_in_a_copy_of_the_json_fails_check(
     assert "the recomputed JSON differs" in capsys.readouterr().err
 
 
+def test_a_later_commit_that_rewrites_the_column_leaves_check_green(
+    tmp_path: Path,
+) -> None:
+    repo, sha = _column_repo(tmp_path)
+    out = tmp_path / "out"
+    out.mkdir()
+    assert _run(repo, out, f"r2={sha}:replays/samples/9p2i") == 0
+    column = repo / "replays" / "samples" / "9p2i"
+    (column / f"replay-seed-{_RUN_SEED}.jsonl").unlink()
+    shutil.copy(SAMPLES_9P2I / f"replay-seed-{_WALK_SEED}.jsonl", column)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "a different game in the column")
+    assert _check(repo, out) == 0
+
+
 def test_a_file_committed_into_the_column_after_the_run_leaves_check_green(
     tmp_path: Path,
 ) -> None:
@@ -624,16 +662,20 @@ def _flip_in_line(path: Path, *, kind: str, key: str) -> None:
     raise AssertionError(f"no {kind} line")
 
 
-def test_a_flipped_byte_in_a_recorded_prompt_raises(tmp_path: Path) -> None:
-    copy = _game_copy(tmp_path, _WALK_SEED)
+@pytest.mark.parametrize(("seed", "label"), ((_WALK_SEED, "r2"), (_RUN_SEED, "r1")))
+def test_a_flipped_byte_in_a_recorded_prompt_raises(
+    tmp_path: Path, seed: int, label: str
+) -> None:
+    copy = _game_copy(tmp_path, seed)
     _flip_in_line(copy, kind="meeting", key="prompt")
     with pytest.raises(
-        rcr.RouteCheckReplayError, match=r"r2 seed 1 meeting 0: \d+ recorded prompt"
+        rcr.RouteCheckReplayError,
+        match=rf"^{label} seed {seed} meeting 0: \d+ recorded prompt",
     ):
         rcr.read_game(
             copy,
-            label="r2",
-            game=_r2_game(_WALK_SEED),
+            label=label,
+            game=_r2_game(seed),
             renderers=_canonical_renderers(),
         )
 
@@ -1355,6 +1397,28 @@ def test_case_3_drops_the_sighting_inside_the_regroup_window() -> None:
         rcr.ledger_call(replace(inputs, regroup_ticks=frozenset()))
     )
     assert 11 in {spot.tick for spot in open_window[_SUBJECT].path}
+
+
+def test_a_pair_the_map_reconciles_reads_as_a_walk_across_a_regroup() -> None:
+    inputs = _inputs(
+        *_pair_transcript(("ADMIN", 10), ("CAFETERIA", 14)),
+        regroup_ticks=frozenset({11}),
+    )
+    pairs = rcr.c_pairs(
+        rcr.c_spots(inputs)[_SUBJECT], regroup_ticks=inputs.regroup_ticks
+    )
+    assert [how for _, _, how in pairs] == ["walk"]
+
+
+def test_the_hop_search_is_bounded_by_the_room_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first, second = rcr.spoken_placements(
+        MeetingTranscript(turns=_pair_transcript(("ADMIN", 14), ("CAFETERIA", 17)))
+    )
+    assert rcr.reconcilable(first, second, regroup_ticks=frozenset()) == "walk"
+    monkeypatch.setattr(rcr, "CANONICAL_ROOMS", frozenset({"ADMIN"}))
+    assert rcr.reconcilable(first, second, regroup_ticks=frozenset()) is None
 
 
 def test_the_planted_cases_tell_every_pair_of_checks_apart() -> None:
