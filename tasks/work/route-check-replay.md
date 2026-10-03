@@ -118,6 +118,32 @@ census `kills_seen_by_crew`, 3, 4 and 14).
 
 ## Acceptance
 
+- [x] Review correction, round 3 (the correctness lens, survivor F): `run_columns` writes its columns in
+  `COLUMN_LABELS` order whatever order the run is given. `test_columns_given_out_of_column_order_are_written_in_it`
+  runs r2 before r1 and r1 before r2 from one temporary repository and requires the JSON's columns, the report's
+  column sections and its provenance rows in `COLUMN_LABELS` order, both files byte-equal to the canonical-order
+  run. Probe F1 (the sort dropped) turns it red.
+- [x] Review correction, round 3 (the integrity lens, the same survivor F): the card's run command names r2, r1
+  and s9 in that order and regenerates the committed JSON (s9, r1, r2) only through that sort, which `--check`,
+  following the JSON's order, cannot see. The same test holds it; probes S1 (the order read from the labels as
+  given) and T1 (r1 dropped from `COLUMN_LABELS`) turn it red too.
+- [x] Review correction, round 3 (survivor N): `reading.rule_applies_to` is held by tests.
+  `test_the_reading_applies_its_rule_to_r2_when_the_run_reads_r2` requires `r2` for the one-game r2 run, and
+  `test_an_r1_column_reads_under_its_rounds_config` now also requires `None` for the r1-only run. Probes N1 (`not
+  in`), N2 (`labels is not None`) and B1 (the branches swapped) turn them red.
+- [x] Review correction, round 3 (survivor C): the origin leg's relevance gate is given the regroup ticks.
+  `test_a_movement_origin_in_the_regroup_window_is_no_placement` plants a grounded movement into Admin at 12 whose
+  origin, West Hall at 11, falls in the window of a regroup at 10 and alone pairs with the arrival: the leg reads
+  False as built, True with the regroup ticks dropped, and True with a regroup at 9.
+  `test_a_movement_origin_at_the_kill_scene_is_no_placement` isolates the same gate's body rooms. Probe C1 (the
+  gate given no regroup ticks), C2 to C5, N3, N4 and F2 turn them red. The neuter-pass claim is corrected: no
+  earlier row isolated those two call-site arguments.
+- [x] Review correction, round 3 (integration, the card's merge order): `main` at `a0fdb570`, the census card, is
+  merged at `bc8d6ff1`, never rebased. The census denominators and the instrument's own census agreement
+  (`--check`) re-run there read as before. The `tasks/README.md` inventory sentence is re-derived by
+  `scripts/validate_task_docs.py` (96 cards: 3 ready, 93 done), and the `experiments/lab/` row holds at 167 files
+  and 6.9 MB on the merged tree.
+
 - [x] Review correction, round 2: a public regroup's room is read from the memory wherever the regroup gathers the
   table. `test_a_regroup_off_the_hub_takes_its_room_from_the_memory` plants Labs at 10 and a regroup to Admin at
   11: the regroup line's ends read Labs then Admin, and it holds a charged placement in Admin at 11 and not one in
@@ -506,8 +532,8 @@ re-measure reads as the card states.
 
 ### Acceptance, item by item
 
-Test file: `tests/experiments/test_route_check_replay.py`, 104 tests at delivery (117 after review round 1 and
-139 after review round 2, below), `uv run pytest tests/experiments/test_route_check_replay.py -n 6` → 104 passed (exit 0). Each planted case below
+Test file: `tests/experiments/test_route_check_replay.py`, 104 tests at delivery (117 after review round 1,
+139 after review round 2 and 143 after review round 3, below), `uv run pytest tests/experiments/test_route_check_replay.py -n 6` → 104 passed (exit 0). Each planted case below
 is a test that asserts the failure it plants, so a green run is the planted case failing as claimed.
 
 - **Columns with exact provenance.** Mechanism: `resolve_column` (`git rev-parse --verify COMMIT^{commit}`),
@@ -579,13 +605,15 @@ is a test that asserts the failure it plants, so a green run is the planted case
   phase implies (c); (b) cannot reconcile implies not (c); (b) fits at snapshot phase exactly when (c). Perturbed:
   `test_a_reference_bound_off_by_one_fails_a_property` (the bound one higher and one lower each fail at least one).
 - **The process count, role-blind.** Mechanism: `read_meeting` and `_read_case` take no role; roles reach only
-  `class_payload`. `test_permuting_the_roles_moves_only_the_class_columns` (Hypothesis, four role maps) and the
+  `class_payload` and, since review round 2, the column's roster (`column_roster` counts each game's players
+  and impostors, which a permutation of the role map leaves equal; `seed_ranges` reads only the seeds). `test_permuting_the_roles_moves_only_the_class_columns` (Hypothesis, four role maps) and the
   planted `test_a_role_read_inside_a_line_computation_fails_the_property`. Charges, the universe and the
   misjudged definition: `test_a_charge_rests_on_a_cited_placement_or_a_flag_of_placements`,
   `test_the_universe_is_ungated_and_typed`, `test_charges_are_counted_for_living_targets_only`. The judgment net is
   an informational column.
 - **Count-only, no model call.** Mechanism: `scan_outputs`, run before any write, against every recorded turn text,
-  ballot rationale and travel row the run read, each sought as written and, since review round 1, as the JSON
+  ballot rationale and travel row of 16 or more characters the run read (`_SCAN_MIN_LENGTH`; shorter strings are
+  ids and room names the outputs carry, so the guarantee holds from that length), each sought as written and, since review round 1, as the JSON
   escapes it. `test_the_outputs_carry_no_recorded_text`, the planted
   `test_a_rationale_written_into_the_json_fails_the_scan` and `..._turn_text_...` (ASCII texts), the planted
   `test_a_recorded_text_the_json_escapes_fails_the_scan` (non-ASCII texts the JSON escapes), `test_a_run_holds_its_outputs_to_every_travel_row_it_read`
@@ -657,8 +685,9 @@ amendment 7 is settled at this strength: (a) as built shows a walkable pair for 
 
 ### Neuter pass
 
-`experiments/lab/route_check_replay.py`, every production line, row and call-site argument switched off in turn
-on a copy-backed working file (`<harness> neuter_probes.py`, scratch, not committed): apply the edit, run
+`experiments/lab/route_check_replay.py`, every production line and row, and the call-site arguments its rows
+name, switched off in turn (review round 3 found that no row isolated the origin leg's relevance-gate arguments,
+`regroup_ticks` and `triggering_body_rooms`; its subsection adds them) on a copy-backed working file (`<harness> neuter_probes.py`, scratch, not committed): apply the edit, run
 `pytest tests/experiments/test_route_check_replay.py -x -n 6 -k 'not recomputes_from_the_checkouts'`, then the r2
 golden alone if that stage stayed green, restore the module from its byte copy. 171 probes. A first attempt
 (stopped and restored to rebuild the harness in two stages) came back green on probes 4 and 11; both were killed
@@ -923,7 +952,8 @@ harness. First run: 31 red, 8 survivors; 5 survivors killed by planted tests and
   file moves the run (a planted case), rather than a copy frozen at import.
 - **The `docs/artifacts.md` row** also states the row's tracked size, 6.9 MB (7,189,659 bytes across 167 files at
   delivery, `8b18aa53`; 7,192,265 after review round 1, `01dc8a9f`, corrected in review round 2 from a mistyped
-  7,192,231; 7,195,798 after review round 2's code commit, `200e2a32`; 6.3 MB was 6,591,637 bytes over 164 files
+  7,192,231; 7,195,798 after review round 2's code commit, `200e2a32`, and at the merge of `main`, `bc8d6ff1`;
+  7,196,210 after review round 3's code commit, `400361d3`; 6.3 MB was 6,591,637 bytes over 164 files
   before, `5877adb4`), so the row stays true; the count is what `verify_ml_evidence.py` holds. Each figure is
   `git ls-tree -r -l <commit> -- experiments/lab experiments/model_probe | awk '{n++; s+=$4} END {print n, s}'`.
 
@@ -965,8 +995,10 @@ The first full gate, `bash scripts/check.sh` at `8b18aa53`, exited 1 (624 s): 10
 - The refuter's own script is uncommitted; its 17 of 22 is explained by two committed legs, not reproduced by one.
 - The full run and `--check` need history (`d41c9006`); CI's shallow clone runs the tests, which recompute r2 from
   the working tree.
-- The census card (`census-reporter-base-rate`) had not merged at this card's head (`origin/main` still
-  `5877adb4`); the denominator agreement above ran at this head, and must run again after that merge.
+- The census card (`census-reporter-base-rate`) had not merged when this card was delivered (`origin/main` was
+  `5877adb4`), so the denominator agreement above first ran there. Done in review round 3: the census card
+  merged at `a0fdb570`, this branch merged it at `bc8d6ff1`, and the agreement ran again on the merged tree with
+  every figure unchanged (round 3, item 4).
 
 ### Deviations
 
@@ -1287,6 +1319,126 @@ frontend legs could run; no frontend file changed. Record impact: none. No recor
 recorded byte or ML artifact moved; the JSON gains `seeds` and `roster` per column and the report the matching
 table columns and Method sentence, with every count unchanged, and the merge publishes nothing (the empty bundle
 diff above).
+
+### Review corrections, round 3 (2026-10-03)
+
+Review round 3 of PR 499, at `24ea077f`: the documentation lens passed, and the correctness and integrity lenses
+left four listed-class findings, two of them the same mutant (the column sort). Each is repaired here, and
+`## Acceptance` opens with one review-correction item per finding plus one for the integration the card's merge
+order requires. Commits: `bc8d6ff1` (the merge of `main`), `400361d3` (the planted cases, the wording and the
+regenerated report), then the commit adding this subsection and the gate's. Files written:
+`experiments/lab/route_check_replay.py` (docstrings and one report header), `experiments/lab/report-route-check-replay.md`
+(that header, regenerated by the run), `tests/experiments/test_route_check_replay.py`, `tasks/README.md` (the
+inventory sentence, in the merge) and this card, all inside the Expected scope. The run rewrote the JSON
+byte-identical. `docs/artifacts.md` needs no change: the row's 167 files and 6.9 MB hold at `400361d3` (7,196,210
+bytes) and at `bc8d6ff1` (7,195,798).
+
+1. **The column sort (F, the correctness and integrity lenses).** `run_columns` sorts the requested columns into
+   `COLUMN_LABELS` order, but every run in the suite that wrote its outputs read one column (the only
+   two-column request is the refused pool), so dropping the sort passed all 139 tests while the card's own
+   command (r2, r1, s9) would then write r2, r1, s9 and stop regenerating the committed JSON. Planted: one temporary repository holding r1 and r2 seed 2, run twice, r2
+   first and r1 first; the r2-first run must write the JSON's columns, the `### Column` sections and the
+   provenance rows as r1 then r2, and both files byte-equal to the r1-first run's.
+2. **`rule_applies_to` (N).** `build_payload` names the column the dated rule applies to, r2 when the run reads
+   r2, and no test read it (only `--check` on a full run would). The one-game r2 run must read `r2` and the r1-only
+   run `None`.
+3. **The origin leg's regroup ticks (C).** `walkable_with_movement_origins` passes each spoken movement's origin
+   through `is_relevant_sighting` with the meeting's body rooms and regroup ticks, but no case put an origin in a
+   regroup window, so the gate given no regroup ticks passed every test. Planted: p-1 holds the record of p-5
+   moving from West Hall into Admin at 12 and says so, so the live clause places p-5 in Admin at 12 alone (the
+   test checks that path under every regroup setting it uses); the origin, West Hall at 11, is one door and one
+   tick from it. With a regroup at 10 (window 10 and 11) the leg reads False; with no regroup ticks, and with a
+   regroup at 9 (window 9 and 10), True. The same plant at a report meeting whose body lies in West Hall reads
+   False, and as a button meeting True, which isolates the gate's other call-site argument.
+   **The neuter pass's claim, corrected.** Its paragraph said every call-site argument was switched off in turn.
+   Its rows 65 to 68 drop the whole gate, any subject's movement, the origin's tick and the leg itself, and no row
+   isolated the gate's `regroup_ticks` or `triggering_body_rooms`. The paragraph now states what it covered, and
+   C1 and C2 below are those two arguments.
+4. **Integration.** The card's merge order is census first, then this card. The census card merged into `main`
+   at `a0fdb570` after this branch's base; `bc8d6ff1` merges it (no rebase; the one conflict, the derived
+   inventory sentence, re-derived by the validator). On the merged tree, with the census card's
+   `eval/gameplay_census.py` and `eval/eras.py`:
+   - `publish_gameplay_census.py --set-dir ... --json-stdout`, exit 0 each, count-only: r2 117 meetings,
+     `meetings_with_vent_proof` 24, `button_meetings_with_vent_proof` 3 of 3, `meetings_without_vent_proof_ejecting`
+     42 of 93, `role_correct_ejections` 44 of 66 (22 innocent), `kills_seen_by_crew` 14, 114 report meetings; r1
+     124, 26, 6 of 6, 28 of 98, 39 of 54 (15 innocent), 4, 118. Every denominator the delivery quoted reads the same.
+   - `--check` exit 0 (62.5 s at `bc8d6ff1`, 38.5 s at `400361d3`): the instrument re-derives each column's
+     census with the merged `load_census_inputs` (s9's on its archived copy) and compares every meeting one for
+     one, so s9's 145 meetings and 90 ejections, r1's and r2's, and the witness meetings 3, 3 and 14 stand.
+   - The inventory sentence reads 96 cards, 3 ready and 93 done (both this card and the census card are done);
+     `validate_task_docs.py` exits 0 on it. The `experiments/lab/` row is unchanged: the merge moves nothing under
+     `experiments/`.
+5. **Wording, from the round's nonblocking notes, with no new mechanism.** The module docstring said roles were
+   read only for the ejection classes; since review round 2 they also give each column's roster, and it now says
+   so (as does the role-blind bullet of Acceptance, item by item, above). The scan's 16-character floor
+   (`_SCAN_MIN_LENGTH`) is stated where the guarantee is: the module docstring, `scan_outputs`,
+   `forbidden_strings` and the Count-only bullet above. The report's provenance column `games` counts the games
+   with a meeting (`len({record.seed for record in records})`, beside `seeds`, every recorded game) and its header
+   now reads "games with a meeting". The post-census obligations of Limitations are marked done there.
+
+**Codex.** No new Codex comment since the first review at `8b18aa5`; its five comments were answered in round 2.
+
+**Mutation pass, round 3.** One bounded pass with the listed classes only, over the spans the findings name
+(`run_columns`' sort, `build_payload`'s `rule_applies_to`, the origin leg's gate and the reads feeding it) and the
+spans this round changed: 14 mutants and one neuter. Harness (`probes.py`, scratch, not committed): apply one edit
+to `experiments/lab/route_check_replay.py`, run the named tests with `pytest -x -n 4 -k`, and, only if they pass,
+the whole file; restore the module from its byte copy (its sha1 matched the copy after the run). First run: all 15
+red, no survivor; a second run without `-x` named every red test below. At `24ea077f` the verifiers' runs had F1, N1
+and C1 green (139 passed each).
+
+| # | mutant | first run | red test |
+| --- | --- | --- | --- |
+| F1 | F: `run_columns` iterates the sources as given (the sort dropped; finding F, both lenses) | RED | columns_given_out_of_column_order_are_written_in_it |
+| S1 | S: the sort reads the labels as given, not `COLUMN_LABELS` | RED | columns_given_out_of_column_order_are_written_in_it |
+| T1 | T: `COLUMN_LABELS` drops r1 | RED | columns_given_out_of_column_order_are_written_in_it |
+| N1 | N: `rule_applies_to` tests `"r2" not in labels` (finding N) | RED | an_r1_column_reads_under_its_rounds_config, the_reading_applies_its_rule_to_r2_when_the_run_reads_r2 |
+| N2 | N: `rule_applies_to` tests `labels is not None` | RED | an_r1_column_reads_under_its_rounds_config |
+| B1 | B: `rule_applies_to`'s two branches swapped | RED | an_r1_column_reads_under_its_rounds_config, the_reading_applies_its_rule_to_r2_when_the_run_reads_r2 |
+| C1 | C: the origin gate given `frozenset()` for the regroup ticks (finding C) | RED | a_movement_origin_in_the_regroup_window_is_no_placement |
+| C2 | C: the origin gate given `frozenset()` for the body rooms | RED | a_movement_origin_at_the_kill_scene_is_no_placement |
+| C3 | C: the origin leg reads the trigger kind as `emergency` | RED | a_movement_origin_at_the_kill_scene_is_no_placement |
+| C4 | C: the origin's tick read as 0 | RED | a_movement_origin_at_the_kill_scene_is_no_placement, a_movement_origin_in_the_regroup_window_is_no_placement |
+| C5 | C: the origin's room read as the Cafeteria | RED | the same two |
+| N3 | N: the origin leg's subject test inverted | RED | the same two |
+| N4 | N: the origin leg's empty-room test inverted | RED | the same two |
+| F2 | F: the origin leg drops its movement-sighting filter | RED | a_movement_origin_at_the_kill_scene_is_no_placement |
+
+**Neuter pass, round 3.** The one production line this round changed that is not a docstring, switched off with
+the same harness: X1, the provenance header read as `games` again, is red through
+`test_the_committed_report_is_the_committed_jsons_rendering`. The docstrings are prose and carry no probe. No test
+was weakened, skipped or deleted: `test_an_r1_column_reads_under_its_rounds_config` keeps both its assertions and
+gains the `rule_applies_to` one; four tests are new.
+
+**Verification, round 3.** Each command ran alone with its exit code captured directly (no pipe), at `400361d3`
+unless named; no frontend file changed.
+
+| command | exit | result |
+| --- | --- | --- |
+| the run (the five `--set`/`--out` arguments above) | 0 | wrote both files (38.8 s); the JSON byte-identical, the report's provenance header the only change |
+| `uv run python -m experiments.lab.route_check_replay --check` at `bc8d6ff1` and at `400361d3` | 0, 0 | reproduced (62.5 s, 38.5 s) |
+| `uv run pytest tests/experiments/test_route_check_replay.py -n 6` | 0 | 143 passed (139 on the merged tree before the repairs) |
+| `uv run ruff format --check` and `uv run ruff check` on the two Python files; `uv run mypy --strict` on them | 0, 0, 0 | formatted, clean, no issues (the gate covers the tree) |
+| `bash scripts/verify_samples.sh replays/<set>` for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent with the committed recordings |
+| `publish_gameplay_census.py --set-dir ... --json-stdout`, r2 and r1, at `bc8d6ff1` | 0 each | the denominators in item 4 |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | every check passed: 63 checks, 51 OK, 0 FAIL, 7 ABSENT, 5 INFO; `experiments/lab/` OK |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -n 6` | 0 | 86 passed |
+| `uv run python scripts/check_doc_facts.py` | 0 | every fact verified |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 historical phase tasks and 390 prompts; 96 work cards (at `bc8d6ff1`, and on this card at the subsection commit) |
+| `uv run lint-imports` | 0 | 4 kept, 0 broken |
+| `uv run pytest -m campaign -n 6` | 0 | 337 passed |
+| the lab row's byte total: `ls-tree -r -l 400361d3 -- experiments/lab experiments/model_probe`, summed by the Decisions command | 0 | `167 7196210` (`167 7195798` at `bc8d6ff1`) |
+| `build_demo_bundle.py --out <scratch>/base` at `a0fdb570` (`main`), then `--out <scratch>/head` at `400361d3`, one checkout; `diff -rq` | 0, 0, 0 | no difference across 109 files: nothing publishes |
+
+Deviations, round 3: the two findings that name the same mutant share one planted test, with an Acceptance item
+each. The body-room half of the origin gate (C2, C3) was not a finding; it is planted because the corrected neuter
+claim names both of the gate's call-site arguments. The bundle's base is now `a0fdb570`, `main` after the census
+merge, where rounds 1 and 2 built it at `5877adb4`. `npm ci` ran in `frontend/` so the bundle and the gate's
+frontend legs could run; no frontend file changed. Record impact: none. No recording, prompt, template, detector,
+recorded byte or ML artifact moved; the report's one header is the instrument's own wording, every count is
+unchanged, and the merge publishes nothing (the empty bundle diff above).
 
 ### Reading (2026-10-03)
 
