@@ -5,7 +5,8 @@ bytes recorded BOTH ways.
 
 ``--sets`` is the committed-record mode: the baseline-9 era's three committed
 replay sets, whose bytes were recorded with every lever OFF (``samples/9p2i``
-moved to the stage-b-r2 era on 2026-10-02 and is refused by name).
+moved to the stage-b-r2 era on 2026-10-02 and is refused, however it is spelled,
+by the era registry's entry for its resolved directory).
 ``--recording <dir> --recorded-slate on`` is the LEVER-ON mode: one directory
 of ``replay-seed-*.jsonl`` recorded with
 the Wave-2 slate up -- 21.23's smoke and 21.24's record write exactly that, into
@@ -155,7 +156,8 @@ from meetings.corroboration import (  # noqa: E402
     TestimonySupport,
     build_testimony_ledger,
 )
-from eval.eras import BASELINE_9, era_of  # noqa: E402
+from eval.eras import BASELINE_9, CommittedSet, era_of  # noqa: E402
+from eval.eras import COMMITTED_SETS as REGISTERED_SETS  # noqa: E402
 from meetings.render_contract import ReporterContext  # noqa: E402
 from meetings.manager import (  # noqa: E402
     MeetingParticipant,
@@ -208,7 +210,8 @@ from tests.meetings.test_prompt_byte_golden import (  # noqa: E402
 # The committed sets of the baseline-9 era, in the record audit's order. The
 # counterfactual reads recordings made with every lever OFF on the baseline-9
 # substrate; samples/9p2i left that era at the promotion of candidate round 2
-# (2026-10-02, eval/eras.py) and is refused by name.
+# (2026-10-02, eval/eras.py). run() refuses it, and any committed set of another
+# era, by the registry entry its resolved directory names, however it is spelled.
 CANONICAL_SETS: Final[tuple[str, ...]] = tuple(
     label
     for label in ("samples/9p2i", "ml_corpus/9p2i", "samples/4p1i", "ml_corpus/4p1i")
@@ -4383,25 +4386,40 @@ def assert_shell_matches_recording(stamp: Mapping[str, bool]) -> None:
 ADVISORY_INNOCENT_EJECTIONS: Final[int] = 5
 
 
+def _registered_entry(set_name: str) -> CommittedSet | None:
+    """The era registry's entry for the directory ``set_name`` resolves to.
+
+    ``set_name`` is read below ``replays/``, as ``--sets`` names it, and matched
+    by resolved directory, so ``./samples/9p2i`` and ``samples//9p2i`` find the
+    entry ``samples/9p2i`` does. ``None`` for a directory the registry does not
+    name.
+    """
+
+    directory = (_REPO_ROOT / "replays" / set_name).resolve()
+    for entry in REGISTERED_SETS:
+        if (_REPO_ROOT / entry.path).resolve() == directory:
+            return entry
+    return None
+
+
 def run(
     set_names: Sequence[str], *, withhold: str = "testimony_shapes"
 ) -> dict[str, object]:
     """Compute the whole table for the named sets, plus the pooled column.
 
-    A committed set outside the baseline-9 era is refused by name before any
-    walk: the slate is priced on recordings made with every lever OFF on that
-    substrate, and the pooled column never crosses an era.
+    A committed set outside the baseline-9 era is refused before any walk,
+    found by the registry entry its resolved directory names and refused with
+    that entry's era: the slate is priced on recordings made with every lever
+    OFF on that substrate, and the pooled column never crosses an era. A
+    directory the registry does not name is walked as it always was.
     """
 
     for set_name in set_names:
-        if set_name in CANONICAL_SETS:
-            continue
-        try:
-            era = era_of(f"replays/{set_name}")
-        except ValueError:
+        entry = _registered_entry(set_name)
+        if entry is None or entry.era == BASELINE_9:
             continue
         raise SystemExit(
-            f"{set_name} is a committed set of the {era.id} era; this "
+            f"{set_name} is a committed set of the {entry.era.id} era; this "
             f"counterfactual reads the {BASELINE_9.id} era's sets only "
             f"({', '.join(CANONICAL_SETS)})"
         )

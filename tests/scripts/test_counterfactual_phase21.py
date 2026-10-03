@@ -98,6 +98,7 @@ from agents.strategic.prompts.loader import ENV_PROMPT_SET, build_prompt_rendere
 from llm.client import CallKind, LLMResponse
 from agents.memory.store import absorb_reported_testimony
 from engine.world import load_canonical_map
+from eval.eras import COMMITTED_SETS, CommittedSet, Era
 from llm.fake_provider import FakeProvider
 from meetings.manager import derive_reported_testimony
 from meetings.corroboration import MeetingTestimonyLedger
@@ -523,35 +524,98 @@ def test_the_memo_table_parses_into_rows() -> None:
     )
 
 
-def test_a_committed_set_of_another_era_is_refused_by_name(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Planted: the promoted set named among the sets; refused before any walk.
+class _PastTheEraCheck(Exception):
+    """Raised by the sentinel standing in for the first step after the era check."""
 
-    A sentinel replaces the first step after the era check, so a name the check
-    lets through (a baseline-9 set, or a directory the registry does not name)
-    reaches it, and the promoted set never does.
-    """
 
-    class _PastTheCheck(Exception):
-        pass
-
+def _sentinel_after_the_era_check(monkeypatch: pytest.MonkeyPatch) -> None:
     def sentinel() -> None:
-        raise _PastTheCheck
+        raise _PastTheEraCheck
 
     monkeypatch.setattr(cf, "_assert_slate_is_the_three_wave_2_keys", sentinel)
+
+
+def test_a_committed_set_of_another_era_is_refused_by_its_resolved_directory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the promoted set named among the sets, in four spellings.
+
+    Each is refused before any walk with the era its registry entry names; the
+    last climbs out of another directory, so only a resolved path reaches the
+    entry. A sentinel replaces the first step after the era check, so a name the
+    check lets through (a baseline-9 set, or a directory the registry does not
+    name) reaches it, and the promoted set never does, however it is spelled.
+    """
+
+    _sentinel_after_the_era_check(monkeypatch)
+    for spelling in (
+        "samples/9p2i",
+        "./samples/9p2i",
+        "samples//9p2i",
+        "candidates/../samples/9p2i",
+    ):
+        with pytest.raises(
+            SystemExit,
+            match=(
+                rf"^{re.escape(spelling)} is a committed set of the stage-b-r2 era; "
+                r"this counterfactual reads the baseline-9 era's sets only "
+                r"\(ml_corpus/9p2i, samples/4p1i, ml_corpus/4p1i\)$"
+            ),
+        ):
+            cf.run(["samples/4p1i", spelling])
+    for passing in (
+        list(cf.CANONICAL_SETS),
+        ["./ml_corpus/9p2i", "samples//4p1i"],
+        ["candidates/stage-b-r1/9p2i"],
+    ):
+        with pytest.raises(_PastTheEraCheck):
+            cf.run(passing)
+
+
+def test_a_registered_set_of_a_third_era_is_refused_with_that_eras_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: a registry filing samples/4p1i under an era no set belongs to.
+
+    The refusal names the era the registry gives the set's directory, not one
+    the script holds: the same set reads as baseline-9 under the real registry.
+    """
+
+    _sentinel_after_the_era_check(monkeypatch)
+    third = Era(
+        id="planted-third",
+        record="audits/planted.md",
+        recorded_on="2026-10-05",
+        declared_config=None,
+    )
+    planted = tuple(
+        CommittedSet(entry.path, third)
+        if entry.path == "replays/samples/4p1i"
+        else entry
+        for entry in COMMITTED_SETS
+    )
+    monkeypatch.setattr(cf, "REGISTERED_SETS", planted)
     with pytest.raises(
         SystemExit,
-        match=(
-            r"^samples/9p2i is a committed set of the stage-b-r2 era; this "
-            r"counterfactual reads the baseline-9 era's sets only "
-            r"\(ml_corpus/9p2i, samples/4p1i, ml_corpus/4p1i\)$"
-        ),
+        match=r"^\./samples/4p1i is a committed set of the planted-third era; ",
     ):
-        cf.run(["samples/4p1i", "samples/9p2i"])
-    for passing in (list(cf.CANONICAL_SETS), ["candidates/stage-b-r1/9p2i"]):
-        with pytest.raises(_PastTheCheck):
-            cf.run(passing)
+        cf.run(["./samples/4p1i"])
+    with pytest.raises(_PastTheEraCheck):
+        cf.run(["ml_corpus/4p1i"])
+    # The registry's own path is resolved too: an entry spelled through another
+    # directory still names the directory the set lies in.
+    spelled = tuple(
+        CommittedSet("replays/candidates/../samples/4p1i", third)
+        if entry.path == "replays/samples/4p1i"
+        else entry
+        for entry in COMMITTED_SETS
+    )
+    monkeypatch.setattr(cf, "REGISTERED_SETS", spelled)
+    with pytest.raises(
+        SystemExit,
+        match=r"^samples/4p1i is a committed set of the planted-third era; ",
+    ):
+        cf.run(["samples/4p1i"])
 
 
 def test_the_pooled_on_column_is_withdrawn_when_any_set_disagrees() -> None:

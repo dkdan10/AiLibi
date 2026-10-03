@@ -15,7 +15,8 @@ Count-only, with zero model calls
 ids, rooms, ticks, kinds, labels, recorded dispositions, plain recorded setting
 values and booleans it computes itself. A recorded prompt is read inside the
 loader only to compute such a boolean or an id (the kill-tick body handle in an
-opening; a served own-kill ballot row), and no prompt, speech or rationale text
+opening; a served own-kill ballot row; whether a prompt after a regroup carries
+every earlier regroup's notice), and no prompt, speech or rationale text
 leaves it. :func:`fold_set` is a pure fold over that carrier, so every cell is
 plantable from a hand-built :class:`CensusInputs` with no replay on disk, and
 :func:`pool` adds counts and recomputes each rate from the pooled numerator and
@@ -79,6 +80,18 @@ made only by a setting's mechanism (regroup meetings, rebuttal turns) has no
 scope. On a walked recording that denominator is empty in every other era: the
 loader marks a meeting regrouped only under the recorded regroup reset, and at
 the historical rebuttal setting the fold raises on any rebuttal.
+
+The recorded tally
+------------------
+Every meeting's recorded ballots are re-tallied by the game's own function,
+:func:`meetings.voting.tally_ballots`, at the meeting's recorded confidence
+floor. The tally of the ballots as recorded must reproduce the recorded outcome;
+a meeting where it does not raises :class:`GameplayCensusConformanceError`
+naming the set, seed and meeting. Two re-tallies then read every impostor
+ballot as SKIP, or remove it, holding every other ballot fixed; they count which
+recorded ejections would not stand. Real voters would have heard different
+speech, so a re-tally describes the ballots, never what the table would have
+done. The re-tallies read the voter's role only to pick the ballots they change.
 """
 
 from __future__ import annotations
@@ -90,7 +103,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, Literal, TypeAlias
+from typing import Final, Literal, TypeAlias, get_args
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -128,7 +141,9 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     TaskActivityAccount,
+    VoteBallot,
 )
+from meetings.voting import SKIP_TARGET, tally_ballots
 from orchestrator.experiment_config import ConfigLayer, RecordedExperimentConfig
 from orchestrator.replay import (
     GameEndReplayEntry,
@@ -240,6 +255,89 @@ _REGROUP_DROPPED_KINDS: Final[tuple[str, ...]] = (
     "Moved",
     "TaskProgressed",
     "TaskCompleted",
+)
+
+#: The public regroup's notice, in the wording the memory's meetings block
+#: renders from the regroup's tick and room. A test pins it equal to the
+#: renderer's own wording; the loader looks for it in this wording only.
+REGROUP_NOTICE_TEXT: Final[str] = (
+    "Public regroup at the start of tick {tick}: living players were placed in "
+    "{room}; this was not a walking journey."
+)
+
+#: The grounding label of a ballot whose voter said outright that it held
+#: nothing that resolves the vote. The type checker holds it to the meeting
+#: layer's label vocabulary.
+HOLDS_NOTHING_LABEL: Final[BallotGroundingLabel] = "none_held"
+
+#: The row of a ballot recorded before the meeting layer labelled ballots.
+UNLABELLED: Final[str] = "unlabelled"
+
+#: How many living crew witnesses a held kill had at the next meeting.
+_WITNESS_BANDS: Final[tuple[str, str]] = (
+    "one living crew witness",
+    "two or more living crew witnesses",
+)
+
+#: What the meeting after a held kill did, from the killer's side first.
+_NEXT_MEETING_OUTCOMES: Final[tuple[str, str, str, str]] = (
+    "the killer ejected",
+    "a witness ejected",
+    "another player ejected",
+    "no one ejected",
+)
+
+#: Every row of the held-kill outcome table: a witness band crossed with the
+#: next meeting's outcome. Each held crew-witnessed kill lands in exactly one.
+WITNESS_OUTCOME_ROWS: Final[tuple[str, ...]] = tuple(
+    f"{band}: {outcome}"
+    for band in _WITNESS_BANDS
+    for outcome in _NEXT_MEETING_OUTCOMES
+)
+
+#: The tally of the ballots as recorded, which must reproduce the outcome.
+AS_RECORDED: Final[str] = "as recorded"
+
+#: The two re-tallies, each named by what it does to an impostor's ballot;
+#: every other ballot is held fixed.
+IMPOSTOR_BALLOTS_AS_SKIP: Final[str] = "impostor ballots as SKIP"
+IMPOSTOR_BALLOTS_REMOVED: Final[str] = "impostor ballots removed"
+RETALLY_VARIANTS: Final[tuple[str, str]] = (
+    IMPOSTOR_BALLOTS_AS_SKIP,
+    IMPOSTOR_BALLOTS_REMOVED,
+)
+
+#: The cell each re-tally's undone ejections are counted in.
+_UNDONE_CELLS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        IMPOSTOR_BALLOTS_AS_SKIP: "ejections_undone_with_impostor_ballots_as_skip",
+        IMPOSTOR_BALLOTS_REMOVED: "ejections_undone_with_impostor_ballots_removed",
+    }
+)
+
+#: The seat classes at a report meeting, reporter first whatever its role, and
+#: the cells each reads: in total, without vent proof, and with it.
+_REPORTER_SEAT: Final[str] = "reporter"
+_OTHER_CREWMATE_SEAT: Final[str] = "other crewmate"
+_IMPOSTOR_SEAT: Final[str] = "impostor"
+_SEAT_CELLS: Final[Mapping[str, tuple[str, str, str]]] = MappingProxyType(
+    {
+        _REPORTER_SEAT: (
+            "reporter_seats_ejected",
+            "reporter_seats_ejected_without_vent_proof",
+            "reporter_seats_ejected_with_vent_proof",
+        ),
+        _OTHER_CREWMATE_SEAT: (
+            "other_crewmate_seats_ejected",
+            "other_crewmate_seats_ejected_without_vent_proof",
+            "other_crewmate_seats_ejected_with_vent_proof",
+        ),
+        _IMPOSTOR_SEAT: (
+            "impostor_seats_ejected",
+            "impostor_seats_ejected_without_vent_proof",
+            "impostor_seats_ejected_with_vent_proof",
+        ),
+    }
 )
 
 
@@ -635,7 +733,9 @@ class BallotFact:
 
     ``authored_target`` is what the voter wrote: the typed guard field's
     original when a rewrite reason is recorded, the recorded target otherwise,
-    and ``None`` for a ballot that never parsed.
+    and ``None`` for a ballot that never parsed. ``primary_reason_id`` is the
+    turn the ballot cites and ``counter_reason_id`` its counter slot, each a
+    recorded id or ``None``; a hand-built ballot without them cites nothing.
     """
 
     voter: PlayerId
@@ -644,6 +744,8 @@ class BallotFact:
     confidence: float
     grounding_label: BallotGroundingLabel | None
     cited_observation_id: str | None
+    primary_reason_id: str | None = None
+    counter_reason_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -668,7 +770,11 @@ class MeetingFact:
     opener's first prompt was not recorded. ``regrouped`` says the recorded
     reset gathered the survivors when play resumed. ``ejected`` is set exactly
     when ``outcome`` is ``EJECTED``, the invariant a meeting result carries; a
-    carrier breaking it raises.
+    carrier breaking it raises. ``regroup_notices_held`` holds one boolean per
+    recorded call with an agent id at a meeting after a regroup: whether its
+    prompt carries the notice of every earlier regroup of the game. It is empty
+    at a game's first meeting, without a regroup, and on a hand-built carrier
+    that does not set it.
     """
 
     meeting_id: str
@@ -695,6 +801,7 @@ class MeetingFact:
     in_vent_after: frozenset[PlayerId]
     bodies_after: frozenset[str]
     regrouped: bool
+    regroup_notices_held: tuple[bool, ...] = ()
 
     def __post_init__(self) -> None:
         if (self.outcome == "EJECTED") != (self.ejected is not None):
@@ -808,6 +915,7 @@ def _in_scope(
 _WITNESSES: Final[str] = "Witnesses"
 _TRIPS: Final[str] = "Vent trips and surfacings"
 _PROOF: Final[str] = "Vent proof at meetings"
+_SEATS: Final[str] = "Ejections at report meetings, by seat"
 _CORPSES: Final[str] = "Corpses and the state play resumes in"
 _REGROUP: Final[str] = "After a regroup"
 _COOLDOWN: Final[str] = "The kill cooldown"
@@ -821,6 +929,7 @@ HEADINGS: Final[tuple[str, ...]] = (
     _WITNESSES,
     _TRIPS,
     _PROOF,
+    _SEATS,
     _CORPSES,
     _REGROUP,
     _COOLDOWN,
@@ -833,6 +942,12 @@ HEADINGS: Final[tuple[str, ...]] = (
 _KILL: Final = ("Killed",)
 _VENTS: Final = ("VentEntered", "VentExited")
 _MEETING_ROW: Final = ("meeting row",)
+_SEAT_READS: Final = (
+    "MeetingTriggered",
+    "state at the meeting",
+    "meeting row",
+    "meeting row flags",
+)
 
 CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
     {
@@ -1018,6 +1133,87 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             "Button meetings with vent proof, over all button meetings.",
             ("MeetingTriggered", "meeting row flags"),
         ),
+        "reporter_seats_ejected": CellSpec(
+            "Reporter seats ejected",
+            _SEATS,
+            "Report meetings that ejected their reporter, over the reporter's "
+            "seats: one per report meeting, whatever the reporter's role.",
+            _SEAT_READS,
+        ),
+        "reporter_seats_ejected_without_vent_proof": CellSpec(
+            "Reporter seats ejected, without vent proof",
+            _SEATS,
+            "Report meetings without vent proof that ejected their reporter, over "
+            "the reporter's seats at report meetings without vent proof.",
+            _SEAT_READS,
+        ),
+        "reporter_seats_ejected_with_vent_proof": CellSpec(
+            "Reporter seats ejected, with vent proof",
+            _SEATS,
+            "Report meetings with vent proof that ejected their reporter, over the "
+            "reporter's seats at report meetings with vent proof.",
+            _SEAT_READS,
+        ),
+        "other_crewmate_seats_ejected": CellSpec(
+            "Other crewmate seats ejected",
+            _SEATS,
+            "Seats of living crewmates other than the reporter that a report "
+            "meeting ejected, over those seats at every report meeting.",
+            _SEAT_READS,
+        ),
+        "other_crewmate_seats_ejected_without_vent_proof": CellSpec(
+            "Other crewmate seats ejected, without vent proof",
+            _SEATS,
+            "Seats of living crewmates other than the reporter that a report "
+            "meeting without vent proof ejected, over those seats at report "
+            "meetings without vent proof.",
+            _SEAT_READS,
+        ),
+        "other_crewmate_seats_ejected_with_vent_proof": CellSpec(
+            "Other crewmate seats ejected, with vent proof",
+            _SEATS,
+            "Seats of living crewmates other than the reporter that a report "
+            "meeting with vent proof ejected, over those seats at report meetings "
+            "with vent proof.",
+            _SEAT_READS,
+        ),
+        "impostor_seats_ejected": CellSpec(
+            "Impostor seats ejected",
+            _SEATS,
+            "Seats of living impostors other than the reporter that a report "
+            "meeting ejected, over those seats at every report meeting.",
+            _SEAT_READS,
+        ),
+        "impostor_seats_ejected_without_vent_proof": CellSpec(
+            "Impostor seats ejected, without vent proof",
+            _SEATS,
+            "Seats of living impostors other than the reporter that a report "
+            "meeting without vent proof ejected, over those seats at report "
+            "meetings without vent proof.",
+            _SEAT_READS,
+        ),
+        "impostor_seats_ejected_with_vent_proof": CellSpec(
+            "Impostor seats ejected, with vent proof",
+            _SEATS,
+            "Seats of living impostors other than the reporter that a report "
+            "meeting with vent proof ejected, over those seats at report meetings "
+            "with vent proof.",
+            _SEAT_READS,
+        ),
+        "reporters_among_ejected_crewmates": CellSpec(
+            "Reporters among the crewmates ejected",
+            _SEATS,
+            "Crewmates a report meeting ejected who were its reporter, over all "
+            "crewmates report meetings ejected.",
+            _SEAT_READS,
+        ),
+        "reporters_among_crewmate_seats": CellSpec(
+            "Reporters among the crewmate seats",
+            _SEATS,
+            "Crewmate seats at report meetings that were the reporter's, over all "
+            "crewmate seats at report meetings.",
+            _SEAT_READS,
+        ),
         "stale_report_meetings": CellSpec(
             "Stale report meetings",
             _CORPSES,
@@ -1109,6 +1305,16 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             "Regroup meetings that opened with a sabotage active, over all regroup "
             "meetings.",
             ("state at the meeting",),
+        ),
+        "prompts_missing_a_regroup_notice": CellSpec(
+            "Prompts after a regroup missing an earlier regroup's notice",
+            _REGROUP,
+            "Recorded meeting prompts of a player at a meeting after a regroup that "
+            "lack the notice of some earlier regroup of the same game, in the "
+            "wording the memory renders from that regroup's tick and room, over "
+            "all such prompts.",
+            ("recorded meeting prompts", "meeting row"),
+            MEETING_REGROUP,
         ),
         "kill_cooldowns_differing_from_recorded": CellSpec(
             "Kill cooldowns that differ from the recorded value",
@@ -1247,6 +1453,23 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             "the rest are not evaluable.",
             ("meeting row turns",),
         ),
+        "ballots_citing_a_rebuttal": CellSpec(
+            "Ballots whose cited turn is a rebuttal",
+            _REBUTTALS,
+            "Ballots whose cited turn is a repeat-speaker turn of the same meeting, "
+            "over all ballots at meetings with a repeat-speaker turn.",
+            ("meeting row turns", "meeting row ballots"),
+            scope=BOUNDED_REBUTTAL,
+        ),
+        "ballots_countering_with_a_rebuttal": CellSpec(
+            "Ballots whose counter slot names a rebuttal",
+            _REBUTTALS,
+            "Ballots whose counter slot, the strongest thing the voter held "
+            "pointing away from its choice, names a repeat-speaker turn of the "
+            "same meeting, over all ballots at meetings with a repeat-speaker turn.",
+            ("meeting row turns", "meeting row ballots"),
+            scope=BOUNDED_REBUTTAL,
+        ),
         "impostor_skip_ballots": CellSpec(
             "Impostor ballots that skip",
             _BALLOTS,
@@ -1291,6 +1514,22 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             "ejections.",
             ("meeting row ballots",),
         ),
+        "ejections_undone_with_impostor_ballots_as_skip": CellSpec(
+            "Ejections that would not stand with impostor ballots read as SKIP",
+            _BALLOTS,
+            "Ejections whose re-tally, with every impostor ballot read as SKIP and "
+            "every other ballot held fixed, ejects no one or a different player, "
+            "over all ejections.",
+            ("meeting row ballots",),
+        ),
+        "ejections_undone_with_impostor_ballots_removed": CellSpec(
+            "Ejections that would not stand with impostor ballots removed",
+            _BALLOTS,
+            "Ejections whose re-tally, with every impostor ballot removed and every "
+            "other ballot held fixed, ejects no one or a different player, over all "
+            "ejections.",
+            ("meeting row ballots",),
+        ),
         "own_kill_rows_breaching": CellSpec(
             "Own-kill ballot rows naming a teammate or held by a non-witness",
             _BALLOTS,
@@ -1330,6 +1569,29 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             "Held crew-witnessed kills whose killer the next meeting ejected, over "
             "held crew-witnessed kills.",
             ("Killed", "meeting row"),
+        ),
+        "held_kill_killers_ejected_at_any_later_meeting": CellSpec(
+            "Held kills whose killer some later meeting ejected",
+            _BALLOTS,
+            "Held crew-witnessed kills whose killer the next meeting, or any "
+            "meeting after it, ejected, over held crew-witnessed kills.",
+            ("Killed", "meeting row"),
+        ),
+        "held_kill_witnesses_ejected": CellSpec(
+            "Held kills whose living witness was ejected",
+            _BALLOTS,
+            "Held crew-witnessed kills where the next meeting ejected one of the "
+            "kill's living crew witnesses, over held crew-witnessed kills.",
+            ("Killed", "meeting row"),
+        ),
+        "skips_holding_nothing": CellSpec(
+            "SKIP ballots labelled as holding nothing",
+            _BALLOTS,
+            "SKIP ballots, whatever the voter's role, whose recorded grounding label "
+            "says the voter stated outright that it held nothing that resolves the "
+            "vote, over all SKIP ballots. The label restates the voter's own "
+            "statement; it is not a checked fact.",
+            ("meeting row ballots",),
         ),
         "impostor_wins": CellSpec(
             "Games the impostors won",
@@ -1414,6 +1676,32 @@ TABLES: Final[Mapping[str, TableSpec]] = MappingProxyType(
             "crewmate or impostor) and the role of the speaker of the turn answered.",
             ("meeting row turns",),
             scope=BOUNDED_REBUTTAL,
+        ),
+        "retally_outcome_changes": TableSpec(
+            "Outcomes a re-tally changes",
+            _BALLOTS,
+            "Meetings whose re-tally differs from the recorded outcome, by re-tally, "
+            "by the recorded outcome (the reporter, another crewmate, an impostor or "
+            "no one ejected) and by what the re-tally gives instead. Every other "
+            "ballot is held fixed; real voters would have heard different speech.",
+            ("MeetingTriggered", "meeting row ballots"),
+        ),
+        "held_kill_next_meeting_outcomes": TableSpec(
+            "What the next meeting did after a held kill",
+            _BALLOTS,
+            "Held crew-witnessed kills by how many of the kill's crew witnesses were "
+            "alive at the next meeting, one or two or more, and by what that "
+            "meeting did: ejected the killer, ejected one of those witnesses, "
+            "ejected another player, or ejected no one. Every row is listed.",
+            ("Killed", "meeting row"),
+        ),
+        "skips_by_grounding_label": TableSpec(
+            "SKIP ballots by grounding label",
+            _BALLOTS,
+            "Every SKIP ballot by its recorded grounding label. Every label the "
+            "meeting layer can write is listed, and unlabelled counts a ballot "
+            "recorded before ballots were labelled.",
+            ("meeting row ballots",),
         ),
     }
 )
@@ -1969,6 +2257,12 @@ def _fold_meetings(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> 
                 where=where,
             )
         _fold_vent_proof(game, meeting, acc)
+        if is_report:
+            _fold_report_seats(game, meeting, acc)
+        for held in meeting.regroup_notices_held:
+            acc.count(
+                "prompts_missing_a_regroup_notice", not held, seed=seed, where=where
+            )
         _fold_structure(game, meeting, acc)
         next_tick = (
             game.meetings[index + 1].tick if index + 1 < len(game.meetings) else None
@@ -2033,10 +2327,63 @@ def _vent_flag_names(meeting: MeetingFact, player: PlayerId) -> bool:
     return any(player in subjects for subjects in meeting.vent_flag_subjects)
 
 
+def _has_vent_proof(meeting: MeetingFact) -> bool:
+    """Whether a vent-sighting flag names a player alive when the meeting opened."""
+
+    return any(subjects & meeting.living for subjects in meeting.vent_flag_subjects)
+
+
+def seat_class(game: GameFacts, meeting: MeetingFact, player: PlayerId) -> str:
+    """``player``'s seat class at a report meeting: the reporter first.
+
+    The reporter's seat is the reporter's whatever its role, so the three
+    classes partition the living seats even when an impostor reports. Any other
+    seat is classed by its recorded role; a player without one raises.
+    """
+
+    if player == meeting.opener:
+        return _REPORTER_SEAT
+    return _IMPOSTOR_SEAT if _is_impostor(game, player) else _OTHER_CREWMATE_SEAT
+
+
+def _fold_report_seats(
+    game: GameFacts, meeting: MeetingFact, acc: _Accumulator
+) -> None:
+    """Every living seat at one report meeting, and whether it was ejected."""
+
+    proof = _has_vent_proof(meeting)
+    for player in sorted(meeting.living):
+        where = f"meeting {meeting.meeting_id}, seat {player}"
+        ejected = meeting.ejected == player
+        total, without_proof, with_proof = _SEAT_CELLS[
+            seat_class(game, meeting, player)
+        ]
+        acc.count(total, ejected, seed=game.seed, where=where)
+        acc.count(
+            with_proof if proof else without_proof,
+            ejected,
+            seed=game.seed,
+            where=where,
+        )
+        if _is_impostor(game, player):
+            continue
+        is_reporter = player == meeting.opener
+        acc.count(
+            "reporters_among_crewmate_seats", is_reporter, seed=game.seed, where=where
+        )
+        if ejected:
+            acc.count(
+                "reporters_among_ejected_crewmates",
+                is_reporter,
+                seed=game.seed,
+                where=where,
+            )
+
+
 def _fold_vent_proof(game: GameFacts, meeting: MeetingFact, acc: _Accumulator) -> None:
     where = f"meeting {meeting.meeting_id}"
     seed = game.seed
-    proof = any(subjects & meeting.living for subjects in meeting.vent_flag_subjects)
+    proof = _has_vent_proof(meeting)
     acc.count("meetings_with_vent_proof", proof, seed=seed, where=where)
     if meeting.trigger_kind == "emergency":
         acc.count("button_meetings_with_vent_proof", proof, seed=seed, where=where)
@@ -2201,6 +2548,21 @@ def _fold_rebuttals(game: GameFacts, acc: _Accumulator) -> None:
                 seed=seed,
                 where=where,
             )
+            rebuttal_ids = frozenset(turn.turn_id for turn in repeats)
+            for ballot in meeting.ballots:
+                voter_where = f"{where}, voter {ballot.voter}"
+                acc.count(
+                    "ballots_citing_a_rebuttal",
+                    ballot.primary_reason_id in rebuttal_ids,
+                    seed=seed,
+                    where=voter_where,
+                )
+                acc.count(
+                    "ballots_countering_with_a_rebuttal",
+                    ballot.counter_reason_id in rebuttal_ids,
+                    seed=seed,
+                    where=voter_where,
+                )
         for turn in repeats:
             earlier = {
                 other.speaker for other in meeting.turns if other.index < turn.index
@@ -2308,7 +2670,161 @@ def _own_kill_row_breaches(game: GameFacts, row: OwnKillRowFact) -> bool:
     )
 
 
+def grounding_labels() -> tuple[str, ...]:
+    """Every grounding label the meeting layer writes, read from its type.
+
+    Read at call time from :data:`meetings.schemas.BallotGroundingLabel`, so the
+    label table's rows and the vocabulary check follow the type, never a copy.
+    """
+
+    return tuple(get_args(BallotGroundingLabel))
+
+
+def _tally_ballots(
+    game: GameFacts, meeting: MeetingFact, tally: str
+) -> tuple[BallotFact, ...]:
+    """The meeting's ballots under one tally: as recorded, or one re-tally.
+
+    A re-tally changes impostor ballots only, reading each as SKIP or removing
+    it; every other ballot is held fixed. An unknown tally raises.
+    """
+
+    if tally == AS_RECORDED:
+        return meeting.ballots
+    if tally == IMPOSTOR_BALLOTS_AS_SKIP:
+        return tuple(
+            replace(ballot, target=SKIP_TARGET)
+            if _is_impostor(game, ballot.voter)
+            else ballot
+            for ballot in meeting.ballots
+        )
+    if tally == IMPOSTOR_BALLOTS_REMOVED:
+        return tuple(
+            ballot for ballot in meeting.ballots if not _is_impostor(game, ballot.voter)
+        )
+    raise ValueError(f"no tally is named {tally!r}")
+
+
+def tally_outcome(
+    ballots: Sequence[BallotFact], floor: float
+) -> tuple[MeetingOutcome, PlayerId | None]:
+    """``ballots`` tallied by the game's own function at the confidence ``floor``."""
+
+    return tally_ballots(
+        tuple(
+            VoteBallot(
+                voter=ballot.voter,
+                target=ballot.target,
+                confidence=ballot.confidence,
+                primary_reason_id=None,
+                rationale_text="",
+            )
+            for ballot in ballots
+        ),
+        skip_confidence_threshold=floor,
+    )
+
+
+def retally(
+    game: GameFacts, meeting: MeetingFact
+) -> Mapping[str, tuple[MeetingOutcome, PlayerId | None]]:
+    """The meeting's outcome under the recorded tally and each re-tally.
+
+    Every tally runs at the meeting's recorded confidence floor.
+    """
+
+    return MappingProxyType(
+        {
+            tally: tally_outcome(
+                _tally_ballots(game, meeting, tally), meeting.ballot_floor
+            )
+            for tally in (AS_RECORDED, *RETALLY_VARIANTS)
+        }
+    )
+
+
+def _recorded_outcome_class(game: GameFacts, meeting: MeetingFact) -> str:
+    """Who the meeting ejected, by seat: the reporter first, whatever its role."""
+
+    ejected = meeting.ejected
+    if ejected is None:
+        return "no one ejected"
+    if meeting.trigger_kind == "report" and ejected == meeting.opener:
+        return "the reporter ejected"
+    return (
+        "an impostor ejected"
+        if _is_impostor(game, ejected)
+        else "another crewmate ejected"
+    )
+
+
+def _retally_result_class(recorded: PlayerId | None, result: PlayerId | None) -> str:
+    """What a re-tally that changed the outcome gives instead."""
+
+    if result is None:
+        return "no one ejected"
+    return "someone ejected" if recorded is None else "a different player ejected"
+
+
+def _fold_retally(game: GameFacts, meeting: MeetingFact, acc: _Accumulator) -> None:
+    """Hold the recorded tally to the outcome, then count what each re-tally undoes."""
+
+    where = f"meeting {meeting.meeting_id}"
+    outcomes = retally(game, meeting)
+    recorded = (meeting.outcome, meeting.ejected)
+    if outcomes[AS_RECORDED] != recorded:
+        tallied_outcome, tallied_ejected = outcomes[AS_RECORDED]
+        raise GameplayCensusConformanceError(
+            "The recorded ballots, tallied by the game's own function at the "
+            "recorded confidence floor, must give the recorded outcome, but set "
+            f"{acc.label}, seed {game.seed}, {where} breaches it: the tally gives "
+            f"{tallied_outcome} {tallied_ejected} against the recorded "
+            f"{meeting.outcome} {meeting.ejected}"
+        )
+    recorded_class = _recorded_outcome_class(game, meeting)
+    for variant in RETALLY_VARIANTS:
+        _, result = outcomes[variant]
+        if meeting.ejected is not None:
+            acc.count(
+                _UNDONE_CELLS[variant],
+                result != meeting.ejected,
+                seed=game.seed,
+                where=where,
+            )
+        if result != meeting.ejected:
+            acc.tally(
+                "retally_outcome_changes",
+                f"{variant}: {recorded_class} -> "
+                f"{_retally_result_class(meeting.ejected, result)}",
+            )
+
+
+def _witness_outcome_row(
+    kill: KillFact, alive: frozenset[PlayerId], following: MeetingFact
+) -> str:
+    """One held kill's row: its living crew witnesses and the next meeting's act."""
+
+    band = _WITNESS_BANDS[0] if len(alive) == 1 else _WITNESS_BANDS[1]
+    ejected = following.ejected
+    if ejected == kill.killer:
+        outcome = _NEXT_MEETING_OUTCOMES[0]
+    elif ejected in alive:
+        outcome = _NEXT_MEETING_OUTCOMES[1]
+    elif ejected is not None:
+        outcome = _NEXT_MEETING_OUTCOMES[2]
+    else:
+        outcome = _NEXT_MEETING_OUTCOMES[3]
+    return f"{band}: {outcome}"
+
+
 def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
+    labels = grounding_labels()
+    # Every label row and every witness row is listed, at zero when nothing
+    # lands in it, so each table always shows its whole shape.
+    for listed_label in (*labels, UNLABELLED):
+        acc.tally("skips_by_grounding_label", listed_label, 0)
+    for outcome_row in WITNESS_OUTCOME_ROWS:
+        acc.tally("held_kill_next_meeting_outcomes", outcome_row, 0)
     for meeting in game.meetings:
         where = f"meeting {meeting.meeting_id}"
         seed = game.seed
@@ -2319,9 +2835,25 @@ def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
             eject = ballot.target != "SKIP"
             voter_is_impostor = _is_impostor(game, ballot.voter)
             target_is_impostor = eject and _is_impostor(game, ballot.target)
+            voter_where = f"{where}, voter {ballot.voter}"
+            label = ballot.grounding_label
+            if label is not None and label not in labels:
+                raise ValueError(
+                    f"set {acc.label}, seed {seed}, {voter_where}: the grounding "
+                    f"label {label!r} is not one the meeting layer writes"
+                )
+            if not eject:
+                acc.count(
+                    "skips_holding_nothing",
+                    label == HOLDS_NOTHING_LABEL,
+                    seed=seed,
+                    where=voter_where,
+                )
+                acc.tally(
+                    "skips_by_grounding_label", UNLABELLED if label is None else label
+                )
             if not voter_is_impostor:
                 continue
-            voter_where = f"{where}, voter {ballot.voter}"
             acc.count("impostor_skip_ballots", not eject, seed=seed, where=voter_where)
             acc.count("impostor_eject_ballots", eject, seed=seed, where=voter_where)
             if eject:
@@ -2375,6 +2907,7 @@ def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
                 seed=seed,
                 where=row_where,
             )
+        _fold_retally(game, meeting, acc)
     for kill in game.kills:
         witnesses = _crew(game, kill.witnesses)
         if not witnesses:
@@ -2409,6 +2942,26 @@ def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
             following.ejected == kill.killer,
             seed=game.seed,
             where=where,
+        )
+        acc.count(
+            "held_kill_killers_ejected_at_any_later_meeting",
+            any(
+                later.ejected == kill.killer
+                for later in game.meetings
+                if later.tick >= kill.tick
+            ),
+            seed=game.seed,
+            where=where,
+        )
+        acc.count(
+            "held_kill_witnesses_ejected",
+            following.ejected in alive,
+            seed=game.seed,
+            where=where,
+        )
+        acc.tally(
+            "held_kill_next_meeting_outcomes",
+            _witness_outcome_row(kill, alive, following),
         )
 
 
@@ -2590,11 +3143,31 @@ def selector_pick(
     return None
 
 
+def regroup_notices_held(
+    entry: MeetingReplayEntry, notices: Sequence[str]
+) -> tuple[bool, ...]:
+    """Per recorded call with an agent id: does its prompt carry every notice?
+
+    ``notices`` are the earlier regroups' notices in the renderer's wording.
+    Empty when no earlier regroup was announced, so a game's first meeting adds
+    nothing to the count. The prompt text never leaves this function.
+    """
+
+    if not notices:
+        return ()
+    return tuple(
+        all(notice in call.prompt for notice in notices)
+        for call in entry.llm_calls
+        if call.agent_id is not None
+    )
+
+
 def _meeting_fact(
     opened: MeetingOpened,
     applied: MeetingApplied,
     *,
     regroup_recorded: bool,
+    earlier_notices: Sequence[str] = (),
 ) -> MeetingFact:
     entry = opened.entry
     state = opened.state
@@ -2659,6 +3232,8 @@ def _meeting_fact(
                 confidence=ballot.confidence,
                 grounding_label=ballot.grounding_label,
                 cited_observation_id=ballot.primary_reason_observation_id,
+                primary_reason_id=ballot.primary_reason_id,
+                counter_reason_id=ballot.counter_reason_id,
             )
             for ballot in entry.ballots
         ),
@@ -2681,6 +3256,7 @@ def _meeting_fact(
         ),
         bodies_after=frozenset(after.bodies),
         regrouped=regroup_recorded and after.phase == "PLAY",
+        regroup_notices_held=regroup_notices_held(entry, earlier_notices),
     )
 
 
@@ -2812,6 +3388,21 @@ def _load_game(
                         applied.state, "regroup", opened_meeting.entry.tick
                     )
                 )
+    # Each meeting reads the notices of the regroups before it in this game; a
+    # regroup's notice is formed only when a later meeting reads it.
+    meetings = tuple(
+        _meeting_fact(
+            opened_meeting,
+            applied,
+            regroup_recorded=regroup_recorded,
+            earlier_notices=tuple(
+                _regroup_notice(prior)
+                for _, prior in applied_meetings[:index]
+                if regroup_recorded and prior.state.phase == "PLAY"
+            ),
+        )
+        for index, (opened_meeting, applied) in enumerate(applied_meetings)
+    )
     return GameFacts(
         seed=seed,
         roles=MappingProxyType(dict(roles)),
@@ -2820,15 +3411,30 @@ def _load_game(
         vents=tuple(vents),
         bodies=tuple(bodies),
         frames=MappingProxyType(frames),
-        meetings=tuple(
-            _meeting_fact(opened_meeting, applied, regroup_recorded=regroup_recorded)
-            for opened_meeting, applied in applied_meetings
-        ),
+        meetings=meetings,
         discarded=tuple(discarded),
         rows_without_dispositions=rows_without_dispositions,
         winner=game_end.winner if game_end is not None else None,
         terminal_tick=terminal_tick,
         cooldown_writes=tuple(cooldown_writes),
+    )
+
+
+def _regroup_notice(applied: MeetingApplied) -> str:
+    """The notice the memory renders for the regroup ``applied``'s close made.
+
+    The regroup's tick is the resumed state's, the tick the announced row
+    records; its room is the one the walk regrouped the survivors into. A
+    regroup the walk names no room for raises.
+    """
+
+    if applied.regroup_room is None:
+        raise ValueError(
+            f"{applied.entry.meeting_id}: the recorded reset regrouped the "
+            "survivors, but the walk names no room they were placed in"
+        )
+    return REGROUP_NOTICE_TEXT.format(
+        tick=applied.state.tick, room=applied.regroup_room
     )
 
 
@@ -3017,6 +3623,38 @@ TERMS: Final[Mapping[str, str]] = MappingProxyType(
         "rebuttal": (
             "a turn by a player who already spoke in the same meeting; the only such "
             "turn the meeting layer can produce is the bounded rebuttal."
+        ),
+        "seat": (
+            "one living player at one report meeting. The reporter's seat is the "
+            "reporter's whatever its role; every other seat belongs to a crewmate "
+            "or an impostor. A player dead before the meeting has no seat."
+        ),
+        "living witnesses": (
+            "the crewmates the engine recorded as seeing a kill who are still alive "
+            "at the next meeting, counted as one, or as two or more. A fellow "
+            "impostor who saw the kill is never one of them."
+        ),
+        "held kill": (
+            "a kill a crewmate saw whose crew witness is still alive when the next "
+            "meeting opens, a meeting on the kill's own tick included."
+        ),
+        "re-tally": (
+            "the meeting's recorded ballots counted again by the game's own vote "
+            "count at the meeting's recorded confidence floor, with each impostor "
+            "ballot read as a SKIP or removed. Every other ballot is held fixed, "
+            "so a re-tally describes the ballots, not what the table would have "
+            "done: real voters would have heard different speech."
+        ),
+        "holds-nothing label": (
+            "the grounding label a SKIP ballot carries when its voter stated "
+            "outright that it held nothing that resolves the vote. The label "
+            "restates the voter's own statement; nothing checks it against what "
+            "the voter held."
+        ),
+        "rebuttal citation": (
+            "a ballot whose cited turn, or whose counter slot (the strongest thing "
+            "the voter held pointing away from its choice), names a rebuttal of "
+            "the same meeting."
         ),
         "era": (
             "the recorded settings a group of games shares: its experiment settings, "
@@ -3459,8 +4097,12 @@ __all__ = [
     "CENSUS_WALK_CONFIG",
     "COUNT_ONLY_NOTE",
     "FIELD_CLASSIFICATION",
+    "AS_RECORDED",
     "FRESH_KILL_WINDOW_TICKS",
     "HEADINGS",
+    "HOLDS_NOTHING_LABEL",
+    "IMPOSTOR_BALLOTS_AS_SKIP",
+    "IMPOSTOR_BALLOTS_REMOVED",
     "IN_VENT_CAP_TICKS",
     "KILL_TICK_BODY_HANDLE_PATTERN",
     "LOOK_AND_WAIT_EXIT",
@@ -3474,6 +4116,8 @@ __all__ = [
     "PHYSICAL_VENT_WITNESS",
     "PREDICATES",
     "PUBLIC_BODY_HANDLE",
+    "REGROUP_NOTICE_TEXT",
+    "RETALLY_VARIANTS",
     "ROLE_CORRECTNESS_NOTE",
     "SCHEMA_VERSION",
     "SETTING_DEFAULTS",
@@ -3481,7 +4125,9 @@ __all__ = [
     "SHORT_WINDOW_TICKS",
     "TABLES",
     "TERMS",
+    "UNLABELLED",
     "UNSEEN_SEED_BAND",
+    "WITNESS_OUTCOME_ROWS",
     "AlibiFact",
     "BallotFact",
     "BodyFact",
@@ -3521,16 +4167,21 @@ __all__ = [
     "census_from_inputs",
     "compute_gameplay_census",
     "fold_set",
+    "grounding_labels",
     "load_census_inputs",
     "pool",
     "prompt_stamps_from_cell",
     "recorded_game_eras",
     "recorded_kill_cooldown",
+    "regroup_notices_held",
     "resolve_era",
+    "retally",
+    "seat_class",
     "section_from_tally",
     "selector_pick",
     "serialize_json",
     "served_own_kill_rows",
     "setting_value",
+    "tally_outcome",
     "verify_era_registry",
 ]
