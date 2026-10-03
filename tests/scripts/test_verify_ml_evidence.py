@@ -35,6 +35,7 @@ from pathlib import Path
 import pytest
 
 import verify_ml_evidence as vme
+from eval import process_scorecard
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLE_SET = "replays/samples/4p1i"
@@ -159,11 +160,12 @@ def _availability_tree(root: Path) -> None:
         vme.COMPOSED_DIR,
         "audits",
         "docs/media",
-        # The process scorecard's row probes the PAIR, so both files are linked:
-        # a tree holding one of them would make the row read MISSING for a
+        # The process scorecard's row probes all three of its files, so each is
+        # linked: a tree holding fewer would make the row read MISSING for a
         # reason this scratch tree is not about.
         "docs/process-scorecard.md",
         "docs/process-scorecard.json",
+        "docs/process-scorecard-before.json",
         # The gameplay census's row probes its pair the same way.
         "docs/gameplay-census.md",
         "docs/gameplay-census.json",
@@ -1148,6 +1150,122 @@ def test_a_singular_stated_count_is_read_and_can_fail(
     assert result.status == "FAIL", result.detail
     assert f"{key}: {vme.ARTIFACTS_DOC} promises 1 files, the index tracks 2" in (
         result.detail
+    )
+
+
+_SCORECARD_KEY = "docs/process-scorecard.md"
+
+
+def _scorecard_row_text(root: Path) -> str:
+    """The scorecard's registry row, as `docs/artifacts.md` writes it."""
+
+    rows = [
+        line
+        for line in (root / vme.ARTIFACTS_DOC).read_text().splitlines()
+        if line.startswith(f"| `{_SCORECARD_KEY}`")
+    ]
+    assert len(rows) == 1, rows
+    return rows[0]
+
+
+def _before_file_registration_problems(root: Path) -> list[str]:
+    """Why the scorecard row does not register the publisher's pinned before file.
+
+    The path is read off :mod:`eval.process_scorecard` at call time, so the row,
+    the probe, the inventory scope and the index are held to the file the
+    publisher actually pins rather than to a spelling copied here.
+    """
+
+    before = process_scorecard.BEFORE_COLUMNS_PATH
+    problems: list[str] = []
+    if before not in vme._IN_TREE_PROBES[_SCORECARD_KEY]:
+        problems.append(f"the probe entry does not name {before}")
+    pathspec, owned_elsewhere = vme._IN_TREE_INVENTORY[_SCORECARD_KEY]
+    if before not in pathspec or before in owned_elsewhere:
+        problems.append(f"the inventory scope does not name {before}")
+    if f"`{before}`" not in _scorecard_row_text(root):
+        problems.append(f"the registry row does not name {before}")
+    tracked = vme.in_tree_inventory(root, _SCORECARD_KEY)
+    if tracked is None:
+        return [*problems, "no index to inventory"]
+    if before not in tracked:
+        problems.append(f"the index does not track {before}")
+    size = next(
+        size
+        for key, _cls, _where, size in vme.registry_rows(root)
+        if key == _SCORECARD_KEY
+    )
+    stated = vme._STATED_FILES.search(size)
+    if stated is None or int(stated.group(1)) != len(tracked):
+        problems.append(f"the row states {size!r}, the index tracks {len(tracked)}")
+    return problems
+
+
+def test_the_scorecard_row_registers_its_pinned_before_file() -> None:
+    """The publisher's frozen before columns are a registered, inventoried file.
+
+    `eval/process_scorecard.py` pins `BEFORE_COLUMNS_PATH` by sha256 and copies
+    it into every publication without recomputing it, so it is an input the
+    registry must name: in the row's words, in its probe and inventory entries,
+    and in the row's stated count.
+    """
+
+    assert _before_file_registration_problems(_REPO_ROOT) == []
+    row = _scorecard_row_text(_REPO_ROOT)
+    assert "sha256" in row
+    assert "never recomputed" in row
+
+
+def test_a_moved_before_path_fails_the_registration_case(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the publisher pinning another file turns the case red."""
+
+    moved = "docs/process-scorecard-before-moved.json"
+    monkeypatch.setattr(process_scorecard, "BEFORE_COLUMNS_PATH", moved)
+    problems = _before_file_registration_problems(_REPO_ROOT)
+    assert f"the probe entry does not name {moved}" in problems
+    assert f"the inventory scope does not name {moved}" in problems
+    assert f"the registry row does not name {moved}" in problems
+    assert f"the index does not track {moved}" in problems
+
+
+def test_the_scorecard_row_restated_as_two_files_fails_the_inventory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the row's old count, against the three files the index tracks."""
+
+    rows = vme.registry_rows(_REPO_ROOT)
+    changed = [
+        (key, category, where, "2 files" if key == _SCORECARD_KEY else size)
+        for key, category, where, size in rows
+    ]
+    assert changed != rows
+    monkeypatch.setattr(vme, "registry_rows", lambda _root: changed)
+    result = _row(
+        vme.run_availability(_context(_REPO_ROOT)).rows, "in-tree family inventory"
+    )
+    assert result.status == "FAIL", result.detail
+    assert (
+        f"{_SCORECARD_KEY}: {vme.ARTIFACTS_DOC} promises 2 files, the index tracks 3"
+        in result.detail
+    )
+
+
+def test_an_inventory_scope_without_the_before_file_fails_the_inventory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the scope's old pair, against the row's stated three files."""
+
+    pair = ("docs/process-scorecard.md", "docs/process-scorecard.json")
+    monkeypatch.setitem(vme._IN_TREE_INVENTORY, _SCORECARD_KEY, (pair, ()))
+    result = _row(
+        vme.run_availability(_context(_REPO_ROOT)).rows, "in-tree family inventory"
+    )
+    assert result.status == "FAIL", result.detail
+    assert (
+        f"{_SCORECARD_KEY}: {vme.ARTIFACTS_DOC} promises 3 files, the index tracks 2"
+        in result.detail
     )
 
 

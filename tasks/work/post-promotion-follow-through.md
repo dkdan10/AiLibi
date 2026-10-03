@@ -1,6 +1,6 @@
 # Follow-through on the promotion and tour reviews
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
@@ -165,7 +165,7 @@ diagnosis of 2026-10-02 (`tasks/diagnosis-2026-10-02/README.md`, Part 3, card 0)
 Each item names its enforcing mechanism and a planted or perturbed proof. Each new test is written first and fails at
 this card's base for the stated reason; Results quotes that run.
 
-- [ ] **The before file is registered.**
+- [x] **The before file is registered.**
   - `docs/artifacts.md`'s scorecard row names `docs/process-scorecard-before.json`, says it is the frozen before
     columns (sha256-pinned and never recomputed), and states `3 files`.
   - `_IN_TREE_PROBES` and `_IN_TREE_INVENTORY` name the three paths, and the scratch availability tree links them.
@@ -176,7 +176,7 @@ this card's base for the stated reason; Results quotes that run.
     inventory entry without the file fails the same leg. `BEFORE_COLUMNS_PATH` monkeypatched to another path fails
     the new case.
   - `verify_ml_evidence.py`, offline, keeps its check count and FAIL 0.
-- [ ] **The front door names the pictured game in plain words.**
+- [x] **The front door names the pictured game in plain words.**
   - `README.md`'s caption, its samples sentence and `docs/media/README.md` call 9p2i seed 19 the game the demo's
     guided tour opens on, or other plain words a first reader understands. None says "strip" or "head".
   - The caption says one impostor is inside a vent, and the README stays at or under 1,600 words.
@@ -186,7 +186,7 @@ this card's base for the stated reason; Results quotes that run.
   - Planted: the `59bbd1be` caption, put back into a scratch README, fails that assertion by name.
   - `tests/scripts/test_check_doc_facts.py`'s planted `d41c9006` hunk carries the new sentence as its current side.
     Its previous side is unchanged, and the case still passes all four of its assertions.
-- [ ] **The hero caption claims only what the picture shows.**
+- [x] **The hero caption claims only what the picture shows.**
   - `frontend/e2e/media.spec.ts`'s caption and its `:803` comment say only this: the left half is what happened and
     the right half what p-5 could see, both at tick 9, and the card below is the accusation p-5 wrote at the meeting
     that followed, at tick 12. No clause says the panel is everything p-5 knew when it voted.
@@ -199,7 +199,7 @@ this card's base for the stated reason; Results quotes that run.
     requires the tick placeholder.
   - Planted: the `59bbd1be` template in a scratch copy fails the new case. A changed image with unchanged provenance
     fails the existing digest check.
-- [ ] **The public results page calls adopted rules adopted.**
+- [x] **The public results page calls adopted rules adopted.**
   - Every word of `BehaviorIdentity` moves into a new public-results group of `SPECTATOR_COPY`, with `fmt`
     templates for counts. `PublicResults.tsx` joins the disk leg's in-scope sources with a rendered fragment.
   - A field at its adopted value, one of the seven pairs, is listed under a lead that says adopted, each in plain
@@ -219,12 +219,12 @@ this card's base for the stated reason; Results quotes that run.
   - Planted: the paragraph with one pair's value edited, and a config copy with one adopted field moved, each fail
     the source pin. Each changed assertion is replaced by one at least as strong: the old phrase is asserted absent
     where its classification changed.
-- [ ] **The recorder's era refusal stays registry-derived.**
+- [x] **The recorder's era refusal stays registry-derived.**
   - Mechanism: `test_an_era_refusal_names_the_set_and_the_declared_file_it_found`.
   - Proof: D10 re-applied at dispatch fails it for both variables, and Results quotes the run.
   - Only if D10 survives does this card add a planted-registry case to `tests/scripts/test_refresh_samples.py`.
     `scripts/_declared_experiment.py` does not change.
-- [ ] **The recorder tests pass under any distribution.**
+- [x] **The recorder tests pass under any distribution.**
   - While the guard under test holds, no case in `tests/scripts/test_refresh_samples.py` creates, edits or deletes a
     path under the real `replays/` tree.
   - Decoys, planted rounds and strays live under the case's own `tmp_path`. Otherwise the case aims, read-only, at an
@@ -238,7 +238,7 @@ this card's base for the stated reason; Results quotes that run.
   - Proof: three runs each of `-n 4 --dist load` and `-n 6 --dist load`, and of both files under
     `-n 8 --dist load`, all green. The serial run and the `--dist loadfile` run stay green. No case is skipped,
     deleted or loosened to get there.
-- [ ] **Both merged cards carry a dated note in Results, and nothing above it changes.**
+- [x] **Both merged cards carry a dated note in Results, and nothing above it changes.**
   - The promotion's note records the owner's words verbatim, "Merge both and continue", and that Q1 and Q2 were
     both open at the merge. It records that the code holds Q1's option (a), the `d41c9006` reading at (11, 50),
     and that the twelve commits stand as pushed: Q2 needs no ruling, because no rewrite is possible. It lists Q1
@@ -252,7 +252,7 @@ this card's base for the stated reason; Results quotes that run.
   - Mechanism: `git diff --numstat 59bbd1be -- tasks/work/promote-round-2.md tasks/work/spectator-tour-round-2.md`
     shows zero deleted lines.
   - Proof: each corrected figure is re-measured by the command the note quotes, at the head that states it.
-- [ ] **Every changed production line goes red when neutered, and one bounded mutation pass is run.**
+- [x] **Every changed production line goes red when neutered, and one bounded mutation pass is run.**
   - The spans: `PublicResults.tsx`, the new copy group, `adoptedRules.ts`, the two `verify_ml_evidence.py` entries
     and the caption lines of `media.spec.ts`.
   - Results tabulates each neutered line with the test that failed. Equivalent probes are named with their reason.
@@ -267,7 +267,7 @@ this card's base for the stated reason; Results quotes that run.
     - a read of a loaded source to the canonical literal.
   - Each mutant is applied alone and the file is restored from a copy with its sha256 checked. Each survivor is
     killed or named equivalent with its reason.
-- [ ] **The gates hold.**
+- [x] **The gates hold.**
   - Nothing recorded moves: `verify_samples.sh`, the five `build_sample_report.py --check` runs, both publishers'
     `--check` and `pytest -m campaign` read as at `59bbd1be`.
   - `npm run e2e` is green.
@@ -434,4 +434,311 @@ gate in a clean worktree and cite CI for it.
 
 ## Results
 
-Not started.
+Done on `work/post-promotion-follow-through`, from `origin/main` at `5877adb4`. Every count is count-only: no rendered
+prompt, transcript text or seed-band prefix was printed or logged. Scratch work stayed under a private subdirectory
+of the session scratchpad.
+
+**Commits**, in order: `acdaddb6` the front-door words and the hero caption template; `52c4b1f3` the public results
+wording; `c91e604b` the media re-capture; `a74045b3` the recorder tests off the shared tree; `e5403bb0` the M14
+numerator pin; `dd1a4b17` the deployment figure; `cd77b998` the two dated notes; `d392b108` the probes the first pass
+left green; then the registry rows with this Results, and the commit recording the `check.sh` run.
+
+**Sections relied on.** This card; `AGENTS.md`; `docs/workflow.md` (card format, reopen pattern); the Stage B
+decision memo (`tasks/decision-2026-09-24-stage-b-wave.md`) sections 0, 1, 3.1-3.3 and 7; the diagnosis
+(`tasks/diagnosis-2026-10-02/README.md`) Part 3, card 0, and Part 4; `audits/audit-2026-10-01-stage-b-r2.md` sections
+1.11 and 9; `docs/experiment-arms.md` "Adopted arms"; `docs/artifacts.md` "The four classes"; `docs/media/README.md`;
+`docs/architecture.md` "Determinism and the substrate ladder" (unchanged: no engine, agent, meeting or recorded
+byte moves).
+
+### The before file is registered
+
+- `docs/artifacts.md`'s scorecard row names `docs/process-scorecard-before.json` as the frozen before columns,
+  sha256-pinned in `eval/process_scorecard.py`, copied into every publication and never recomputed, and states
+  `3 files`. `_IN_TREE_PROBES` and `_IN_TREE_INVENTORY` name the three paths; the scratch availability tree links all
+  three.
+- Mechanism (`tests/scripts/test_verify_ml_evidence.py`): `test_the_scorecard_row_registers_its_pinned_before_file`
+  reads `BEFORE_COLUMNS_PATH` off `eval.process_scorecard` at call time and requires it in the row's words, its probe,
+  its inventory scope and the index, and the row's count to equal the index.
+- Written first, red at the base (`pytest tests/scripts/test_verify_ml_evidence.py -k "scorecard_row or before_path or
+  before_file"`): 3 failed, 1 passed (the registration case, the two planted inventory cases; the moved-path case
+  passes at both commits).
+- Planted: the row restated as `2 files` reads "docs/process-scorecard.md: docs/artifacts.md promises 2 files, the
+  index tracks 3"; the scope without the before file reads "promises 3 files, the index tracks 2";
+  `BEFORE_COLUMNS_PATH` monkeypatched to another path fails the case with four named problems.
+- `uv run python scripts/verify_ml_evidence.py` (offline): 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5, as before.
+
+### The front door names the pictured game in plain words
+
+- `README.md`'s caption and samples sentence and `docs/media/README.md` call 9p2i seed 19 the game the demo's guided
+  tour opens on (`tests/api/test_sets.py` pins it as the featured list's first entry). The caption says one impostor
+  stands in MedBay and the other is inside a vent. `wc -w README.md`: 1,579 (budget 1,600, held by
+  `check_doc_facts.py`).
+- Mechanism (`tests/scripts/test_public_recording_provenance.py`): the caption pin holds the new words;
+  `test_the_front_door_names_the_pictured_game_in_plain_words` refuses the words strip and head in both pages and
+  requires the vent clause; `test_the_captions_scene_is_the_recorded_one` holds the scene to the served replay (two
+  bodies at tick 9, exactly one impostor inside a vent, the other in MedBay), because the capture harness checks only
+  that both impostors are alive in a room. `acdaddb6`'s message said the harness checks the vent; `c91e604b` corrects
+  it.
+- Red at the base: 3 failed, 9 passed (the caption pin, the front-door case, the caption case). Planted: the
+  `59bbd1be` caption in a scratch README is reported as `["README.md"]`; the `59bbd1be` scene, both impostors in
+  rooms, fails with "not exactly one impostor inside a vent".
+- `tests/scripts/test_check_doc_facts.py`'s planted `d41c9006` hunk carries the new samples sentence as its current
+  side; its previous side is unchanged and `test_the_d41c9006_front_door_fails_on_the_promoted_tree` passes all four
+  of its assertions.
+
+### The hero caption claims only what the picture shows
+
+- `frontend/e2e/media.spec.ts`: "Left: what happened at tick 9. Right: what p-5 could see at the same tick. Below: the
+  accusation p-5 wrote at the meeting that followed, at tick 12.", from `HERO.tick`, `HERO.fogSubject` and
+  `HERO.meetingTick`. The right-half comment and the HERO comment say the same.
+- Mechanism: `test_the_hero_caption_claims_only_what_the_picture_shows` reads the template out of the spec, refuses
+  "when it voted" and "allowed to know" anywhere in it, requires both tick placeholders, and pins the whole template.
+  Planted: the `59bbd1be` caption and comment fail with all four named problems.
+- Re-capture, by the documented command (`cd frontend && AILIBI_CAPTURE_MEDIA=1 npx playwright test
+  e2e/media.spec.ts`), twice at `52c4b1f3`: both runs gave the two-truths sheet `a921c55c`, the meeting still
+  `2da7cab6` and the GIF `80dc7add` (13 frames, 640x400); the clip differs run to run as documented, and the second
+  run's ships (`2119ce78`, 1440x900, 9.00 s). `provenance.json` names capture revision `52c4b1f3` and the four new
+  digests; the recording and its sha256 are unchanged. `shasum -a 256 docs/media/*.png docs/media/*.gif
+  docs/media/*.webm` equals `provenance.json`. Both stills keep their documented sizes (2036x864, 1440x900).
+- The meeting still and the GIF are not byte-identical to the `8d07a340` capture, and this card is not why. Captured
+  through `AILIBI_DEMO_BUNDLE_DIR`, one bundle per revision built in this checkout: the `8d07a340` bundle reproduces
+  the committed still (`c827b6ac`) and GIF (`0a5aa048`) exactly; the `5877adb4` base bundle gives this head's new
+  digests. They moved with the viewer between those commits (the tour's review round 1 reworded the regroup note the
+  map draws).
+- Planted: before `provenance.json` moved, the re-captured images failed the existing digest check, naming all four
+  assets.
+
+### The public results page calls adopted rules adopted
+
+- Every word of the recorded-behavior group is in the new `publicResults` group of `SPECTATOR_COPY`, with `fmt`
+  templates for counts. A field is listed under "Rules adopted for the current game:" only at one of the seven pairs
+  in `frontend/src/lib/adoptedRules.ts`; `own_fresh_kill` reads "impostors enter a vent only beside a body they have
+  just killed" (the look-and-wait card's Outcome) and `hub_with_grace` reads "after each meeting, the survivors start
+  again from the meeting room with the bodies cleared" (the glossary's regroup). The kept vent exit and a recorded
+  kill cooldown ("a kill cooldown of N ticks set for these recordings", unchanged) are listed under "Also in place:".
+  Any other value off its default keeps an experiment label; a default group keeps "No enabled experiments recorded.
+  This alone does not certify the default behavior."; the `experimental` factory kind reads "Built-in agents with
+  recorded tactical settings".
+- On the shown set's declared config, read off disk, the rendered results section carries no form of "experiment"
+  and none of "arm", "regroup", "era" or "Stage-B".
+- Mechanism: `adoptedRules.test.ts` reads the paragraph's adoption sentence and the declared config off disk and
+  requires the list to equal the paragraph's seven pairs, in order, each held by the config. Planted: the paragraph
+  with `meeting_reset = preserve` and a config copy with `vent_entry_policy = any_body` each fail the pin.
+- Exhaustive enumeration (`PublicResults.test.tsx`): 128 on/off combinations of the seven fields, times the three vent
+  exits, times a cooldown set or unset (768), each also with one non-default value of each of eleven other fields
+  (orchestrator ruling 2): 9,216 renders. In none is an adopted value called an experiment or left out, and in none is
+  a value outside the seven called adopted.
+- Changed assertions: each old one is replaced by one at least as strong, with the old phrase asserted absent where its
+  classification changed ("Recorded experiments: a kill cooldown", "Recorded experiments: experimental movement or
+  action policies.", "Experimental agent factory").
+- `copy.test.ts`: `PublicResults.tsx` joins the disk leg's sources with the rendered fragment "What the recordings
+  show"; a new case requires the recorded-behavior span to carry no prose literal, with a planted literal and a
+  planted text node caught.
+- Red at the base (the new test files over a `git archive` of `5877adb4`'s frontend): `adoptedRules.test.ts` fails to
+  import its module; `PublicResults.test.tsx` 5 failed of 11; `copy.test.ts` 2 failed of 268.
+
+### The recorder's era refusal stays registry-derived
+
+D10 re-applied (`config=declared` in the wrong-config refusal replaced by
+`'replays/samples/9p2i/experiment-config.json'`): `uv run pytest tests/scripts/test_refresh_samples.py -k
+"era_refusal_names_the_set or declared" -q` read 2 failed, 11 passed, both variables of
+`test_an_era_refusal_names_the_set_and_the_declared_file_it_found`. The file was restored from a copy (sha256
+`c97f4c87...` before and after). `scripts/_declared_experiment.py` does not change; no case was added.
+
+### The recorder tests pass under any distribution
+
+- No case writes into the real `replays/` tree while the guard it tests holds. The symlink cases link from `tmp_path`
+  to the committed `replays/samples/4p1i`, read only, and aim at a directory below it of their own unique name; the
+  switched-on config family compares the bytes of each committed directory it is aimed at; the round case aims read
+  only at the committed `stage-b-r1`, and its planted twin plants a round under `tmp_path` and runs the rule over that
+  scratch repository; the replays-target cases fill their absent names per run.
+- The autouse fixture `_replays_tree_untouched` (orchestrator ruling 3) compares a stat inventory of `replays/` (kind,
+  size, modification time, the tree root included) before and after every case and fails naming any difference.
+  `test_the_no_trace_checks_report_a_stray_of_each_kind` plants each kind of stray on a scratch tree (a set below a
+  committed set, a stage directory, a round, a set inside a round, a top-level path, a rewritten file, a decoy made
+  and removed) and the inventory reports each one.
+- Red at the base: the base file with only the fixture added, serially: 154 passed, 4 errors, exactly the symlink
+  decoy, the composed decoy, the switched-on config's decoy and the planted round.
+- Perturbed: one decoy restored under `replays/samples/` turns `-n 6 --dist load` red, 162 passed with 8 errors and 162
+  passed with 9 errors in two runs, each error naming `samples/.test-symlink-decoy`.
+- Runs (`git status --porcelain --ignored -- replays` empty after every one):
+
+| command | result |
+| --- | --- |
+| `test_refresh_samples.py -n 4 --dist load`, three runs | 162 passed each (28.5 s, 30.3 s, 27.8 s) |
+| `test_refresh_samples.py -n 6 --dist load`, three runs | 162 passed each |
+| both files `-n 8 --dist load`, the first three runs | 191 passed, 191 passed, then 1 failed and 190 passed (failure not captured, see Limitations) |
+| both files `-n 8 --dist load`, fifteen further runs with `-rfE` (three under a concurrent `-n 4` watchability run) | 191 passed each |
+| both files `-n 2 --dist loadfile` | 191 passed |
+| both files serially | 191 passed |
+
+- The box is checked on the triples above that are green; the one red `-n 8` run is disclosed under Limitations, at
+  the strength measured: 17 of 18 both-file `-n 8` runs green.
+- `tests/scripts/test_record_ml_corpus.py`'s one decoy case made `replays/ml_corpus/.test-corpus-decoy`, which a
+  concurrent refresh case would now report; it links to the committed `replays/ml_corpus/4p1i`, read only, and names
+  a directory below it of its own (Deviations). That file: 109 passed under `-n 6`.
+
+### Both merged cards carry a dated note
+
+`### Follow-through note (2026-10-02)` closes each card's Results. `git diff --numstat 59bbd1be --
+tasks/work/promote-round-2.md tasks/work/spectator-tour-round-2.md`: 55 0 and 27 0. Re-measured at this head:
+
+| figure | command | reading |
+| --- | --- | --- |
+| referee JSON | `uv run python scripts/measure_baseline.py --watchability --json <set>` | 21,981 B `badba42d` (`samples/4p1i`); 64,432 B `bc574592` (`ml_corpus/9p2i`); 22,088 B `79055133` (`ml_corpus/4p1i`); exit 0 each |
+| re-pin notes | `git diff d41c9006 4a36dc03 -- tests/ frontend/src/ \| grep -c was`; `\| grep -cE '^\+.*(#\|//) was'`; the same with a trailing space | 1,325; 530 across 39 files; 529 |
+| criterion | `measure_featured_criterion.py --set 9p2i`; `--games 9p2i:3`; `--games 9p2i:23` | 11 of 50; 1 of 1; 0 of 1; exit 0 each |
+| tour grep | `git grep -n "every meeting ends\|survivors gathered" 59bbd1be` | 5 lines: 3 in `regroup.test.ts` (`:135`, `:162`, `:165`), 2 in the tour card (`:809`, `:816`) |
+| M14 | witnessed-kill numerator raised to 15 | earlier stage suite 6 passed; the new case fails |
+| D10 | above | 2 failed, 11 passed |
+
+The red-at-base counts (15 errors, 5 of 32) are marked unreproduced.
+
+### M14 and the deployment figure (orchestrator ruling 5)
+
+- `test_stage_b_r2_floor_numerators_equal_the_measured_counts` (`tests/eval/test_watchability.py`) reads the
+  `SupplyGaugeValues` the referee's walk hands `evaluate_supply_floors` on `replays/samples/9p2i` and requires each of
+  the five stage pins' numerators to equal its count (14, 53, 44, 15, 38). Planted: each numerator moved by one, its
+  value unchanged, fails by name. The mutant (numerator 15) passes the earlier stage tests (`-k "(stage_b_r2 or
+  stage_pin) and not numerators"`: 6 passed) and fails the new case; numerator 13 is also caught by the existing
+  raised-by-one case. `eval/watchability.py` was restored from a copy (sha256 `e3720555...` before and after).
+- `docs/deployment.md:127` reads 33 MB: `gzip -dc replays/samples/9p2i/tournament-eval-report.json.gz | wc -c` reads
+  32,952,472 bytes. The bundle built in this checkout (`scripts/build_demo_bundle.py --out`) holds no
+  `tournament-eval-report` file and measures 3.1 MB.
+
+### The neuter pass
+
+Each changed production line neutered alone, its targeted suite run (`vitest` over `PublicResults.test.tsx`,
+`adoptedRules.test.ts` and `copy.test.ts`; `test_verify_ml_evidence.py -n 6`; `test_public_recording_provenance.py`),
+the file restored from a copy with its sha256 checked:
+
+| ids | span | probes | killed |
+| --- | --- | --- | --- |
+| N1-N23 | `PublicResults.tsx`: the null guard, the adopted filter, each set-for-recordings and experiment push, the return, the factory table and lookup, the count, the nothing-recorded test, each rendered line | 23 | 23 |
+| C1-C35 | the `publicResults` copy group: each leaf, and the export | 35 | 35 |
+| A1-A8 | `adoptedRules.ts`: each of the seven rows, and `holdsAdoptedValue` | 8 | 8 |
+| V1-V2 | `verify_ml_evidence.py`: the before file in the probe entry and in the inventory scope | 2 | 2 |
+| S1-S3 | `media.spec.ts`: each caption template line | 3 | 3 |
+
+71 of 71 killed. Run against the tests as committed in `52c4b1f3` and `c91e604b`, before `d392b108`, four probes
+first came back green: S2 (the caption's middle line deleted) and the mutants M26, M27 and M29 below. `d392b108`
+pins the whole caption template and renders a recorded tactical policy; all four are killed now. M35 was already
+killed there.
+
+### One bounded mutation pass
+
+Exactly the eight listed classes, over the spans above; each mutant applied alone, its targeted suite run, the file
+restored from a copy with its sha256 checked.
+
+| id | class | mutant | result |
+| --- | --- | --- | --- |
+| M1 | drop a filter or wrapper on a collection | the adopted filter dropped | killed |
+| M2 | drop a filter or wrapper on a collection | `Object.freeze` dropped from `ADOPTED_RULES` | equivalent: nothing writes to the list, and `as const` keeps it read-only to the compiler |
+| M3 | swap one collection for a related one | the adopted line joins `setForRecordings` | killed |
+| M4 | swap one collection for a related one | the set-for-recordings line joins `experiments` | killed |
+| M5 | swap one collection for a related one | the scorecard probe entry holds the census pair | killed |
+| M6 | swap one collection for a related one | the scorecard inventory scope holds the census pair | killed |
+| M7 | comparison to its inverse | `vent_exit_policy === "look_and_wait"` to `!==` | killed |
+| M8 | comparison to its inverse | `kill_cooldown_ticks != null` to `== null` | killed |
+| M9 | comparison to its inverse | `kill_cooldown_ticks === 1` to `!== 1` | killed |
+| M10 | comparison to its inverse | `!== "target_distance"` to `===` in the movement clause | killed |
+| M11 | comparison to its inverse | `!== "look_and_wait"` to `===` in the movement clause | killed |
+| M12 | comparison to its inverse | `redistribution_policy !== "lowest_id"` to `===` | killed |
+| M13 | comparison to its inverse | `crew_idle_policy !== "hub_wait"` to `===` | killed |
+| M14 | comparison to its inverse | `sabotage_threshold !== "six_sevenths"` to `===` | killed |
+| M15 | comparison to its inverse | `holdsAdoptedValue`'s `===` to `!==` | killed |
+| M16 | comparison to its inverse | `if (!config)` to `if (config)` | killed |
+| M17 | comparison to its inverse | `adopted.length > 0` to `=== 0` | killed |
+| M18 | comparison to its inverse | `count === 1` to `!== 1` | killed |
+| M19 | a kind read to a constant | the factory kind read as `"experimental"` | killed |
+| M20 | a tick read to a constant | the cooldown ticks read as `"6"` | killed |
+| M21 | a tick read to a constant | the caption's `HERO.tick` as `9` | killed |
+| M22 | a tick read to a constant | the caption's `HERO.meetingTick` as `12` | killed |
+| M23 | a message argument to a constant | the adopted rules argument as `""` | killed |
+| M24 | a message argument to a constant | the recording count as `"1"` | killed |
+| M25 | a message argument to a constant | the evidence version as `"1"` | killed |
+| M26 | a message argument to a constant | the impostor policy as "not recorded" | killed (first green) |
+| M27 | a message argument to a constant | the crew policy as "not recorded" | killed (first green) |
+| M28 | a message argument to a constant | the clock version as `"1"` | killed |
+| M29 | a message argument to a constant | the caption's fog subject as `p-5` | killed (first green) |
+| M30 | drop one member of a tuple of kinds | the `vent_entry_policy` row | killed |
+| M31 | drop one member of a tuple of kinds | the `scripted` factory label | killed |
+| M32 | drop one member of a tuple of kinds | `process-scorecard.json` from the inventory scope | killed |
+| M33 | swap adjacent branches | the recording count's one and many | killed |
+| M34 | swap adjacent branches | the cooldown's one and many | killed |
+| M35 | swap adjacent branches | recorded and not-recorded rule settings | killed |
+| M36 | swap adjacent branches | the clock's not-recorded and version | killed |
+| M37 | a read of a loaded source to the canonical literal | the group's game count as 50 | killed |
+
+36 killed, 1 equivalent. No other class was run.
+
+### Validation
+
+| command | result |
+| --- | --- |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
+| `pytest tests/scripts/test_verify_ml_evidence.py tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py` | 0: 428 passed (`-n 6`) |
+| `uv run python scripts/check_doc_facts.py`; `uv run python scripts/validate_task_docs.py` | 0; 0 (96 work cards before this card's flip) |
+| `wc -w README.md` | 1,579 |
+| the re-capture, twice; `shasum -a 256` against `provenance.json` | 3 passed each; equal |
+| `npm run lint`, `tsc:check`, `test`, `build` (frontend) | 0; 0; 0: 26 files, 695 tests; 0 |
+| `npm run e2e` (local, serial, `CI=1`) | 0: 14 passed, 3 skipped (the media spec's, without its capture switch) |
+| `bash scripts/verify_samples.sh`; per set | 0 (50 clean); `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i`: 0 each (50, 50, 150, 50, 50) |
+| `build_sample_report.py --check`, the five sets | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `uv run pytest -m campaign` | 0: 337 passed, as at `59bbd1be` |
+| bundle `build_demo_bundle.py --out` at `5877adb4` and at `52c4b1f3`, one checkout, `diff -rq` | `data/` identical; only the seven hashed JS assets and `index.html` differ |
+| `git diff --numstat 59bbd1be` over the two merged cards | 55 0; 27 0 |
+| `bash scripts/check.sh`, once at the pushed head | recorded in the next commit |
+
+### Decisions
+
+1. Orchestrator ruling 1: Q1 stays open for the owner exactly as the card states. The promotion's note quotes the
+   owner's words verbatim, records that the code holds option (a) and that the twelve commits stand as pushed.
+2. Orchestrator ruling 2: the page calls adopted only the seven pairs of `docs/experiment-arms.md`'s Adopted arms
+   paragraph. `vent_exit_policy = look_and_wait` and the kill cooldown are named as set for these recordings, never as
+   adopted or experimental. The enumeration repeats every one of the 768 renders with one non-default value of each
+   of the eleven other config fields.
+3. Orchestrator ruling 3: the xdist race gets the deterministic guard, the autouse inventory fixture, plus the three
+   `-n 4 --dist load` runs above.
+4. Orchestrator ruling 4: Record impact names the replaced media and the moved `docs/media/` row (below).
+5. Orchestrator ruling 5: M14 and the `docs/deployment.md:127` figure are this card's. M14 is pinned in the test that
+   owns the stage pins, so the promotion's note records M14 closed; the card's "Q1 and M14 open" sentence predates the
+   ruling. The figure is the 9p2i report's size, which the bundle leaves out, so it is measured from the report; the
+   one-checkout bundle confirms the exclusion.
+6. The new copy lead for settings kept but not adopted reads "Also in place:"; each such setting's own words end "set
+   for these recordings", which keeps the cooldown's words unchanged.
+7. The front-door check refuses the words strip and head in both pages outright, stronger than the two phrases the
+   card names; neither page uses either word otherwise.
+8. A recorded tactical policy's method, and recorded rule settings, are now asserted; before, no case rendered them.
+
+### Record impact
+
+- No recorded byte, manifest, report, census, scorecard output or ML artifact moves; no prompt byte or experiment field
+  changes; no evaluation moves.
+- Replaced, class (a), by the documented re-capture only: `docs/media/spectator-two-truths.png`,
+  `spectator-meeting.png`, `spectator-journey.gif`, `spectator-journey.webm` and `docs/media/provenance.json`.
+- `docs/artifacts.md`: the scorecard row gains its third file (3 files); the `docs/media/` row's rounded size moves from
+  1.6 MB to 1.4 MB (1,406,205 tracked bytes, was 1,575,772; the clip is smaller), 7 files.
+- What changes for a reader: the public results card's words for recorded settings and the factory label (in the
+  bundle's JS); the README caption and samples sentence and the hero picture's caption (on the front door). Older
+  payloads render as before except for that wording; no DTO changes.
+
+### Limitations
+
+- One run of the both-files `-n 8 --dist load` command failed one case; its name was not captured (the runner kept
+  only the summary line). The replays/ status was clean after it, and fifteen further runs with failure reports,
+  three under extra load, were all green, so the case and cause are unidentified.
+- The promotion's red-at-base counts stay unreproduced.
+- The capture harness still checks only that both impostors stand in a room; the vent clause is held by the Python
+  scene case instead.
+- On macOS the evolution-strategy hash pin is Linux-only; CI is cited for it if `check.sh` reports it.
+
+### Deviations
+
+- `tests/scripts/test_record_ml_corpus.py` is outside Expected scope: its one decoy case made a directory in the real
+  `replays/ml_corpus/`, which the ruled autouse fixture in `test_refresh_samples.py` would report from a concurrent
+  case under `check.sh`'s `--dist loadfile`. The change is that case alone, reviewed by the orchestrator in the PR.
+- `tests/eval/test_watchability.py` and `docs/deployment.md` are outside Expected scope by orchestrator ruling 5.
+- `acdaddb6`'s message overstated what the capture harness checks; `c91e604b` corrects it, and no pushed commit is
+  rewritten.
