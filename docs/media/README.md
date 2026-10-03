@@ -97,8 +97,10 @@ changed image with unchanged provenance.
 half of the same tick carries two bodies and both impostors — one in MedBay with
 the player it has just killed, the other inside the vents — and at the meeting
 that follows, `p-5` accuses `p-4`, who is also a crewmate. The capture harness
-checks these scene and accusation facts against the served bytes before
-shooting.
+checks the body count, the kill, how many players `p-5` can see and the
+accusation against the served bytes before shooting. The test suite reads each
+claim of the README caption's scene, MedBay and the vent included, and holds it
+to the same bytes in every run.
 
 ### What is deterministic, and what is not
 
