@@ -1041,8 +1041,13 @@ round's changes; no frontend file changed.
 | `uv run pytest -m campaign -n 6` | 0 | 337 passed |
 | `build_demo_bundle.py --out <scratch>/base` at `5877adb4`, then `--out <scratch>/head` at `aa7eab23`, one checkout; `diff -rq` | 0, 0, 0 | no difference across 109 files: nothing publishes |
 
-The full gate, `bash scripts/check.sh`, runs once at this subsection's commit; the commit after it records its
-exit code.
+**The gate, round 1: `bash scripts/check.sh` at `8c155150` in this clean worktree, run once to its end, exit 0**
+(about six minutes by the clock, 02:27 to 02:33): ruff check and format (553 files), import contracts 4 kept and 0
+broken, task docs (390 phase tasks, 96 work cards), prompt sync, strict mypy over 524 sources, pytest 10,162
+passed, 20 skipped and 3 xfailed (the 13 new instrument tests on top of the earlier gate's 10,149), and the
+frontend lint, type check, 649 tests in 25 files and production build. The commit after it changes only this
+card. The evolution-strategy hash pin, Linux-only by its own note, did not fail here; the PR's CI carries the
+Linux run.
 
 Deviations, round 1: the heading carries 2026-10-03, the day these corrections were made (the dispatch named
 2026-10-02). `npm ci` ran in `frontend/` so the gate's frontend legs could run; no frontend file changed. Record
