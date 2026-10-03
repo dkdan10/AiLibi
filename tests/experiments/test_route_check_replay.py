@@ -468,6 +468,48 @@ def test_an_unknown_label_is_refused(
     assert "column label 'r3'" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    "text", ("r2", "r2=", "r2=abc", "r2=abc:", "=abc:replays", "r2=:replays")
+)
+def test_a_malformed_column_request_is_refused(text: str) -> None:
+    with pytest.raises(rcr.RouteCheckReplayError, match="expected LABEL=COMMIT:PATH"):
+        rcr.parse_column_request(text)
+
+
+def test_a_column_path_is_recorded_without_a_trailing_slash() -> None:
+    request = rcr.parse_column_request("r2=abc:replays/samples/9p2i/")
+    assert request == rcr.ColumnRequest("r2", "abc", "replays/samples/9p2i")
+
+
+def test_a_path_that_names_a_file_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, sha = _column_repo(tmp_path)
+    assert _run(repo, tmp_path, f"r2={sha}:replays/samples/9p2i/roster.json") == 1
+    assert "is a blob, not a directory" in capsys.readouterr().err
+
+
+def test_r2s_tree_under_the_s9_label_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, sha = _column_repo(tmp_path)
+    assert _run(repo, tmp_path, f"s9={sha}:replays/samples/9p2i") == 1
+    assert "(no experiment config)" in capsys.readouterr().err
+
+
+def test_a_declared_config_that_is_no_config_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, _ = _column_repo(tmp_path)
+    (repo / "replays" / "samples" / "9p2i" / "experiment-config.json").write_text(
+        '{"format_version": 1, "kill_cooldown_ticks": "six"}\n'
+    )
+    _git(repo, "commit", "-q", "-am", "a broken config")
+    sha = _git(repo, "rev-parse", "HEAD")
+    assert _run(repo, tmp_path, f"r2={sha}:replays/samples/9p2i") == 1
+    assert "is no experiment config" in capsys.readouterr().err
+
+
 def test_check_takes_no_columns_from_the_command_line(
     one_game_run: tuple[Path, Path, str], capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -720,6 +762,44 @@ def test_the_rerender_check_pins_the_ballot_budget(
             game=_r2_game(_RUN_SEED),
             renderers=_canonical_renderers(),
         )
+
+
+def _first_meeting(seed: int) -> Any:
+    return next(
+        iter(
+            walk_replay_meetings(
+                SAMPLES_9P2I / f"replay-seed-{seed}.jsonl",
+                game_map=load_canonical_map(),
+                renderers_for_set=_canonical_renderers(),
+            )
+        )
+    )
+
+
+def test_a_meeting_the_walk_threaded_no_trigger_or_ballot_for_raises() -> None:
+    meeting = _first_meeting(_RUN_SEED)
+    rcr.meeting_inputs(meeting, regroup_ticks=frozenset())
+    with pytest.raises(rcr.RouteCheckReplayError, match="threaded no trigger"):
+        rcr.meeting_inputs(
+            replace(meeting, trigger_kind=None), regroup_ticks=frozenset()
+        )
+    with pytest.raises(rcr.RouteCheckReplayError, match="no ballot render for p-"):
+        rcr.meeting_inputs(
+            replace(
+                meeting,
+                renders=tuple(r for r in meeting.renders if r.kind != "vote_ballot"),
+            ),
+            regroup_ticks=frozenset(),
+        )
+
+
+def test_a_ledger_bound_that_is_no_integer_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert rcr._ledger_bound("MAP_ARBITRATION_MAX_HOPS") == 1
+    monkeypatch.setattr(corroboration, "MAP_ARBITRATION_MAX_HOPS", "1")
+    with pytest.raises(rcr.RouteCheckReplayError, match="is not an integer"):
+        rcr._ledger_bound("MAP_ARBITRATION_MAX_HOPS")
 
 
 def test_meeting_kinds_agree_with_the_census_vent_proof_cells() -> None:
@@ -1604,3 +1684,39 @@ def test_the_committed_columns_name_full_shas_never_a_symbolic_ref() -> None:
         assert len(column["sha"]) == 40 and int(column["sha"], 16) >= 0
         assert len(column["tree"]) == 40 and int(column["tree"], 16) >= 0
         assert column["commit"] != "HEAD"
+
+
+def test_the_committed_r2_column_recomputes_from_the_checkouts_bytes() -> None:
+    """The committed r2 column is what the instrument reads from these replays today.
+
+    The checkout's ``replays/samples/9p2i`` replays are the bytes the column
+    records (nothing under ``replays/`` moved since), so every count of the
+    column, case by case and in aggregate, is recomputed here and compared. A
+    shallow clone runs it: it reads the working tree, never history.
+    """
+
+    payload = json.loads(_COMMITTED_JSON.read_text())
+    (committed,) = [column for column in payload["columns"] if column["label"] == "r2"]
+    census = census_inputs(SAMPLES_9P2I)
+    records, _ = rcr.read_set(SAMPLES_9P2I, label="r2", census=census)
+    source = rcr.ColumnSource(
+        label="r2",
+        commit=committed["commit"],
+        sha=committed["sha"],
+        path=committed["path"],
+        tree=committed["tree"],
+    )
+    column = rcr.column_payload(
+        source,
+        config=committed["recorded_experiment_config"],
+        records=records,
+        roles={game.seed: game.roles for game in census.games},
+    )
+    assert json.loads(json.dumps(column)) == committed
+
+
+def test_the_committed_s9_column_meets_the_agreement() -> None:
+    payload = json.loads(_COMMITTED_JSON.read_text())
+    (s9,) = [column for column in payload["columns"] if column["label"] == "s9"]
+    assert s9["s9_agreement"]["a"] == list(rcr.S9_WALKABLE_PAIR_EJECTIONS)
+    assert s9["sha"] == "d41c90067a0023d08997231f181cc02deb6461bc"

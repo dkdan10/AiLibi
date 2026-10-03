@@ -379,12 +379,7 @@ def materialize(repo: Path, source: ColumnSource, destination: Path) -> Path:
     archive = _git(repo, "archive", "--format=tar", source.sha, "--", source.path)
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
         bundle.extractall(destination, filter="data")
-    set_dir = destination / source.path
-    if not set_dir.is_dir():
-        raise RouteCheckReplayError(
-            f"{source.label}: the archive held no {source.path}"
-        )
-    return set_dir
+    return destination / source.path
 
 
 def declared_config(repo: Path, source: ColumnSource) -> dict[str, object] | None:
@@ -394,11 +389,13 @@ def declared_config(repo: Path, source: ColumnSource) -> dict[str, object] | Non
     if path is None:
         return None
     raw = _git(repo, "show", f"{source.sha}:{path}")
-    RecordedExperimentConfig.model_validate_json(raw)
-    loaded = json.loads(raw)
-    if not isinstance(loaded, dict):
-        raise RouteCheckReplayError(f"{source.label}: {path} is not a JSON object")
-    return cast(dict[str, object], loaded)
+    try:
+        RecordedExperimentConfig.model_validate_json(raw)
+    except ValueError as error:
+        raise RouteCheckReplayError(
+            f"column {source.label}: {path} at {source.sha} is no experiment config"
+        ) from error
+    return cast(dict[str, object], json.loads(raw))
 
 
 def require_declared_settings(
@@ -1493,7 +1490,7 @@ def read_meeting(
         check="(c)",
     )
     c_lines = {
-        subject: [pair for pair in c_pairs(found, regroup_ticks=regroup)]
+        subject: c_pairs(found, regroup_ticks=regroup)
         for subject, found in spots.items()
     }
     b_readings = {
@@ -1669,7 +1666,7 @@ def _read_case(
                 ),
             )
         )
-    shown_c = [pair for pair in c_lines.get(ejected, ())]
+    shown_c = c_lines.get(ejected, ())
     reaches_c = bool(shown_c) and bool(eject_voters)
     checks.append(
         (
