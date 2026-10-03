@@ -353,6 +353,14 @@ def test_the_hero_caption_claims_only_what_the_picture_shows() -> None:
     root = Path(__file__).resolve().parents[2]
     spec = (root / _MEDIA_SPEC).read_text()
     assert _hero_caption_problems(spec) == []
+    # The whole template, so no clause of it can drift without this case seeing.
+    caption = "".join(re.findall(r"`([^`]*)`", _CAPTION_TEMPLATE.findall(spec)[0]))
+    assert caption == (
+        "Left: what happened at tick ${String(HERO.tick)}. Right: what "
+        "${HERO.fogSubject} could see at the same tick. Below: the accusation "
+        "${HERO.fogSubject} wrote at the meeting that followed, at tick "
+        "${String(HERO.meetingTick)}."
+    )
     # Planted: the `59bbd1be` caption and comment fail by name.
     assert _hero_caption_problems(_SPEC_AT_59BBD1BE) == [
         "says 'when it voted'",

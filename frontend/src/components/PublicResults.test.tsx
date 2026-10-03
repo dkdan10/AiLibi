@@ -176,6 +176,10 @@ describe("public result interpretation", () => {
     const many = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [{ ...group(OLDER), game_ids: ["headless-seed-1", "headless-seed-2"] }] }} />);
     expect(many).toContain("Built-in agents with recorded tactical settings</strong> · 2 recordings.");
     expect(lines).toContain("Impostor policy: not recorded. Crew policy: not recorded. Rule settings: not recorded.");
+    const policy = { policy_id: "id", encoder_version: "e1", weights_sha256: "sha", anchor_policy: "anchor" };
+    const recorded = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [{ ...group(OLDER), tactical_policy: { ...policy, method: "rule-based impostor" }, crew_tactical_policy: { ...policy, method: "rule-based crew" }, substrate_flags: {}, temporal_observation_version: 2 }] }} />);
+    expect(recorded).toContain("Impostor policy: rule-based impostor. Crew policy: rule-based crew. Rule settings: recorded.");
+    expect(recorded).toContain("Observation clock: v2.");
   });
 
   it("reads the shown set's declared config off disk and calls nothing on its card an experiment", () => {
