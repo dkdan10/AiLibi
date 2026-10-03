@@ -331,7 +331,7 @@ test.describe("static demo bundle", () => {
     page,
     bundle,
   }) => {
-    // Deliberate omission, not an oversight: the 9p2i tournament report is 29 MB.
+    // Deliberate omission, not an oversight: the 9p2i tournament report is 33 MB.
     // The dashboard's existing first-class no-report panel is the honest state,
     // and pinning it here keeps the omission a DECISION rather than a surprise.
     const apiAttempts = await forbidApi(page);
