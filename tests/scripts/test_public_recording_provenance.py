@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +12,7 @@ import pytest
 
 import build_demo_bundle as bdb
 from api.replay_loader import ReplayLoader
+from api.schemas import AccusationClaimView, ReplayView
 from experiments.lab.rubric_score import regen_for_set
 from orchestrator.recording_fingerprint import recording_fingerprint
 from orchestrator.replay import GameEndReplayEntry, MeetingReplayEntry, read_all_entries
@@ -263,49 +263,381 @@ def test_the_front_door_names_the_pictured_game_in_plain_words(
     assert "inside a vent" not in _readme_caption(planted.read_text())
 
 
-#: The caption's scene: the pictured game and tick, and the room the impostor
-#: standing outside the vents is in.
-_HERO_GAME, _HERO_TICK, _HERO_ROOM = "headless-seed-19", 9, "MEDBAY"
+#: The pictured game; `test_media_hashes_and_labels_are_current` holds it to the
+#: captured recording and to the caption's seed.
+_HERO_GAME = "headless-seed-19"
+
+#: The caption's scene clause. Each claim in it is a named group, read back out
+#: of the caption and held to the served replay at the tick the caption names.
+_CAPTION_SCENE = re.compile(
+    r"at tick (?P<tick>\d+) (?P<dead>[a-z]+) players lie dead, one impostor "
+    r"stands in (?P<room>[A-Za-z ]+?) and the other is inside a vent, while "
+    r"(?P<subject>p-\d+) can see only (?P<seen>p-\d+), whom "
+    r"(?P<accuser>p-\d+) accuses at the meeting that follows\."
+)
+
+#: The number words a caption counts in, each at its own value.
+_COUNT_WORDS = (
+    "no",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+)
+
+#: The `tick` of the capture spec's `HERO`: the tick both halves are shot at.
+_PICTURE_TICK = re.compile(r"const HERO = \{[^}]*?\n  tick: (\d+),")
 
 
-def _hero_scene_problems(
-    impostors: Sequence[tuple[str | None, bool]], bodies: int
+def _picture_tick(spec: str) -> int:
+    """The tick the capture spec shoots the hero picture at."""
+
+    ticks = _PICTURE_TICK.findall(spec)
+    if len(ticks) != 1:
+        raise ValueError(f"expected one HERO tick in the spec, found {len(ticks)}")
+    return int(ticks[0])
+
+
+def _caption_scene_problems(
+    caption: str, replay: ReplayView, picture_tick: int
 ) -> list[str]:
-    """Why the caption's scene is not the one recorded, given each impostor's
-    (room, inside-a-vent) and the body count at the pictured tick."""
+    """Why the caption's scene is not what the served replay records.
 
+    Every claim is read from the caption: the tick, which must be the one the
+    picture shows; how many players lie dead; the room, by the map's own name,
+    the impostor outside the vents stands in; the one player the fog subject can
+    see; and the accuser's accusation of that player at the first meeting after
+    the tick.
+    """
+
+    scene = _CAPTION_SCENE.search(caption)
+    if scene is None:
+        return ["the caption names no scene"]
+    tick = int(scene["tick"])
     problems = []
-    if bodies != 2:
-        problems.append(f"{bodies} bodies, not two")
-    if sorted(venting for _room, venting in impostors) != [False, True]:
-        problems.append("not exactly one impostor inside a vent")
-    if [room for room, venting in impostors if not venting] != [_HERO_ROOM]:
-        problems.append(f"the impostor outside the vents is not in {_HERO_ROOM}")
-    return problems
+    if tick != picture_tick:
+        problems.append(f"names tick {tick}, the picture shows tick {picture_tick}")
+    frames = [frame for frame in replay.ticks if frame.tick == tick]
+    if len(frames) != 1:
+        return [*problems, f"the replay has no tick {tick}"]
+    frame = frames[0]
 
+    dead = scene["dead"]
+    if dead not in _COUNT_WORDS or _COUNT_WORDS.index(dead) != len(frame.bodies):
+        problems.append(
+            f"says {dead} players lie dead, the replay has {len(frame.bodies)}"
+        )
 
-def test_the_captions_scene_is_the_recorded_one() -> None:
-    # The README caption says that at tick 9 two players lie dead, one impostor
-    # stands in MedBay and the other is inside a vent. The capture harness runs
-    # only under its capture switch, so the claim is held here, in every run, to
-    # the replay the demo serves.
-    root = Path(__file__).resolve().parents[2]
-    replay = ReplayLoader(root / "replays/samples/9p2i").load_replay(_HERO_GAME)
-    frame = next(frame for frame in replay.ticks if frame.tick == _HERO_TICK)
     roles = {player.agent_id: player.role for player in replay.players}
     impostors = [
-        (state.room_id, state.is_venting)
+        state
         for state in frame.agent_states
         if roles[state.agent_id] == "IMPOSTOR" and state.is_alive
     ]
-    assert _hero_scene_problems(impostors, len(frame.bodies)) == []
-    # Planted: the scene the `59bbd1be` caption described, both impostors in rooms.
-    standing = [(room, False) for room, _venting in impostors]
-    assert _hero_scene_problems(standing, len(frame.bodies)) == [
-        "not exactly one impostor inside a vent",
-        f"the impostor outside the vents is not in {_HERO_ROOM}",
+    venting = sum(state.is_venting for state in impostors)
+    if venting != 1:
+        problems.append(f"says one impostor is inside a vent, the replay has {venting}")
+    room_ids = {room.name: room.id for room in replay.map.rooms}
+    standing = [state.room_id for state in impostors if not state.is_venting]
+    if scene["room"] not in room_ids:
+        problems.append(f"names no room called {scene['room']}")
+    elif standing != [room_ids[scene["room"]]]:
+        problems.append(
+            f"says one impostor stands in {scene['room']}, the replay has {standing}"
+        )
+
+    subject = {state.agent_id: state for state in frame.agent_states}.get(
+        scene["subject"]
+    )
+    seen = (
+        None
+        if subject is None or subject.visibility is None
+        else [player.id for player in subject.visibility.visible_players]
+    )
+    if seen != [scene["seen"]]:
+        problems.append(
+            f"says {scene['subject']} can see only {scene['seen']}, "
+            f"the replay has {seen}"
+        )
+
+    following = [meeting for meeting in replay.meetings if meeting.tick > tick]
+    accused = (
+        []
+        if not following
+        else [
+            claim.against
+            for turn in min(following, key=lambda meeting: meeting.tick).turns
+            if turn.speaker == scene["accuser"]
+            for claim in turn.claims
+            if isinstance(claim, AccusationClaimView)
+        ]
+    )
+    if scene["seen"] not in accused:
+        problems.append(
+            f"says {scene['accuser']} accuses {scene['seen']} at the meeting that "
+            f"follows, the replay has {accused}"
+        )
+    return problems
+
+
+def _readme_scene_problems(root: Path, replay: ReplayView) -> list[str]:
+    """The scene problems of the caption in ``root``'s README, at the tick
+    ``root``'s capture spec shoots the picture at."""
+
+    caption = _readme_caption((root / "README.md").read_text())
+    return _caption_scene_problems(
+        caption, replay, _picture_tick((root / _MEDIA_SPEC).read_text())
+    )
+
+
+def _scratch_front_door(
+    root: Path, scratch: Path, *, caption_edit: tuple[str, str] | None = None
+) -> Path:
+    """A scratch copy of the README and the capture spec, with one caption
+    phrase replaced when ``caption_edit`` names one (old, new)."""
+
+    readme = (root / "README.md").read_text()
+    if caption_edit is not None:
+        caption = _readme_caption(readme)
+        old, new = caption_edit
+        assert caption.count(old) == 1, old
+        readme = readme.replace(caption, caption.replace(old, new))
+    (scratch / "README.md").write_text(readme)
+    spec = scratch / _MEDIA_SPEC
+    spec.parent.mkdir(parents=True, exist_ok=True)
+    spec.write_bytes((root / _MEDIA_SPEC).read_bytes())
+    return scratch
+
+
+@pytest.fixture(scope="module")
+def hero_replay() -> ReplayView:
+    root = Path(__file__).resolve().parents[2]
+    return ReplayLoader(root / "replays/samples/9p2i").load_replay(_HERO_GAME)
+
+
+def _with_frame(replay: ReplayView, tick: int, **update: Any) -> ReplayView:
+    """The replay with the frame at ``tick`` changed by ``update``."""
+
+    ticks = tuple(
+        frame.model_copy(update=update) if frame.tick == tick else frame
+        for frame in replay.ticks
+    )
+    return replay.model_copy(update={"ticks": ticks})
+
+
+def test_the_captions_scene_is_the_recorded_one(
+    tmp_path: Path, hero_replay: ReplayView
+) -> None:
+    # The README caption names a tick, how many players lie dead there, the room
+    # one impostor stands in while the other is inside a vent, the one player
+    # the fog subject can see and its accusation at the next meeting. The capture
+    # harness runs only under its capture switch, so every one of those words is
+    # read out of the caption here and held, in every run, to the replay the
+    # demo serves and to the tick the capture spec shoots.
+    root = Path(__file__).resolve().parents[2]
+    assert _readme_scene_problems(root, hero_replay) == []
+    caption = _readme_caption((root / "README.md").read_text())
+    tick = _picture_tick((root / _MEDIA_SPEC).read_text())
+
+    # Planted: a scratch spec shooting another tick; the read follows the spec.
+    scratch = _scratch_front_door(root, tmp_path)
+    spec = scratch / _MEDIA_SPEC
+    spec.write_text(
+        spec.read_text().replace(f"\n  tick: {tick},", f"\n  tick: {tick + 1},")
+    )
+    assert _readme_scene_problems(scratch, hero_replay) == [
+        f"names tick {tick}, the picture shows tick {tick + 1}"
     ]
-    assert _hero_scene_problems(impostors, 1) == ["1 bodies, not two"]
+
+    # Planted: the replay changed under the caption at the pictured tick.
+    frame = next(frame for frame in hero_replay.ticks if frame.tick == tick)
+    standing = _with_frame(
+        hero_replay,
+        tick,
+        agent_states=tuple(
+            state.model_copy(update={"is_venting": False})
+            for state in frame.agent_states
+        ),
+    )
+    assert _caption_scene_problems(caption, standing, tick) == [
+        "says one impostor is inside a vent, the replay has 0",
+        "says one impostor stands in MedBay, the replay has ['STORAGE', 'MEDBAY']",
+    ]
+    impostor_ids = {
+        player.agent_id for player in hero_replay.players if player.role == "IMPOSTOR"
+    }
+    both_venting = _with_frame(
+        hero_replay,
+        tick,
+        agent_states=tuple(
+            state.model_copy(update={"is_venting": True})
+            if state.agent_id in impostor_ids
+            else state
+            for state in frame.agent_states
+        ),
+    )
+    assert _caption_scene_problems(caption, both_venting, tick) == [
+        "says one impostor is inside a vent, the replay has 2",
+        "says one impostor stands in MedBay, the replay has []",
+    ]
+    venter_dead = _with_frame(
+        hero_replay,
+        tick,
+        agent_states=tuple(
+            state.model_copy(update={"is_alive": False}) if state.is_venting else state
+            for state in frame.agent_states
+        ),
+    )
+    assert _caption_scene_problems(caption, venter_dead, tick) == [
+        "says one impostor is inside a vent, the replay has 0"
+    ]
+    one_body = _with_frame(hero_replay, tick, bodies=frame.bodies[:1])
+    assert _caption_scene_problems(caption, one_body, tick) == [
+        "says two players lie dead, the replay has 1"
+    ]
+    # The meeting that follows is the earliest after the tick, in any listing order.
+    reversed_meetings = hero_replay.model_copy(
+        update={"meetings": hero_replay.meetings[::-1]}
+    )
+    assert _caption_scene_problems(caption, reversed_meetings, tick) == []
+
+    # Planted: the map's own name for the room changes; the read follows it.
+    renamed = hero_replay.model_copy(
+        update={
+            "map": hero_replay.map.model_copy(
+                update={
+                    "rooms": tuple(
+                        room.model_copy(update={"name": "Sickbay"})
+                        if room.id == "MEDBAY"
+                        else room
+                        for room in hero_replay.map.rooms
+                    )
+                }
+            )
+        }
+    )
+    assert _caption_scene_problems(caption, renamed, tick) == [
+        "names no room called MedBay"
+    ]
+    sickbay = caption.replace("stands in MedBay", "stands in Sickbay")
+    assert _caption_scene_problems(sickbay, renamed, tick) == []
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "problems"),
+    [
+        pytest.param(
+            "stands in MedBay",
+            "stands in Admin",
+            ["says one impostor stands in Admin, the replay has ['MEDBAY']"],
+            id="another-room",
+        ),
+        pytest.param(
+            "stands in MedBay",
+            "stands in Sickbay",
+            ["names no room called Sickbay"],
+            id="no-such-room",
+        ),
+        pytest.param(
+            "two players lie dead",
+            "three players lie dead",
+            ["says three players lie dead, the replay has 2"],
+            id="another-count",
+        ),
+        pytest.param(
+            "at tick 9 ",
+            "at tick 12 ",
+            [
+                "names tick 12, the picture shows tick 9",
+                "says one impostor stands in MedBay, the replay has ['ENGINEERING']",
+                "says p-5 accuses p-4 at the meeting that follows, the replay has []",
+            ],
+            id="another-tick",
+        ),
+        pytest.param(
+            "can see only p-4",
+            "can see only p-3",
+            [
+                "says p-5 can see only p-3, the replay has ['p-4']",
+                "says p-5 accuses p-3 at the meeting that follows, the replay has "
+                "['p-4']",
+            ],
+            id="another-sighting",
+        ),
+        pytest.param(
+            "while p-5 can see",
+            "while p-3 can see",
+            ["says p-3 can see only p-4, the replay has []"],
+            id="another-subject",
+        ),
+        pytest.param(
+            "whom p-5 accuses",
+            "whom p-6 accuses",
+            [
+                "says p-6 accuses p-4 at the meeting that follows, the replay has "
+                "['p-1']"
+            ],
+            id="another-accuser",
+        ),
+    ],
+)
+def test_a_caption_naming_another_scene_fails_by_name(
+    tmp_path: Path,
+    hero_replay: ReplayView,
+    old: str,
+    new: str,
+    problems: list[str],
+) -> None:
+    # Each planted caption is the README's own with one scene word changed, in a
+    # scratch README read back the way the real one is.
+    root = Path(__file__).resolve().parents[2]
+    scratch = _scratch_front_door(root, tmp_path, caption_edit=(old, new))
+    assert _readme_scene_problems(scratch, hero_replay) == problems
+
+
+@pytest.mark.parametrize(
+    ("word", "dead"),
+    [
+        ("no", 0),
+        ("one", 1),
+        ("two", 2),
+        ("three", 3),
+        ("four", 4),
+        ("five", 5),
+        ("six", 6),
+        ("seven", 7),
+        ("eight", 8),
+        ("nine", 9),
+    ],
+)
+def test_the_caption_counts_its_dead_in_words(
+    hero_replay: ReplayView, word: str, dead: int
+) -> None:
+    # A caption that counts the dead in a word holds exactly when the pictured
+    # frame carries that many bodies, and fails by name on one more.
+    root = Path(__file__).resolve().parents[2]
+    caption = _readme_caption((root / "README.md").read_text())
+    tick = _picture_tick((root / _MEDIA_SPEC).read_text())
+    frame = next(frame for frame in hero_replay.ticks if frame.tick == tick)
+    counted = caption.replace("two players lie dead", f"{word} players lie dead")
+    exact = _with_frame(hero_replay, tick, bodies=frame.bodies[:1] * dead)
+    assert _caption_scene_problems(counted, exact, tick) == []
+    more = _with_frame(hero_replay, tick, bodies=frame.bodies[:1] * (dead + 1))
+    assert _caption_scene_problems(counted, more, tick) == [
+        f"says {word} players lie dead, the replay has {dead + 1}"
+    ]
+
+
+def test_the_59bbd1be_caption_names_no_scene(hero_replay: ReplayView) -> None:
+    # Planted: the caption `59bbd1be` published, both impostors on the map.
+    assert _caption_scene_problems(_CAPTION_AT_59BBD1BE, hero_replay, 9) == [
+        "the caption names no scene"
+    ]
 
 
 _MEDIA_SPEC = "frontend/e2e/media.spec.ts"
