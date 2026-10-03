@@ -6523,8 +6523,9 @@ def test_the_impostor_only_floor_reads_recorded_targets_on_either_side() -> None
 
     ``SKIP`` sorts before ``p-2`` and ``p-3`` after it; neither joins the
     ejection. One impostor's ballot was rewritten to ``p-2`` from ``p-4``, and the
-    floor reads the recorded target; the other impostor's gives ``p-2`` the
-    plurality the recorded ejection needs.
+    floor reads the recorded target. The other impostor's, below the floor, gives
+    ``p-2`` the plurality the recorded ejection needs and is not read: a floor
+    that read the authored target would find no confident ballot for ``p-2``.
     """
 
     planted = game(
@@ -6534,7 +6535,7 @@ def test_the_impostor_only_floor_reads_recorded_targets_on_either_side() -> None
                 ejected="p-2",
                 ballots=(
                     ballot("p-0", "p-2", authored="p-4"),
-                    ballot("p-1", "p-2"),
+                    ballot("p-1", "p-2", confidence=0.1),
                     ballot("p-3", "SKIP"),
                     ballot("p-4", "p-3"),
                 ),

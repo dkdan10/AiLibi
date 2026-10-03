@@ -126,6 +126,7 @@ session scratchpad, 2026-10-02); the reporter-justice survivor there is equivale
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
+- [x] Review correction: the floor test's re-derived carrier catches an authored-target read again. `test_the_impostor_only_floor_reads_recorded_targets_on_either_side` had gained a second impostor ballot for the ejected player at 0.9, which a floor reading `authored_target` still found; that ballot now sits at 0.1, below the floor, so the tally still ejects and the floor reads only the rewritten ballot. Proved by the probe that reads `ballot.authored_target` in the floor, which survived at `ecf51aa1` and is red at this head (Results, review corrections round 1), and by Decision 8 listing the carrier's old and new ballot.
 - [x] **The per-seat cells.** Mechanism: one fold over report meetings (`trigger_kind == "report"`). It uses the
   existing vent-proof predicate (a vent-sighting flag naming a player alive at the open, as
   `meetings_with_vent_proof` reads it) and the reporter-first partition of `eval/reporter_justice.py`. It produces the
@@ -665,6 +666,13 @@ Decisions 1 to 6 record the orchestrator's rulings of 2026-10-02 on the card's o
    the floor (old: one impostor ballot at 0.1, expected `(0, 1, 0)`), a tally the game cannot produce. Its new
    case is an impostor ballot at 0.9 beside a crewmate's at 0.1 (expected `(1, 1, 0)`); dropping the confidence
    filter still turns it red. The cell's `bool(confident)` guard is now unreachable on a conforming carrier.
+   One carrier gained a ballot of another shape: `test_the_impostor_only_floor_reads_recorded_targets_on_either_side`
+   held one impostor ballot for the ejected `p-2` (rewritten from `p-4`) beside a SKIP and a ballot for `p-3`, a
+   tie the tally skips. `3eb8cc5b` added the other impostor's ballot for `p-2` at 0.9, which a floor reading the
+   authored target also found, so the test stopped catching that read. Review round 1 lowered it below the
+   floor: old `ballot("p-1", "p-2")` at 0.9, new `ballot("p-1", "p-2", confidence=0.1)`. The tally still
+   ejects `p-2` (two ballots, one at the floor), the expected `(1, 1, 0)` is unchanged, and the authored-target
+   read gives `(0, 1, 0)`, red.
    One pin of this card's own moved during the neuter pass: the rebuttal-citation test gained a second citing
    ballot, so its counts went from `(1, 6, 0)` for both cells to `(2, 7, 0)` and `(1, 7, 0)`.
 9. **The recorded outcome's seat is reporter-first only at a report meeting**: a button meeting's presser ejected
@@ -703,3 +711,68 @@ Decisions 1 to 6 record the orchestrator's rulings of 2026-10-02 on the card's o
 ### Deviations
 
 None outside the Expected scope. The follow-through in Decision 12 stays inside files this card owns.
+
+### Review corrections, round 1 (2026-10-02)
+
+One blocking finding from the integrity review of the pull request, repaired on top of `ecf51aa1`. `origin/main`
+was still `5877adb4`, and no `audits/`, `replays/`, `docs/media` or `tests/fixtures/` byte moved, so the inventory
+sentence and this card's row of `docs/artifacts.md` stand as derived. No production line changed.
+
+**The finding.** Re-deriving the hand-built carriers for the tally identity (Decision 8) had weakened
+`test_the_impostor_only_floor_reads_recorded_targets_on_either_side`. The ballot `3eb8cc5b` added, the second
+impostor's for the ejected `p-2`, sat at 0.9, so a floor that read `authored_target` in place of the recorded
+`target` still found an impostor-only floor and the test stayed green. The repair lowers that ballot to 0.1, below
+the floor. The tally still ejects `p-2` (two ballots against one SKIP and one for `p-3`, one of the two at the
+floor), and the floor reads only the rewritten ballot. Decision 8 now lists the carrier's old and new ballot; the
+expected `(1, 1, 0)` is unchanged.
+
+**The probe, green first and then red.** The probe makes the floor's filter read `ballot.authored_target`. It ran
+against the three suites that read the cell (`tests/eval/test_gameplay_census.py`,
+`tests/scripts/test_publish_gameplay_census.py`, `tests/meetings/test_ballot_arms.py`), with the module restored
+from a copy after each run:
+- against `ecf51aa1`'s test file: survived, 471 passed (the green the review found);
+- against this head's: killed, 1 failed and 470 passed, the named test red.
+
+**A bounded mutation pass over the span the finding names**: the `ejections_carried_only_by_impostor_ballots`
+count in `_fold_ballots` (`eval/gameplay_census.py`). It used only the listed operator classes; 13 mutants, each
+alone against the same three suites.
+
+| id | class | mutant | result | red, or the reason |
+|---|---|---|---|---|
+| W01 | swap a collection for a related one | the filter reads `authored_target` | killed | `test_the_impostor_only_floor_reads_recorded_targets_on_either_side` |
+| F02 | drop a filter | the confidence filter dropped | killed | 3 tests: `test_an_ejection_carried_only_by_impostor_ballots_reads_the_recorded_floor`, `test_the_impostor_only_floor_reads_only_confident_ballots_for_the_ejected`, `test_the_honesty_cells_count_the_scripted_ballots` |
+| F03 | drop a filter | the ejected-target filter dropped | killed | 2 tests: both impostor-only floor tests |
+| F04 | drop a wrapper | the `bool(confident)` guard dropped | equivalent | an ejection with no ballot at the floor for the ejected player is not a tally the game produces (rule 4 of `tally_ballots`), and the tally identity refuses it before the fold returns (Decision 8) |
+| C05 | comparison to its inverse | `meeting.ejected is None` | killed | 8 tests, among them `test_the_committed_census_matches_a_recomputation` |
+| C06 | comparison to its inverse | `ballot.target != meeting.ejected` | killed | 8 tests |
+| C07 | comparison to its inverse | `ballot.confidence < meeting.ballot_floor` | killed | 3 tests |
+| R08 | role read to a constant | every confident voter read as an impostor | killed | 5 tests |
+| R09 | role read to a constant | no confident voter read as an impostor | killed | 4 tests |
+| S10 | swap a collection for a related one | the voter list reads `ballot.target` | killed | 8 tests |
+| S11 | swap a collection for a related one | the ballots read through the impostor-as-SKIP re-tally | killed | 4 tests |
+| L12 | loaded source to the canonical literal | the recorded floor read as 0.6 | killed | `test_an_ejection_carried_only_by_impostor_ballots_reads_the_recorded_floor` |
+| M13 | message argument to a constant | `where="x"` | equivalent | the cell carries no guard, so `_Accumulator.count` never formats `where` for it |
+
+Green first: W01 alone, against `ecf51aa1`'s test file. Equivalent: F04 and M13, each for its reason. The script
+and its copies lived in the session scratchpad.
+
+**Validation at the fix commit**, each run to its end with its exit code captured directly:
+
+| command | exit, and what it printed |
+|---|---|
+| `env \| grep -c '^AILIBI_'` | `0` |
+| `uv run pytest` over the card's five suites, `-n 6 --dist loadfile` | 0: 581 passed |
+| `uv run pytest tests/meetings/test_ballot_arms.py` | 0: 84 passed |
+| `uv run ruff check` and `ruff format --check` on the test file | 0: clean, already formatted |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0: both files consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/candidates/stage-b-r1/9p2i --json-stdout` | 0: section `stage-b-r1/9p2i`, 50 games, 124 meetings; nothing written |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0: both scorecard files consistent; `git diff --stat main -- replays/ docs/process-scorecard.md docs/process-scorecard.json` empty |
+| `uv run python -m eval.reporter_justice replays/samples/9p2i replays/ml_corpus/9p2i` | 0: per-slot reporter 17/114, innocent non-reporter 5/367, impostor 41/195; and 29/416, 2/1318, 210/597 |
+| `uv run python scripts/verify_ml_evidence.py` (offline; never `--complete`) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
+| `bash scripts/verify_samples.sh <dir>`, once per set: `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, round 1 | 0 each |
+| `uv run python scripts/build_sample_report.py --check --sample-dir <dir>`, the same five sets | 0 each |
+| `uv run pytest -m campaign -n 6` | 0: 337 passed |
+| `uv run python scripts/validate_task_docs.py` | 0: 390 historical phase tasks and 390 prompts; 96 work cards |
+| `uv run python scripts/check_doc_facts.py` | 0 |
+
+No frontend file changed, so `npm --prefix frontend test` and the e2e were not run.
