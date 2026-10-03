@@ -775,5 +775,6 @@ and its copies lived in the session scratchpad.
 | `uv run python scripts/validate_task_docs.py` | 0: 390 historical phase tasks and 390 prompts; 96 work cards |
 | `uv run python scripts/check_doc_facts.py` | 0 |
 | demo bundle: `build_demo_bundle.py --out` at `5877adb4`, then at the fix commit `0b6fa67d`, in this one checkout; `diff -rq` | 0: the two bundles' 109 files are byte-identical; nothing ships |
+| `bash scripts/check.sh` at the pushed head `45e5ec54`, run once, its exit code captured directly | 0: ruff and format clean (551 files), the four import-linter contracts kept, task docs valid, strict mypy clean (522 source files), 10,106 Python tests passed (20 skipped, 3 xfailed), frontend lint and type checks clean, 649 frontend tests passed (25 files), the frontend build green. The commit recording this changes only this row |
 
 No frontend file changed, so `npm --prefix frontend test` and the e2e were not run.
