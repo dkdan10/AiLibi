@@ -1,6 +1,6 @@
 # Offline replay of the route checks on the committed recordings
 
-**Status:** ready
+**Status:** active
 
 ## Outcome
 
@@ -118,7 +118,7 @@ census `kills_seen_by_crew`, 3, 4 and 14).
 
 ## Acceptance
 
-- [ ] **Columns with exact provenance.** `uv run python -m experiments.lab.route_check_replay --set
+- [x] **Columns with exact provenance.** `uv run python -m experiments.lab.route_check_replay --set
   LABEL=COMMIT:PATH ...` resolves each COMMIT to its full commit sha when the run starts (`git rev-parse
   --verify COMMIT^{commit}`), materializes every column with `git archive SHA PATH` into a temporary directory,
   and records each column's full sha beside its path, tree id and recorded experiment config in the JSON.
@@ -136,14 +136,14 @@ census `kills_seen_by_crew`, 3, 4 and 14).
     column. In a temporary repository, a file committed into a column's directory after the run (as
     `rubric-extractor-era` will add `replays/samples/9p2i/results-rubric-score.json`) leaves `--check` green,
     because `--check` reads the recorded sha.
-- [ ] **A faithful walk, or none.** Every meeting is read through `walk_replay_meetings` with the recording's
+- [x] **A faithful walk, or none.** Every meeting is read through `walk_replay_meetings` with the recording's
   settings. The instrument raises, naming (column, seed, meeting), when a recorded prompt is missed, when a
   state hash differs, and when its meetings per column differ from the census's (`load_census_inputs`). Each
   meeting is counted before the walk resumes, and the live memories are left as they were. Mechanism: the
   integrity checks, and a test comparing each live memory before and after the per-meeting counting. Planted:
   a temporary copy of one r2 game with one byte of a recorded prompt flipped raises; a census fact list with
   one meeting removed raises; a counting step that appends one row to the live store fails the comparison.
-- [ ] **(a) as the manager builds it.** The instrument calls `build_testimony_ledger` with the firewalled
+- [x] **(a) as the manager builds it.** The instrument calls `build_testimony_ledger` with the firewalled
   sighting mapping, the movement records, the opener, the living roster, the trigger kind and
   `derive_regroup_ticks(recorded, earlier meeting ticks)` (`orchestrator/replay.py:1498-1514`), and shows a
   row to the voters whose `_candidate_targets` (`meetings/manager.py:5472`) hold the subject. Mechanism: a
@@ -154,14 +154,14 @@ census `kills_seen_by_crew`, 3, 4 and 14).
   `meetings.corroboration`'s namespace: the tick bound set to 2 reconciles a planted West Hall at t, Admin at
   t+2; with it, the hop bound set to 2 also reconciles planted case 2; the subject cap set to 1 cuts a planted
   three-pair row to one line. So the instrument reads the live rule and holds no copy of it.
-- [ ] **The dispute settled.** Beside (a) as built, a perturbed leg drops the movement records and regroup ticks
+- [x] **The dispute settled.** Beside (a) as built, a perturbed leg drops the movement records and regroup ticks
   (the transcript-only probe). Results reports both on r2's innocent ejections, impostor ejections and ejected
   witnesses, names the input that moves each case between the legs, and explains any difference from 12/22,
   17/22, 0/5 or 3/5 case by case. On s9, (a) as built must read 13 of 90 ejections with a walkable pair; a
   different figure stops the card and goes to the orchestrator, and is never adjusted to fit. Mechanism: the
   two legs and the s9 agreement assertion. Perturbed: the assertion with its expected figure moved by one
   fails; Results also states whether the transcript-only leg would pass it on s9.
-- [ ] **(b) as the recorded field renders it.** For each voter, the instrument calls `v2_evidence_context_rows`
+- [x] **(b) as the recorded field renders it.** For each voter, the instrument calls `v2_evidence_context_rows`
   on a version-2 view of the voter's memory at the meeting's open, deriving the voter's own id and teammates
   as the store does (`_latest_self_guard_fields`, `agents/memory/store.py:1162`). It classifies every travel
   row as fits, cannot reconcile, insufficient timing, crosses the regroup or unverifiable, and raises on a
@@ -171,18 +171,18 @@ census `kills_seen_by_crew`, 3, 4 and 14).
   raises otherwise. Mechanism: the classifier and an equivalence test: one ingestion sequence into a
   version-None and a version-2 memory yields identical travel rows. Planted: a travel line with an altered
   suffix raises; a claim row injected into a first-meeting memory raises.
-- [ ] **(b-snapshot), labelled.** The same rows with each plain recorded sighting (built from the pre-action
+- [x] **(b-snapshot), labelled.** The same rows with each plain recorded sighting (built from the pre-action
   state, no action payload) labelled a start-of-tick snapshot; move rows and action-sourced rows stay unknown.
   The report calls it an approximation of temporal delivery, which would also add event rows these bytes lack.
   Mechanism: the relabelling function and its unit test. Planted: relabelling a move row turns that test red.
-- [ ] **(c), the reference reading.** Its placements are `reconstruct_stated_paths` with the movement records,
+- [x] **(c), the reference reading.** Its placements are `reconstruct_stated_paths` with the movement records,
   the regroup ticks and `include_kill_scene=True`, plus the stays of alibi routes about the candidate
   (`maximal_stays`, `meetings/transcript.py:991`) at their first and last tick, for every living candidate. A
   pair in two different rooms is reconciled when `1 <= hops <= elapsed` over the whole canonical map
   (`room_hops` bounded by the room count), and a pair whose interval holds a public regroup tick is reconciled
   by the regroup. No `meetings/` or `agents/` code changes. Mechanism: unit tests over the planted cases.
   Planted: dropping the regroup marking turns case 3 red.
-- [ ] **The planted route cases tell the checks apart.** Each runs through the code paths the walk uses (a
+- [x] **The planted route cases tell the checks apart.** Each runs through the code paths the walk uses (a
   built transcript for (a) and (c); a built memory on the canonical public map for (b)):
 
   | case | (a) | (b) unknown phase | (b) snapshot phase | (c) |
@@ -195,12 +195,12 @@ census `kills_seen_by_crew`, 3, 4 and 14).
   In case 3 a meeting closes at tick 10, (a) leaves the charge unanswered, and a sighting inside the regroup
   window is dropped. Mechanism: the four tests. Proof: the four rows are pairwise distinct, so a classifier
   that conflated any two checks fails at least one row.
-- [ ] **Properties over the map.** Hypothesis, `settings(deadline=None)`, over pairs of distinct canonical rooms
+- [x] **Properties over the map.** Hypothesis, `settings(deadline=None)`, over pairs of distinct canonical rooms
   and ticks away from a regroup: (a) reconciled implies (c) reconciled; (b) fits at unknown phase implies (c)
   reconciled; (b) cannot reconcile at unknown phase implies (c) not reconciled; at snapshot phase, (b) fits
   exactly when (c) reconciles. Mechanism: the properties. Perturbed: (c) with its bound off by one in either
   direction fails at least one of them.
-- [ ] **The process count, role-blind.** The **universe** is every typed placement of a player spoken at the
+- [x] **The process count, role-blind.** The **universe** is every typed placement of a player spoken at the
   meeting (sightings naming them as subject or company, movement sightings, their whereabouts, the stays of
   alibi routes about them, vent sightings), ungated. A pair in it is **reconcilable** when its rooms differ
   and `1 <= hops <= elapsed` over the whole map, or its interval holds a public regroup tick. A **charge** is
@@ -217,13 +217,13 @@ census `kills_seen_by_crew`, 3, 4 and 14).
   `scripts/counterfactual_phase21.py:299`) is an informational column, never the reading. Mechanism:
   role-free signatures, and a property that permuting the role map moves only the class columns. Planted: a
   role read inserted into a line computation fails the property.
-- [ ] **Count-only, no model call.** The JSON and the report carry ids, ticks, room ids, kinds, booleans and
+- [x] **Count-only, no model call.** The JSON and the report carry ids, ticks, room ids, kinds, booleans and
   counts, keyed by (column, seed, meeting). They carry no rendered prompt, memory line, rationale, transcript
   text or seed-band prefix. No provider client is built: the walk's recorded-response stub answers from the
   recording's bytes. Mechanism: a scan test over a one-game run's outputs for any recorded turn text,
   rationale or travel line, and a run with socket connection refused. Planted: a rationale written into the
   JSON fails the scan.
-- [ ] **The artifacts, pinned.** The instrument writes the report (the decision informed; hypothesis, method,
+- [x] **The artifacts, pinned.** The instrument writes the report (the decision informed; hypothesis, method,
   result, decision input; the lab's caveat that replayed ballots propagate no game state; each term defined
   where used) and the JSON. `--check` recomputes both from the recorded shas and compares, so it reproduces the
   committed JSON on any later `main`. The `experiments/lab/` row of `docs/artifacts.md` goes from 164 to 167
@@ -231,7 +231,7 @@ census `kills_seen_by_crew`, 3, 4 and 14).
   holds against the git index (`_IN_TREE_INVENTORY`, `:2869`). No lab artifact is hash-pinned file by file, so
   nothing else is registered. Mechanism: `--check` and the offline evidence check. Perturbed: one count edited
   in a copy of the JSON makes `--check` exit 1; the row left at 164 fails the inventory leg.
-- [ ] **The dated reading, by a rule fixed here.** Results ends with "Reading (YYYY-MM-DD)", which applies this
+- [x] **The dated reading, by a rule fixed here.** Results ends with "Reading (YYYY-MM-DD)", which applies this
   rule to r2 verbatim and reports s9 and r1 beside it. Let M be r2's misjudged cases, W the ones at witness
   meetings, and R(X) the cases check X reaches.
   1. M empty: name no route arm.
@@ -246,7 +246,7 @@ census `kills_seen_by_crew`, 3, 4 and 14).
   The reading authorizes no recording; a round 3 is the owner's spend decision. Mechanism: the rule's inputs
   are JSON fields, and the report prints the branch taken. Perturbed: the rule on a copy of the JSON with every
   R set to 0 takes branch 4.
-- [ ] **The wave's lessons.** Every production line is enforced by a test that goes red when neutered (a neuter
+- [x] **The wave's lessons.** Every production line is enforced by a test that goes red when neutered (a neuter
   pass listed in Results); one bounded mutation pass over the instrument with the listed operator classes only
   (F filter, S swap, N comparison, C constant, M message, T tuple member, B branch swap, L loaded source to
   literal), each survivor killed or argued equivalent; no test weakened; every number in Results measured at
@@ -370,9 +370,540 @@ pin is Linux-only, so gate in a clean worktree and cite CI for it.
 
 ## Results
 
-Not started. On completion this section records the commits, the sections relied on (this card; the diagnosis
-memo's Parts 2.2, 3 and 4; the round-2 record's sections 6.4 and 9.6 to 9.8; `docs/architecture.md`,
-"Determinism and the substrate ladder" and "Explicit cleanup experiments"; `docs/experiment-arms.md`; the
-decision memo's sections 1 and 7), each acceptance item's evidence with its command and exit code, the wall
-time of the full run, the per-column tables, the dispute settled case by case, the neuter and mutation tables,
-decisions, limitations and deviations. It ends with the dated reading the rule above produces.
+### Delivered (2026-10-02 to 2026-10-03, branch `work/route-check-replay` from `5877adb4`)
+
+Commits: `2ccf7af6` (the instrument, its report and JSON, its tests), `8d65bfad` (the committed-column golden and
+the refusal pins), `319a6e36` (r2's declared config read from the era registry; further planted cases),
+`0f566756` and `45e109dd` (the planted cases the neuter and mutation passes called for), then this card's
+Results commit with the `docs/artifacts.md` row and the gate's commit. Files written: the four new files of the
+Expected scope, the `experiments/lab/` row of `docs/artifacts.md`, this card and the `tasks/README.md` inventory
+sentence. Nothing under `engine/`, `agents/`, `meetings/`, `observation/`, `orchestrator/`, `llm/`, `training/`,
+`replays/` or `tests/fixtures/` was written; no recorded byte, prompt, template, detector or ML artifact moved.
+
+Sections relied on: this card; the diagnosis memo (`tasks/diagnosis-2026-10-02/README.md`) Parts 1.4, 2.2
+(amendment 7, the dispute), 3 (card 2) and 4 (item 3); the round-2 record
+(`audits/audit-2026-10-01-stage-b-r2.md`) sections 6.4 and 9.6 to 9.8 (the denominators, the before columns and
+the two committed walkable-pair cells); `docs/architecture.md` "Determinism and the substrate ladder" (the walk
+re-derives every state hash, eras are never pooled, `temporal_observations` stays a default-OFF toggle this card
+does not touch) and "Explicit cleanup experiments" (evidence version 2, its temporal prerequisite, and
+`evidence_context.py`'s conditional walking feasibility); `docs/experiment-arms.md`; the decision memo's
+sections 1 and 7 (the partial-record principle; round 1's rulings).
+
+### The run, at its exact commits
+
+```sh
+uv run python -m experiments.lab.route_check_replay \
+  --set r2=5877adb4:replays/samples/9p2i \
+  --set r1=5877adb4:replays/candidates/stage-b-r1/9p2i \
+  --set s9=d41c9006:replays/samples/9p2i \
+  --out-report experiments/lab/report-route-check-replay.md \
+  --out-json experiments/lab/results-route-check-replay.json
+#   route-check replay: wrote ... (43.0 s)                              exit 0
+uv run python -m experiments.lab.route_check_replay --check
+#   route-check replay: reproduced (43.2 s)                             exit 0
+git rev-parse 59bbd1be 59bbd1be:replays/samples/9p2i 59bbd1be:replays/candidates/stage-b-r1/9p2i
+#   59bbd1bebe2da9431092287f80f76b5d1977ef31
+#   8197dc791afbe432186a5bd8c16e3e16f7dd8477
+#   2c0529eb694fc011c836cb564d241101da1957e4
+git rev-parse 5877adb4 5877adb4:replays/samples/9p2i 5877adb4:replays/candidates/stage-b-r1/9p2i
+#   5877adb48e046042a1e2927675451f896168673a  8197dc79...  2c0529eb...  (the same trees)
+git rev-parse d41c9006 d41c9006:replays/samples/9p2i
+#   d41c90067a0023d08997231f181cc02deb6461bc  5c12c060e75b026daf643ab8b20e5aaca8de20b0
+```
+
+The JSON records those shas and tree ids, and `--check` re-archives them. The r1 and r2 trees at `5877adb4` are
+the trees at `59bbd1be` that the card names. Wall time of the full run on this machine: 43 to 56 s across the
+runs made (the instrument prints it); `--check` takes the same. The census denominators, run beside it on the
+checkout (`publish_gameplay_census.py --set-dir ... --json-stdout`, exit 0 each): r2 117 meetings, 24 with vent
+proof (21 report, 3 button), 93 report meetings without proof ejecting 42; r1 124 meetings, 26 with vent proof
+(20 report, 6 button), 98 without proof ejecting 28. The instrument's own meeting kinds read the same, and it
+re-derives the census per column and checks every meeting one for one (s9's census runs inside it, on its
+archived copy): s9 145 meetings (60 report with proof, 75 without, 10 button), r1 124 (20, 98, 6), r2 117 (21, 93,
+3); ejections 90, 54 and 66 (innocent 9, 15 and 22); witness meetings 3, 3 and 14. Every count the card asked to
+re-measure reads as the card states.
+
+### Acceptance, item by item
+
+Test file: `tests/experiments/test_route_check_replay.py`, 104 tests,
+`uv run pytest tests/experiments/test_route_check_replay.py -n 6` → 104 passed (exit 0). Each planted case below
+is a test that asserts the failure it plants, so a green run is the planted case failing as claimed.
+
+- **Columns with exact provenance.** Mechanism: `resolve_column` (`git rev-parse --verify COMMIT^{commit}`),
+  `tree_at`, `materialize` (`git archive SHA -- PATH`), `declared_config` and `require_declared_settings` (the era
+  registry's own comparison of canonical recorded settings); `--check` builds its columns from the JSON by
+  `recorded_sources`, which refuses a tree mismatch before anything is recomputed. Planted:
+  `test_r1s_tree_under_the_r2_label_is_refused` (exit 1, "column r2: seed 2 recorded settings that differ from the
+  config its label declares"), `test_an_unknown_commit_is_refused` (exit 1, "commit '0123456789abcdef' does not
+  resolve"), `test_a_tree_named_as_the_commit_is_refused`, `test_a_recorded_tree_id_that_is_not_the_shas_tree_fails_check`
+  (exit 1, "column r2: the recorded tree id ...") and its r1 twin, `test_a_file_committed_into_the_column_after_the_run_leaves_check_green`
+  (the `results-rubric-score.json` shape: exit 0) and `test_a_later_commit_that_rewrites_the_column_leaves_check_green`;
+  pooling (`test_a_request_to_pool_columns_is_refused`), an unknown label, a malformed request, a file path, a
+  path that does not resolve, r2 bytes under the s9 label, a broken declared config, `--set` with `--check`, and a
+  moved era config (`test_the_r2_config_is_read_from_the_era_registry`) are refused. The tests resolve the
+  checkout's `HEAD` to its sha or build temporary repositories; none reads a column through a symbolic ref.
+- **A faithful walk, or none.** Mechanism: `walk_game` (a state hash the walk cannot reproduce, or a recorded
+  prompt it did not re-render, raises naming column, seed and meeting), `read_game` (the census's meetings must be
+  the walk's, one for one, by id, opener, ejection and trigger), and `require_faithful_rerender` (each voter's
+  memory, re-rendered on a deep copy at the default budget with the pre-vote suspicion, must be the whole
+  `<memory>` block of its recorded ballot; it held at every one of the 386 meetings of the full run). Planted:
+  `test_a_flipped_byte_in_a_recorded_prompt_raises` (two seeds and labels), `test_a_state_hash_the_walk_cannot_reproduce_raises`,
+  `test_a_census_with_one_meeting_removed_raises`, `..._one_meeting_more_raises`, `..._no_meeting_for_a_games_first_raises`,
+  `test_a_census_that_names_a_different_meeting_raises`, `test_a_census_of_other_seeds_raises`,
+  `test_the_rerender_check_pins_the_ballot_budget` (a quarter budget raises). Live memories:
+  `test_counting_leaves_every_live_memory_as_it_was` compares every live store's events, working memory, beliefs
+  and meeting history before and after each meeting's counting; the planted
+  `test_a_counting_step_that_appends_to_a_live_store_fails_the_comparison` fails it.
+- **(a) as the manager builds it.** Mechanism: `ledger_call` and `a_readings`, which call the live
+  `build_testimony_ledger` and ask the live `_walkable_transits` about each stated pair; voters see a row when
+  `_candidate_targets` holds its subject. Parity: `test_the_ledger_call_is_the_managers_own` patches the manager's
+  corroboration resolver ON (a monkeypatch, no environment write), spies the manager's ledger call on r2 seed 0,
+  and requires the instrument's call equal at all four meetings and different under the three dropped legs at the
+  three meetings after the first. Perturbed, edited and restored from a copy: the instrument's `ledger_call` with
+  `regroup_ticks=frozenset()` turns the suite red (3 failed, 101 passed: the parity test, case 3, the r2 golden;
+  exit 1), and with `move_witness_records` dropped (2 failed, 102 passed: the parity test and the r2 golden; exit
+  1). Sourced constants, patched in `meetings.corroboration`: tick bound 2 reconciles West Hall at t, Admin at
+  t+2; with it, hop bound 2 reconciles case 2; cap 1 cuts a three-pair row to one line; the unreached-reason
+  bounds follow the same namespace (`test_the_unreached_bounds_follow_the_ledgers_namespace`).
+- **The dispute settled.** Mechanism: the four ledger legs plus one informational leg, and `s9_agreement`, which
+  raises on any figure but 13 of 90. s9 reads 13 of 90 under (a) as built (the transcript-only leg reads 8 of 90 and
+  would not pass). Perturbed: `test_the_s9_expectation_moved_by_one_fails` and
+  `test_a_different_s9_figure_stops_the_run` (12, 14 of 90 and 13 of 89 raise). The case-by-case account is
+  below.
+- **(b) as the recorded field renders it.** Mechanism: `b_voter_reading` (a version-2 deep copy, own id and
+  teammates from `_latest_self_guard_fields`, `v2_evidence_context_rows`, a version-2 `render_for_prompt` on a
+  further copy at the default budget with the voter's pre-vote suspicion), `classify_travel_row` (five classes;
+  a walking row must name placements the memory holds), and `require_no_claim_at_first_meeting`. Equivalence:
+  `test_a_version_none_and_a_version_2_ingestion_give_identical_travel_rows` (one ingestion sequence of packets,
+  a roster, absorbed testimony derived under each version and a regroup yields the same travel rows, six or more).
+  Planted: `test_a_travel_row_with_an_altered_suffix_raises` and `test_a_claim_held_at_a_first_meeting_raises`;
+  `test_rows_the_budget_sheds_are_offered_but_not_kept` separates offered from kept.
+- **(b-snapshot), labelled.** Mechanism: `relabel_plain_sightings`, unit-tested by
+  `test_relabelling_marks_plain_sightings_only`; the report and the JSON name the column an approximation, and it
+  is never merged into (b)'s. Planted (neuter 77): relabelling move rows too turns that test red.
+- **(c), the reference reading.** Mechanism: `c_spots` (`reconstruct_stated_paths` with the movement records, the
+  regroup ticks and `include_kill_scene=True`, plus every alibi stay end about a living candidate) and `c_pairs`
+  over `reconcilable` (whole-map hops bounded by the room count; the regroup interval). No `meetings/` or
+  `agents/` code changed. Planted (neuter 33): dropping the regroup branch turns case 3 red.
+- **The planted route cases tell the checks apart.** `test_a_planted_route_case_reads_as_the_card_tabulates`
+  [1, 2, 2', 3] reproduces the card's table through the walk's own code paths;
+  `test_case_3_drops_the_sighting_inside_the_regroup_window` shows the regroup-window sighting dropped and the
+  charge unanswered by (a); `test_the_planted_cases_tell_every_pair_of_checks_apart` proves the four rows and the
+  four columns pairwise distinct.
+- **Properties over the map.** `test_the_checks_order_by_the_map` (Hypothesis, `settings(deadline=None)`, 80
+  examples over distinct canonical rooms and gaps 1 to 8 away from a regroup): (a) implies (c); (b) fits at unknown
+  phase implies (c); (b) cannot reconcile implies not (c); (b) fits at snapshot phase exactly when (c). Perturbed:
+  `test_a_reference_bound_off_by_one_fails_a_property` (the bound one higher and one lower each fail at least one).
+- **The process count, role-blind.** Mechanism: `read_meeting` and `_read_case` take no role; roles reach only
+  `class_payload`. `test_permuting_the_roles_moves_only_the_class_columns` (Hypothesis, four role maps) and the
+  planted `test_a_role_read_inside_a_line_computation_fails_the_property`. Charges, the universe and the
+  misjudged definition: `test_a_charge_rests_on_a_cited_placement_or_a_flag_of_placements`,
+  `test_the_universe_is_ungated_and_typed`, `test_charges_are_counted_for_living_targets_only`. The judgment net is
+  an informational column.
+- **Count-only, no model call.** Mechanism: `scan_outputs`, run before any write, against every recorded turn text,
+  ballot rationale and travel row the run read. `test_the_outputs_carry_no_recorded_text`, the planted
+  `test_a_rationale_written_into_the_json_fails_the_scan` and `..._turn_text_...`, `test_a_run_holds_its_outputs_to_every_travel_row_it_read`
+  (a report carrying a travel row is refused), and `test_a_run_needs_no_network` (`--check` with
+  `socket.connect` and `create_connection` refused: exit 0). No provider client is built; the walk's
+  recorded-response stub answers every call.
+- **The artifacts, pinned.** `--check` reproduces both committed files (exit 0 above);
+  `test_one_count_edited_in_a_copy_of_the_json_fails_check` and `test_a_report_that_differs_from_its_recomputation_fails_check`
+  (exit 1); `test_the_committed_r2_column_recomputes_from_the_checkouts_bytes` recomputes the committed r2 column
+  on any shallow clone; `test_the_committed_report_is_the_committed_jsons_rendering`. The `experiments/lab/` row
+  reads 167 files: `uv run python scripts/verify_ml_evidence.py` with the row still at 164 exited 1 ("experiments/lab/:
+  docs/artifacts.md promises 164 files, the index tracks 167"), and at 167 exits 0 ("every check passed", 51 OK, 7
+  ABSENT as a fresh clone expects); `tests/scripts/test_verify_ml_evidence.py` 86 passed.
+- **The dated reading, by a rule fixed here.** Mechanism: `rule_inputs` and `reading_branch` read JSON fields;
+  the report prints the branch. `test_the_rule_takes_each_branch`; perturbed:
+  `test_the_committed_reading_takes_the_branch_its_rule_inputs_give` sets every R to 0 in a copy of each committed
+  column's inputs and reads branch 4.
+- **The wave's lessons.** The neuter and mutation tables below; no test was weakened, skipped or deleted; every
+  number here was measured at the head that states it, with its command; guarantees are stated at the strength the
+  code delivers (see Limitations).
+- **Every gate, green.** See Verification.
+
+### The per-column counts (the committed JSON; the report sets them out in full)
+
+| column | meetings | ejections | charges at the table | resting on a reconcilable pair | misjudged | at witness meetings |
+| --- | --- | --- | --- | --- | --- | --- |
+| s9 | 145 | 90 | 513 | 332 | 50 | 0 |
+| r1 | 124 | 54 | 406 | 265 | 29 | 0 |
+| r2 | 117 | 66 | 402 | 276 | 40 | 7 |
+
+Misjudged cases each check reaches (reaches the charge in brackets):
+
+| column | (a) as built | (a) transcript only | (b) as recorded | (b-snapshot) | (c) reference |
+| --- | --- | --- | --- | --- | --- |
+| s9 (of 50) | 13 (12) | 8 (8) | 27 (26) | 30 (27) | 32 (28) |
+| r1 (of 29) | 8 (7) | 10 (8) | 8 (7) | 15 (11) | 20 (20) |
+| r2 (of 40) | 15 (15) | 13 (9) | 16 (14) | 20 (16) | 29 (28) |
+
+r2 by ejection class, as description (misjudged / reached by a, a transcript only, b, b-snapshot, c): innocent
+21 of 22 misjudged, reached 15, 12, 8, 12, 21; impostor 19 of 44, reached 0, 1, 8, 8, 8; ejected witness 5 of 5,
+reached 2, 0, 2, 3, 5. r2's unreached misjudged cases by first reason: (a) 18 placement kind (an alibi stay or a
+vent sighting at an end), 7 relevance gate; (b) 13 cap or memory budget, 4 claim not yet held, 4 kind, 3 residual;
+(c) 9 kind (a vent sighting at an end), 2 relevance gate; every case (c) leaves unreached is an impostor
+ejection. At the recorded ballot budget (b) as recorded keeps 2,158 of 28,564 travel rows it offers in r2, and none
+of the 4,478 rows that say an interval crosses the regroup: they sort after the walking rows and are shed (r1: 1 of
+5,003; s9 has no regroup). Insufficient-timing rows about a misjudged ejected player over two rooms, shown to a
+voter who voted to eject: (b) 115, (b-snapshot) 49 in r2.
+
+### The dispute, case by case (r2)
+
+Ejections with a walkable pair under each leg (the JSON's `classes.counts`): as built innocent 15 of 22, impostor
+0 of 44, ejected witnesses 2 of 5; transcript only 12 of 22, 1 of 44, 0 of 5, which is the earlier probe's 12/22,
+1/44 and 0/5 exactly. What moves each case between the two legs (`moved by`, from the single-input legs):
+
+- seeds 2 m0, 28 m0 (witness), 43 m0 (witness) and 45 m1 gain a pair from the movement records alone (a confirmed
+  movement places its subject at the destination);
+- seed 21 m1 (innocent) and seed 16 m1 (impostor) lose their pair to the regroup ticks alone (a sighting inside the
+  regroup window is no placement).
+
+So 12 + 4 − 1 = 15 innocent, 0 + 2 = 2 witnesses, 1 − 1 = 0 impostors. The refuter's 17 of 22 and 3 of 5 differ
+from as built by exactly two committed cases: seed 29 m0 (witness) has a pair only when a spoken movement
+sighting's origin is also placed one tick earlier (the informational `a_with_movement_origins` leg; the live clause
+deliberately places the destination alone), and seed 21 m1 has one only without the regroup window (the
+`a_no_regroup` leg). As built plus those two is 17 of 22 and 3 of 5; that is the reading of the refuter's figure,
+whose script is not committed. The origin leg alone reads 16 of 22, 4 of 44 and 3 of 5. The claim of the diagnosis
+amendment 7 is settled at this strength: (a) as built shows a walkable pair for 15 of 22 innocent ejections and
+2 of 5 ejected witnesses (28 m0 and 43 m0); 29 m0, 30 m1 (the regroup relocation) and 35 m0 are beyond it.
+
+### Neuter pass
+
+`experiments/lab/route_check_replay.py`, every production line, row and call-site argument switched off in turn
+on a copy-backed working file (`<harness> neuter_probes.py`, scratch, not committed): apply the edit, run
+`pytest tests/experiments/test_route_check_replay.py -x -n 6 -k 'not recomputes_from_the_checkouts'`, then the r2
+golden alone if that stage stayed green, restore the module from its byte copy. 171 probes. A first attempt
+(stopped and restored to rebuild the harness in two stages) came back green on probes 4 and 11; both were killed
+before the counted run. The counted run: 142 red, 28 green, one probe string re-anchored (12 as 172). Each green
+was killed by a planted test written for it and re-run red, except probe 56, argued equivalent. Final: 170 red, 1
+equivalent.
+
+| # | neutered | first run | final | red test |
+| --- | --- | --- | --- | --- |
+| 1 | parse: drop the malformed-request guard | RED | RED | a_malformed_column_request_is_refused[r2=abc] |
+| 2 | parse: keep a trailing slash | RED | RED | a_column_path_is_recorded_without_a_trailing_slash |
+| 3 | _git: ignore a failing return code | RED | RED | a_path_that_does_not_resolve_is_refused |
+| 4 | resolve_commit: drop ^{commit} | GREEN (aborted run) | RED | a_tree_named_as_the_commit_is_refused |
+| 5 | resolve_commit: rewrap error dropped | RED | RED | an_unknown_commit_is_refused |
+| 6 | tree_at: drop the directory check | RED | RED | a_path_that_names_a_file_is_refused |
+| 7 | tree_at: rewrap error dropped | RED | RED | a_path_that_does_not_resolve_is_refused |
+| 8 | resolve_column: drop the label guard | RED | RED | an_unknown_label_is_refused |
+| 9 | resolve_column: record the commit as given in the sha slot | RED | RED | the_checkouts_head_resolves_to_its_full_sha_and_tree |
+| 10 | resolve_column: record the commit field as the sha | RED | RED | the_checkouts_head_resolves_to_its_full_sha_and_tree |
+| 11 | materialize: archive HEAD instead of the sha | GREEN (aborted run) | RED | a_later_commit_that_rewrites_the_column_leaves_check_green |
+| 13 | declared_config: skip validation | RED | RED | a_declared_config_that_is_no_config_is_refused |
+| 14 | require_declared_settings: never refuse | RED | RED | r1s_tree_under_the_r2_label_is_refused |
+| 15 | require_declared_settings: expect nothing for a declared config | RED | RED | one_game_run fixture (errors) |
+| 16 | declared path: r1 declares no config | GREEN | RED | an_r1_column_reads_under_its_rounds_config |
+| 17 | declared path: r2 declares no config | RED | RED | the_r2_config_is_read_from_the_era_registry |
+| 18 | alibi stays: drop the non-spatial filter | GREEN | RED | the_universe_is_ungated_and_typed |
+| 19 | alibi stays: first tick only | RED | RED | the_universe_is_ungated_and_typed |
+| 20 | universe: drop sightings' subject | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 21 | universe: drop company | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 22 | universe: company includes the subject | GREEN | RED | the_universe_is_ungated_and_typed |
+| 23 | universe: drop movement sightings | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 24 | universe: movement placed at its origin | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 25 | universe: drop whereabouts | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 26 | universe: drop vent sightings | RED | RED | the_universe_is_ungated_and_typed |
+| 27 | universe: drop alibi stays | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 28 | universe: drop the non-spatial sighting filter | RED | RED | the_universe_is_ungated_and_typed |
+| 29 | placements_of: every player's | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 30 | reconcilable: drop the order guard | GREEN | RED | a_pair_out_of_tick_order_is_refused |
+| 31 | reconcilable: same room reconciles | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 32 | reconcilable: drop the walk branch | RED | RED | a_planted_route_case_reads_as_the_card_tabulates[1] |
+| 33 | reconcilable: drop the regroup branch | RED | RED | a_planted_route_case_reads_as_the_card_tabulates[3] |
+| 34 | reconcilable: hop search bounded at one | RED | RED | a_planted_route_case_reads_as_the_card_tabulates[2] |
+| 35 | charges: any target's ballots | RED | RED | a_charge_rests_on_a_cited_placement_or_a_flag_of_placements |
+| 36 | charges: ballots need no cited placement | RED | RED | a_charge_rests_on_a_cited_placement_or_a_flag_of_placements |
+| 37 | charges: drop ballot charges | RED | RED | a_charge_rests_on_a_cited_placement_or_a_flag_of_placements |
+| 38 | charges: flags naming anyone | GREEN | RED | a_charge_rests_on_a_cited_placement_or_a_flag_of_placements |
+| 39 | charges: any event suffices | RED | RED | a_charge_rests_on_a_cited_placement_or_a_flag_of_placements |
+| 40 | charges: drop flag charges | RED | RED | a_charge_rests_on_a_cited_placement_or_a_flag_of_placements |
+| 41 | misjudging: no charged end required | RED | RED | a_charge_rests_on_a_cited_placement_or_a_flag_of_placements |
+| 42 | misjudging: later end only | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 43 | meeting_inputs: drop the trigger guard | RED | RED | a_meeting_the_walk_threaded_no_trigger_or_ballot_for_raises |
+| 44 | meeting_inputs: drop the ballot render guard | RED | RED | a_meeting_the_walk_threaded_no_trigger_or_ballot_for_raises |
+| 45 | meeting_inputs: no suspicion override | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 46 | meeting_inputs: renders of any kind | RED | RED | a_meeting_the_walk_threaded_no_trigger_or_ballot_for_raises |
+| 47 | meeting_inputs: renders of any voter | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 48 | meeting_inputs: unfirewalled sightings | RED | RED | the_ledger_call_is_the_managers_own |
+| 49 | meeting_inputs: no movement records | RED | RED | the_ledger_call_is_the_managers_own |
+| 50 | meeting_inputs: first meeting never | GREEN | RED | the_first_meeting_is_marked_and_a_later_one_is_not |
+| 51 | meeting_inputs: opener from the transcript's first speaker set to ejected | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 52 | ledger build: drop regroup ticks | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 53 | ledger build: drop movement records | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 54 | ledger build: drop the roster | GREEN | RED | a_subject_outside_the_roster_gets_no_row |
+| 55 | ledger build: drop the trigger kind | GREEN | RED | a_button_meetings_opening_body_is_no_kill_scene |
+| 56 | ledger build: no contradictions | GREEN | GREEN | equivalent: the walkable clause reads no contradiction (the ledger's rows and walkable pairs are built from the transcript and the paths) |
+| 57 | stated_paths: drop movement records | RED | RED | a_census_with_one_meeting_more_raises |
+| 58 | stated_paths: drop regroup ticks | RED | RED | case_3_drops_the_sighting_inside_the_regroup_window |
+| 59 | ledger_call: never drop movement | RED | RED | the_ledger_call_is_the_managers_own |
+| 60 | ledger_call: never drop regroup | RED | RED | the_ledger_call_is_the_managers_own |
+| 61 | A_LEG_DROPS: transcript-only drops only movement | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 62 | A_LEG_DROPS: no-regroup drops nothing | RED | RED | the_ledger_call_is_the_managers_own |
+| 63 | a_readings: drop the shown-subset guard | GREEN | RED | a_shown_pair_resting_on_no_stated_pair_raises |
+| 64 | a_readings: shown pairs are every qualifying pair | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 65 | origins: drop the relevance gate | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 66 | origins: any subject's movement | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 67 | origins: origin at the arrival tick | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 68 | origins: add nothing | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 69 | shown lines: a voter also sees themself | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 70 | c_spots: kill scene excluded | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 71 | c_spots: no movement records | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 72 | c_spots: no regroup ticks | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 73 | c_spots: drop alibi stays | RED | RED | a_planted_route_case_reads_as_the_card_tabulates[3] |
+| 74 | c_spots: stays of anyone | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 75 | c_pairs: drop the reconcile filter | RED | RED | the_checks_order_by_the_map |
+| 76 | two_rooms: any rooms | GREEN | RED | a_one_room_line_neither_reaches_nor_counts_two_rooms |
+| 77 | relabel: relabel move rows too | RED | RED | relabelling_marks_plain_sightings_only |
+| 78 | relabel: relabel action rows too | RED | RED | relabelling_marks_plain_sightings_only |
+| 79 | relabel: relabel nothing | RED | RED | relabelling_marks_plain_sightings_only |
+| 80 | version_2_view: keep version None | RED | RED | rows_the_budget_sheds_are_offered_but_not_kept |
+| 81 | version_2_view: never relabel | RED | RED | a_planted_route_case_reads_as_the_card_tabulates[1] |
+| 82 | held_rooms: drop regroups | GREEN | RED | a_regroup_lines_ends_take_their_rooms_from_the_memory |
+| 83 | held_rooms: drop claims | RED | RED | the_context_reads_claims_of_exactly_the_three_kinds |
+| 84 | held_rooms: move rows by origin | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 85 | held_rooms: any player's sightings | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 86 | classify: unknown verdict passes as fits | RED | RED | a_travel_row_with_an_altered_suffix_raises |
+| 87 | classify: drop the held-placement check | RED | RED | a_travel_row_with_an_altered_suffix_raises |
+| 88 | classify: regroup ends hold no rooms | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 89 | classify: an unmatched row passes as unverifiable | RED | RED | a_travel_row_with_an_altered_suffix_raises |
+| 90 | _WALK_VERDICTS: insufficient read as fits | RED | RED | each_travel_row_shape_is_classified |
+| 91 | b_voter_reading: every row kept | RED | RED | rows_the_budget_sheds_are_offered_but_not_kept |
+| 92 | b_voter_reading: no suspicion override | GREEN | RED | the_b_render_takes_the_voters_pre_vote_suspicion |
+| 93 | b_voter_reading: rows of every kind | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 94 | b_voter_reading: no own id | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 95 | b_voter_reading: no teammates | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 96 | first-meeting claim check off | RED | RED | a_claim_held_at_a_first_meeting_raises |
+| 97 | rerender check off | RED | RED | the_rerender_check_pins_the_ballot_budget |
+| 98 | rerender check without the override | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 99 | a reason: drop the kind step | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 100 | a reason: drop the relevance step | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 101 | a reason: drop the hop step | RED | RED | the_unreached_bounds_follow_the_ledgers_namespace |
+| 102 | a reason: drop the tick step | RED | RED | the_unreached_bounds_follow_the_ledgers_namespace |
+| 103 | a reason: drop the cap step | GREEN | RED | a_qualifying_pair_the_cap_cuts_is_given_the_cap |
+| 104 | c reason: drop the kind step | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 105 | c reason: drop the relevance step | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 106 | b reason: drop the kind step | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 107 | b reason: drop the cap step | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 108 | b reason: drop the phase step | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 109 | reaching: shed lines reach | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 110 | reaching: one-room lines reach | GREEN | RED | a_one_room_line_neither_reaches_nor_counts_two_rooms |
+| 111 | reaching: insufficient lines reach | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 112 | holds charge (b): tick ignored | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 113 | case reason: last instead of first | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 114 | check case: reason even when reached | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 115 | input-kind guard off | GREEN | RED | an_input_of_a_kind_the_check_is_not_read_to_take_raises |
+| 116 | read_meeting: no first-meeting check call | GREEN | RED | reading_a_meeting_checks_the_first_meetings_claims_first |
+| 117 | read_meeting: no rerender check call | RED | RED | the_rerender_check_pins_the_ballot_budget |
+| 118 | read_meeting: targets from ballots only | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 119 | read_meeting: charges resting never counted | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 120 | read_meeting: b snapshot never | RED | RED | an_unchanged_copy_of_a_game_reads_cleanly |
+| 121 | read_meeting: (b) lines count offered | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 122 | read_meeting: (c) lines per pair | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 123 | read_meeting: no travel texts for the scan | RED | RED | the_outputs_carry_no_recorded_text |
+| 124 | case: eject voters of any target | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 125 | case: (a) reaches without a voter | GREEN | RED | a_line_reaches_only_a_voter_who_voted_to_eject |
+| 126 | case: (a) reaches the charge whatever | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 127 | case: (b) voters are every voter | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 128 | case: (b) lines about anyone | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 129 | case: (b) insufficient lines need no two rooms | GREEN | RED | an_insufficient_line_counts_only_over_two_rooms |
+| 130 | case: (c) reaches the charge whatever | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 131 | case: reporter regardless of trigger | GREEN | RED | a_button_meetings_ejected_opener_is_no_reporter |
+| 132 | case: pit net over any ballot | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 133 | case: origin leg always false | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 134 | meeting_kind: proof among the dead too | GREEN | RED | vent_proof_names_a_living_player_and_a_witness_reports |
+| 135 | meeting_kind: buttons read as reports | RED | RED | meeting_kinds_agree_with_the_census_vent_proof_cells |
+| 136 | witness: any trigger | GREEN | RED | vent_proof_names_a_living_player_and_a_witness_reports |
+| 137 | witness: no floor | RED | RED | witness_meetings_read_the_kill_facts_since_the_previous_meeting |
+| 138 | witness: kills after the meeting | RED | RED | witness_meetings_read_the_kill_facts_since_the_previous_meeting |
+| 139 | walk: swallow a state-hash failure | RED | RED | a_state_hash_the_walk_cannot_reproduce_raises |
+| 140 | walk: never check missed prompts | RED | RED | a_flipped_byte_in_a_recorded_prompt_raises[1-r2] |
+| 141 | read_game: drop the census-short guard | RED | RED | a_census_with_one_meeting_removed_raises |
+| 142 | read_game: drop the meeting identity check | GREEN | RED | a_census_that_names_a_different_meeting_raises |
+| 143 | read_game: drop the census-long guard | RED | RED | a_census_with_one_meeting_more_raises |
+| 144 | read_game: no regroup ticks | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 145 | read_game: earlier ticks never grow | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 146 | read_game: previous tick never passed | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 147 | read_set: drop the seed guard | GREEN | RED | a_census_of_other_seeds_raises |
+| 148 | forbidden: no rationales | RED | RED | a_rationale_written_into_the_json_fails_the_scan |
+| 149 | forbidden: no turn texts | GREEN | RED | a_turn_text_written_into_the_json_fails_the_scan |
+| 150 | scan: never raise | RED | RED | a_rationale_written_into_the_json_fails_the_scan |
+| 151 | half: strict majority | RED | RED | the_rule_takes_each_branch |
+| 152 | rule: drop the M-empty branch | RED | RED | the_rule_takes_each_branch |
+| 153 | rule: ignore W | RED | RED | the_rule_takes_each_branch |
+| 154 | rule: (c) before (b-snapshot) | RED | RED | the_committed_reading_takes_the_branch_its_rule_inputs_give |
+| 155 | s9: never raise | RED | RED | a_different_s9_figure_stops_the_run[found0] |
+| 156 | s9 agreement only for s9: for every label | RED | RED | one_game_run fixture (errors) |
+| 157 | classes: witnesses are not innocent | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 158 | moved_by: never | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 159 | run: allow pooling | RED | RED | a_request_to_pool_columns_is_refused |
+| 160 | run: no settings check | RED | RED | r2s_tree_under_the_s9_label_is_refused |
+| 161 | run: no travel rows in the scan | GREEN | RED | a_run_holds_its_outputs_to_every_travel_row_it_read |
+| 162 | outputs: no scan | GREEN | RED | a_run_holds_its_outputs_to_every_travel_row_it_read |
+| 163 | check: no tree check | RED | RED | a_recorded_tree_id_that_is_not_the_shas_tree_fails_check |
+| 164 | check: no JSON comparison | RED | RED | one_count_edited_in_a_copy_of_the_json_fails_check |
+| 165 | check: no report comparison | GREEN | RED | a_report_that_differs_from_its_recomputation_fails_check |
+| 166 | main: --check accepts --set | RED | RED | check_takes_no_columns_from_the_command_line |
+| 167 | main: --check problems exit 0 | RED | RED | one_count_edited_in_a_copy_of_the_json_fails_check |
+| 168 | main: errors exit 0 | RED | RED | an_unknown_label_is_refused |
+| 169 | ledger bound: no integer guard | RED | RED | a_ledger_bound_that_is_no_integer_raises |
+| 170 | group counts: misjudged at witness not counted | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 171 | declared path: s9 declares r1's config | RED | RED | r2s_tree_under_the_s9_label_is_refused |
+| 172 | declared_config: no config for any label | - | RED | a_file_committed_into_the_column_after_the_run_leaves_check_green |
+
+### Mutation pass
+
+One bounded pass over the instrument with exactly the classes F, S, N, C, M, T, B and L, 39 mutants, the same
+harness. First run: 31 red, 8 survivors; 5 survivors killed by planted tests and re-run red, 3 argued equivalent.
+
+| # | mutant | first run | final | red test or reason |
+| --- | --- | --- | --- | --- |
+| 1 | F: c_spots keeps stays of dead speakers' subjects (drop the roster filter) | GREEN | equivalent | equivalent: (c) reads only each roster candidate's own stays, so a stay of a player outside the roster is never read |
+| 2 | F: flag subjects outside the roster become targets | GREEN | RED | charges_are_counted_for_living_targets_only |
+| 3 | F: movement-record mapping keeps empty records | RED | RED | the_ledger_call_is_the_managers_own |
+| 4 | F: forbidden strings keep short texts | GREEN | equivalent | equivalent: the scan skips texts under the same length itself |
+| 5 | F: (b) case lines keep shed rows (drop the kept filter on insufficient lines) | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 6 | S: ballot charges cite placements of any player | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 7 | S: (b) case reads the other view | RED | RED | an_insufficient_line_counts_only_over_two_rooms |
+| 8 | S: (a) reasons use (c)'s input kinds | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 9 | S: (b) reasons use (a)'s input kinds | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 11 | N: same-room test inverted | RED | RED | a_planted_route_case_reads_as_the_card_tabulates[1] |
+| 12 | N: (a) reaches when there is no row | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 13 | N: (b) charge test inverted on ends | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 14 | N: line-over test inverted on ends | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 15 | N: walk test inverted | RED | RED | a_planted_route_case_reads_as_the_card_tabulates[1] |
+| 16 | N: regroup interval inverted | RED | RED | a_planted_route_case_reads_as_the_card_tabulates[3] |
+| 17 | C: sighting tick read as 0 | RED | RED | the_hop_search_is_bounded_by_the_room_count |
+| 18 | C: alibi stay room read as the Cafeteria | RED | RED | the_universe_is_ungated_and_typed |
+| 19 | C: ejected role read as crewmate | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 20 | C: trigger kind read as report | RED | RED | a_button_meetings_ejected_opener_is_no_reporter |
+| 21 | C: movement kind read as a sighting | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 22 | C: kill tick read as the meeting tick | RED | RED | witness_meetings_read_the_kill_facts_since_the_previous_meeting |
+| 23 | C: regroup tick read as 0 in held rooms | RED | RED | a_regroup_lines_ends_take_their_rooms_from_the_memory |
+| 24 | M: walk failure names a constant label | RED | RED | a_flipped_byte_in_a_recorded_prompt_raises[2-r1] |
+| 25 | M: walk failure names a constant seed | RED | RED | a_flipped_byte_in_a_recorded_prompt_raises[2-r1] |
+| 26 | M: tree mismatch names a constant column | GREEN | RED | an_r1_columns_tree_mismatch_names_r1 |
+| 27 | M: settings refusal names a constant column | GREEN | RED | r2s_tree_under_the_s9_label_is_refused |
+| 28 | M: census-short failure names a constant meeting | GREEN | RED | a_census_with_no_meeting_for_a_games_first_raises |
+| 29 | T: travel rows without the contradicted kind | RED | RED | each_travel_row_shape_is_classified |
+| 30 | T: (a) inputs without company | RED | RED | a_file_committed_into_the_column_after_the_run_leaves_check_green |
+| 31 | T: (b) claims without whereabouts | RED | RED | the_context_reads_claims_of_exactly_the_three_kinds |
+| 32 | T: held rooms read no alibi claims | RED | RED | the_context_reads_claims_of_exactly_the_three_kinds |
+| 33 | T: reaching verdicts without the regroup | GREEN | RED | a_regroup_lines_ends_take_their_rooms_from_the_memory |
+| 34 | B: walk and regroup branches swapped | RED | RED | a_pair_the_map_reconciles_reads_as_a_walk_across_a_regroup |
+| 35 | B: vent-proof kinds swapped | RED | RED | meeting_kinds_agree_with_the_census_vent_proof_cells |
+| 36 | B: moved-by movement and regroup branches swapped | GREEN | equivalent | equivalent: the branch for both inputs runs first, so at most one of the swapped branches can hold |
+| 37 | B: b reason cap and phase swapped | RED | RED | the_committed_r2_column_recomputes_from_the_checkouts_bytes |
+| 38 | L: room-count bound as the literal 10 | RED | RED | the_hop_search_is_bounded_by_the_room_count |
+| 39 | L: ledger tick bound as the literal 1 | RED | RED | the_unreached_bounds_follow_the_ledgers_namespace |
+| 40 | L: r2's declared config as the literal path | RED | RED | the_r2_config_is_read_from_the_era_registry |
+
+### Decisions
+
+- **Orchestrator ruling 1 (2026-10-02).** Each column is pinned to a resolved full commit sha recorded in the JSON:
+  s9 at `d41c9006`, r1 and r2 at the dispatch base `5877adb4` (nothing under `replays/` moved since `59bbd1be`; the
+  tree ids above show it); `--check` re-materializes the recorded sha, with the planted mismatched-tree and
+  later-file cases.
+- **Orchestrator ruling 2.** The dated reading is advisory; its threshold is the card's recommendation rule and
+  gates nothing; the owner decides on a round 3 and which check; `evidence_reasoning_version = 2` would be named only
+  conditionally on lifting the temporal-observations exclusion.
+- **Orchestrator ruling 3.** The instrument reads recordings through the committed walk with no provider (the
+  recorded-response stub), prints no transcript text or prompt, keys every count by (column, seed, meeting), and
+  leaves `agents/` free of `engine/` imports (`lint-imports`: 4 kept, 0 broken).
+- **Orchestrator ruling 4.** (a) is built exactly as the manager builds it (the parity test) and (b) exactly as the
+  store renders it (the equivalence test and the per-voter re-render check), each with its planted case.
+- **Orchestrator ruling 5.** (b-snapshot) relabels plain sightings only, is labelled an approximation in the report
+  and the JSON, and is a column of its own.
+- **"Ends a reconcilable pair"** is read as "is one end of": a charged placement may be either end. A same-room
+  pair is no move, so the regroup branch, like the walk, needs two different rooms. A regroup lies inside an
+  interval when `earlier < tick <= later`, the evidence context's own test. When a pair both walks and crosses a
+  regroup, it reads as a walk (`test_a_pair_the_map_reconciles_reads_as_a_walk_across_a_regroup`).
+- **A flag is a charge** when it names the target and every event resolves to a typed placement of the target; an
+  alibi event stands for every stay end of its claim. Charges are counted for every living target at the table;
+  misjudged cases only at ejections.
+- **Reaching uses kept rows** for (b): a row the ballot budget sheds is offered but not shown. For a crosses-the-regroup
+  row, whose text names no rooms, each end takes the rooms the memory places the subject in at that tick
+  (`held_rooms`); a walking row's rooms must be among them, which checks that recovery on every walking row.
+- **Unreached reasons:** each misjudged pair takes the first reason in the card's order that applies to it, and the
+  case takes the first reason in that order among its pairs; the JSON also carries every pair's reason. (b) adds
+  "residual" for a held pair over which no row was offered (it pairs only adjacent placements).
+- **The informational `a_with_movement_origins` leg** was added to explain the refuter's 3 of 5 from committed code;
+  it is no check and enters no reading.
+- **r2's declared config is read from the era registry at call time** (`declared_config_path`), so a moved era
+  file moves the run (a planted case), rather than a copy frozen at import.
+- **The `docs/artifacts.md` row** also states the row's tracked size, 6.9 MB (7,189,659 bytes across 167 files;
+  6.3 MB was 6,591,637 bytes before), so the row stays true; the count is what `verify_ml_evidence.py` holds.
+
+### Verification
+
+Each command ran alone, its exit code captured directly (no pipe), on this branch at `45e109dd` plus the
+`docs/artifacts.md` row of the Results commit; no frontend file changed, so the frontend suite and the browser
+journeys were not required.
+
+| command | exit | result |
+| --- | --- | --- |
+| `uv run pytest tests/experiments/test_route_check_replay.py -n 6` | 0 | 104 passed |
+| `uv run python -m experiments.lab.route_check_replay --check` | 0 | reproduced (43.2 s) |
+| `bash scripts/verify_samples.sh replays/<set>` for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout` and `--set-dir replays/candidates/stage-b-r1/9p2i` | 0 each | the denominators quoted above |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | every check passed: 51 OK, 7 ABSENT, 5 INFO |
+| `uv run pytest tests/scripts/test_verify_ml_evidence.py -n 6` | 0 | 86 passed |
+| `uv run python scripts/check_doc_facts.py` | 0 | every fact verified |
+| `uv run python scripts/validate_task_docs.py` | 0 | (re-run in the gate commit) |
+| `uv run lint-imports` | 0 | 4 kept, 0 broken |
+| `uv run pytest -m campaign` | 0 | 337 passed, 10,172 deselected |
+| `build_demo_bundle.py --out <scratch>/base` at `5877adb4`, then `--out <scratch>/head` at this branch, one checkout; `diff -rq` | 0, 0, 0 | no difference across 109 files: nothing publishes |
+
+`bash scripts/check.sh` runs once, at the head of the Results commit, after this table; its exit code is recorded by the commit that follows it.
+
+### Limitations
+
+- Replayed meetings carry no consequence forward: the counts are per meeting and never a re-simulated outcome.
+- (b) is read on recordings made with legacy delivery: the version-2 view flips the field on memories recorded
+  without it, and the equivalence test proves the travel rows match for the same ingestion; a temporal-ON
+  recording would also hold event rows these bytes lack, which (b-snapshot) only approximates.
+- The process count is generous by construction: it counts any charge whose placement ends any reconcilable pair,
+  with no reading of what the charge said; the judgment net is reported beside it and is not specific.
+- (c) is a reading computed here, not a rendered field; whether the 27B would change a ballot on any line was not
+  measured and cannot be offline.
+- The refuter's own script is uncommitted; its 17 of 22 is explained by two committed legs, not reproduced by one.
+- The full run and `--check` need history (`d41c9006`); CI's shallow clone runs the tests, which recompute r2 from
+  the working tree.
+- The census card (`census-reporter-base-rate`) had not merged at this card's head (`origin/main` still
+  `5877adb4`); the denominator agreement above ran at this head, and must run again after that merge.
+
+### Deviations
+
+- `docs/artifacts.md`: the row's size moved with its count (Decisions). The row lands in the Results commit, before
+  the final gate, and the last commit records only the gate (the gate needs the row to pass).
+- The card's Validation names `59bbd1be` for r1 and r2; the run names `5877adb4` (ruling 1), whose trees are equal.
+
+### Reading (2026-10-03)
+
+The card's rule, applied to r2 verbatim, from the JSON's `rule_inputs` (the report prints the same branch). M is
+r2's 40 misjudged cases; W is the 7 of them at witness meetings.
+
+1. M is not empty.
+2. (b-snapshot) reaches 20 of the 40, exactly half, but 3 of the 7 at witness meetings, under half. Branch 2 is not
+   taken. (b) as recorded reaches 16 of 40 and 2 of 7, and at the recorded ballot budget it never shows a row that
+   says an interval crosses the regroup.
+3. (c) reaches 29 of the 40 and 7 of the 7. **Branch 3: name the narrow new field**, as a card to write: versioned,
+   default off, set only from the config file, its own stamp, one role-blind line per living candidate that never
+   asserts presence or honesty, with planted cases and fake and scripted rehearsals before any spend. Shaped by
+   (c)'s unreached reasons: (c) reaches every misjudged innocent ejection (21 of 21) and every ejected witness (5 of
+   5); the 11 cases it leaves are all impostor ejections, 9 resting on a vent sighting at one end of the pair (a
+   kind the reading does not take, and a role-proving one) and 2 on a sighting the relevance gate drops (the
+   spawn or regroup window). Its reach comes from what (a) lacks: several hops over the whole map, alibi stays
+   (18 of (a)'s 25 unreached cases rest on a kind (a) does not read) and a named regroup crossing. It also reaches 8
+   of the 19 misjudged impostor ejections; that is reported, not discounted.
+
+Beside it, at the same rule: s9 takes branch 2 (M 50, W 0; (b-snapshot) reaches 30) and r1 takes branch 2 (M 29,
+W 0; (b-snapshot) reaches 15). Neither column has a misjudged case at a witness meeting, which is the half of the
+rule r2 fails for (b-snapshot).
+
+What this does not say: reaching is showing a line, not changing a vote, and no model was run. The reading is
+advisory and gates nothing; it authorizes no recording, and a round 3 is the owner's spend decision.
