@@ -9,6 +9,7 @@ one committed game's walk.
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import functools
 import importlib.util
@@ -6828,6 +6829,27 @@ SEAT_CELLS: Final[tuple[str, ...]] = tuple(
 )
 
 
+def public_names_defined(source: Path) -> set[str]:
+    """Every public name a module's own top level defines or assigns."""
+
+    names: set[str] = set()
+    for node in ast.parse(source.read_text(encoding="utf-8")).body:
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+        elif isinstance(node, ast.Assign):
+            names.update(
+                target.id for target in node.targets if isinstance(target, ast.Name)
+            )
+    return {name for name in names if not name.startswith("_")}
+
+
+def test_the_module_exports_every_public_name_it_defines() -> None:
+    assert set(census.__all__) == public_names_defined(Path(census.__file__))
+    assert len(census.__all__) == len(set(census.__all__))
+
+
 def test_no_new_cell_has_a_guard_or_scope_that_reads_a_role() -> None:
     for key, (guard, scope) in NEW_CELLS.items():
         assert (CELLS[key].guard, CELLS[key].scope) == (guard, scope), key
@@ -7584,6 +7606,26 @@ def test_the_change_table_names_the_recorded_seat_and_what_the_re_tally_gives() 
         3,
         0,
     )
+
+
+def test_a_button_presser_ejected_is_another_crewmate_not_the_reporter() -> None:
+    """Planted: a button meeting ejects its own presser on impostor ballots.
+
+    Only a report meeting has a reporter, so the re-tally's row names the
+    presser another crewmate; reading the trigger as a constant would call it
+    the reporter.
+    """
+
+    pressed = meeting(
+        opener="p-2",
+        outcome="EJECTED",
+        ejected="p-2",
+        ballots=(ballot("p-0", "p-2"), ballot("p-1", "p-2"), ballot("p-3", "SKIP")),
+    )
+    assert table("retally_outcome_changes", game(meetings=(pressed,))) == {
+        "impostor ballots as SKIP: another crewmate ejected -> no one ejected": 1,
+        "impostor ballots removed: another crewmate ejected -> no one ejected": 1,
+    }
 
 
 def test_an_unknown_tally_is_refused() -> None:

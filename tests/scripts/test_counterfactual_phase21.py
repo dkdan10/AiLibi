@@ -538,16 +538,22 @@ def _sentinel_after_the_era_check(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_a_committed_set_of_another_era_is_refused_by_its_resolved_directory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Planted: the promoted set named among the sets, in three spellings.
+    """Planted: the promoted set named among the sets, in four spellings.
 
-    Each is refused before any walk with the era its registry entry names. A
-    sentinel replaces the first step after the era check, so a name the check
-    lets through (a baseline-9 set, or a directory the registry does not name)
-    reaches it, and the promoted set never does, however it is spelled.
+    Each is refused before any walk with the era its registry entry names; the
+    last climbs out of another directory, so only a resolved path reaches the
+    entry. A sentinel replaces the first step after the era check, so a name the
+    check lets through (a baseline-9 set, or a directory the registry does not
+    name) reaches it, and the promoted set never does, however it is spelled.
     """
 
     _sentinel_after_the_era_check(monkeypatch)
-    for spelling in ("samples/9p2i", "./samples/9p2i", "samples//9p2i"):
+    for spelling in (
+        "samples/9p2i",
+        "./samples/9p2i",
+        "samples//9p2i",
+        "candidates/../samples/9p2i",
+    ):
         with pytest.raises(
             SystemExit,
             match=(

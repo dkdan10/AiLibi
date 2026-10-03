@@ -10,6 +10,7 @@ id, and file two that fold to one key under two ids; each is refused.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -91,6 +92,16 @@ def test_each_eras_recording_date_is_its_manifests(entry: eras.CommittedSet) -> 
 def test_each_eras_record_exists() -> None:
     for era in eras.ERAS:
         assert (_REPO_ROOT / era.record).is_file(), era.record
+
+
+def test_the_module_exports_every_public_name_it_defines() -> None:
+    names: set[str] = set()
+    for node in ast.parse(Path(eras.__file__).read_text(encoding="utf-8")).body:
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    assert set(eras.__all__) == {name for name in names if not name.startswith("_")}
 
 
 def test_eras_is_the_registrys_eras_oldest_first() -> None:
