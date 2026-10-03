@@ -774,5 +774,6 @@ and its copies lived in the session scratchpad.
 | `uv run pytest -m campaign -n 6` | 0: 337 passed |
 | `uv run python scripts/validate_task_docs.py` | 0: 390 historical phase tasks and 390 prompts; 96 work cards |
 | `uv run python scripts/check_doc_facts.py` | 0 |
+| demo bundle: `build_demo_bundle.py --out` at `5877adb4`, then at the fix commit `0b6fa67d`, in this one checkout; `diff -rq` | 0: the two bundles' 109 files are byte-identical; nothing ships |
 
 No frontend file changed, so `npm --prefix frontend test` and the e2e were not run.
