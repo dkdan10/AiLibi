@@ -17,8 +17,8 @@ When it is done:
   everything p-5 knew when it voted at tick 12;
 - the public results page calls the seven adopted rules adopted, through `SPECTATOR_COPY`, and keeps the kill
   cooldown's words as they are;
-- the recorder tests pass however pytest-xdist distributes them, because none of them writes into the real
-  `replays/` tree;
+- the recorder tests pass however pytest-xdist distributes them among the rest of the default tier, because none of
+  them writes into the real `replays/` tree and, as measured at this card's head, no other test of that tier does;
 - both merged cards' Results carry a dated note that corrects their wording-only imprecisions and records the
   owner's merge of the promotion with its two questions open. The note closes neither question by inference: Q1
   stays open for the owner, and Q2 needs no ruling because no pushed commit can be rewritten. Nothing written
@@ -165,6 +165,30 @@ diagnosis of 2026-10-02 (`tasks/diagnosis-2026-10-02/README.md`, Part 3, card 0)
 Each item names its enforcing mechanism and a planted or perturbed proof. Each new test is written first and fails at
 this card's base for the stated reason; Results quotes that run.
 
+- [x] Review correction (round 1): no test of the default tier writes into a committed set directory, so the
+  recorder tests' whole-tree fixture fails only on a real write into `replays/`. The feature sweep in
+  `tests/agents/test_features.py` wrote its observation audit log beside each recording in `replays/samples/<set>/`
+  and removed it again, and the fixture reported it from a recorder case running beside it (181 passed, 16 errors for
+  the pair under `-n 2 --dist loadfile` at `878d05db`). The sweep now writes that log in a temporary directory.
+  Mechanism: `test_the_sweep_leaves_the_committed_set_directory_untouched`. Proof: the log put back beside the
+  recording fails it; the pair under `-n 2 --dist loadfile` reads 182 passed in each of three runs; the whole default
+  tier between two stat inventories of `replays/` changes none of its 386 entries (Results, Review corrections,
+  round 1).
+- [x] Review correction (round 1): the distribution guarantee is stated at the strength delivered, in the Outcome,
+  this list and Results. The recorder tests pass under any distribution of the default tier because none of them
+  writes into `replays/` and, measured at this card's head, no other test of the tier does. A future test that writes
+  there would turn a concurrent recorder case red, and the fixture names its path. Mechanism: the autouse fixture
+  `_replays_tree_untouched` and the inventory run in Results. The bounded mutation pass over the inventory found one
+  survivor, the directory test negated; the new planted kind "a rewritten file with its time put back" in
+  `test_the_no_trace_checks_report_a_stray_of_each_kind` kills it.
+- [x] Review correction (round 1): every live comment that states the 9p2i eval report's size agrees with
+  `docs/deployment.md` and with the measured bytes. `frontend/src/api/client.ts` and `frontend/e2e/bundle.spec.ts`
+  said 29 MB, and `scripts/build_demo_bundle.py` said 33.86 MB uncompressed and 2.89 MB gzipped, which are binary
+  megabytes of the report before the promotion. They now say 33 MB, and the docstring gives the bytes. Mechanism:
+  these are comments that no test holds; the commands that measure them are in Results. Proof:
+  `git grep -n -E "29 ?MB|33\.86|2\.89 ?MB"` outside `tasks/` and `audits/` finds none, and bundles built in one
+  checkout at `878d05db` and at this round's code head give an empty `diff -rq`.
+
 - [x] **The before file is registered.**
   - `docs/artifacts.md`'s scorecard row names `docs/process-scorecard-before.json`, says it is the frozen before
     columns (sha256-pinned and never recomputed), and states `3 files`.
@@ -224,7 +248,7 @@ this card's base for the stated reason; Results quotes that run.
   - Proof: D10 re-applied at dispatch fails it for both variables, and Results quotes the run.
   - Only if D10 survives does this card add a planted-registry case to `tests/scripts/test_refresh_samples.py`.
     `scripts/_declared_experiment.py` does not change.
-- [x] **The recorder tests pass under any distribution.**
+- [x] **The recorder tests pass under any distribution of the default tier.**
   - While the guard under test holds, no case in `tests/scripts/test_refresh_samples.py` creates, edits or deletes a
     path under the real `replays/` tree.
   - Decoys, planted rounds and strays live under the case's own `tmp_path`. Otherwise the case aims, read-only, at an
@@ -545,7 +569,7 @@ D10 re-applied (`config=declared` in the wrong-config refusal replaced by
 `test_an_era_refusal_names_the_set_and_the_declared_file_it_found`. The file was restored from a copy (sha256
 `c97f4c87...` before and after). `scripts/_declared_experiment.py` does not change; no case was added.
 
-### The recorder tests pass under any distribution
+### The recorder tests pass under any distribution of the default tier
 
 - No case writes into the real `replays/` tree while the guard it tests holds. The symlink cases link from `tmp_path`
   to the committed `replays/samples/4p1i`, read only, and aim at a directory below it of their own unique name; the
@@ -742,3 +766,138 @@ restored from a copy with its sha256 checked.
 - `tests/eval/test_watchability.py` and `docs/deployment.md` are outside Expected scope by orchestrator ruling 5.
 - `acdaddb6`'s message overstated what the capture harness checks; `c91e604b` corrects it, and no pushed commit is
   rewritten.
+
+### Review corrections, round 1 (2026-10-02)
+
+Three blocking findings from the round-1 verifiers, and the PR's three Codex comments. Commits: `32501b6a` the feature
+sweep off the committed sets; `494a7599` the report-size comments; `374f217f` the planted kind the mutation pass
+asked for; then this record and the commit recording `check.sh`. Every count is count-only.
+
+**Findings 1 and 2 (correctness; integrity): the fixture failed the recorder tests beside the feature sweep.**
+
+- Cause: `tests/agents/test_features.py::_iter_committed_packets` wrote its observation audit log as
+  `_sweep_audit_replay-seed-N.jsonl` beside each recording in `replays/samples/<set>/` and deleted it on close. The
+  autouse fixture `_replays_tree_untouched` saw the file, or the set directory's moved modification time, from any
+  recorder case running at the same moment.
+- Reproduced at `878d05db`: `uv run pytest tests/agents/test_features.py tests/scripts/test_refresh_samples.py -n 2
+  --dist loadfile -q -p no:cacheprovider` read 181 passed, 16 errors.
+- Fix (`32501b6a`): the sweep writes its audit log in a temporary directory, as the committed-set walk in
+  `tests/_helpers/committed.py` does. The fixture's docstring now says a difference can also come from a test in
+  another file writing beside it, and that the paths it names show which.
+- Mechanism: `test_the_sweep_leaves_the_committed_set_directory_untouched` (`tests/agents/test_features.py`) holds
+  `replays/samples/4p1i`'s listing while the walk is open and its modification time after the walk closes.
+- Planted: with the audit log put back beside the recording, the case fails; the open walk lists
+  `_sweep_audit_replay-seed-0.jsonl`. The file was restored from a copy (sha256 `c640c0e2...` before and after), and
+  the one stray the planted run left was removed; `git status --porcelain --ignored -- replays` was empty after.
+- Runs, `git status --porcelain --ignored -- replays` empty after each. The pair ran on the tree committed as
+  `32501b6a` (one comment in the new case was reworded while they ran); the default tier ran at `374f217f`:
+
+| command | result |
+| --- | --- |
+| the pair above under `-n 2 --dist loadfile`, three runs | 182 passed each (190.98 s, 227.17 s, 151.09 s) |
+| the whole default tier as `check.sh` runs it (`uv run pytest -n auto --dist loadfile`), between two stat inventories of `replays/` (kind, size and modification time of every entry, the root included) | exit 0: 10,063 passed, 20 skipped, 3 xfailed; 386 entries before and after, 0 changed |
+
+- The guarantee, restated at the strength delivered: the recorder tests pass under any distribution of the default
+  tier, because none of them writes into `replays/` while its guard holds and, measured at this head by the inventory
+  run above, no other test of the tier does either. The fixture is not a property over every possible future test:
+  a test that writes into `replays/` would turn a concurrent recorder case red, and the path the fixture names would
+  identify it. The Outcome bullet, the Acceptance item and the Results heading above now say "of the default tier".
+- The one red `-n 8` run under Limitations involved only `test_refresh_samples.py` and `test_candidate_sets.py`, not
+  the feature sweep, so this cause does not explain it; it stays unidentified.
+
+**Finding 3 (docs; the Codex P2): the report's size was corrected in one place and stale in three.**
+
+| file | was | now |
+| --- | --- | --- |
+| `frontend/src/api/client.ts` (the `getTournamentReport` comment) | 29 MB | 33 MB |
+| `frontend/e2e/bundle.spec.ts` (the compact-results case's comment) | 29 MB | 33 MB |
+| `scripts/build_demo_bundle.py` (the module docstring) | 33.86 MB uncompressed, 2.89 MB gzipped; ML corpus 102.70 MB | 32,952,472 bytes uncompressed, about 33 MB, and 2,790,383 bytes gzipped; ML corpus 107,690,098 bytes |
+
+- Measured at this head: `gzip -dc replays/samples/9p2i/tournament-eval-report.json.gz | wc -c` reads 32,952,472;
+  `ls -l` gives the `.gz` as 2,790,383 bytes; `gzip -dc replays/ml_corpus/9p2i/tournament-eval-report.json.gz | wc -c`
+  reads 107,690,098.
+- The old docstring figures were binary megabytes of the pre-promotion report: `git show
+  d41c9006:replays/samples/9p2i/tournament-eval-report.json.gz` is 3,027,379 bytes (2.89 MiB) and 35,500,305
+  uncompressed (33.86 MiB). `docs/deployment.md`'s 33 MB is decimal, so the docstring now gives bytes, which no reader
+  can take in the other unit. `docs/artifacts.md` and `eval/report_io.py` keep 102.70 MB for the ML corpus report,
+  which is the binary figure GitHub's 100 MB limit is measured in; neither is in this card's scope.
+- Mechanism: these are comments, and no test holds them. `git grep -n -E "29 ?MB|33\.86|2\.89 ?MB"` outside `tasks/`
+  and `audits/` now finds none.
+- Comment-only, so no shipped byte moves: bundles built in this one checkout at `878d05db` and at `494a7599` give an
+  empty `diff -rq`. `374f217f` and the card commits change only tests and this card.
+
+**The Codex comments.**
+
+- P2, "Synchronize the remaining report-size claims": valid; it is finding 3, fixed above.
+- P1, "Keep the cited capture revision reachable": not valid for this PR. Codex reviewed a synthesized squash
+  (`5b523696`, one parent, `5877adb4`). On the branch, `git merge-base --is-ancestor 52c4b1f3 HEAD` exits 0, and
+  AGENTS.md's delivery rule merges by merge commit or fast-forward, never squash. So `52c4b1f3`, the capture revision
+  `docs/media/provenance.json` names, stays reachable from `main` after the owner's merge. No change.
+- P1, "Record the full-gate result before marking the card done": valid at `e35b052f`, the head Codex reviewed.
+  `878d05db` recorded that run (exit 0), and this round's last commit records the run at this round's head.
+
+**The bounded mutation pass**, over the spans this round changes and the spans the findings name (the sweep's audit
+path and the inventory behind the fixture). The listed classes only; each mutant applied alone, its targeted case run,
+the file restored from a copy with its sha256 checked.
+
+| id | class | mutant | killed by | result |
+| --- | --- | --- | --- | --- |
+| P1 | swap one collection for a related one | the sweep's audit directory, the temporary one, back to the recording's set directory, `replay_path.parent / f"_sweep_audit_{replay_path.stem}.jsonl"` | `test_the_sweep_leaves_the_committed_set_directory_untouched` | killed |
+| FM1 | swap one collection for a related one | the inventory walks `files` only | the planted stray kinds: 6 of 8 fail | killed |
+| FM2 | swap one collection for a related one | the inventory walks `subdirectories` only | 2 of 8 fail | killed |
+| FM3 | comparison to its inverse | `before.get(path) != after.get(path)` to `==` | 8 of 8 fail | killed |
+| FM4 | swap one collection for a related one | `before.keys() \| after.keys()` to `before.keys()` | 5 of 8 fail | killed |
+| FM5 | comparison to its inverse | `stat.S_ISDIR(...)` negated | the new kind, a rewritten file with its time put back | killed (first green) |
+| FM6 | swap adjacent branches | the link and directory tests swapped | none | equivalent: under `lstat` a symbolic link is never a directory, so the two tests are exclusive and their order cannot change an entry |
+
+FM5 first came back green: it records a file by its modification time alone, and every planted kind moved a time.
+`374f217f` adds the kind "a rewritten file with its time put back" (a committed file rewritten at a new size, its
+modification time restored with `os.utime`), which only the size reports; the inventory as written reports it, and
+FM5 fails it. 6 of 7 killed, 1 equivalent. No other class was run.
+
+**Bundle diff, rebuilt for this round** (`scripts/build_demo_bundle.py --out`, at `5877adb4`, `878d05db` and
+`494a7599` in this one checkout): `878d05db` against `494a7599`, `diff -rq` empty. `5877adb4` against `494a7599`,
+`data/` identical; only the seven hashed JS assets and `index.html` differ, as before. The head bundle holds 109 files,
+3,237 KiB. What goes live at the merge is unchanged by this round.
+
+**Observed, not changed.** `frontend/e2e/bundle.spec.ts:170` says the bundle is about 8 MB of built output; the
+bundle above measures 3,237 KiB. That comment is outside the findings, and this round leaves it for the orchestrator to
+route.
+
+**Validation at `374f217f`**, `git status --porcelain --ignored -- replays` empty after each:
+
+| command | result |
+| --- | --- |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | 0: 63 checks, OK 51, FAIL 0, ABSENT 7, INFO 5 |
+| `uv run python scripts/check_doc_facts.py`; `uv run python scripts/validate_task_docs.py` | 0; 0 (96 work cards) |
+| `bash scripts/verify_samples.sh`, then once per set directory | 0; `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i`: 0 each (50, 50, 150, 50, 50 clean) |
+| `build_sample_report.py --sample-dir <set> --check`, the five sets | 0 each |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | 0; 0 |
+| `pytest tests/scripts/test_verify_ml_evidence.py tests/scripts/test_public_recording_provenance.py tests/scripts/test_check_doc_facts.py tests/scripts/test_build_demo_bundle.py -n 6` | 0: 459 passed |
+| `uv run pytest -m campaign` | 0: 337 passed |
+| `npm run lint`, `tsc:check`, `test` (frontend) | 0; 0; 0: 26 files, 695 tests |
+| `CI=1 npm run e2e -- --workers=1` (local, serial) | 0: 14 passed, 3 skipped (the media spec's, without its capture switch) |
+| `bash scripts/check.sh`, once at the pushed head | recorded in the commit after this one |
+
+**Decisions.**
+
+9. The test-file writer into `replays/` is fixed at its source, as both findings prescribe, rather than narrowing the
+   fixture to each case's own paths: the whole-tree fixture keeps catching a concurrent writer, which is what it is
+   for.
+10. `scripts/build_demo_bundle.py` states the report in bytes, so the binary-against-decimal megabyte ambiguity cannot
+    reopen; the two one-line comments say 33 MB, as `docs/deployment.md` does.
+11. The mutation pass's one non-equivalent survivor is killed with a new planted kind in the existing parametrized
+    case, not by changing the inventory.
+
+**Deviations, this round.** Each is outside Expected scope and outside this card's one-writer map; please confirm or
+ask for a revert.
+
+- `tests/agents/test_features.py`: the sweep's audit path and one new case, as findings 1 and 2 prescribe. No wave-1
+  card's Expected scope names it (`census-reporter-base-rate`, `route-check-replay`), and `rubric-extractor-era` does
+  not either.
+- `frontend/src/api/client.ts`, `frontend/e2e/bundle.spec.ts` and `scripts/build_demo_bundle.py`: one comment or
+  docstring passage each, as finding 3 prescribes. `rubric-extractor-era`, which dispatches after this card merges,
+  edits other comment lines of `client.ts` (`:366-372`) and builds on these.
+
+**Record impact, this round.** None: no recorded byte, media asset, manifest, report, census, scorecard output or ML
+artifact moves, and no shipped byte moves (the bundle diff above). The registry rows this card set are unchanged.
