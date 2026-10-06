@@ -132,6 +132,21 @@ Each item names its enforcing mechanism and a planted or perturbed proof. Each n
 at the base for the stated reason; Results quotes that run. Tests over committed bytes compare digests or booleans,
 so a failure prints no prompt or transcript text.
 
+- [x] Review correction: **the instrument's served-mode outputs are pinned** (round 3, correctness verifier).
+  Proof: `tests/experiments/test_route_lines_replay.py::test_a_served_ballot_counts_its_whole_block` reads one
+  served ballot through `read_ballot` with `served=True` and holds its block characters equal to the served
+  prompt's length less that prompt without its block, and to the served length less the OFF render's, above
+  zero; `test_an_r3_columns_block_cost_and_report_are_read_as_served` holds every served ballot of the scripted
+  r3 column to the same rule, the column's block characters to their sum and above zero, its already-served
+  input tokens above zero and its projected total equal to its recorded total, and its report to the served
+  sentence, the as-served reach row and the already-served token row, with a planted payload that sets the
+  served reach apart from the rebuilt. The served branch's `without_route_block` dropped (V35, row Q01) or the
+  report's served flag a `None` test (V46, row Q09) each turns them red.
+- [x] Review correction: **the parity check's length guard is pinned** (round 3, correctness verifier). Proof:
+  `test_a_route_check_column_of_another_length_is_refused_by_name[one record long]` and `[one record short]` run
+  the CLI on r2's seed 2 against a committed route-check column holding its one record twice, or none, and
+  expect exit 1, the `RouteLinesReplayError` message whole on stderr and no output written; the guard a `None`
+  test (V30, row Q20) turns both red, a bare `ValueError` from `zip(strict=True)` escaping `main`.
 - [x] Review correction: **the step's whole-number check holds every tick and door field, and its once-each
   check a repeated room** (round 2, correctness verifier). Proof: `test_the_typed_check_refuses[a boolean
   to_tick]`, `[a float to_tick]`, `[a boolean door count]`, `[a float door count]`, `[a boolean regroup tick]`,
@@ -1146,3 +1161,112 @@ it ran again, whole, at the same head: **exit 0**. Ruff check and format clean (
 contracts kept, `validate_task_docs` and `generate_prompts --check` clean, strict mypy clean over 530 source
 files, the default tier 10,490 passed, 20 skipped and 3 xfailed (round 1's 10,474 and the 16 new tests), and the
 frontend lint, typecheck, 695 unit tests in 26 files and build all passed.
+
+### Review corrections, round 3 (2026-10-07)
+
+Two blocking findings from the round-3 correctness verifier at `407cb34b`, both in
+`experiments/lab/route_lines_replay.py`; the integrity and docs lenses passed at that head. Fix commit
+`1c5fb252`: `tests/experiments/test_route_lines_replay.py` only; the commits after it change only this card. No
+production line, committed output, recording, audit, fixture or media byte changes, so no count this card states
+and no `docs/artifacts.md` row moves, and the bundle is untouched. Every command below ran at `1c5fb252` in a
+shell with no `AILIBI_*` export, unless it names another head.
+
+**What changed.**
+- **The instrument's served-mode outputs (V35, V46).** Valid. The scripted r3 test read the served column's
+  reach and steps but not what its block costs or how the report states it, so `off_prompt =
+  without_route_block(on_prompt)` in `read_ballot`'s served branch written as `off_prompt = on_prompt` (every
+  served ballot's block characters 0, so an r3 column would publish its block characters and its
+  already-served tokens as 0), or `_column_section`'s served flag made a `None` test (the report states the
+  rendered reading and drops the as-served reach row), left the suite green.
+  `test_a_served_ballot_counts_its_whole_block` reads one served ballot through `read_ballot` with
+  `served=True` and holds its block characters equal to the served prompt's length less that prompt without
+  its block, and to the served length less the OFF render's, above zero.
+  `test_an_r3_columns_block_cost_and_report_are_read_as_served` runs the CLI on the scripted r3 set with
+  `read_ballot` wrapped to keep each reading, and holds every served ballot to the same rule, the column's
+  block characters to their sum and above zero, its already-served input tokens above zero and its projected
+  total equal to its recorded total (a column that served the block adds nothing to it), and its report to the
+  served sentence, the as-served reach row and the already-served token row, the rendered sentence and the
+  projected-added row absent. The scripted set's served and rebuilt reach agree, as `read_ballot` requires, so
+  a planted copy of the payload sets the served reach apart (one fewer over M, one more over W) and the
+  as-served row is shown to read the served counts and the rebuilt row its own.
+- **The parity length guard (V30).** Valid. No case handed `require_parity` a committed column of another
+  length, so `len(recomputed) != len(recorded)` made a `None` test left the suite green, and a run then ended in
+  the bare `ValueError` of `zip(strict=True)`, which `main` does not catch, not in the named refusal.
+  `test_a_route_check_column_of_another_length_is_refused_by_name[one record long]` and `[one record short]`
+  run the CLI on r2's seed 2 (one meeting) against a route-check JSON pinning the same bytes with that
+  meeting's committed record twice, or none, and expect exit 1, stderr exactly `route-lines replay: column r2:
+  the route-check replay records 2 meetings and the walk read 1` (0 for the short case), and no output written.
+
+**Mutation pass, round 3** (the spans the findings name: `read_ballot`'s served branch, the served flags of
+`read_game`, `column_counts` and `_column_section` with the projection, sentence and rows they select, and
+`require_parity` with the refusal `main` prints; the eight listed classes only; each mutant applied alone to a
+copy-restored module and run against `tests/experiments/test_route_lines_replay.py` with `-x`; scratch
+harness, count only): 29 mutants, 29 killed, none named equivalent. The column "at `407cb34b`" re-ran every
+mutant against that suite as it stood at that head (its file written over the new one, then the new one
+restored from a copy): 16 killed, 13 survived. Q01, Q09 and Q20 also ran without `-x`; each red test they turn
+is listed.
+
+| id | class | site | at `407cb34b` | a red test now |
+| --- | --- | --- | --- | --- |
+| Q01 | F | `read_ballot`'s served OFF prompt with `without_route_block` dropped (V35) | survived | `test_a_served_ballot_counts_its_whole_block`, `test_an_r3_columns_block_cost_and_report_are_read_as_served` |
+| Q02 | N | the served comparison `served_lines != lines` a `None` test | killed | `test_a_served_block_other_than_its_rebuilt_lines_raises` |
+| Q03 | M | the served refusal's message a constant | killed | same |
+| Q04 | B | the served and rendered branches swapped | killed | `test_a_run_holds_parity_and_its_check_reproduces` |
+| Q05 | S | the block characters read off the recorded prompt for the OFF prompt | survived | `test_a_served_ballot_counts_its_whole_block` |
+| Q06 | N | `read_game`'s served flag a `None` test | killed | `test_an_r3_column_is_read_from_its_served_blocks_by_both_instruments` |
+| Q07 | N | `column_counts`'s served flag a `None` test | killed | same |
+| Q08 | B | the projection's served and rendered branches swapped | killed | `test_an_r3_columns_block_cost_and_report_are_read_as_served` |
+| Q09 | N | `_column_section`'s served flag a `None` test (V46) | survived | `test_an_r3_columns_block_cost_and_report_are_read_as_served` |
+| Q10 | N | the same flag inverted | killed | `test_a_run_holds_parity_and_its_check_reproduces` |
+| Q11 | B | the served and rendered sentences swapped | killed | `test_an_r3_columns_block_cost_and_report_are_read_as_served` |
+| Q12 | M | the served sentence a constant | survived | same |
+| Q13 | B | the as-served row's `if served` inverted | killed | `test_a_run_holds_parity_and_its_check_reproduces` |
+| Q14 | M | the as-served row's label a constant | survived | `test_an_r3_columns_block_cost_and_report_are_read_as_served` |
+| Q15 | S | the as-served row reads the rebuilt reach over M | survived | same |
+| Q16 | S | the as-served row reads the rebuilt reach over W | survived | same |
+| Q17 | B | the token row's two labels swapped | killed | same |
+| Q18 | M | the already-served label a constant | survived | same |
+| Q19 | S | the token row reads the recorded ballot tokens for the added ones | killed | same |
+| Q20 | N | `require_parity`'s length comparison a `None` test (V30) | survived | `test_a_route_check_column_of_another_length_is_refused_by_name[one record long]`, `[one record short]` |
+| Q21 | N | the same comparison inverted | killed | `test_a_run_holds_parity_and_its_check_reproduces` |
+| Q22 | M | the length refusal's message a constant | survived | `test_a_route_check_column_of_another_length_is_refused_by_name[one record long]` |
+| Q23 | M | its recorded count a constant (0) | survived | same |
+| Q24 | M | its walk count a constant (0) | survived | same |
+| Q25 | S | its recorded count read off the walk's records | survived | same |
+| Q26 | N | `committed is None` inverted | killed | `test_a_run_holds_parity_and_its_check_reproduces` |
+| Q27 | N | the pinned-bytes comparison a `None` test | killed | `test_a_column_the_route_check_replay_pins_to_other_bytes_raises` |
+| Q28 | N | the per-record comparison a `None` test | killed | `test_a_parity_mismatch_raises` |
+| Q29 | T | `RouteLinesReplayError` dropped from the types `main` catches | killed | same |
+
+Which probes first came back green: at `407cb34b`, the verifier's three (Q01 is V35, Q09 is V46, Q20 is V30)
+and ten more on the same spans (Q05, Q12, Q14, Q15, Q16, Q18 and Q22 to Q25). After the new cases none survived
+its first run. Q15 and Q16 cannot be told apart on the scripted set alone, whose served and rebuilt reach agree;
+the planted payload is what kills them. No production line changed, so the neuter tables gain no row.
+
+**Validation, round 3** (at `1c5fb252`; exit codes captured directly):
+
+| command | exit | result |
+| --- | --- | --- |
+| the card's targeted pytest list, `-n 6` | 0 | 1,570 passed (round 2's 1,566 and the 4 new tests) |
+| `uv run lint-imports` | 0 | 4 contracts kept, 0 broken |
+| `uv run python -m experiments.lab.route_check_replay --check` | 0 | reproduced |
+| `uv run python -m experiments.lab.route_lines_replay --check` | 0 | reproduced: no committed output moves |
+| `bash scripts/verify_samples.sh` for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, the same five sets | 0 each | consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py`, then `--check` | 0, 0 | regenerated with no diff; consistent |
+| `uv run python scripts/gen_frontend_types.py --check` | 0 | consistent |
+| `npm --prefix frontend run tsc:check` | 0 | clean |
+| `uv run python scripts/check_doc_facts.py` | 0 | verified |
+| `uv run python scripts/validate_task_docs.py` (at the head carrying this subsection) | 0 | clean |
+| `uv run python scripts/generate_prompts.py --check` | 0 | all 390 prompts in sync (no template changed) |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | 63 checks: 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign` | 0 | 337 passed |
+
+No frontend file, template, recording, audit, fixture or media byte changed, so the frontend unit and e2e legs
+outside `check.sh`, the prompt regeneration and the `docs/artifacts.md` rows are not touched.
+
+**Publication.** Unchanged by this round: `git diff --stat 407cb34b 1c5fb252` lists the one test file only, so
+nothing on the bundle's build path moved, and round 1's bundle diff (`83806ab0` then `732cda8d`, one checkout:
+exactly five null `route_lines_version` keys in four 9p2i files) stands. `origin/main` is still `83806ab0`, so
+no merge of `main` was needed. **The merge stays the owner's.**
