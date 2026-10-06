@@ -770,8 +770,12 @@ captured directly):
 | the default tier, `uv run pytest -n auto --dist loadfile`, on the tree committed as `6014c883` and `93e8cfb8` less the door-bound change and four later tests | 0 | 10,421 passed, 20 skipped, 3 xfailed |
 | the field's default planted at 1 (scratch, restored) | red as planted | the read-off test, the view mirror test and the golden on all three walked sets go red; the byte test stays green, since the omission keys on the default and the bytes still round-trip |
 
-`bash scripts/check.sh`, the full gate, runs once at the head that carries this Results section; its exit code
-is recorded in the last commit, below.
+`bash scripts/check.sh`, the full gate, ran once at `0bac2050` (the head carrying this Results section; the
+commit recording this line changes this card only), in a shell with no `AILIBI_*` export, its exit code
+captured directly: **exit 0**. Ruff check and format clean (559 files), import-linter 4 contracts kept,
+`validate_task_docs` and `generate_prompts --check` clean, strict mypy clean over 530 source files, the default
+tier 10,433 passed, 20 skipped and 3 xfailed, and the frontend lint, typecheck, 695 unit tests in 26 files and
+build all passed.
 
 **Limitations that stay.** Reaching is showing a line, not changing a vote; fake games prove mechanics, not
 reasoning. A lie stated at the table yields a line as plain as the truth. Vent-sighting pairs stay unreached by
