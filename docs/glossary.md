@@ -305,6 +305,21 @@ voter and every role, and it names, ranks and recommends no one
 ([`meetings/route_lines.py`](../meetings/route_lines.py),
 [experiment arms](experiment-arms.md)).
 
+### game-shape profile (shelves, facets and the tripwire)
+
+The game-shape profile is how the owner chose, on 2026-10-06, to have the replay
+viewer describe each game of the shown 9-player set without a score or a rank
+([decision memo](../tasks/decision-2026-09-24-stage-b-wave.md), section 8.6): a
+**facet** is a plain fact every game has, such as its length, its meetings or
+when its kills fell; a **shelf** is a named kind of moment to browse by, such as
+a double kill or a close vote, listing its games by seed number and never by
+rank and, when it reads a player's role or could give the ending away, hidden
+until the viewer chooses to reveal the outcome; and the **tripwire** keeps a
+game off every shelf, though never out of the list of all games, when a player
+was voted out by ballots that rested on nothing the table held about them and
+without which the meeting would have decided otherwise, or on a contradiction
+raised against an account that was in fact true.
+
 ---
 
 ## The machine-learning program

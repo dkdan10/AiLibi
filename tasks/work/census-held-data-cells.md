@@ -239,9 +239,12 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   - **One home.** Planted: the field card's `ast` test stays green with this card's modules in the tree; a copy of
     `reconcilable` defined in `eval/route_charges.py` turns it red.
   - **No drift from the lab.**
-    - A test reads the committed JSON's r2 and r1 columns. It requires each recorded tree equal to the tree of its
-      path at `HEAD`, and every meeting's facts equal to the census's, naming seed, meeting and field. A failed
-      precondition fails by name and is never skipped.
+        - A test reads the committed JSON's r2 and r1 columns. It requires each column's recording files
+      (`replay-seed-*.jsonl`, `roster.json`, `MANIFEST.md`, the `recording_fingerprint` inputs) at the recorded
+      `SHA:PATH` to be blob-identical to those at `HEAD:PATH`, so a derived file beside the recordings, such as
+      `results-game-profile.json`, leaves it green; and every meeting's facts equal to the census's, naming seed,
+      meeting and field. A failed precondition fails by name and is never skipped. Planted: a changed replay blob
+      fails; an added results file does not.
     - Planted: a JSON copy with one meeting's misjudged flag flipped names that meeting; and a loader given no
       regroup ticks breaks the r2 agreement.
     - The lab's own tests pass unchanged. `python -m experiments.lab.route_check_replay --check` reproduces the
@@ -298,9 +301,13 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     those ejections. Every rendered step reconciles, so the cell counts reconciling steps only. This is the live
     counterpart of the lab's "reaches" for (c), which was 29 of 40 on round 2.
   - Planted: a line shown only to a SKIP voter does not reach; a line about another candidate does not reach.
-- [ ] **5. (Optional; the orchestrator may strike any.) The genre-shape tables, role-blind and descriptive.** The
-  carrier gains each game's end reason and its final task count, with defaults that leave hand-built carriers
-  counting nothing. Each table is planted on a hand-built carrier:
+- [ ] **5. (Optional; the orchestrator may strike any table, never the fields.) The genre-shape tables, role-blind
+  and descriptive.** The carrier gains, outside the strikable tables: each game's end reason and its final task
+  count, with defaults that leave hand-built carriers counting nothing; `KillFact.victim` (from `KilledEvent.target`,
+  read in `_load_game`) and `BodyFact.victim` (the body's `player_id`), each `PlayerId | None = None` and always filled
+  by the loader. The end reason and the final task count are kept even if every table below is struck, because
+  `rubric-v2-profile` reads them. Planted for the victims: a same-tick double kill joins each trigger body to its own
+  kill by victim, and a loader that swaps the two victims fails. Each table is planted on a hand-built carrier:
   - **Endings by reason.** Games by recorded end reason. The rows are read with `typing.get_args` from
     `engine.win_conditions.WinResultType` and `orchestrator.replay.GameStopReason`, never copied; an unknown reason
     raises.
@@ -375,7 +382,8 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   - The re-keyed reporter line and every round-3 bar are the record card's, confirmed by the owner before the first
     seed. This card adds no line, flag value or step rule.
   - The census stays out of the scorecard (ruling R13).
-  - The rubric is held for a design pass, and the README and front door are deferred; none is touched.
+    - The rubric is `rubric-v2-profile`'s (decision memo 8.6); this card adds only the carrier fields that card reads
+    and no profile cell; the README and front door stay deferred.
 - **The library is reused, never re-implemented.**
   - Each definition has one home. `route-lines-field` owns `meetings/route_lines.py`, the one home of `Placement`,
     `PlacementKind`, the sort key, `_alibi_stay_placements`, `spoken_placements`, `placements_of` and `reconcilable`
@@ -451,7 +459,9 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   `misjudging_pairs`, lifted with their docstrings, importing the placement reader and `reconcilable` from
   `meetings.route_lines`.
 - `eval/gameplay_census.py`:
-  - the new carrier fields, each defaulting empty;
+  - the new carrier fields, each defaulting empty, among them `KillFact.victim` and `BodyFact.victim` (`PlayerId | None
+    = None`, always filled by the loader) and each game's end reason and final task count, which stay even if every
+    item-5 table is struck;
   - the loader's facts;
   - `is_witness_meeting`;
   - the predicate, the new cells, tables, headings and terms;

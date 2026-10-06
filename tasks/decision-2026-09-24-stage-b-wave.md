@@ -1475,7 +1475,7 @@ says about 8 MB; memo D5 measures 3,237 KiB), is not fixed by the merge, and no 
 | `census-held-data-cells` | the first goal's missing held-data measures (memo Part 3.4 items 1 to 3) as count-only, role-blind census reports, so the pre-registration can name them with a carrier; and the route field's conformance cell on the field's own model (`route_lines_false_to_the_map` and `route_lines_off_the_table` as conformance cells, `meetings_with_a_route_line` as presence) |
 | `stage-b-record-r3` | the pre-registration (the re-keyed flag and its proposed bar with alternatives, 8.2 item 3's carrier, the step rule), the rehearsals, the probe and the 50 seeds under 8.2 item 2's ceilings and conditions |
 | `crew-idle-policy-lab` | 8.2 item 4: the idle-policy lab with its whereabouts-coverage cell, and the re-pricing note in `training/README.md` section 7 and the `training/rewards.py` comment |
-| the rubric cards to come | 8.2 item 5's rubric, after the design pass |
+| `rubric-v2-profile` and the held `rubric-extractor-era` | 8.2 item 5's rubric, as ruled in 8.6; the profile dispatches after `census-held-data-cells` merges and lands, by the owner's merge, before F |
 
 `route-lines-field`, `census-held-data-cells` and `crew-idle-policy-lab` all merge before F, the frozen head the
 pre-registration commit of `stage-b-record-r3` builds on: the field first, the census after it (merging `main`),
@@ -1490,6 +1490,7 @@ The owner still confirms, each in their own words:
 - the reporter flag's bar (8.2 item 1), before the first seed;
 - the carrier of 8.2 item 3, in the pre-registration;
 - round 3's pre-registration and ceilings (8.2 item 2), before the first seed;
+- the profile card's merge (8.6), which publishes the 9p2i Highlights tab through `.github/workflows/pages.yml`;
 - memo D14's retirements of the era-locked instruments, pins and fixtures, which were not ruled. Nothing is retired
   on the strength of this section, and section 1's proposal that the card landing round r+1 deletes round r
   (`:246-248`) stays a proposal: `replays/candidates/stage-b-r1/` stays (audit 9.9).
@@ -1497,6 +1498,53 @@ The owner still confirms, each in their own words:
 This section decides none of the memo's other items (D9, D12, D13 and D15 to D18). Round 3 declares the balance
 pair as round 2 did, and its status (D16) does not change here. The ladder tip stays at baseline 9
 (`eval/eras.py:95`).
+
+### 8.6 The rubric's design and the owner's ruling (2026-10-06)
+
+The design pass of 8.2 item 5 reported the same day in the rubric design memo, an advisory memo kept with the
+session's records outside the tree (`rubric-design-2026-10-06/rubric-design-memo.md`, read-only on `76270d6c`). It
+recommended redoing the rubric as a profile rather than re-basing its score, and the owner ruled on it, verbatim:
+"Profile as recommended, decisive, and ship the shelf". The orchestrator reads the three clauses as that memo's Part
+4 items 1, 4 and 5, item 2 and item 3. Rubric version 2 is the memo's role-blind game-shape profile: for each game,
+facets on a timeline of physical moments and named shelves in a fixed order, each listing its games in seed order,
+with no score, no rank and no zeroing floor. Every read of a role or of the ending sits behind the viewer's reveal
+toggle, and so does any shelf the leak rule finds hinting at an ending (a two-sided Fisher exact test over every game
+of the era, recomputed per era and recorded in the served file), which moves "caught venting" there: 12 of the 13
+games the crew won by ejection carry it. A candidate holding more than three quarters of an era's games is a facet,
+not a shelf. "Decisive" is the tripwire's quantifier: an ejection trips when, with its ejecting ballots labelled
+`off_target`, `uncited` or `invalid_citation` removed, `tally_outcome` (`eval/gameplay_census.py:2708`) at the
+meeting's recorded floor ejects no one or someone else; `supported` and `flag_only` count as held and `not_assessed`
+stays as recorded. No ejecting ballot on the shown set carries `none_held`; how the tripwire reads one is still open,
+and the profile card refuses one by name until the owner says. On the shown set it trips seed 26 at meeting index 2
+alone, and the "every" and "any" counts, 0 and 2, are published beside it; the second tripwire, an ejection on a
+contradiction that scorecard row 3 classes as manufactured, reads 0 and is stated as nearly blind. "Ship the shelf"
+settles D7 as far as version 2 touches it: the reveal-only shelf "decided without proof: wrong on what it held" (20
+games, 21 ejections) ships in the local viewer, always shown with its "right" half (18 games, 19 ejections). It is
+direction section 7's wrong-but-believable class without that section's test that the cited line is true, a role
+read reported beside and never a gate (its section 8). Version 1 (R1 to R7, the weighted geomean, the scalar railroad
+floor and `experiments/lab/rubric_score.py --set-dir`) is retired for the `stage-b-r2` era and kept as baseline-9 lab
+history, never re-scored. No extractor widening is needed: the refresh script's rubric step
+(`scripts/refresh_samples.sh:1123-1166`) is rewired to the profile's publisher, and the W0, W1 and W2 fixtures are
+read by the extractor (`audits/workflows/extract_gameplay_facts.py:686-700`), not the reverse. Two cards carry the
+ruling. `rubric-v2-profile` builds the profile; it reads the census carrier and scorecard row 3's helpers and writes
+neither, and `census-held-data-cells`, which owns the carrier, adds the kill and body victims (`KillFact` and
+`BodyFact`, `eval/gameplay_census.py:658`, `:679`) and keeps its item 5's end reason and final task count, for the
+profile, as cross-card edits. The profile card's import-linter contract, with a planted breach, keeps `agents`,
+`meetings`, `orchestrator`, `engine` and `training` from importing the profile, and no pre-registration, step rule,
+gate or fitness may read it. The orchestrator admits the profile before the frozen head F: the profile card dispatches once
+`census-held-data-cells` has merged (it reads that card's carrier fields) and merges, by the owner, before F, which
+the record card's F clause names (cross-card edit 6). `rubric-extractor-era` is amended to the optional extractor half and held: whether it is dispatched, deferred or
+closed as superseded rides with memo D14, which stays the owner's (8.5). The profile card's merge is the owner's,
+because it publishes: through `.github/workflows/pages.yml` the 9p2i Highlights tab moves from its empty state to the
+two baked games, seed 19 with its pre-reveal shelves and seed 14 with facets only. Neither game is on "wrong on what
+it held", so the public demo shows no wrong-but-believable ejection, and no histogram goes public, because the
+bundle's dashboard shows no tournament report (`scripts/build_demo_bundle.py:25-37`); the card's pull request states
+the copy that goes live, the baked file's keys and the bundle diff file by file. The D7 residue stays open and the
+owner's: whether a wrong-but-believable ejection is ever featured, on the strip or as a curated case (the withdrawn
+`disputed-route` among them). The profile features and orders nothing, so it does not decide that. The profile's
+counts here were measured at `76270d6c` by the design memo's count-only script (`rubric-v2-repro.py`, run from the
+repository root with `.venv/bin/python`, 5 s), which is not committed; the profile card's publisher re-derives them
+with its `--check`, and the card restates them measured at its head.
 
 ## Appendix: reproduction
 
