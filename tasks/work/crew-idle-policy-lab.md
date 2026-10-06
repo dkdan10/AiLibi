@@ -1018,3 +1018,12 @@ subsection.
 - One `git grep` for the old sentence first ran over the whole tree without a path filter. It printed part of one
   committed audit JSONL line that holds transcript text into this session's tool output. Nothing was written,
   committed or quoted from it, and the later searches were limited to `*.md` and `*.py`.
+
+**Task docs, the bundle and the full gate.** The following ran at `52bb8f0c`:
+- `scripts/validate_task_docs.py` exited 0 ("390 historical phase tasks and 390 prompts; 101 work cards").
+- `scripts/check_doc_facts.py` exited 0.
+- The demo bundle was built in this one worktree at `83806ab0` (the base, `main`) and at `52bb8f0c`
+  (`scripts/build_demo_bundle.py --out <scratch>`). `diff -r` prints nothing over 109 files, so nothing ships.
+
+`bash scripts/check.sh` runs once at the head that carries this paragraph. Its exit code is recorded in the next
+commit.
