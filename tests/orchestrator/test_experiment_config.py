@@ -424,7 +424,7 @@ def test_evidence_version_two_with_the_reset_still_validates() -> None:
 
 def test_no_lab_candidate_combines_either_reset_pair() -> None:
     candidates = candidate_configs()
-    assert len(candidates) == 19
+    assert len(candidates) == 21
     combined = [
         name
         for name, config in candidates.items()

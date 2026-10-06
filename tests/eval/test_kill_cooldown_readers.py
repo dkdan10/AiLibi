@@ -1293,7 +1293,11 @@ def test_the_comparison_publishes_ticks_to_parity_over_its_own_arms(
         return lab_module.GameMetrics(
             seed=seed,
             roster=roster,
-            counts={"tick_rows": seed - 990, "event:Killed": 1},
+            counts={
+                "tick_rows": seed - 990,
+                "event:Killed": 1,
+                **dict.fromkeys(lab_module.WHEREABOUTS_COUNTS, 0),
+            },
             maximum_finished_wait_ticks=0,
             completion_status="completed",
             winner="IMPOSTORS",
