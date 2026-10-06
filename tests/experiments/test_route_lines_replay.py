@@ -20,6 +20,7 @@ import json
 import shutil
 import subprocess
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -27,6 +28,7 @@ import pytest
 
 import experiments.lab.route_check_replay as rcr
 import experiments.lab.route_lines_replay as rlr
+from eval.gameplay_census import GameFacts
 from meetings.route_lines import Placement, PlacementKind, RouteLine
 from meetings.schemas import MeetingTranscript
 from tests._helpers.committed import SAMPLES_9P2I, census_inputs, repo_root
@@ -209,6 +211,55 @@ def test_a_run_holds_parity_and_its_check_reproduces(r2_run: dict[str, Any]) -> 
     whole = column["all"]
     assert whole["ballots"] > 0 and whole["tokens"]["recorded_input"] > 0
     assert _check(r2_run["repo"], r2_run["out"], r2_run["route_check"]) == 0
+
+
+def _census_game(change: str) -> GameFacts:
+    """r2's one-meeting game as the census reads it, with ``change`` planted."""
+
+    (game,) = [g for g in census_inputs(SAMPLES_9P2I).games if g.seed == _RUN_SEED]
+    (fact,) = game.meetings
+    if change == "one meeting short":
+        return replace(game, meetings=())
+    if change == "one meeting long":
+        return replace(game, meetings=(fact, fact))
+    if change == "a moved tick":
+        return replace(game, meetings=(replace(fact, tick=fact.tick + 1),))
+    assert change == "a moved meeting id"
+    return replace(game, meetings=(replace(fact, meeting_id="elsewhere"),))
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    (
+        (
+            "one meeting short",
+            r"^r2 seed 2 meeting 0: the census holds no such meeting$",
+        ),
+        (
+            "one meeting long",
+            r"^r2 seed 2: the census holds 2 meetings and the walk read 1$",
+        ),
+        (
+            "a moved tick",
+            r"^r2 seed 2 meeting 0: the census and the walk read different meetings$",
+        ),
+        (
+            "a moved meeting id",
+            r"^r2 seed 2 meeting 0: the census and the walk read different meetings$",
+        ),
+    ),
+)
+def test_a_census_the_walk_disagrees_with_is_refused_by_name(
+    change: str, message: str
+) -> None:
+    """Planted: each census-against-walk guard of ``read_game``, on its own case."""
+
+    with pytest.raises(rlr.RouteLinesReplayError, match=message):
+        rlr.read_game(
+            SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl",
+            label="r2",
+            game=_census_game(change),
+        )
 
 
 def test_a_parity_mismatch_raises(

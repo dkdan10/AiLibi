@@ -235,6 +235,12 @@ RouteReading: TypeAlias = Literal["walking_fits", "regroup_between"]
 ROUTE_BLOCK_OPEN: Final[str] = "<routes>"
 ROUTE_BLOCK_CLOSE: Final[str] = "</routes>"
 
+#: The ballot's own closing lines the block's place is read from: the
+#: transcript's, above which the reader reads nothing, and the map card's, two
+#: lines below which the block opens.
+_TRANSCRIPT_CLOSE: Final[str] = "</transcript>"
+_MAP_CLOSE: Final[str] = "</map>"
+
 #: The served form of one line and of one of its steps. The steps of a line are
 #: joined by ``"; "`` and the line ends with a full stop.
 ROUTE_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -438,21 +444,47 @@ def build_route_lines(
 def route_block_span(prompt: str) -> tuple[int, int] | None:
     """The line indices of the block's open and close delimiters, or ``None``.
 
-    A prompt carries the block at most once; a second open delimiter, or an
-    open delimiter with no close after it, raises.
+    The block is read only where the ballot template writes it. Nothing above
+    the transcript's last closing line is read, so no text spoken or remembered
+    there (a turn's free text, a claim's reason or evidence, a spoken room
+    label, a memory line) opens, closes or stands in for a block, and a prompt
+    with no transcript closing line carries none. Below that line, a prompt with
+    no delimiter line carries no block; otherwise it carries exactly one open
+    and one close delimiter line, the open after a blank line two lines below
+    the map card's only closing line and the close after the open, and any
+    other shape raises.
+
+    The fence stops at the transcript, and holds for a ballot that renders the
+    map card, as every ballot of the served set does (rendered without it, a
+    served block has no place and raises). Below the transcript the template
+    quotes spoken room labels in contradiction sentences and evidence rows: a
+    label holding a delimiter line there raises, as does one holding a map
+    closing line on a ballot that carries the block, and one holding a
+    transcript closing line below the block moves the fence past it, so the
+    block reads as absent.
     """
 
     lines = prompt.split("\n")
-    opens = [index for index, line in enumerate(lines) if line == ROUTE_BLOCK_OPEN]
-    if not opens:
+    fences = [index for index, line in enumerate(lines) if line == _TRANSCRIPT_CLOSE]
+    if not fences:
         return None
-    if len(opens) > 1:
+    below = range(fences[-1] + 1, len(lines))
+    opens = [index for index in below if lines[index] == ROUTE_BLOCK_OPEN]
+    closes = [index for index in below if lines[index] == ROUTE_BLOCK_CLOSE]
+    if not opens and not closes:
+        return None
+    if len(opens) > 1 or len(closes) > 1:
         raise ValueError("a ballot carries the route block at most once")
+    if not opens:
+        raise ValueError("a route block closes but never opens")
     start = opens[0]
-    for index in range(start + 1, len(lines)):
-        if lines[index] == ROUTE_BLOCK_CLOSE:
-            return start, index
-    raise ValueError("the route block is never closed")
+    if lines[start - 1] != "":
+        raise ValueError("the route block opens after a blank line")
+    if [index for index in below if lines[index] == _MAP_CLOSE] != [start - 2]:
+        raise ValueError("the route block opens right below the map card")
+    if not closes or closes[0] < start:
+        raise ValueError("the route block is never closed")
+    return start, closes[0]
 
 
 def without_route_block(prompt: str) -> str:
@@ -463,8 +495,6 @@ def without_route_block(prompt: str) -> str:
         return prompt
     start, end = span
     lines = prompt.split("\n")
-    if start == 0 or lines[start - 1] != "":
-        raise ValueError("the route block opens after a blank line")
     return "\n".join(lines[: start - 1] + lines[end + 1 :])
 
 
@@ -489,7 +519,9 @@ def _parse_step(text: str) -> RouteStep:
 def parse_route_lines(prompt: str) -> tuple[RouteLine, ...]:
     """The route lines a served ballot carries, read back off its block.
 
-    No block reads ``()``. Inside the block, the fixed header comes first and
+    The block is found by :func:`route_block_span`, only where the template
+    writes it, so text spoken in the transcript is never read as a block; no
+    block reads ``()``. Inside the block, the fixed header comes first and
     every line after it is one candidate's line in the served form; a line in
     any other form, a header line after the first line, a block with no line or
     a second line for one candidate raises, as does every check of
