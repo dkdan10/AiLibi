@@ -1270,3 +1270,11 @@ outside `check.sh`, the prompt regeneration and the `docs/artifacts.md` rows are
 nothing on the bundle's build path moved, and round 1's bundle diff (`83806ab0` then `732cda8d`, one checkout:
 exactly five null `route_lines_version` keys in four 9p2i files) stands. `origin/main` is still `83806ab0`, so
 no merge of `main` was needed. **The merge stays the owner's.**
+
+`bash scripts/check.sh`, the full gate for this round, ran once at `fe27894c` (the head carrying this
+subsection; the commit recording this paragraph changes this card only), in a shell with no `AILIBI_*` export,
+`frontend/node_modules` installed by `npm ci` from the lockfile beforehand (no tracked file changed), its exit
+code captured directly: **exit 0**. Ruff check and format clean (559 files), import-linter 4 contracts kept,
+`validate_task_docs` and `generate_prompts --check` clean, strict mypy clean over 530 source files, the default
+tier 10,494 passed, 20 skipped and 3 xfailed (round 2's 10,490 and the 4 new tests), and the frontend lint,
+typecheck, 695 unit tests in 26 files and build all passed.
