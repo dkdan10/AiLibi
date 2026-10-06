@@ -305,6 +305,118 @@ def test_an_on_render_that_moves_more_than_its_block_raises() -> None:
         )
 
 
+def test_an_on_render_whose_block_holds_other_lines_raises() -> None:
+    """Planted: an ON render that serves a different line than it was handed."""
+
+    from tests.meetings.test_route_lines import (
+        _EXAMPLE,
+        _ballot_inputs,
+        _sightings,
+        _vote,
+    )
+
+    transcript = _sightings(("p-3", "WEST_HALL", 5), ("p-3", "ADMIN", 6))
+    kwargs = _ballot_inputs(transcript=transcript)
+    vote = _vote()
+    render = rlr.BallotRender(kwargs=kwargs, prompt=vote(**kwargs))
+
+    def _other_line(**inputs: Any) -> str:
+        return vote(**{**inputs, "route_lines": (RouteLine.model_validate(_EXAMPLE),)})
+
+    with pytest.raises(rlr.RouteLinesReplayError, match="does not parse back"):
+        rlr.read_ballot(
+            render, inner=_other_line, regroup_ticks=frozenset(), served=False
+        )
+
+
+def test_a_ballot_recorded_off_but_rendered_with_lines_raises() -> None:
+    from tests.meetings.test_route_lines import _EXAMPLE, _ballot_inputs, _vote
+
+    kwargs = {
+        **_ballot_inputs(transcript=MeetingTranscript()),
+        "route_lines": (RouteLine.model_validate(_EXAMPLE),),
+        "route_lines_version": 1,
+    }
+    render = rlr.BallotRender(kwargs=kwargs, prompt=_vote()(**kwargs))
+    with pytest.raises(rlr.RouteLinesReplayError, match="recorded OFF was rendered"):
+        rlr.read_ballot(render, inner=_vote(), regroup_ticks=frozenset(), served=False)
+
+
+def _meeting_record() -> rcr.MeetingRecord:
+    return rcr.MeetingRecord(
+        seed=0,
+        meeting=0,
+        tick=9,
+        kind="button",
+        witness_meeting=False,
+        opener="p-1",
+        voters=2,
+        charges=0,
+        charges_on_reconcilable_pair=0,
+        lines=(),
+        b_offered=(),
+        b_kept=(),
+        b_snapshot_offered=(),
+        b_snapshot_kept=(),
+        case=None,
+    )
+
+
+def _reading(voter: str, lines: tuple[RouteLine, ...]) -> rlr.BallotReading:
+    return rlr.BallotReading(
+        voter=voter,
+        lines=lines,
+        block_chars=0,
+        block_rows=(),
+        recorded_prompt="",
+        served_lines=None,
+    )
+
+
+def test_a_meeting_needs_one_ballot_per_participant_and_one_line_per_player() -> None:
+    from tests.meetings.test_route_lines import _EXAMPLE
+
+    inputs = rcr.MeetingInputs(
+        transcript=MeetingTranscript(),
+        contradictions=(),
+        ballots=(),
+        ejected=None,
+        opener="p-1",
+        trigger_kind="emergency",
+        roster=frozenset({"p-1", "p-2"}),
+        sighting_records={},
+        move_witness_records={},
+        regroup_ticks=frozenset(),
+        first_meeting=True,
+        memories={},
+        ballot_overrides={},
+        ballot_prompts={},
+    )
+    line = RouteLine.model_validate(_EXAMPLE)
+    whole = rlr.read_field_meeting(
+        inputs,
+        record=_meeting_record(),
+        readings=[_reading("p-1", (line,)), _reading("p-2", (line,))],
+        served=False,
+    )
+    assert (whole.ballots, whole.ballots_with_block, whole.lines) == (2, 2, 1)
+    with pytest.raises(rlr.RouteLinesReplayError, match="one ballot render per"):
+        rlr.read_field_meeting(
+            inputs,
+            record=_meeting_record(),
+            readings=[_reading("p-1", ())],
+            served=False,
+        )
+    other = line.model_copy(update={"steps": line.steps[:1]})
+    with pytest.raises(rlr.RouteLinesReplayError, match="different lines"):
+        rlr.read_field_meeting(
+            inputs,
+            record=_meeting_record(),
+            readings=[_reading("p-1", (line,)), _reading("p-2", (other,))],
+            served=False,
+        )
+
+
 def test_a_served_block_other_than_its_rebuilt_lines_raises() -> None:
     from tests.meetings.test_route_lines import _EXAMPLE, _ballot_inputs, _vote
 

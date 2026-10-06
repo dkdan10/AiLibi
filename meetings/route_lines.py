@@ -298,8 +298,6 @@ class RouteStep(BaseModel):
                 raise ValueError("a route step names only the station's rooms")
         if set(self.from_rooms) & set(self.to_rooms):
             raise ValueError("a route step is a change of room: its rooms are disjoint")
-        if self.from_tick > self.to_tick:
-            raise ValueError("a route step runs forward in ticks")
         doors = room_hops(
             frozenset(self.from_rooms), frozenset(self.to_rooms), max_hops=_max_doors()
         )

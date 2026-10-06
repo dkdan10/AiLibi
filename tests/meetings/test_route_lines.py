@@ -527,10 +527,25 @@ def test_the_example_line_is_accepted_and_served_as_the_card_words_it() -> None:
             "a reading outside the two",
             {**_EXAMPLE, "steps": (_step(reading="walking_does_not_fit"),)},
         ),
-        ("a room off the map", {**_EXAMPLE, "steps": (_step(to_rooms=("BRIDGE",)),)}),
+        # The map reaches MEDBAY, so only the room check refuses BRIDGE beside it.
         (
+            "a room off the map",
+            {**_EXAMPLE, "steps": (_step(to_rooms=("BRIDGE", "MEDBAY")),)},
+        ),
+        (
+            # Zero doors in two ticks would otherwise read as a walk.
             "overlapping rooms",
-            {**_EXAMPLE, "steps": (_step(to_rooms=("MEDBAY", "REACTOR")),)},
+            {
+                **_EXAMPLE,
+                "steps": (
+                    _step(
+                        to_rooms=("MEDBAY", "REACTOR"),
+                        doors=0,
+                        reading="walking_fits",
+                        regroup_tick=None,
+                    ),
+                ),
+            },
         ),
         (
             "unsorted rooms",
@@ -538,8 +553,30 @@ def test_the_example_line_is_accepted_and_served_as_the_card_words_it() -> None:
         ),
         ("no room", {**_EXAMPLE, "steps": (_step(from_rooms=()),)}),
         ("ticks running back", {**_EXAMPLE, "steps": (_step(from_tick=7),)}),
-        ("a boolean tick", {**_EXAMPLE, "steps": (_step(from_tick=True),)}),
-        ("a negative tick", {**_EXAMPLE, "steps": (_step(regroup_tick=-1),)}),
+        # Each of these two would otherwise read as a five-door walk in five ticks.
+        (
+            "a boolean tick",
+            {
+                **_EXAMPLE,
+                "steps": (
+                    _step(from_tick=True, reading="walking_fits", regroup_tick=None),
+                ),
+            },
+        ),
+        (
+            "a negative tick",
+            {
+                **_EXAMPLE,
+                "steps": (
+                    _step(
+                        from_tick=-5,
+                        to_tick=0,
+                        reading="walking_fits",
+                        regroup_tick=None,
+                    ),
+                ),
+            },
+        ),
         ("no step", {**_EXAMPLE, "steps": ()}),
         (
             "steps out of tick order",
@@ -984,6 +1021,10 @@ def test_a_malformed_line_inside_the_block_raises() -> None:
         parse_route_lines(rendered + "\n" + ROUTE_BLOCK_OPEN + "\n" + ROUTE_BLOCK_CLOSE)
     with pytest.raises(ValueError, match="never closed"):
         parse_route_lines(rendered.replace(ROUTE_BLOCK_CLOSE, "(closed)"))
+    with pytest.raises(ValueError, match="opens after a blank line"):
+        without_route_block(
+            rendered.replace(f"\n\n{ROUTE_BLOCK_OPEN}\n", f"\nx\n{ROUTE_BLOCK_OPEN}\n")
+        )
     assert parse_route_lines("no block here") == ()
     assert without_route_block("no block here") == "no block here"
 
