@@ -21,6 +21,7 @@ import shutil
 import subprocess
 from collections.abc import Sequence
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -30,7 +31,7 @@ import experiments.lab.route_check_replay as rcr
 import experiments.lab.route_lines_replay as rlr
 from eval.gameplay_census import GameFacts
 from meetings.route_lines import Placement, PlacementKind, RouteLine
-from meetings.schemas import MeetingTranscript
+from meetings.schemas import MeetingTranscript, VoteBallot
 from tests._helpers.committed import SAMPLES_9P2I, census_inputs, repo_root
 from tests._helpers.scripted_routes import record_routes_game, round_two_config
 
@@ -468,6 +469,147 @@ def test_a_meeting_needs_one_ballot_per_participant_and_one_line_per_player() ->
         )
 
 
+def _case_record(*, misjudged: bool) -> rcr.CaseRecord:
+    """The harness's record of ``p-3``'s ejection, check (c) reaching it."""
+
+    reached = rcr.CheckCase(
+        reaches=True,
+        reaches_charge=False,
+        insufficient_lines=0,
+        reason=None,
+        pair_reasons=(),
+    )
+    return rcr.CaseRecord(
+        ejected="p-3",
+        eject_voters=1,
+        reporter=False,
+        placements=0,
+        reconcilable_pairs=0,
+        charges=0,
+        ballot_charges=0,
+        flag_charges=0,
+        charges_on_reconcilable_pair=0,
+        misjudged=misjudged,
+        misjudging_pairs=0,
+        walkable_pair=tuple((leg, False) for leg in rcr.DISPUTE_LEGS),
+        checks=tuple((name, reached) for name in rcr.CHECKS),
+        pit_net=False,
+    )
+
+
+def _ballot(voter: str, target: str) -> VoteBallot:
+    return VoteBallot(
+        voter=voter,
+        target=target,
+        confidence=0.8,
+        primary_reason_id=None,
+        rationale_text="a recorded rationale",
+    )
+
+
+def _ejection_case(
+    readings: Sequence[rlr.BallotReading],
+    *,
+    served: bool,
+    misjudged: bool = True,
+    witness: bool = True,
+) -> rlr.FieldCase:
+    """``p-3`` ejected by ``p-1`` alone, read through ``read_field_meeting``."""
+
+    inputs = rcr.MeetingInputs(
+        transcript=MeetingTranscript(),
+        contradictions=(),
+        ballots=(_ballot("p-1", "p-3"), _ballot("p-2", "SKIP"), _ballot("p-3", "SKIP")),
+        ejected="p-3",
+        opener="p-1",
+        trigger_kind="emergency",
+        roster=frozenset({"p-1", "p-2", "p-3"}),
+        sighting_records={},
+        move_witness_records={},
+        regroup_ticks=frozenset(),
+        first_meeting=True,
+        memories={},
+        ballot_overrides={},
+        ballot_prompts={},
+    )
+    record = replace(
+        _meeting_record(),
+        witness_meeting=witness,
+        case=_case_record(misjudged=misjudged),
+    )
+    meeting = rlr.read_field_meeting(
+        inputs, record=record, readings=readings, served=served
+    )
+    assert meeting.case is not None
+    return meeting.case
+
+
+def _served(
+    voter: str,
+    lines: tuple[RouteLine, ...],
+    served_lines: tuple[RouteLine, ...] | None = None,
+) -> rlr.BallotReading:
+    return replace(
+        _reading(voter, lines),
+        served_lines=lines if served_lines is None else served_lines,
+    )
+
+
+def test_served_reach_counts_only_served_lines_about_the_ejected_from_its_voters() -> (
+    None
+):
+    """Planted: served mode, where a served block's lines miss the ejected player.
+
+    ``p-1`` alone votes ``p-3`` out. Unreached: ``p-1``'s served block holds a
+    line about ``p-2`` only, and ``p-2``, who skipped, holds one about ``p-3``.
+    Served apart: ``p-1``'s rebuilt lines hold ``p-3`` but its served block holds
+    only ``p-2`` (the instrument refuses that state before this reading; here it
+    proves the served reach reads the served block). The counts then hold an
+    unreached and a reached case at a witness meeting, a reached misjudged case
+    at another meeting and a reached case that is not misjudged, so each served
+    count counts only its own reached cases.
+    """
+
+    from tests.meetings.test_route_lines import _EXAMPLE
+
+    about_ejected = RouteLine.model_validate(_EXAMPLE)
+    about_other = RouteLine.model_validate({**_EXAMPLE, "subject": "p-2"})
+    unreached_readings = [
+        _served("p-1", (about_other,)),
+        _served("p-2", (about_ejected,)),
+        _served("p-3", ()),
+    ]
+    reached_readings = [
+        _served("p-1", (about_ejected,)),
+        _served("p-2", ()),
+        _served("p-3", ()),
+    ]
+    unreached = _ejection_case(unreached_readings, served=True)
+    assert (unreached.reaches, unreached.reaches_served) == (False, False)
+    apart = _ejection_case(
+        [_served("p-1", (about_ejected,), (about_other,)), *reached_readings[1:]],
+        served=True,
+    )
+    assert (apart.reaches, apart.reaches_served) == (True, False)
+    reached = _ejection_case(reached_readings, served=True)
+    assert (reached.reaches, reached.reaches_served) == (True, True)
+    # Rendered mode reads no served block.
+    rendered = [replace(reading, served_lines=None) for reading in reached_readings]
+    assert _ejection_case(rendered, served=False).reaches_served is None
+    elsewhere = _ejection_case(reached_readings, served=True, witness=False)
+    not_misjudged = _ejection_case(reached_readings, served=True, misjudged=False)
+    counts = rlr._case_counts(
+        [unreached, reached, elsewhere, not_misjudged], served=True
+    )
+    assert (counts["M"], counts["W"]) == (3, 2)
+    assert (counts["field_reaches_M"], counts["field_reaches_W"]) == (2, 1)
+    assert (counts["field_reaches_M_served"], counts["field_reaches_W_served"]) == (
+        2,
+        1,
+    )
+    assert "field_reaches_M_served" not in rlr._case_counts([reached], served=False)
+
+
 def test_a_served_block_other_than_its_rebuilt_lines_raises() -> None:
     from tests.meetings.test_route_lines import _EXAMPLE, _ballot_inputs, _vote
 
@@ -561,6 +703,70 @@ def test_an_r3_set_recorded_under_another_config_is_refused_naming_the_column(
     out.mkdir()
     assert _run(repo, out, f"r3={sha}:replays/candidates/stage-b-r3/9p2i") == 1
     assert "column r3: seed 0 recorded settings that differ" in capsys.readouterr().err
+
+
+def _copy_r2_game(set_dir: Path) -> None:
+    set_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("MANIFEST.md", "roster.json", "experiment-config.json"):
+        if not (set_dir / name).exists():
+            shutil.copy(SAMPLES_9P2I / name, set_dir / name)
+    shutil.copy(SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl", set_dir)
+
+
+def test_a_census_whose_seeds_differ_from_the_set_is_refused(tmp_path: Path) -> None:
+    """Planted: r2's 50-game census beside a set holding one of its games."""
+
+    set_dir = tmp_path / "9p2i"
+    _copy_r2_game(set_dir)
+    with pytest.raises(
+        rlr.RouteLinesReplayError,
+        match=r"^r2: the census and the set hold different seeds$",
+    ):
+        rlr.read_set(set_dir, label="r2", census=census_inputs(SAMPLES_9P2I))
+
+
+def test_a_set_whose_games_record_the_field_both_ways_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: a scripted game recorded ON beside r2's game recorded OFF.
+
+    Each game's reading is stubbed (it is the mode check under test, and the
+    scripted game has no census row here); the modes are read off the bytes.
+    """
+
+    set_dir = tmp_path / "9p2i"
+    record_routes_game(set_dir, route_lines=True)
+    _copy_r2_game(set_dir)
+    modes = {
+        rlr._column_mode(set_dir / f"replay-seed-{seed}.jsonl")
+        for seed in (0, _RUN_SEED)
+    }
+    assert modes == {"served", "rendered"}
+    census = census_inputs(SAMPLES_9P2I)
+    (game,) = [g for g in census.games if g.seed == _RUN_SEED]
+    read: list[int] = []
+
+    def _read_game(path: Path, *, label: str, game: GameFacts) -> rlr.GameReading:
+        read.append(game.seed)
+        return rlr.GameReading(
+            meetings=(),
+            texts=frozenset(),
+            recorded_input_tokens=0,
+            recorded_ballot_input_tokens=0,
+            added_input_tokens=Fraction(0),
+        )
+
+    monkeypatch.setattr(rlr, "read_game", _read_game)
+    with pytest.raises(
+        rlr.RouteLinesReplayError,
+        match=r"^r2: its games record the field both ways$",
+    ):
+        rlr.read_set(
+            set_dir,
+            label="r2",
+            census=replace(census, games=(replace(game, seed=0), game)),
+        )
+    assert read == [0, _RUN_SEED]
 
 
 # ---------------------------------------------------------------------------

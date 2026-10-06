@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import inspect
+import itertools
 import re
 import shutil
 import sys
@@ -487,6 +488,24 @@ def test_the_example_line_is_accepted_and_served_as_the_card_words_it() -> None:
     assert parse_route_lines(rendered) == (line,)
 
 
+#: The reason the typed check states for each case that names one.
+_WHOLE_NUMBERS: Final[str] = "a route step's ticks and doors are whole numbers"
+_ONCE_EACH: Final[str] = "a route step names its rooms once each, in sorted order"
+_REASONS: Final[dict[str, str]] = {
+    "a boolean tick": _WHOLE_NUMBERS,
+    "a negative tick": _WHOLE_NUMBERS,
+    "a boolean to_tick": _WHOLE_NUMBERS,
+    "a float to_tick": _WHOLE_NUMBERS,
+    "a boolean door count": _WHOLE_NUMBERS,
+    "a float door count": _WHOLE_NUMBERS,
+    "a boolean regroup tick": _WHOLE_NUMBERS,
+    "a float regroup tick": _WHOLE_NUMBERS,
+    "unsorted rooms": _ONCE_EACH,
+    "no room": _ONCE_EACH,
+    "a duplicated room": _ONCE_EACH,
+}
+
+
 @pytest.mark.parametrize(
     ("label", "payload"),
     [
@@ -578,6 +597,37 @@ def test_the_example_line_is_accepted_and_served_as_the_card_words_it() -> None:
                 ),
             },
         ),
+        # Each of these six would otherwise read as the same step with its whole
+        # number: the whole-number check holds every tick and door field.
+        (
+            "a boolean to_tick",
+            {**_EXAMPLE, "steps": (_step(from_tick=0, to_tick=True, regroup_tick=1),)},
+        ),
+        ("a float to_tick", {**_EXAMPLE, "steps": (_step(to_tick=6.0),)}),
+        (
+            "a boolean door count",
+            {**_EXAMPLE, "steps": ({**_EXAMPLE_STEPS[1], "doors": True},)},
+        ),
+        (
+            "a float door count",
+            {**_EXAMPLE, "steps": ({**_EXAMPLE_STEPS[1], "doors": 1.0},)},
+        ),
+        (
+            "a boolean regroup tick",
+            {**_EXAMPLE, "steps": (_step(from_tick=0, to_tick=2, regroup_tick=True),)},
+        ),
+        ("a float regroup tick", {**_EXAMPLE, "steps": (_step(regroup_tick=5.0),)}),
+        # Sorted and on the map, one door from MEDBAY: only the once-each check
+        # refuses it.
+        (
+            "a duplicated room",
+            {
+                **_EXAMPLE,
+                "steps": (
+                    {**_EXAMPLE_STEPS[1], "to_rooms": ("WEST_HALL", "WEST_HALL")},
+                ),
+            },
+        ),
         ("no step", {**_EXAMPLE, "steps": ()}),
         (
             "steps out of tick order",
@@ -589,8 +639,79 @@ def test_the_example_line_is_accepted_and_served_as_the_card_words_it() -> None:
     ],
 )
 def test_the_typed_check_refuses(label: str, payload: dict[str, object]) -> None:
-    with pytest.raises(ValidationError):
+    reason = _REASONS.get(label)
+    with pytest.raises(
+        ValidationError, match=None if reason is None else re.escape(reason)
+    ):
         RouteLine.model_validate(payload)
+
+
+def test_the_typed_check_accepts_each_sorted_room_set_and_refuses_every_other_order() -> (
+    None
+):
+    """Property over a generated family: every two- and three-room set off ADMIN.
+
+    Each set, in sorted order, is a walk from ADMIN over the map's doors in as
+    many ticks; each other order of the same rooms is refused for its order. A
+    set's own iteration order follows string hashing, not sorting, so a check
+    that compared the rooms to that order instead fails on members of this
+    family whatever the hash seed.
+    """
+
+    others = sorted(transcript_module.CANONICAL_ROOMS - {"ADMIN"})
+    accepted = refused = 0
+    for size in (2, 3):
+        for combo in itertools.combinations(others, size):
+            doors = transcript_module.room_hops(
+                frozenset({"ADMIN"}),
+                frozenset(combo),
+                max_hops=len(transcript_module.CANONICAL_ROOMS),
+            )
+            assert doors is not None
+            for order in itertools.permutations(combo):
+                step = _step(
+                    from_rooms=("ADMIN",),
+                    from_tick=0,
+                    to_rooms=order,
+                    to_tick=doors,
+                    doors=doors,
+                    reading="walking_fits",
+                    regroup_tick=None,
+                )
+                payload = {**_EXAMPLE, "steps": (step,)}
+                if order == combo:
+                    RouteLine.model_validate(payload)
+                    accepted += 1
+                else:
+                    with pytest.raises(ValidationError, match=re.escape(_ONCE_EACH)):
+                        RouteLine.model_validate(payload)
+                    refused += 1
+    assert (accepted, refused) == (36 + 84, 36 + 84 * 5)
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        _step(from_tick=0, to_tick=1, regroup_tick=1),
+        _step(),
+        _EXAMPLE_STEPS[1],
+        _step(from_tick=0, to_tick=2, regroup_tick=1),
+        {**_EXAMPLE_STEPS[1], "to_rooms": ("WEST_HALL",)},
+    ],
+    ids=[
+        "the boolean to_tick's whole number",
+        "the float to_tick's and regroup tick's whole numbers",
+        "the boolean and float door counts' whole number",
+        "the boolean regroup tick's whole number",
+        "the duplicated room once",
+    ],
+)
+def test_each_whole_number_and_once_each_case_reads_with_its_fix(
+    step: dict[str, object],
+) -> None:
+    """The control: each such refused step, with its one defect mended, is accepted."""
+
+    RouteLine.model_validate({**_EXAMPLE, "steps": (step,)})
 
 
 def test_the_door_bound_follows_the_room_table(
