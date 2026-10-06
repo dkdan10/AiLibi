@@ -463,3 +463,39 @@ documents describe them as the current game; a missing key keeps its historical 
 keep verifying, and the shown set moves by the era-keyed promotion once a round sits inside the envelope. The
 vent exit `vent_exit_policy = look_and_wait` is kept, not fallen back, and the balance is addressed by a second
 round with one dial, a recorded kill-cooldown override, so that the two are never confounded.
+
+Addendum, 2026-10-06 (Stage B, the reporter line re-keyed). Candidate round 2 is the shown set since 2026-10-02
+(`replays/samples/9p2i`, `audits/audit-2026-10-01-stage-b-r2.md` section 9). It carries one flag its record states:
+reporters ejected per report meeting read 17 of 114, above the 0.104 pre-registered as twice baseline 9's 7 of 135,
+so the round's own rule named no promotion step, and the owner promoted it regardless. That line is keyed to bytes
+the shown set has left, and it reads role: while impostors never report a body (ruling R6; meetings opened by an
+impostor read 0 of 117 by construction in `docs/gameplay-census.md`), every reporter is a crewmate, so every count of
+ejected reporters is a count of innocent ejections. The owner ruled on 2026-10-06, verbatim: "Rekey". From the next
+pre-registration on, the envelope's reporter line reads reporter seats ejected without vent proof against other
+crewmate seats ejected without vent proof. The gameplay census already publishes both per era (17 of 93 against 5
+of 291 on the shown set), and `uv run python scripts/publish_gameplay_census.py --check` recomputes them from the
+recordings. The round's record card proposes the bar with its alternatives, and the owner states it in their own
+words before the first seed. Round 2's reading under the 0.104 line stands as recorded: a later experiment never
+changes an earlier verdict.
+
+The rule behind the re-keying is general. A pre-registered flag that reads role is reported beside the readings and
+is never read by a step rule: no branch that names a next round, a promotion or a fallback takes it as a condition.
+A flag reads role when its count depends on a player's seeded role, directly (other crewmate seats, role-correct
+ejections) or by construction (every reporter, while impostors never report). Section 8's yardstick already says
+role-correct ejection is "reported beside, never a gate", and for the scorecard a typed invariant enforces it
+(`eval/process_scorecard.py`, `ProcessScorecard._role_correctness_stays_demoted`). For a round, the step rule as
+pre-registered carries it: its conditions name no such flag, and the round's readings command computes the step
+from those conditions alone. Round 2's promotion branch fired only with no envelope flag, which made the 0.104 line
+a gate on that step; that form is not repeated. The impostor win share reads the game's outcome rather than a
+player's role, and whether a later step rule branches on it is that round's pre-registration to state and the
+owner's to confirm.
+
+On the same day the owner took the orchestrator's recommendation for round 3: a spend on one recorded field of the
+same kind as the wave's, under the standing ceilings and only after the owner confirms its pre-registration (the
+decision memo's section 8). Section 10's stop on levers, as amended for Stage B, allows it: the field is default
+off, set only from the declared config file, stamped, and recorded ON only in a candidate recording, and no
+`AILIBI_*` lever and no environment switch is added. It is the narrow route field the route-check replay named
+(`tasks/work/route-check-replay.md`, Reading): at most one line per living candidate, the same for every role,
+giving only the pairs of places stated at the table that the map links within the elapsed ticks and the moves that
+cross the public regroup; a change of room that is neither is left out. It never asserts presence or honesty and
+points at no one, so nothing in it pushes an agent toward the correct answer (section 7).

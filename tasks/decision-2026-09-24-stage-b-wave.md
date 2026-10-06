@@ -1324,6 +1324,180 @@ round-3 rule (win share above 0.60 at 6 names 8; below 0.20 names 5), the same e
 ceilings, the same pause mechanism, and its own candidate directory `replays/candidates/stage-b-r2/9p2i`. Two
 cards carry it: `kill-cooldown-arm` and `stage-b-record-r2`.
 
+---
+
+## 8. The baselines review and the owner's rulings (2026-10-06)
+
+Citations in this section are `path:line` at `76270d6c` (the merge of PR #498, 2026-10-06) unless a commit is
+named; every count was re-measured there by the command beside it.
+
+**Since section 7.** Round 2 recorded seeds 0-49 under the seven adopted arms, `vent_exit_policy = look_and_wait`
+and `kill_cooldown_ticks = 6` (PR #494, `d41c9006`; `audits/audit-2026-10-01-stage-b-r2.md`). Every conformance cell
+read 0 and the impostor win share read 24 of 50, inside the envelope; reporters ejected per report meeting read 17 of
+114, above the pre-registered 0.104, so the round-3 rule named no step (audit 6.4 and 7). The owner ruled on
+2026-10-02, verbatim: "1. Merge 2. Promote and run the diagnostics." Round 2 is now `replays/samples/9p2i`, in its
+own era (PR #495, `0e67f42a`; `eval/eras.py:82-83`), with the flag stated as its limitation (audit 9.2). The
+diagnosis (`tasks/diagnosis-2026-10-02/README.md`) and three follow-up cards came next: the census's reporter base
+rate (PR #497), the route-check replay (PR #499) and the post-promotion follow-through (PR #498); a fourth,
+`rubric-extractor-era`, stayed ready and undispatched. The baselines memo of 2026-10-03, an advisory memo kept with
+the session's records outside the tree (`baselines-2026-10-03/baselines-memo.md`, read-only on `cf3341ab`),
+classified every measure on the tree against the direction, posed the open decisions in its Part 4 (D1 to D18) and
+listed in its Part 3.4 the measures the first goal is missing. It decided nothing; the owner ruled on its questions.
+
+### 8.1 The owner's rulings of 2026-10-06, verbatim
+
+> 1. Rekey
+> 2. What is your recommendation? I slightly lean to spend with narrow field, but would go with your recommendation
+> 3. Rebase the rubric. Maybe spend time thinking if it needs to be completely redone with the context from this conversation.
+> 4. README should be current and can be a focus in the last steps, once the project is stable.
+> 5. Sounds good
+> 6. Sounds good
+> 7. Sounds good
+> 8. Merge when ready
+
+Ruling 2 asks for the orchestrator's recommendation and defers to it. The recommendation is the narrow field the
+owner leaned to (memo D2 option (a)), so round 3 is authorized on it under that delegation, on the conditions of 8.2
+item 2.
+
+### 8.2 The orchestrator's readings
+
+These are the orchestrator's application, not the owner's words. They bind the cards of round 3.
+
+1. **The reporter line is re-keyed** (ruling 1; memo D1 option (b)). From the next pre-registration on, the
+   envelope's reporter line reads reporter seats ejected without vent proof against other crewmate seats ejected
+   without vent proof. The census already publishes both per era: on the shown set, 17 of 93 against 5 of 291
+   (`docs/gameplay-census.md:162`, `:165`; `uv run python scripts/publish_gameplay_census.py --check` recomputes
+   them from the recordings). It is a flag the round-3 step rule does not read. While R6 holds every reporter is a
+   crewmate (meetings opened by an impostor: 0 of 117 by construction, `docs/gameplay-census.md:255`), so any
+   reporter line reads role, and a role-reading flag that a step rule branches on is a gate on that step. Its bar
+   is proposed with alternatives by `stage-b-record-r3` and stated by the owner before the first seed. Round 2's
+   reading under the 0.104 line (twice baseline 9's 7 of 135, section 4's envelope row at `:1193`) stands as
+   recorded, and no earlier verdict is re-read. The direction addendum of 2026-10-06 states the rule in general.
+2. **Round 3 is a spend on the narrow role-blind route field** (ruling 2; memo D2 option (a); the route-check
+   card's branch 3, `tasks/work/route-check-replay.md:1461-1469`).
+   - The field. A new `RecordedExperimentConfig` field: versioned, default off and omitted from the payload at its
+     default, set only from the declared config file, with its own stamp in the replay and readers that thread it
+     or refuse it. Prompt-only, it serves a composite stamp through the spine registry and guarded template blocks,
+     as the ballot arms do: no prompt registry bump, no `AILIBI_*` lever, no environment switch.
+   - What it renders. At most one line per living candidate, the same for every role, holding only two readings:
+     pairs of places stated at the table that the map links within the elapsed ticks, over several hops; and moves
+     that cross the public regroup, which walking cannot decide. A change of room that is neither is left out, never
+     rendered as an impossible move, and a candidate with neither has no line. It never asserts presence or honesty
+     and never points at anyone. The meeting layer labels and never rewrites, and nothing pushes an agent toward the
+     correct answer (direction section 7).
+   - Why this check. On round 2 the route-check replay found 40 misjudged cases (a charge against a pair of places
+     the map or the public regroup reconciles, ending in an ejection), 7 of them at kill-witness meetings. The
+     existing walkable-pair clause reaches 15 of the 40. The recorded `evidence_reasoning_version = 2` reaches 16,
+     and at the recorded ballot budget it never shows a regroup-crossing row. The reference check (c), several hops
+     over the whole map plus alibi stays plus a named regroup crossing, reaches 29 of 40 and 7 of 7: every
+     misjudged innocent ejection (21 of 21) and every ejected witness (5 of 5). Its 11 unreached cases are impostor
+     ejections, 9 resting on a vent sighting. Source: `experiments/lab/results-route-check-replay.json`, column
+     `r2`, `rule_inputs`; `uv run python -m experiments.lab.route_check_replay --check` reproduces it (exit 0 at
+     `76270d6c`, 46 s). Reaching is showing a line, not changing a vote, and no model was run.
+   - The round. Seeds 0-49 of the 9p2i roster into its own candidate directory under `replays/candidates/`. The same
+     eight rules (the seven adopted arms and `vent_exit_policy = look_and_wait`) plus `kill_cooldown_ticks = 6`, so
+     the route field is the round's one dial. `evidence_reasoning_version = 2` is not used, and R6 stays off.
+   - The ceilings. The standing ones: 2,800 calls, 17,500,000 input and 750,000 output tokens (section 4,
+     `:1109-1115`); a 12 h recording wall summed over sittings, each inside an 18 h window (the owner's amendment of
+     2026-09-28, "Raise the wall to 12h in an 18h window and resume. Make sure it allows for a pause."; audit 1.1 and
+     1.6); $0.00 marginal; each with its stop at 90 percent. The stop rules, the stall rule and the freeze of section
+     4 (`:1124-1156`) and of the round-2 record (audit 1.7) apply unchanged. Round 2's spend is the planning figure
+     (1,588 calls, 9,726,227 input, 441,092 output, 3.59 h, $0; audit 5.2), re-measured at the probe.
+   - The conditions, in order. The field card merges. Its planted cases, the fake and scripted rehearsals and the
+     lab rows pass on the declared config before any live seed. The pre-registration lands as its own commit. The
+     owner confirms the pre-registration and the ceilings in their own words. Only then does the first seed run.
+   - The pre-registration names, after the diagnosis (`tasks/diagnosis-2026-10-02/README.md:649-653`) and memo D2:
+     the route-check process count; the kill-witness outcome row; the per-seat ejection table; the impostor win
+     share against 0.20-0.60, watching the 0.20 floor because saved witnesses help the crew; the re-keyed reporter
+     flag; and the first goal's missing held-data cells (memo Part 3.4 items 1 to 3) once a census card carries
+     them. Its step rule, if it has one, names no role-reading flag among its conditions.
+   - Publication. Nothing ships. A candidate round's bytes reach the demo only through a later promotion, and that
+     is the owner's decision.
+3. **The carrier for the cells round 2 left uncarried** (memo D3; not ruled on 2026-10-06, so this is the
+   orchestrator's reading). False resume perceptions are carried by mechanism and golden, not by a measured count:
+   the shared helper `compose_resume_events` (`orchestrator/replay.py:1427`) with its planted tests, and the
+   golden's byte-equal re-render of all 1,502 recorded round-2 prompts (audit 5.1). Ballots citing a rebuttal read
+   the turn citation as the cell, with the counter slot beside it (57 of 691 and 175 of 691 on the shown set,
+   `docs/gameplay-census.md:299-300`). The regroup notice and the holds-nothing label are census cells from this
+   head on (`:221`, `:331`). Round 2's "not carried" lines stay as recorded (audit 8). The round-3
+   pre-registration names this carrier as a point the owner confirms.
+4. **ML** (memo D10). The hold of 2026-09-24 (ruling 12) stands.
+   - The free idle-policy lab runs: `crew_idle_policy` set to `hub_wait`, `patrol` and `accompany`, crossed with the
+     adopted rules plus cooldown 6 on development seeds, with the fake provider, $0 and no training (diagnosis card
+     6, `tasks/diagnosis-2026-10-02/README.md:674-684`). Its whereabouts-coverage cell is computed from engine
+     positions the same way for every role, and it is defined before the run.
+   - The role-blind re-pricing of `correct_reports` and `patrol_coverage` is written into `training/README.md`
+     section 7 (`:312-364`) and the comment at `training/rewards.py:301-306`, as a comment-only edit of the class
+     `d1ea113a` merged. Any reopening re-prices the two terms role-blind, under a new `FITNESS_OBJECTIVE_ID`, before
+     any search. No reward value, weight, signature, fit or artifact moves.
+   - The conviction GO (`training/artifacts/conviction/verdict.json:10`, `"fitness_term": "ships"`) folds into that
+     note: a reopening's re-priced objective overrides it, dated and written as an override, never by editing the
+     artifact.
+   - The seed-0 reward pin (`tests/training/test_rewards.py:518`, the byte-identical seed-zero test) stays until a
+     reopening.
+   - The corpus FROZEN line and the ML artifacts do not move; `scripts/verify_ml_evidence.py` runs offline, never
+     with `--complete`.
+5. **The rubric, the README and the front door** (rulings 3 and 4; memo D6 to D8).
+   - The rubric is held for a design pass, and no card of round 3 carries it. `rubric-extractor-era` (ready,
+     `tasks/work/rubric-extractor-era.md:3`), which keeps the scorer unchanged, is not dispatched as contracted. The
+     owner chose to rebase the rubric (memo D6 option (b): a new rubric version before anything ships for the shown
+     era, the scalar railroad floor replaced by the ballots' grounding labels with its quantifier stated, a task win
+     after an ejection no longer scored 0.0, the role reads demoted) and asked whether it should be redone from the
+     start; the design pass answers that first. D7, whether a wrong-but-believable ejection is ever featured, rides
+     with it. The rubric cards come from that pass.
+   - The README and the front door (memo D8, with its dashboard and viewer halves) are deferred to the last steps,
+     once the project is stable. Until then the README stays current: `scripts/check_doc_facts.py` keeps every
+     figure it checks true, and a card that makes a README sentence false fixes it in the same pull request.
+
+### 8.3 Held as recommended (rulings 5 to 7)
+
+As the orchestrator reads them, rulings 5 to 7 accept its recommendations on three standing holds:
+
+- **ML is held**, with the idle-policy lab and the re-pricing note of 8.2 item 4 (memo D10).
+- **The champion-flip comparator is held at 11 of 50** (`FSM_COMPARATOR_AT_D41C9006`,
+  `scripts/regen_test_goldens.py:70`; memo D11 option (a)). It is never re-derived from the promoted set's
+  manifest; its form at a reopening is decided then.
+- **R6 is kept through round 3** (memo D4): impostors never report a body, so the reporter cells and the re-keyed
+  line keep their meaning across the round. A revisit, if the owner wants one, is a round of its own after round 3,
+  never beside the route field.
+
+### 8.4 PR #498 (ruling 8)
+
+The post-promotion follow-through merged as delivered on 2026-10-06 (`76270d6c`; memo D5), its stated deviations
+included. The item memo D5 routed to a one-line fix, the bundle-size comment (`frontend/e2e/bundle.spec.ts:170`
+says about 8 MB; memo D5 measures 3,237 KiB), is not fixed by the merge, and no card of round 3 owns it.
+
+### 8.5 The cards, and what the owner still confirms
+
+| card | carries |
+|---|---|
+| `route-lines-field` | 8.2 item 2's field: the recorded field, its stamp and readers, its planted cases (one hop in one tick; two hops in two ticks; across a regroup; diagnosis `:645`), and the fake and scripted rehearsals and lab rows the record needs |
+| `census-held-data-cells` | the first goal's missing held-data measures (memo Part 3.4 items 1 to 3) as count-only, role-blind census reports, so the pre-registration can name them with a carrier; and the route field's conformance cell on the field's own model (`route_lines_false_to_the_map` and `route_lines_off_the_table` as conformance cells, `meetings_with_a_route_line` as presence) |
+| `stage-b-record-r3` | the pre-registration (the re-keyed flag and its proposed bar with alternatives, 8.2 item 3's carrier, the step rule), the rehearsals, the probe and the 50 seeds under 8.2 item 2's ceilings and conditions |
+| `crew-idle-policy-lab` | 8.2 item 4: the idle-policy lab with its whereabouts-coverage cell, and the re-pricing note in `training/README.md` section 7 and the `training/rewards.py` comment |
+| the rubric cards to come | 8.2 item 5's rubric, after the design pass |
+
+`route-lines-field`, `census-held-data-cells` and `crew-idle-policy-lab` all merge before F, the frozen head the
+pre-registration commit of `stage-b-record-r3` builds on: the field first, the census after it (merging `main`),
+and the idle-policy lab whenever it is ready, re-capturing if the field or the census landed under its fingerprint.
+The idle-policy lab is not read by the round, but it writes the tactical lab, `training/`,
+`audits/tactical-gameplay/` and the `audits/` row of `docs/artifacts.md`, which the record's nothing-moves diff and
+freeze cover, so it lands before F and never while the round records. From the first seed to the record's merge,
+section 4's freeze holds for every card.
+
+The owner still confirms, each in their own words:
+
+- the reporter flag's bar (8.2 item 1), before the first seed;
+- the carrier of 8.2 item 3, in the pre-registration;
+- round 3's pre-registration and ceilings (8.2 item 2), before the first seed;
+- memo D14's retirements of the era-locked instruments, pins and fixtures, which were not ruled. Nothing is retired
+  on the strength of this section, and section 1's proposal that the card landing round r+1 deletes round r
+  (`:246-248`) stays a proposal: `replays/candidates/stage-b-r1/` stays (audit 9.9).
+
+This section decides none of the memo's other items (D9, D12, D13 and D15 to D18). Round 3 declares the balance
+pair as round 2 did, and its status (D16) does not change here. The ladder tip stays at baseline 9
+(`eval/eras.py:95`).
+
 ## Appendix: reproduction
 
 The scratch scripts named here are session aids and are not committed; the load-bearing counts are
