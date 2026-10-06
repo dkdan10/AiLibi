@@ -156,6 +156,18 @@ or exact bytes drift. Sub-directories of `audits/` are indexed as units (`check_
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
+- [x] Review correction (round 3): the three refusal messages of the lab are pinned in full.
+  `test_pairs_refuse_arms_that_ran_different_seeds` runs once per cross arm and requires "<arm> and its reference
+  ran different seeds". `test_a_game_without_a_subject_has_no_share` runs at `kill_ticks` and at `play_ticks`, on
+  either side of the pair, and requires "a game without a subject at <scope> has no share".
+  `test_an_unknown_split_is_refused_before_any_game` requires the sorted declared list. Mechanism: the round-3
+  mutation pass under Results. The verifier's V11 (the arm read as the reference arm, then as `x`), V12 (the scope
+  read as `play_ticks`, then as `kill_ticks`) and V13 (the declared list read as `[]`) each passed all 171 tests
+  against the round-2 tests, and each is killed now. Six more mutants of the same three lines are killed too, 11 of
+  11.
+- [x] Review correction (round 3): the round-2 subsection counts six new tests, not five, in its file list and under
+  "The tests". Mechanism: `git diff 4a6d4880 34205618 -- tests/experiments/test_tactical_gameplay.py | grep -c
+  '^+def test_'` prints 6.
 - [x] Review correction (round 2): the cell's bound is stated at the strength the code holds, in the README
   bullet and the `whereabouts_coverage` docstring. Every player a crewmate sees in the state a tick leaves is
   covered. The cell bounds nothing an impostor sees (the rooms next to its own at base sight, and sight from
@@ -231,7 +243,7 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   - an impostor who walks in is not counted (planted: the role read dropped).
   A property holds `kills_with_walk_in_crew_witness <= kills_crew_witnessed` and walked-in witnesses at most all
   crew witnesses.
-- [ ] **The summaries.** Mechanism: pure functions over the `arms` block publish two top-level keys, beside
+- [x] **The summaries.** Mechanism: pure functions over the `arms` block publish two top-level keys, beside
   `ticks_to_parity`.
   - `whereabouts_coverage`, per arm and roster: games, kill ticks, the four sums, games with no kill tick, and the
     per-game kill-tick share's minimum, median and maximum over games with one.
@@ -240,6 +252,11 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     higher, equal or lower; then the same three over play ticks for every seed.
   Stubbed rows (as `test_the_comparison_publishes_ticks_to_parity_over_its_own_arms` does) give exact values.
   Planted: a summary over the wrong arm's rows, and a pair read against `stage_b_full`, each fail.
+  Read under the orchestrator's round-3 ruling, option (a) (Results, "Review corrections, round 3"): where this box
+  says kill ticks, the coverage summary publishes `kills` and `games_without_a_kill_tick`, and no eighth count is
+  added. So the capture does not say how many kill ticks an arm had. Two kills can fall on one tick on the
+  9-player roster, and the kill-tick sums count players, not ticks. That number is at least the games with a kill
+  tick and at most the kills.
 - [x] **No existing count moves.** Mechanism: a run at the head, written outside the tree, of the ten round-1 arms
   on `--split development`, and a count-only comparison quoted in Results, as the kill-cooldown card ran its own. The
   rows equal `stage-b-r1-frozen-head.json` on every top-level row field. `counts` is compared on the frozen file's
@@ -503,6 +520,8 @@ Results. Status and the `tasks/README.md` inventory sentence are left to the orc
 Deviations: the card asks the coverage summary for a kill-tick total, which none of the seven declared counts
 carries, and the card also fixes the new count keys at exactly seven. The summary publishes `kills` and the games
 without a kill tick instead. The orchestrator picks between the two readings; nothing else waits on it.
+(Settled in round 3: the orchestrator picked option (a), and every box is now checked; see "Review corrections,
+round 3".)
 
 **Sections this card rests on.**
 - `docs/architecture.md`: "Layering" (`experiments/` writes its own artifacts and nothing reads them back),
@@ -773,13 +792,17 @@ No probe first came back green except B10.
 B10 is equivalent. The role read takes `step.state` in place of `step.pre_state`, and no engine action changes a
 role within a tick, so the two reads are identical for every witness.
 
+Round 3 adds rows V11 to V13d, which replace the arguments of the three refusal messages B24 to B26 mutated. They
+are in the table under "Review corrections, round 3".
+
 **Deviations.**
 - The summaries' kill-tick total (acceptance **The summaries**, left open). A kill tick can hold two kills on 9p2i,
   so `event:Killed` does not count kill ticks, and none of the seven declared counts does. The card also fixes the
   new count keys at exactly seven (**No existing count moves**, Record impact). `whereabouts_coverage` publishes
   `kills` and `games_without_a_kill_tick` in its place. A game has a kill tick exactly when it has a subject at
   one, because its killer is alive. Option (a): accept this shape. Option (b): add an eighth count, `kill_ticks`,
-  which changes the declared seven, the comparison script and Record impact.
+  which changes the declared seven, the comparison script and Record impact. (Settled in round 3: option (a), with
+  no eighth count.)
 - `tests/eval/test_kill_cooldown_readers.py`: its comparison stub gains the four coverage keys, because the summary
   reads them strictly. Constraints name this follow-through. No assertion changed.
 - `build_comparison(split=...)` is typed `str`, and `SPLIT_SEEDS` is the one source of truth that refuses. A
@@ -1029,7 +1052,7 @@ subsection.
 
 **Deviations, round 1.**
 - **The summaries** box stays open. It waits on the orchestrator's pick between the two readings under Deviations
-  above, and no finding of this round touches it. Checking it here would make that pick.
+  above, and no finding of this round touches it. Checking it here would make that pick. (Settled in round 3.)
 - The Outcome sentence is corrected by the Review correction above, not edited, because the Outcome is the card's
   contract.
 - One `git grep` for the old sentence first ran over the whole tree without a path filter. It printed part of one
@@ -1063,7 +1086,7 @@ This commit changes only this card.
 Independent verification of `4a6d4880` found one blocking problem, in a documented claim. This round changes five
 files:
 - `experiments/tactical_gameplay.py`: the `whereabouts_coverage` docstring only, with no code line changed;
-- `tests/experiments/test_tactical_gameplay.py`: five new tests, seven cases;
+- `tests/experiments/test_tactical_gameplay.py`: six new tests, seven cases;
 - `audits/tactical-gameplay/README.md`: the coverage bullet, and the capture's stamp and wall time;
 - `audits/tactical-gameplay/stage-b-idle-policy-development.json`: the capture, retaken by the harness;
 - `docs/artifacts.md`: the `audits/` row.
@@ -1105,7 +1128,8 @@ stays as the contract was written, and this correction governs how that sentence
 an upper bound on held whereabouts". It is corrected the same way, and it stays as written because it is the
 contract. The matching line under Results, "Limitations", is Results text, so it is corrected in place and marked.
 
-**The tests.** Five new tests, seven cases, in `tests/experiments/test_tactical_gameplay.py`:
+**The tests.** Six new tests, seven cases, in `tests/experiments/test_tactical_gameplay.py` (corrected in round 3:
+this line and the file list above first said five):
 - `test_every_player_a_crewmate_sees_is_covered`. A Hypothesis property under `settings(deadline=None)` over the
   existing seeded canonical-map states (random rooms, `alive`, `in_vent` and roles), with no sabotage or with
   `lights` or `reactor` active. For every living crewmate outside a vent, every player
@@ -1322,7 +1346,7 @@ carries this subsection.
 **Deviations, round 2.**
 - **The summaries** box stays open. It waits on the orchestrator's pick between the two readings under Deviations
   above, as in round 1. This round's dispatch asked that no box be left unchecked. Checking this one would make the
-  pick, so it stays open, and the orchestrator is told so.
+  pick, so it stays open, and the orchestrator is told so. (Settled in round 3.)
 - The card's **Status** line reads `ready`. It belongs to the orchestrator on `main` (Constraints), so it is not
   changed here.
 
@@ -1347,3 +1371,129 @@ were as follows:
 - The frontend passed 26 test files and 695 tests, and its build completed.
 
 This commit changes only this card.
+
+### Review corrections, round 3 (2026-10-07)
+
+Independent verification of `6db8f43e` found two blocking problems, both in the evidence, and the orchestrator ruled
+on the question the summaries left open. This round changes two files:
+- `tests/experiments/test_tactical_gameplay.py`: three tests compare whole messages, and two of them gain a case;
+- this card.
+
+No production line changed. `experiments/tactical_gameplay.py` keeps its sha256 (`4a4c349ef1b7...`), and no other
+file under `runtime_fingerprint` moved, so the capture stands: the Validation fingerprint command exits 0 at this
+head. `main` is still at `83806ab0`, so there was no merge and no re-capture.
+
+**Finding 1: three message-argument mutants survived.** Three tests matched a fixed part of a refusal message, so a
+mutant that replaced a message argument with a constant passed them. Against the round-2 tests each of the
+verifier's mutants passed all 171 tests of the touched suites:
+- V11, `experiments/tactical_gameplay.py:363`: the arm read as `STAGE_B_IDLE_REFERENCE`, then as `x`;
+- V12, `:336`: the scope read as `play_ticks`, then as `kill_ticks`;
+- V13, `:1157`: the declared list read as `[]`.
+
+Each of the three tests now compares the whole message:
+- `test_pairs_refuse_arms_that_ran_different_seeds` runs once per cross arm, with only that arm's rows shortened. It
+  requires "<arm> and its reference ran different seeds", for example "stage_b_full_kill_cooldown_6_patrol and its
+  reference ran different seeds".
+- `test_a_game_without_a_subject_has_no_share` runs at `kill_ticks` and at `play_ticks`, with the empty game on
+  either side of the pair. It requires "a game without a subject at <scope> has no share". The `kill_ticks` case is
+  new.
+- `test_an_unknown_split_is_refused_before_any_game` requires "unknown split <name>; declared: ['development',
+  'development_wide', 'held_out']" for each of its four names.
+
+The `re` import is dropped, because no test uses it now. Each old fixed part is inside the new whole message, so no
+assertion is weaker. The touched suites now run 173 tests: the 171 plus the accompany case and the `kill_ticks` case.
+
+**The mutation pass, bounded to the three refusal lines.** There were eleven mutants, of the listed classes only:
+the verifier's five, and six more on the same three lines. Each ran alone against the touched suites
+(`tests/experiments/test_tactical_gameplay.py`, `tests/orchestrator/test_experiment_config.py` and
+`tests/eval/test_kill_cooldown_readers.py::test_the_comparison_publishes_ticks_to_parity_over_its_own_arms`, with
+`-n 4`). Each ran twice: once with the round-2 test file in place and once with this round's. The round-2 file came
+from `git show 6db8f43e`, and this round's file was restored afterwards from a byte copy, with its sha256
+(`022ea8f778c3...`) re-checked. The production file was restored from a byte copy after each run, and its sha256
+(`4a4c349ef1b7...`) was re-checked each time. With the round-2 tests ten mutants survived and one was killed. With
+this round's tests all eleven are killed.
+
+| id | class | line | mutant | round-2 tests | this round | red tests, this round |
+| --- | --- | --- | --- | --- | --- | --- |
+| V11 | M message | `:363` | the arm read as `STAGE_B_IDLE_REFERENCE` | survived (171 passed) | killed | `test_pairs_refuse_arms_that_ran_different_seeds`, both arms |
+| V11b | M message | `:363` | the arm read as `'x'` | survived (171 passed) | killed | `test_pairs_refuse_arms_that_ran_different_seeds`, both arms |
+| V11c | M message | `:363` | the arm read as the patrol arm's name | survived (171 passed) | killed | `test_pairs_refuse_arms_that_ran_different_seeds[stage_b_full_kill_cooldown_6_accompany]` |
+| V11d | M message | `:363` | the whole message as "ran different seeds" | survived (171 passed) | killed | `test_pairs_refuse_arms_that_ran_different_seeds`, both arms |
+| V12 | M message | `:336` | the scope read as `'play_ticks'` | survived (171 passed) | killed | `test_a_game_without_a_subject_has_no_share[kill_ticks]` |
+| V12b | M message | `:336` | the scope read as `'kill_ticks'` | survived (171 passed) | killed | `test_a_game_without_a_subject_has_no_share[play_ticks]` |
+| V12c | M message | `:336` | the whole message as "no share" | survived (171 passed) | killed | `test_a_game_without_a_subject_has_no_share`, both scopes |
+| V13 | M message | `:1157` | the declared list read as `[]` | survived (171 passed) | killed | `test_an_unknown_split_is_refused_before_any_game`, all four names |
+| V13b | M message | `:1157` | the split name read as `'held-out'` | killed (3 failed) | killed | `test_an_unknown_split_is_refused_before_any_game`, the three other names |
+| V13c | S swap | `:1157` | `sorted(SPLIT_SEEDS)` swapped for `list(SPLIT_SEEDS)` | survived (171 passed) | killed | `test_an_unknown_split_is_refused_before_any_game`, all four names |
+| V13d | S swap | `:1157` | the declared list read from `STAGE_B_IDLE_POLICIES` | survived (171 passed) | killed | `test_an_unknown_split_is_refused_before_any_game`, all four names |
+
+V11c is why the different-seeds test runs once per cross arm: with the patrol arm alone, a message that always names
+the patrol arm would pass. This round adds no production line, so there is no per-line neuter row to add. The three
+lines' own neuter rows are A11, A37 and A40 above.
+
+**Finding 2: the round-2 count of new tests.** The round-2 subsection said "five new tests" in its file list and
+under "The tests", then named six. Both places now say six, and the second is marked. The command
+`git diff 4a6d4880 34205618 -- tests/experiments/test_tactical_gameplay.py | grep -c '^+def test_'` prints 6. The
+seven cases, the 414 passed and the gate's 10,342 passed were right, and they are unchanged.
+
+**The orchestrator's ruling on the summaries.** Deviations above left one question open. The card asks the coverage
+summary for a kill-tick total, and none of the seven declared counts carries one. The card also fixes the new count
+keys at exactly seven. The orchestrator ruled option (a): the published shape stands. The coverage summary publishes
+`kills` and `games_without_a_kill_tick`, and no eighth count is added. **The summaries** box is now checked with that
+reading, which the box states.
+
+The limitation, in plain words: the capture does not say how many kill ticks an arm had. On the 9-player roster two
+kills can fall on one tick, so `kills` can be larger than that number, and the kill-tick sums count players, not
+ticks. A reader can only bound it: it is at least the number of games with a kill tick, and at most the kills. The
+per-game share's minimum, median and maximum are taken over the games with a kill tick, so they do not need the
+total.
+
+**Decisions, round 3.**
+- The summaries follow option (a), as the orchestrator ruled. An eighth count would have changed the seven declared
+  counts, the frozen-head comparison and Record impact, and it would have moved the capture.
+- The different-seeds test runs once per cross arm, for the reason V11c gives.
+- The split test pins the declared list as a literal, so it reads the message a user sees.
+  `test_the_split_table_keeps_development_apart_from_held_out` already pins the table, so a new split changes both
+  tests.
+
+**Deviations, round 3.**
+- The card's **Status** line reads `ready`. It belongs to the orchestrator on `main`, as in round 2, so it is not
+  changed here.
+- The earlier lines that said **The summaries** box stays open are marked as settled in place. They are in Delivery
+  (Acceptance state and Deviations) and in the round-1 and round-2 deviations.
+
+**Validation at the test commit** `6a93eb48` (exit codes captured directly; the commit that carries this
+subsection changes only this card):
+
+```
+env | grep -c '^AILIBI_'                                  0
+pytest <the card's eight files> -n 6 --dist loadfile       416 passed (414 before, plus the two new cases)
+the touched suites: the lab file, the experiment config, the parity test   173 passed
+runtime_fingerprint == capture source_sha256              exit 0
+git diff --stat 6db8f43e 6a93eb48                         tests/experiments/test_tactical_gameplay.py only
+AST comparison, strings kept, base copy from 2275bdba     exit 0
+git diff 2275bdba -- training/rewards.py | ... | grep -vcE '^[+-]\s*#'   0
+git diff --stat 2275bdba HEAD -- training/ | tail -1      2 files changed, 19 insertions(+), 1 deletion(-)
+git diff --stat 2275bdba HEAD -- replays training/artifacts training/reports agents/tactical/learned tests/training api frontend
+                                                          (prints nothing)
+uv run python scripts/verify_ml_evidence.py               checks: 63 | OK 51 | FAIL 0 | ABSENT 7 | INFO 5; exit 0
+uv run pytest -m campaign -q -n auto                      337 passed
+uv run pytest tests/scripts/test_build_demo_bundle.py -q  31 passed
+verify_samples.sh: samples/9p2i 50, samples/4p1i 50, ml_corpus/9p2i 150, ml_corpus/4p1i 50,
+                   candidates/stage-b-r1/9p2i 50, each "All N samples verified clean."
+build_sample_report.py --sample-dir <each of the five sets> --check   "... is consistent with its replays." x5
+publish_process_scorecard.py --check, publish_gameplay_census.py --check   "... consistent with the committed recordings."
+ruff check, ruff format --check, mypy on the test file    clean
+the demo bundle, built at 83806ab0 and at 6a93eb48 in this one worktree (scripts/build_demo_bundle.py --out <scratch>)
+                                                          diff -r prints nothing over 109 files
+```
+
+The capture command and the ten-arm frozen-head comparison were not re-run. No file under `runtime_fingerprint`
+moved, as the fingerprint check proves, so both would reproduce the rows already committed.
+
+**Task docs and the full gate, round 3.** On the tree of the commit that carries this subsection:
+- `scripts/validate_task_docs.py` exited 0 ("390 historical phase tasks and 390 prompts; 101 work cards").
+- `scripts/check_doc_facts.py` exited 0.
+
+`bash scripts/check.sh` runs once at the head that carries this paragraph. Its exit code is recorded in the next
+commit.
