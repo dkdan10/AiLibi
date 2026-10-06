@@ -5,10 +5,11 @@ through that replay's own faithful walk and per-meeting reading, renders every
 recorded ballot again with ``route_lines_version = 1`` and counts, count only,
 what the field would show (``tasks/work/route-lines-field.md``). These tests hold
 it to its card: the harness's recomputed records equal the committed route-check
-JSON or the run stops, every ON render minus its block is the recorded render,
-an r3 column is read from its served blocks and its served reach equals its
-rebuilt reach, an r3 set recorded under another config is refused by name, and
-no output carries a rendered line or a recorded text.
+JSON, meeting for meeting and in number, or the run stops, every ON render minus
+its block is the recorded render, an r3 column is read from its served blocks,
+its served reach equals its rebuilt reach and its block cost and report are read
+as served, an r3 set recorded under another config is refused by name, and no
+output carries a rendered line or a recorded text.
 
 Columns are read from temporary repositories built here; the committed-output
 checks read the checkout's working tree, never history.
@@ -30,7 +31,12 @@ import pytest
 import experiments.lab.route_check_replay as rcr
 import experiments.lab.route_lines_replay as rlr
 from eval.gameplay_census import GameFacts
-from meetings.route_lines import Placement, PlacementKind, RouteLine
+from meetings.route_lines import (
+    Placement,
+    PlacementKind,
+    RouteLine,
+    without_route_block,
+)
 from meetings.schemas import MeetingTranscript, VoteBallot
 from tests._helpers.committed import SAMPLES_9P2I, census_inputs, repo_root
 from tests._helpers.scripted_routes import record_routes_game, round_two_config
@@ -277,6 +283,42 @@ def test_a_parity_mismatch_raises(
     spec = f"r2={r2_run['sha']}:replays/samples/9p2i"
     assert _run(r2_run["repo"], out, spec, route_check=altered) == 1
     assert "differs from the committed one" in capsys.readouterr().err
+    assert not (out / "results.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("change", "recorded"),
+    (
+        pytest.param("one record long", 2, id="one record long"),
+        pytest.param("one record short", 0, id="one record short"),
+    ),
+)
+def test_a_route_check_column_of_another_length_is_refused_by_name(
+    r2_run: dict[str, Any],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    change: str,
+    recorded: int,
+) -> None:
+    """Planted: the committed column holds one meeting record more, or one fewer.
+
+    r2's seed 2 holds one meeting, so the committed column holds that record
+    twice, or none; the run stops on the named refusal, never a traceback.
+    """
+
+    committed = json.loads(r2_run["route_check"].read_text())["columns"][0]
+    (record,) = committed["meetings"]
+    records = [record, record] if change == "one record long" else []
+    assert len(records) == recorded
+    altered = _route_check_copy(tmp_path, source=r2_run["source"], records=records)
+    out = tmp_path / "out"
+    out.mkdir()
+    spec = f"r2={r2_run['sha']}:replays/samples/9p2i"
+    assert _run(r2_run["repo"], out, spec, route_check=altered) == 1
+    assert capsys.readouterr().err == (
+        f"route-lines replay: column r2: the route-check replay records {recorded} "
+        "meetings and the walk read 1\n"
+    )
     assert not (out / "results.json").exists()
 
 
@@ -627,6 +669,42 @@ def test_a_served_block_other_than_its_rebuilt_lines_raises() -> None:
         rlr.read_ballot(render, inner=vote, regroup_ticks=frozenset(), served=True)
 
 
+def test_a_served_ballot_counts_its_whole_block() -> None:
+    """Served mode: the block characters are the served block's, not zero.
+
+    The ballot recorded the field ON, so its block characters are its prompt's
+    length less the prompt without the block, which is the OFF render's length.
+    """
+
+    from meetings.route_lines import build_route_lines
+    from tests.meetings.test_route_lines import _ballot_inputs, _sightings, _vote
+
+    transcript = _sightings(("p-3", "WEST_HALL", 5), ("p-3", "ADMIN", 6))
+    off_kwargs = _ballot_inputs(transcript=transcript)
+    lines = build_route_lines(
+        transcript=transcript,
+        candidate_targets=off_kwargs["candidate_targets"],
+        regroup_ticks=frozenset(),
+    )
+    assert lines
+    vote = _vote()
+    on_kwargs = {**off_kwargs, "route_lines": lines, "route_lines_version": 1}
+    served = vote(**on_kwargs)
+    off = vote(**off_kwargs)
+    reading = rlr.read_ballot(
+        rlr.BallotRender(kwargs=on_kwargs, prompt=served),
+        inner=vote,
+        regroup_ticks=frozenset(),
+        served=True,
+    )
+    assert reading.served_lines == lines
+    assert reading.recorded_prompt == served
+    assert reading.block_chars == len(served) - len(without_route_block(served))
+    assert reading.block_chars == len(served) - len(off)
+    assert reading.block_chars > 0
+    assert reading.block_rows
+
+
 def _placement(kind: PlacementKind, tick: int, room: str) -> Placement:
     return Placement("p-3", tick, frozenset({room}), kind, f"e-{tick}", "t")
 
@@ -693,6 +771,85 @@ def test_an_r3_column_is_read_from_its_served_blocks_by_both_instruments(
     (checked,) = json.loads((route_check_out / "results.json").read_text())["columns"]
     assert checked["label"] == "r3"
     assert checked["declared_config"] == rcr.R3_CONFIG_PATH
+
+
+#: The report's sentence for a column whose ballots recorded the route lines.
+_SERVED_SENTENCE: Final[str] = (
+    "The ballots recorded the route lines, so the block is read as served and held "
+    "equal to the lines its inputs build."
+)
+
+
+def test_an_r3_columns_block_cost_and_report_are_read_as_served(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The served column's block characters, tokens and report rows, pinned.
+
+    Each served ballot's block characters are its recorded prompt's length less
+    that prompt without the block, the column's sum of them is above zero and
+    its tokens already served are too, and the report states the served
+    reading, the as-served reach row and the already-served token row. A copy
+    of the payload with the served reach set apart from the rebuilt reach shows
+    that row reads the served counts.
+    """
+
+    readings: list[rlr.BallotReading] = []
+    real = rlr.read_ballot
+
+    def _remembering(*args: Any, **kwargs: Any) -> rlr.BallotReading:
+        reading = real(*args, **kwargs)
+        readings.append(reading)
+        return reading
+
+    monkeypatch.setattr(rlr, "read_ballot", _remembering)
+    repo, sha = _r3_repo(tmp_path)
+    out = tmp_path / "out"
+    out.mkdir()
+    assert _run(repo, out, f"r3={sha}:replays/candidates/stage-b-r3/9p2i") == 0
+    payload = json.loads((out / "results.json").read_text())
+    (column,) = payload["columns"]
+    whole = column["all"]
+    tokens = whole["tokens"]
+    assert readings and all(reading.served_lines is not None for reading in readings)
+    assert [reading.block_chars for reading in readings] == [
+        len(reading.recorded_prompt) - len(without_route_block(reading.recorded_prompt))
+        for reading in readings
+    ]
+    assert whole["block_chars"] == sum(reading.block_chars for reading in readings)
+    assert whole["block_chars"] > 0
+    assert tokens["added_input"] > 0
+    assert tokens["projected_input"] == tokens["recorded_input"]
+    report = (out / "report.md").read_text()
+    assert report == rlr.render_report(payload)
+    rows = report.splitlines()
+    assert _SERVED_SENTENCE in report
+    assert "rendered again" not in report
+    assert (
+        f"| route lines, as served | {whole['field_reaches_M_served']} of {whole['M']} "
+        f"| {whole['field_reaches_W_served']} of {whole['W']} |"
+    ) in rows
+    assert (
+        f"| already served in the recorded ballots | {tokens['added_input']} |"
+    ) in rows
+    assert "projected added by the block" not in report
+    # The as-served row reads the served counts: a planted payload sets them
+    # apart from the rebuilt ones, one fewer over M and one more over W.
+    assert whole["field_reaches_M"] > 0
+    served_m = whole["field_reaches_M"] - 1
+    served_w = whole["field_reaches_W"] + 1
+    apart = json.loads(json.dumps(payload))
+    apart_whole = apart["columns"][0]["all"]
+    apart_whole["field_reaches_M_served"] = served_m
+    apart_whole["field_reaches_W_served"] = served_w
+    apart_rows = rlr.render_report(apart).splitlines()
+    assert (
+        f"| route lines, as served | {served_m} of {whole['M']} "
+        f"| {served_w} of {whole['W']} |"
+    ) in apart_rows
+    assert (
+        f"| route lines | {whole['field_reaches_M']} of {whole['M']} "
+        f"| {whole['field_reaches_W']} of {whole['W']} |"
+    ) in apart_rows
 
 
 def test_an_r3_set_recorded_under_another_config_is_refused_naming_the_column(
