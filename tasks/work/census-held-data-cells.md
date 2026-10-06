@@ -157,7 +157,7 @@ card imports them, never copies them.
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
-- [ ] **1. The checked holds-nothing label.**
+- [x] **1. The checked holds-nothing label.**
   - Mechanism: the loader keeps one `bool` per `none_held` SKIP. Its source is the voter's recorded ballot call at
     that meeting: the voter's last call whose response validates as a `VoteBallot`. A `none_held` SKIP with no such
     call raises, naming set, seed, meeting and voter.
@@ -184,7 +184,7 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     unclassified tag in a recorded prompt. The `<routes>` tag the field adds is classified (an included source row
     of its own) when this branch merges `main` after `route-lines-field`, with item 4; until then the pin reads the
     base's templates.
-- [ ] **2. The truth of the cited line.**
+- [x] **2. The truth of the cited line.**
   - The denominator: `supported` EJECTs whose `primary_reason_id` names a turn of the same meeting that holds a
     placement of the target. The placement is one of the kinds `saw_player`, `company`, `saw_move` or
     `whereabouts`, as `spoken_placements` gives them. Alibi routes and vent sightings are not read.
@@ -249,6 +249,10 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
       regroup ticks breaks the r2 agreement.
     - The lab's own tests pass unchanged. `python -m experiments.lab.route_check_replay --check` reproduces the
       committed JSON and report byte for byte after the move. It needs history, so it runs locally.
+  - Phase 2 (2026-10-06): the charge library, the meeting-by-meeting agreement and its planted cases land in the
+    review round after `route-lines-field` merges and this branch merges `main`. Landed in phase 1: the drift check's
+    blob-comparing precondition (`recording_blob_problems`, planted: an added results file stays green, a changed or
+    missing replay fails, with and without the recorded commit in the clone).
 - [ ] **4. The route field's conformance cell.** It is written only after `route-lines-field` merges into `main` and
   this branch merges `main`, on that card's model and contract (its "The census contract" paragraph).
   - Mechanism: a new `SettingPredicate` on `route_lines_version = 1` scopes every cell and table here, and replaces
@@ -294,6 +298,7 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     - a perturbed copy of the field's line pattern (the sourced constant's source-change case);
     - the search against `room_hops` on every room pair of the canonical map, with one door removed from the copy.
   - Every era without the field reads n/a.
+  - Phase 2 (2026-10-06): lands in the review round after `route-lines-field` merges.
 - [ ] **4b. (Optional; the orchestrator may strike or move it to the record card.) The field's reach.** Built with
   item 4.
   - The cell `ejections_charged_on_a_reconcilable_pair_shown_a_route_line`, scoped by the field: ejections charged
@@ -301,7 +306,8 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     those ejections. Every rendered step reconciles, so the cell counts reconciling steps only. This is the live
     counterpart of the lab's "reaches" for (c), which was 29 of 40 on round 2.
   - Planted: a line shown only to a SKIP voter does not reach; a line about another candidate does not reach.
-- [ ] **5. (Optional; the orchestrator may strike any table, never the fields.) The genre-shape tables, role-blind
+  - Phase 2 (2026-10-06): built with item 4.
+- [x] **5. (Optional; the orchestrator may strike any table, never the fields.) The genre-shape tables, role-blind
   and descriptive.** The carrier gains, outside the strikable tables: each game's end reason and its final task
   count, with defaults that leave hand-built carriers counting nothing; `KillFact.victim` (from `KilledEvent.target`,
   read in `_load_game`) and `BodyFact.victim` (the body's `player_id`), each `PlayerId | None = None` and always filled
@@ -323,10 +329,14 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     living player. The role-reading version the memo names is not built.
   - Planted, each red on its defect: a meeting on the kill's own tick dropped; a vent tick counted as a room; a
     sabotage active across a meeting counted twice.
+  - Ruled 2026-10-06: every table is built, none struck; the fields are kept for `rubric-v2-profile`.
 - [ ] **Era grouping.** New cells pool only through the existing `pool()` and `census_from_inputs`. Planted: a tally
   with round 1's era key pooled with the shown era's raises `GameplayCensusEraError` before any new cell is summed,
   and every scoped cell reads n/a, never 0, in an era without its setting. Round 1 is read with `--set-dir` and
   never pooled.
+  - Phase 1's part is met: real round-1 and round-2 tallies refuse to pool before any cell is summed
+    (`test_round_1_and_the_promoted_set_never_pool_before_a_new_cell_is_summed`), and no phase-1 cell or table carries
+    a scope. The scoped cells are item 4's, so the box closes in phase 2.
 - [ ] **The census stays a census.** The page and JSON tests are extended.
   - No new cell or table has a guard or scope that reads a role.
   - No new definition names a bar, a flag value or a ratio of two rates.
@@ -334,6 +344,9 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     reconcilable pair proves no innocence.
   - Planted: a new definition saying "flagged above" turns the restatement scan red.
   - `docs/process-scorecard.md` and `.json` stay byte-identical.
+  - Phase 1's part is met: no new guard or scope, the restatement scan refuses a line, a flag value and a bar
+    (planted), two of the three caveats stand on the page, and the scorecard is byte-identical. The third caveat, a
+    reconcilable pair proves no innocence, lands with item 3.
 - [ ] **Properties.** Hypothesis over hand-built carriers and prompts, with `settings(deadline=None)` on every test
   that loads the map. Each property names the perturbed fold that turns it red:
   - adding a line naming a living candidate to an included block always makes a SKIP held, while adding one to an
@@ -344,13 +357,19 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   - the census's link check equals hops at most the ticks between, over random room pairs and gaps (`<` fails it),
     and where no walk fits it names the first regroup tick in (earlier, later] or reads a breach (a last regroup
     tick in place of the first fails it).
+  - Phase 1's part is met: the held-place property and true plus false equals checkable, each red on its perturbed
+    fold, and a role-permutation property over the promoted set's games. Items 3 and 4's two properties land in phase
+    2.
 - [ ] **One bounded mutation pass.** A single pass over every production line this card adds or changes, using only
   the eight operator classes: F filter, S swap, N comparison, C constant for a role, kind, room or tick read,
   M message, T tuple member, B branch swap, L loaded source to literal. Each mutant runs alone against the touched
   suites. A survivor is killed by a new test, or named equivalent with its reason. Results carries a per-line neuter
   table: each production line, and the test that goes red when it is neutered.
+  - Run over phase 1's lines (Results: 243 neuters and 38 mutants); phase 2 runs it again over its own.
 - [ ] **Published and verified.** `publish_gameplay_census.py --check` is green on the regenerated page and JSON,
   and `bash scripts/check.sh` passes at the head that states the numbers.
+  - Phase 1: `--check` is green on the regenerated pages and `bash scripts/check.sh` ran once at the pushed head
+    (Results); phase 2 runs both again.
 
 ## Constraints
 
@@ -533,4 +552,482 @@ kind's two-tick clock carries an edge, which the edge row shows.
 
 ## Results
 
-Not started.
+### Phase 1 (2026-10-06): items 1, 2 and 5, and item 3's blob-comparing drift check
+
+Built from the dispatch base `83806ab0` on `work/census-held-data-cells`, before `route-lines-field` merges, in the
+order the card's Constraints ("Coordination with `route-lines-field` and the round") and the decision memo's 8.5
+set. Items 3 (the charge library), 4 (the route field's conformance cell) and 4b are phase 2: they land in the review
+round after `route-lines-field` merges and this branch merges `main`, and their boxes stay unchecked. This phase
+creates no `meetings/route_lines.py`, and touches neither `experiments/lab/route_check_replay.py` nor
+`eval/route_charges.py`; the `FIELD_CLASSIFICATION` entry for `route_lines_version` is the field card's.
+
+**Sections this rests on.** `docs/architecture.md` "Layering" (the census is an `eval/` reader of `agents/`,
+`meetings/`, `engine/` and `orchestrator/`; it now also imports `eval.evidence_honesty._contradicts` and
+`meetings.transcript.canonical_rooms`), "Enforced boundaries" (`uv run lint-imports`: 4 contracts kept, 0 broken;
+nothing under `agents/` or `meetings/` changes) and "Determinism and the substrate ladder" (no recorded byte, stamp,
+prompt or detector byte moves; the walk still verifies every state hash). Ruling R13 (the census is a separate
+report: `docs/process-scorecard.md` and `.json` are byte-identical). The baselines memo's Part 3.4 items 1, 2 and 6
+to 11, and its D2 as the decision memo 8.1 and 8.2 item 2 read it. The route-check card's Reading
+(`tasks/work/route-check-replay.md`), whose placement reader item 2 mirrors.
+
+**What was built** (`eval/gameplay_census.py`, published to `docs/gameplay-census.md` and `.json` by the unchanged
+generic renderer of `scripts/publish_gameplay_census.py`):
+- Item 1, the holds-nothing check. `BallotFact.held_sources` holds, for every SKIP labelled `none_held`, the places
+  in the voter's own recorded ballot prompt that name a living candidate (`held_sources`, `holds_nothing_check`).
+  The prompt is the voter's last call whose response validates as a `VoteBallot` (`ballot_call`); none raises,
+  naming set, seed, meeting and voter. Read: the memory's observations section and open contradictions, the
+  `<transcript>` block's typed and spoken lines, `<contradictions>` and `<evidence>`. Excluded: turn headers, every
+  other memory section (beliefs, role, tasks, meetings so far, where you were), every other block and the page
+  outside the blocks (suspicion graph, candidate list). A hit is a whole token (`(?<![\w-])p-\d+(?!\w)`) naming a
+  player living at the open other than the voter. Cells `holds_nothing_skips_naming_no_candidate` and its
+  complement `holds_nothing_skips_naming_a_candidate`; table `holds_nothing_skips_by_source` (rows overlap, and
+  the definition says so). The sourced constants: `READ_BALLOT_BLOCKS` and `UNREAD_BALLOT_BLOCKS` are pinned to
+  every column-0 tag the `vote_ballot*.j2` templates render, `MEMORY_SECTIONS` to every `## ` heading
+  `agents/memory/store.py` renders (an `ast` scan), and the loader raises on an unclassified tag or heading. The
+  `<routes>` tag is classified in phase 2.
+- Item 2, the truth of the cited line. `TurnFact.placements` (`turn_placements`) holds each turn's spoken
+  placements of the four kinds; `GameFacts.settled_rooms` and `resolved_rooms` hold the honesty instrument's route
+  (the state after each tick, a meeting's tick read from its applied state; and the state its actions resolved
+  in). `placement_verdict` reads each placement through `eval.evidence_honesty._contradicts` at its kind's own
+  clock, one `Final` mapping (`PLACEMENT_WINDOWS`) read by one helper (`route_rooms`): a whereabouts claim at N
+  and N-1 (I-2's window); a sighting at T-1 settled (state-read), T-1 resolved and T-2 (action-stamped), the window
+  `_assert_clock_alignment` holds every recorded sighting to. The edge window is derived, one settled tick before
+  the window's earliest (N-2, T-3). Cells `cited_lines_true_to_the_route` and `cited_lines_false_to_the_route`;
+  tables `cited_placements_by_kind_and_verdict` (with the edge row) and `supported_ejects_not_checkable_by_reason`.
+- Item 5, the carrier fields and the genre-shape tables. `KillFact.victim` (from `KilledEvent.target`),
+  `BodyFact.victim` (the body's `player_id`), `GameFacts.end_reason`, `final_tasks_completed` and
+  `final_tasks_total`, each defaulting to `None` and always filled by the loader. Tables `games_by_ending` (rows
+  from `get_args(WinResultType)` and `get_args(GameStopReason)`; an unknown reason raises), `kills_per_game`,
+  `ticks_between_kills`, `ticks_from_kill_to_report` (joined by victim), `living_players_at_game_over_by_ending`,
+  `tasks_left_at_game_over_by_ending`, `sabotages_started_per_game`, `report_openers_by_witness`,
+  `copresence_share_per_game`, and the cell `task_wins_with_sabotage_in_play`. Buckets are `Final` tuples.
+- Item 3's precondition, the lab-drift check in its blob-comparing form (`recording_blob_problems` in
+  `tests/eval/test_gameplay_census.py`): the committed route-check JSON's r2 and r1 columns are held to HEAD's
+  recording files (every `replay-seed-*.jsonl`, `roster.json`, `MANIFEST.md`, the recording fingerprint's inputs)
+  blob for blob. The meeting-by-meeting agreement it guards is phase 2's.
+
+**Decisions.**
+1. Orchestrator ruling (1), 2026-10-06: the carrier fields (the two victims, the end reason, the final task count)
+   are kept whatever is struck, because `rubric-v2-profile` reads them (decision memo 8.6).
+2. Orchestrator ruling (2): item 5's tables are all built; none is struck.
+3. Orchestrator ruling (3): the none_held reading is stated on the page, in the cell definition and in the
+   `holds-nothing check` term: the label reads as nothing that resolves the vote, not as nothing held, and a line
+   held is not a reason to vote.
+4. Orchestrator ruling (4): each kind keeps its own clock, and the edge row is published beside the cells rather
+   than widening either window.
+5. Orchestrator ruling (5): this merge is the orchestrator's, after `route-lines-field` merges (an owner merge) and
+   after phase 2 is verified; Status and the `tasks/README.md` inventory sentence are the orchestrator's on `main`
+   and are untouched here.
+6. Phase 1 reads placements through a census-local `turn_placements`, because the field's `spoken_placements` has
+   no production home until `route-lines-field` merges and `eval/` may not import `experiments/`. It is held
+   equal, as a multiset per turn, to the route-check replay's `spoken_placements` restricted to the four kinds on
+   every committed meeting of both round columns (`test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds`;
+   measured on all five sets at authoring: 2,931, 3,007, 8,727, 249 and 248 placements, 0 turns differing). Phase
+   2 replaces it with the import from `meetings/route_lines.py` and deletes it, so one definition remains.
+7. The sighting clock includes the resolved frame at T-1, as `_assert_clock_alignment` does for an action-stamped
+   row; the two frames differ only at a regroup meeting's tick (`test_a_sighting_reads_the_resolved_frame_one_tick_before`).
+8. A placement with no canonical room, or with no route room in its window, is unverifiable, never false; a ballot
+   whose every cited placement is unverifiable lands in the third not-checkable row.
+9. "Since the previous meeting" compares the observation id's tick with the previous meeting's tick (0 at a game's
+   first meeting), as the card states.
+10. "Who found the body" classes an opener as a witness when it is among the recorded witnesses of any kill after the
+    previous meeting's tick and at or before this meeting's, as the card states; the gap reads the reported body's
+    kill tick.
+11. The living count at game over is derived from kills and ejections, with no new carrier field, and a loader test
+    holds it to the walk's final state (`test_the_loader_keeps_each_kill_and_body_victim_and_the_ending`).
+12. CI's checkout is depth 1, so the recorded commit `5877adb4` is absent there. The drift check never skips: with the
+    commit in the clone it compares blob ids; without it, it must find the recorded tree id as HEAD's listing with
+    some non-recording files left out, computed in Python (`flat_tree_id`, held to git's own id by
+    `test_the_python_tree_id_is_gits`), which proves every recording file unchanged; otherwise it fails by name. In
+    a shallow clone a changed non-recording file (say a rewritten `experiment-config.json`) also fails, which is the
+    stricter reading.
+13. `SCHEMA_VERSION` stays 2: the JSON gains cells and tables only. In-tree readers of `docs/gameplay-census.json`
+    are the publisher, `scripts/verify_ml_evidence.py` (presence probe) and the census's own tests; none breaks.
+14. Live-tense follow-through (lesson 3): the `skips_holding_nothing` definition and the `holds-nothing label` term
+    no longer say nothing checks the label; `redistribution_policy`'s classification no longer says no cell counts
+    tasks; the census module docstring names the new checks; the `docs/artifacts.md` census row names the new
+    groups. The process scorecard's own "does NOT measure whether the cited line was factually true" stays true of
+    the scorecard and is not edited (R13).
+15. The restatement scan (`tests/scripts/test_publish_gameplay_census.py`) also refuses "flagged above/below",
+    "bar(s)" and "flag value(s)", planted by `test_a_definition_drawing_a_line_turns_the_restatement_scan_red`.
+
+**Measured at this head, count-only, through the production path** (`uv run python scripts/publish_gameplay_census.py
+--check` recomputes the four committed sets; the r1 column is `uv run python scripts/publish_gameplay_census.py
+--set-dir replays/candidates/stage-b-r1/9p2i --json-stdout`, exit 0, never pooled).
+
+| reading | `samples/9p2i` (stage-b-r2) | `stage-b-r1/9p2i` (`--set-dir`) | baseline-9, pooled |
+|---|---|---|---|
+| holds-nothing SKIPs naming no living candidate | 0/214 | 0/256 | 0/764 |
+| ... naming one in a flag; in an observation row since the previous meeting | 22; 166 | 13; 184 | 203; 560 |
+| supported EJECTs: checkable; citing no turn; nowhere checkable; all unverifiable | 281; 29; 97; 0 | 259; 17; 108; 0 | 842; 254; 487; 6 |
+| checkable: the route makes the cited line true; false | 278; 3 | 244; 15 | 818; 24 |
+| false placements true one tick before their window (edge rows) | 2 (saw_move) | 20 (12 company, 8 saw_player) | 4 |
+| games by ending: crew eject; crew tasks; impostor parity | 13; 13; 24 | 12; 4; 34 | 150; 23; 77 |
+| task wins with a sabotage in play | 11/13 | 4/4 | 2/23 |
+
+The authoring counts of item 1 reproduce exactly (214; 0; 22; 166 and 256; 0; 13; 184; baseline-9 764; 0; 203). The
+authoring cited-line rows were read in I-2's window on every kind; under each kind's own clock round 2 reads 3 false
+of 281, not 15, and the edge row shows the 2 of them a clock one tick earlier would turn true.
+
+**Agreements with the honesty instrument** (slow tests, on `samples/9p2i`). The census's truth reading of every living
+speaker's whereabouts claim gives 754 claims and 4 false, `compute_evidence_honesty`'s I-2 totals summed over speakers
+(632 + 122 and 4 + 0), so no role is read (`test_the_census_reads_every_whereabouts_claim_as_i2_does`). Every
+recorded `saw_player` memory row the instrument rebuilt (24,317 rows) reads 0 false under the census's sighting clock
+(`test_the_census_reads_every_recorded_sighting_true_on_its_clock`).
+
+**Planted and perturbed cases, each run as edit, run, restore from a saved copy** (harness: `<scratch>/harness.py`,
+targeted suites `tests/eval/test_gameplay_census.py` and `tests/scripts/test_publish_gameplay_census.py`, the fast
+subset first and the full suites on a survivor):
+
+| perturbation | kind | result | test that went red |
+|---|---|---|---|
+| `P1-whereabouts-window-N-and-N+1` | perturbed | killed | `test_a_whereabouts_claim_is_read_at_its_tick_and_the_one_before` |
+| `P2-sightings-in-the-whereabouts-window` | perturbed | killed | `test_a_sighting_is_read_at_the_two_ticks_before_its_tick` |
+| `P3-reader-takes-in-the-beliefs` | perturbed | killed | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `P4-fold-drops-mixed-ballots` | perturbed | killed | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `P5-fold-reads-the-voters-role` | perturbed | killed | `test_permuting_the_roles_moves_no_new_count` |
+| `P6-loader-swaps-the-victims` | perturbed | killed | `test_the_loader_keeps_each_kill_and_body_victim_and_the_ending` |
+| `P7-a-vent-tick-counted-as-a-room` | perturbed | killed | `test_a_player_inside_a_vent_stands_in_no_room_for_copresence` |
+| `P8-a-report-on-the-kills-own-tick-dropped` | perturbed | killed | `test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report` |
+| `P9-a-sabotage-across-a-meeting-counted-twice` | perturbed | killed | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `P10-p-1-matched-inside-p-10` | perturbed | killed | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `P11-a-turn-header-counted` | perturbed | killed | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `P12-the-voter-counted` | perturbed | killed | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `P13-a-dead-player-counted` | perturbed | killed | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `P14-a-missing-block-not-raising` | perturbed | killed | `test_a_prompt_missing_its_memory_or_transcript_block_raises` |
+| `P15-an-unvalidated-ballot-call-taken` | perturbed | killed | `test_the_loader_reads_the_voters_last_validating_ballot_call` |
+| `P16-a-non-spatial-room-read-false` | perturbed | killed | `test_a_cited_line_that_cannot_be_checked_lands_in_its_reason_row` |
+| `P17-another-players-placement-read` | perturbed | killed | `test_a_cited_line_that_cannot_be_checked_lands_in_its_reason_row` |
+| `P18-a-turn-from-another-meeting-read` | perturbed | killed | `test_a_cited_turn_resolves_only_within_its_own_meeting` |
+
+The two agreements, run alone on their perturbations (`<scratch>/agreement_perturb.py`, edit, run, restore): with the whereabouts window read at N and N+1, `test_the_census_reads_every_whereabouts_claim_as_i2_does` fails `assert (754, 470) == (754, 4)`; with sightings read in the whereabouts window (T and T-1), `test_the_census_reads_every_recorded_sighting_true_on_its_clock` fails naming the rows it reads false. Restored, both pass.
+
+**Neuter table** (lesson 1): every production line, row and argument phase 1 adds or changes, neutered alone.
+
+243 neuters: 234 red on the first run; 8 of the 9 green ones killed by a test added for it (commit `0128fc46`), 1 named equivalent. The red test is the first one the run reported.
+
+| neuter | first run | test that went red |
+|---|---|---|
+| `held-row-observation` | red | `test_every_value_the_census_holds_is_read_only` |
+| `held-row-since` | red | `test_every_value_the_census_holds_is_read_only` |
+| `held-row-evidence` | red | `test_every_value_the_census_holds_is_read_only` |
+| `held-row-flag` | red | `test_every_value_the_census_holds_is_read_only` |
+| `held-row-typed` | red | `test_every_value_the_census_holds_is_read_only` |
+| `held-row-spoken` | red | `test_every_value_the_census_holds_is_read_only` |
+| `read-block-memory` | red | `test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter` |
+| `read-block-transcript` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `read-block-contradictions` | red | `test_each_place_the_check_reads_names_its_own_row` |
+| `read-block-evidence` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `unread-block-persona` | red | `test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter` |
+| `unread-block-voice` | red | `test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter` |
+| `unread-block-testimony` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `unread-block-map` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `unread-block-output` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `memory-row-role` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `memory-row-tasks` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `memory-row-meetings` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `memory-row-trail` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `memory-row-observations` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `memory-row-beliefs` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `memory-row-contradictions` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `block-tag-closing` | red | `test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter` |
+| `turn-header-pattern` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `player-token-lookbehind` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `player-token-lookahead` | green, killed by a new test | `test_a_player_id_counts_only_as_a_whole_token` |
+| `observation-tag-pattern` | red | `test_an_observation_row_counts_as_since_the_previous_meeting_only_after_it` |
+| `kind-saw-player` | red | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `kind-company` | red | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `kind-saw-move` | red | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `kind-whereabouts` | red | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `window-whereabouts-0` | red | `test_a_whereabouts_claim_is_read_at_its_tick_and_the_one_before` |
+| `window-whereabouts-1` | red | `test_a_whereabouts_claim_is_read_at_its_tick_and_the_one_before` |
+| `window-saw-player-settled-1` | red | `test_the_census_reads_every_recorded_sighting_true_on_its_clock` |
+| `window-saw-player-resolved-1` | red | `test_a_sighting_reads_the_resolved_frame_one_tick_before` |
+| `window-saw-player-settled-2` | red | `test_a_sighting_is_read_at_the_two_ticks_before_its_tick` |
+| `window-company-settled-1` | green, killed by a new test | `test_a_sighting_reads_the_resolved_frame_one_tick_before` |
+| `window-company-resolved-1` | green, killed by a new test | `test_a_sighting_reads_the_resolved_frame_one_tick_before` |
+| `window-company-settled-2` | red | `test_a_sighting_is_read_at_the_two_ticks_before_its_tick` |
+| `window-saw-move-settled-1` | green, killed by a new test | `test_a_sighting_reads_the_resolved_frame_one_tick_before` |
+| `window-saw-move-resolved-1` | green, killed by a new test | `test_a_sighting_reads_the_resolved_frame_one_tick_before` |
+| `window-saw-move-settled-2` | red | `test_a_sighting_is_read_at_the_two_ticks_before_its_tick` |
+| `verdict-true` | red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `verdict-false` | red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `verdict-unverifiable` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `edge-verdict-text` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `reason-0-text` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `reason-1-text` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `reason-2-text` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `task-win` | red | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `gap-row-same` | red | `test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report` |
+| `gap-row-1-2` | red | `test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report` |
+| `gap-row-3-5` | red | `test_tick_gaps_and_shares_land_in_their_buckets` |
+| `gap-row-6-10` | red | `test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report` |
+| `gap-row-11-20` | red | `test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report` |
+| `long-gap-text` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `never-reported-text` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `share-quarters` | red | `test_closeness_reads_the_living_and_the_tasks_left_at_game_over` |
+| `share-row-none` | red | `test_closeness_reads_the_living_and_the_tasks_left_at_game_over` |
+| `share-row-quarter` | red | `test_copresence_counts_player_ticks_with_exactly_one_other` |
+| `share-row-half` | red | `test_closeness_reads_the_living_and_the_tasks_left_at_game_over` |
+| `share-row-three-quarters` | red | `test_tick_gaps_and_shares_land_in_their_buckets` |
+| `share-row-more` | red | `test_every_value_the_census_holds_is_read_only` |
+| `opener-witness-text` | red | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `opener-other-text` | red | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `redistribution-reason` | red | `test_the_committed_census_matches_a_recomputation` |
+| `heading-held-listed` | red | `test_the_new_cells_and_tables_carry_no_guard_and_no_scope` |
+| `heading-shape-listed` | red | `test_the_new_cells_and_tables_carry_no_guard_and_no_scope` |
+| `held-reads-ballots` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `held-reads-prompt` | red | `test_set_dir_prints_the_committed_section_of_that_set` |
+| `held-reads-state` | red | `test_set_dir_prints_the_committed_section_of_that_set` |
+| `cited-reads-ballots` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `cited-reads-turns` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `cited-reads-tick` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `cited-reads-meeting` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `skips-definition` | red | `test_set_dir_prints_the_committed_section_of_that_set` |
+| `cell-no-candidate` | red | `test_every_value_the_census_holds_is_read_only` |
+| `cell-a-candidate` | red | `test_every_value_the_census_holds_is_read_only` |
+| `cell-true` | red | `test_every_value_the_census_holds_is_read_only` |
+| `cell-false` | red | `test_every_value_the_census_holds_is_read_only` |
+| `cell-sabotage` | red | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `table-sources` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-placements` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-reasons` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-endings` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-kills` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-gaps` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-kill-report` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-living` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-tasks` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-sabotage` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-finders` | red | `test_every_value_the_census_holds_is_read_only` |
+| `table-copresence` | red | `test_every_value_the_census_holds_is_read_only` |
+| `term-label-fixed` | red | `test_the_committed_census_matches_a_recomputation` |
+| `term-living-candidate` | red | `test_the_committed_census_matches_a_recomputation` |
+| `term-check` | red | `test_the_committed_census_matches_a_recomputation` |
+| `term-cited-line` | red | `test_the_committed_census_matches_a_recomputation` |
+| `term-checkable` | red | `test_the_committed_census_matches_a_recomputation` |
+| `all-entry-held-sources` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `fold-call-held` | red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `fold-call-shape` | red | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `rows-held-source` | red | `test_every_value_the_census_holds_is_read_only` |
+| `rows-verdicts` | red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `rows-kinds` | red | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `route-settled-frame` | red | `test_a_sighting_reads_the_resolved_frame_one_tick_before` |
+| `route-resolved-frame` | red | `test_a_sighting_reads_the_resolved_frame_one_tick_before` |
+| `route-offset` | red | `test_a_sighting_is_read_at_the_two_ticks_before_its_tick` |
+| `route-append` | red | `test_a_sighting_is_read_at_the_two_ticks_before_its_tick` |
+| `edge-plus-one` | red | `test_a_sighting_is_read_at_the_two_ticks_before_its_tick` |
+| `verdict-unverifiable-guard` | red | `test_a_cited_line_that_cannot_be_checked_lands_in_its_reason_row` |
+| `verdict-unverifiable-route` | red | `test_a_placement_with_no_route_or_no_room_is_unverifiable_never_false` |
+| `verdict-false-branch` | red | `test_a_sighting_is_read_at_the_two_ticks_before_its_tick` |
+| `edge-blank-guard` | red | `test_a_placement_with_no_route_or_no_room_is_unverifiable_never_false` |
+| `edge-contradicts` | red | `test_a_sighting_is_read_at_the_two_ticks_before_its_tick` |
+| `zero-rows-sources` | red | `test_the_holds_nothing_cells_count_the_check_with_its_complement` |
+| `zero-rows-placements` | red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `zero-rows-reasons` | red | `test_set_dir_prints_the_committed_section_of_that_set` |
+| `dispatch-skip` | red | `test_every_value_the_census_holds_is_read_only` |
+| `refuse-eject-check` | red | `test_the_check_on_a_ballot_it_never_reads_is_refused` |
+| `dispatch-supported` | red | `test_a_cited_line_that_cannot_be_checked_lands_in_its_reason_row` |
+| `refuse-unlabelled-check` | red | `test_the_check_on_a_ballot_it_never_reads_is_refused` |
+| `unchecked-not-evaluable-a` | red | `test_the_holds_nothing_cells_count_the_check_with_its_complement` |
+| `unchecked-not-evaluable-b` | red | `test_the_holds_nothing_cells_count_the_check_with_its_complement` |
+| `refuse-unknown-source` | red | `test_the_check_on_a_ballot_it_never_reads_is_refused` |
+| `count-no-candidate-hit` | red | `test_the_holds_nothing_cells_count_the_check_with_its_complement` |
+| `count-a-candidate-hit` | red | `test_the_holds_nothing_cells_count_the_check_with_its_complement` |
+| `tally-sources` | red | `test_the_holds_nothing_cells_count_the_check_with_its_complement` |
+| `reason-0-tally` | red | `test_a_cited_line_that_cannot_be_checked_lands_in_its_reason_row` |
+| `cited-lookup` | red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `cited-target-filter` | red | `test_a_cited_line_that_cannot_be_checked_lands_in_its_reason_row` |
+| `reason-1-tally` | red | `test_a_cited_line_that_cannot_be_checked_lands_in_its_reason_row` |
+| `verdict-tally` | red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `edge-tally` | red | `test_the_edge_row_counts_a_false_placement_true_one_tick_before_its_window` |
+| `checkable-filter` | red | `test_a_cited_line_that_cannot_be_checked_lands_in_its_reason_row` |
+| `reason-2-tally` | red | `test_a_cited_line_that_cannot_be_checked_lands_in_its_reason_row` |
+| `false-any` | red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `count-true` | red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `count-false` | red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `endings-stop` | red | `test_the_ending_rows_are_the_engines_and_the_runners_read_from_their_types` |
+| `endings-win` | red | `test_a_kill_or_body_without_a_victim_is_not_joined` |
+| `gap-rows-long` | red | `test_tick_gaps_and_shares_land_in_their_buckets` |
+| `gap-negative` | red | `test_tick_gaps_and_shares_land_in_their_buckets` |
+| `gap-long-return` | red | `test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report` |
+| `share-guard` | red | `test_tick_gaps_and_shares_land_in_their_buckets` |
+| `ending-zero-rows` | red | `test_the_ending_rows_are_the_engines_and_the_runners_read_from_their_types` |
+| `ending-refuse` | red | `test_the_ending_rows_follow_the_engines_type` |
+| `ending-not-evaluable` | red | `test_the_ending_rows_are_the_engines_and_the_runners_read_from_their_types` |
+| `ending-tally` | red | `test_the_ending_rows_are_the_engines_and_the_runners_read_from_their_types` |
+| `shape-call-cadence` | red | `test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report` |
+| `shape-call-closeness` | red | `test_a_kill_or_body_without_a_victim_is_not_joined` |
+| `shape-call-sabotage` | red | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `shape-call-finders` | red | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `shape-call-copresence` | red | `test_copresence_counts_player_ticks_with_exactly_one_other` |
+| `cadence-zero-gaps` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `cadence-zero-report` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `cadence-zero-never` | green, killed by a new test | `test_every_listed_row_stands_at_zero_in_a_game_with_nothing_to_count` |
+| `cadence-kills-per-game` | red | `test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report` |
+| `cadence-sorted` | red | `test_kills_soon_after_the_killer_surfaced` |
+| `cadence-gap-tally` | red | `test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report` |
+| `cadence-report-filter` | red | `test_every_value_the_census_holds_is_read_only` |
+| `cadence-unjoinable` | red | `test_a_kill_or_body_without_a_victim_is_not_joined` |
+| `cadence-first-report` | green, killed by a new test | `test_a_body_reported_twice_joins_its_kill_to_the_first_report` |
+| `cadence-victim-guard` | red | `test_a_kill_or_body_without_a_victim_is_not_joined` |
+| `cadence-never-reported` | red | `test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report` |
+| `closeness-victim-guard` | red | `test_a_kill_or_body_without_a_victim_is_not_joined` |
+| `closeness-kills-removed` | red | `test_closeness_reads_the_living_and_the_tasks_left_at_game_over` |
+| `closeness-ejections-removed` | red | `test_closeness_reads_the_living_and_the_tasks_left_at_game_over` |
+| `closeness-living-tally` | red | `test_closeness_reads_the_living_and_the_tasks_left_at_game_over` |
+| `closeness-tasks-guard` | red | `test_closeness_reads_the_living_and_the_tasks_left_at_game_over` |
+| `closeness-tasks-tally` | red | `test_closeness_reads_the_living_and_the_tasks_left_at_game_over` |
+| `sabotage-start` | red | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `sabotage-previous` | red | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `sabotage-sorted` | green | equivalent: read backwards, the frames hold the same number of maximal active runs; the dropped sort (mutant `F5`) is killed by the shuffled-frames case |
+| `sabotage-tally` | red | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `sabotage-task-win` | red | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `sabotage-hit` | red | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `finders-zero-rows` | red | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `finders-lower-bound` | red | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `finders-upper-bound` | red | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `finders-opener` | red | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `finders-gap` | red | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `finders-previous` | red | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `copresence-pair` | red | `test_copresence_counts_player_ticks_with_exactly_one_other` |
+| `copresence-ticks` | red | `test_a_player_inside_a_vent_stands_in_no_room_for_copresence` |
+| `copresence-empty` | red | `test_copresence_counts_player_ticks_with_exactly_one_other` |
+| `copresence-tally` | red | `test_copresence_counts_player_ticks_with_exactly_one_other` |
+| `turn-fact-placements` | red | `test_the_census_reads_every_whereabouts_claim_as_i2_does` |
+| `place-saw-player-room-skip` | red | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
+| `place-saw-player` | red | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-company-not-subject` | red | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-company-dedupe` | red | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
+| `place-company` | red | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-saw-move-to-room` | red | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-saw-move-rooms` | red | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-whereabouts-speaker` | red | `test_the_census_reads_every_whereabouts_claim_as_i2_does` |
+| `place-whereabouts-guard` | red | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
+| `call-voter-filter` | red | `test_the_loader_reads_the_voters_last_validating_ballot_call` |
+| `call-validate` | red | `test_the_loader_reads_the_voters_last_validating_ballot_call` |
+| `call-last` | red | `test_the_loader_reads_the_voters_last_validating_ballot_call` |
+| `blocks-known` | red | `test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter` |
+| `blocks-close` | red | `test_a_block_the_census_does_not_classify_raises` |
+| `blocks-append` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `blocks-closing-outside` | red | `test_a_block_the_census_does_not_classify_raises` |
+| `blocks-unknown` | red | `test_a_block_the_census_does_not_classify_raises` |
+| `blocks-twice` | red | `test_a_block_the_census_does_not_classify_raises` |
+| `blocks-never-closes` | red | `test_a_block_the_census_does_not_classify_raises` |
+| `blocks-required` | red | `test_a_prompt_missing_its_memory_or_transcript_block_raises` |
+| `memory-heading-split` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `memory-heading-unknown` | red | `test_a_memory_heading_the_census_does_not_classify_raises` |
+| `memory-started` | red | `test_a_memory_heading_the_census_does_not_classify_raises` |
+| `memory-section-skip` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `memory-since-bound` | red | `test_an_observation_row_counts_as_since_the_previous_meeting_only_after_it` |
+| `transcript-header` | red | `test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads` |
+| `transcript-said` | red | `test_each_place_the_check_reads_names_its_own_row` |
+| `transcript-typed` | red | `test_each_place_the_check_reads_names_its_own_row` |
+| `transcript-outside` | red | `test_a_transcript_line_outside_any_turn_raises` |
+| `transcript-empty-note` | red | `test_a_transcript_line_outside_any_turn_raises` |
+| `held-voter-excluded` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `held-memory` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `held-transcript` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `held-flags` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `held-evidence` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `held-token` | red | `test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else` |
+| `check-label-filter` | red | `test_every_value_the_census_holds_is_read_only` |
+| `check-no-call` | red | `test_a_holds_nothing_skip_without_a_validating_ballot_call_raises` |
+| `check-wrap` | red | `test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter` |
+| `check-voter` | red | `test_set_dir_prints_the_committed_section_of_that_set` |
+| `meeting-where` | red | `test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter` |
+| `meeting-held-arg` | red | `test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter` |
+| `meeting-since-arg` | red | `test_the_loader_bounds_since_the_previous_meeting_by_its_tick` |
+| `loader-previous-tick` | red | `test_the_loader_bounds_since_the_previous_meeting_by_its_tick` |
+| `loader-where` | green, killed by a new test | `test_the_loader_names_the_set_and_seed_of_an_unchecked_holds_nothing_skip` |
+| `loader-route-advanced` | red | `test_the_census_reads_every_whereabouts_claim_as_i2_does` |
+| `loader-kill-victim` | red | `test_the_loader_keeps_each_kill_and_body_victim_and_the_ending` |
+| `loader-body-victim` | red | `test_the_loader_keeps_each_kill_and_body_victim_and_the_ending` |
+| `loader-route-applied` | red | `test_the_census_reads_every_recorded_sighting_true_on_its_clock` |
+| `loader-final-state` | red | `test_every_value_the_census_holds_is_read_only` |
+| `loader-end-reason` | red | `test_the_loader_keeps_each_kill_and_body_victim_and_the_ending` |
+| `loader-tasks-completed` | red | `test_the_loader_keeps_each_kill_and_body_victim_and_the_ending` |
+| `loader-tasks-total` | red | `test_the_loader_keeps_each_kill_and_body_victim_and_the_ending` |
+| `loader-settled` | red | `test_the_census_reads_every_whereabouts_claim_as_i2_does` |
+| `loader-resolved` | red | `test_the_loader_keeps_the_honesty_route_settled_and_resolved` |
+| `rooms-of` | red | `test_the_loader_keeps_the_honesty_route_settled_and_resolved` |
+
+**The bounded mutation pass** (lesson 10): 38 mutants of exactly the eight classes over `eval/gameplay_census.py`,
+the one production module phase 1 touches (`scripts/publish_gameplay_census.py` is unchanged).
+
+38 mutants (F 5, S 4, N 6, C 5, M 4, T 4, B 4, L 6): 34 killed on the first run, 2 killed by a test added for them, 2 named equivalent. The pass then stopped.
+
+| mutant | class | result | test that went red |
+|---|---|---|---|
+| `F1-companions-filter` | F | killed | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `F2-finder-kill-window` | F | killed | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `F3-closeness-ejected-filter` | F | survived, equivalent | `None` joins the removed set and names no player, so the living count is the same |
+| `F4-ballot-call-voter` | F | killed | `test_the_loader_names_the_set_and_seed_of_an_unchecked_holds_nothing_skip` |
+| `F5-sabotage-sorted` | F | killed | `test_a_sabotage_active_across_a_meeting_is_one_start` |
+| `S1-flags-evidence-swap` | S | killed | `test_each_place_the_check_reads_names_its_own_row` |
+| `S2-finder-witnesses-living` | S | killed | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `S3-copresence-keys` | S | killed | `test_copresence_counts_player_ticks_with_exactly_one_other` |
+| `S4-ballot-call-reversed` | S | killed | `test_the_loader_reads_the_voters_last_validating_ballot_call` |
+| `N1-route-room-none` | N | killed | `test_a_compound_or_transit_label_is_read_by_its_canonical_rooms` |
+| `N2-primary-reason-none` | N | killed | `test_a_cited_turn_resolves_only_within_its_own_meeting` |
+| `N3-ending-none` | N | killed | `test_a_cited_turn_resolves_only_within_its_own_meeting` |
+| `N4-kill-victim-none` | N | killed | `test_a_same_tick_double_kill_joins_each_body_to_its_own_kill_by_victim` |
+| `N5-ballot-call-none` | N | killed | `test_every_value_the_census_holds_is_read_only` |
+| `N6-eject-check-none` | N | killed | `test_a_cited_turn_resolves_only_within_its_own_meeting` |
+| `C1-verdict-tick` | C | killed | `test_a_compound_or_transit_label_is_read_by_its_canonical_rooms` |
+| `C2-verdict-kind` | C | killed | `test_a_whereabouts_claim_is_read_at_its_tick_and_the_one_before` |
+| `C3-finder-kill-tick` | C | killed | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `C4-copresence-room` | C | killed | `test_copresence_counts_player_ticks_with_exactly_one_other` |
+| `C5-since-tick` | C | killed | `test_an_observation_row_counts_as_since_the_previous_meeting_only_after_it` |
+| `M1-no-call-message` | M | killed | `test_a_holds_nothing_skip_without_a_validating_ballot_call_raises` |
+| `M2-unknown-block-message` | M | killed | `test_a_block_the_census_does_not_classify_raises` |
+| `M3-unknown-ending-message` | M | killed | `test_the_ending_rows_follow_the_engines_type` |
+| `M4-eject-check-message` | M | killed | `test_the_check_on_a_ballot_it_never_reads_is_refused` |
+| `T1-required-transcript` | T | killed | `test_a_prompt_missing_its_memory_or_transcript_block_raises` |
+| `T2-claims-subheading` | T | killed | `test_every_value_the_census_holds_is_read_only` |
+| `T3-opener-rows` | T | killed | `test_every_listed_row_stands_at_zero_in_a_game_with_nothing_to_count` |
+| `T4-edge-zero-row` | T | killed | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` |
+| `B1-verdict-branches` | B | killed | `test_a_compound_or_transit_label_is_read_by_its_canonical_rooms` |
+| `B2-said-typed-branches` | B | killed | `test_each_place_the_check_reads_names_its_own_row` |
+| `B3-never-reported-branches` | B | killed | `test_a_same_tick_double_kill_joins_each_body_to_its_own_kill_by_victim` |
+| `B4-opener-branches` | B | killed | `test_who_found_the_body_reads_the_witnesses_since_the_last_meeting` |
+| `L1-endings-literal` | L | killed | `test_the_ending_rows_follow_the_engines_type` |
+| `L2-held-rows-literal` | L | killed | `test_the_source_rows_follow_their_type` |
+| `L3-canonical-rooms-literal` | L | killed | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
+| `L4-contradicts-literal` | L | survived, equivalent | every route room is a map room, whose canonical set is itself (`CANONICAL_ROOMS` is pinned to the map), so the instrument's comparison and a plain intersection agree on every route the engine writes |
+| `L5-holds-nothing-literal` | L | survived, then killed | `test_the_loader_checks_the_label_its_constant_names` |
+| `L6-task-win-literal` | L | survived, then killed | `test_the_sabotage_cell_reads_the_task_win_its_constant_names` |
+
+**Verification at this head.**
+
+Measured at `0128fc46` (the census code and tests this Results describes); later commits touch only this card.
+
+| command | exit | result |
+|---|---|---|
+| `env \| grep -c '^AILIBI_'` | - | 0 |
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py tests/experiments/test_route_check_replay.py -n 6 --dist loadfile` | 0 | 600 passed (`tests/eval/test_route_charges.py` and `tests/meetings/test_route_lines.py` are phase 2's and do not exist yet) |
+| `uv run pytest tests/eval/test_evidence_honesty.py -n 6 --dist loadfile` | 0 | 114 passed |
+| `uv run python -m experiments.lab.route_check_replay --check` (full clone) | 0 | reproduced, 41.9 s |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/candidates/stage-b-r1/9p2i --json-stdout` | 0 | the r1 column above |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent; the scorecard page and JSON are byte-identical |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | 63 checks, 51 OK, 0 FAIL, 7 evidence-branch absent, 5 info |
+| `uv run lint-imports` | 0 | 4 kept, 0 broken |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 phase tasks and prompts; 101 work cards |
+| `uv run python scripts/check_doc_facts.py` | 0 | every checked figure true |
+| `git diff --stat main -- replays/ docs/process-scorecard.md docs/process-scorecard.json experiments/lab/results-route-check-replay.json experiments/lab/report-route-check-replay.md` | - | empty |
+| `bash scripts/verify_samples.sh replays/<set>`, for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
+| `uv run pytest -m campaign -n 6` | 0 | 337 passed |
+| demo bundle, built in this one checkout at `83806ab0` and at `0128fc46` (`uv run python scripts/build_demo_bundle.py --out DIR` each, then `diff -r`) | 0 | 109 files each, empty diff: nothing ships |
+| `bash scripts/check.sh`, once, at the pushed head | pending | run once after this Results is pushed; its exit code lands in the card's last commit |
+
+**Limitations.**
+- Each round is one hosted recording of 50 games; the counts describe those games and are no bar.
+- A held line is not a reason to vote, and a true cited line is not a correct vote; reaching is showing a line, not
+  changing a vote (phase 2's 4b).
+- Each kind's two-tick clock carries an edge, which the edge row shows instead of widening a window.
+- The holds-nothing check finds a living candidate in every committed holds-nothing SKIP's prompt: it says the label
+  reads as "nothing resolves", and it does not judge whether a held line resolves the vote.
+- The placement reader is census-local until phase 2 swaps in the field's.
+- In a shallow clone the drift check also fails on a changed non-recording file beside the recordings.
