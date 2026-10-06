@@ -8417,12 +8417,15 @@ def test_each_place_the_check_reads_names_its_own_row() -> None:
 
 
 def test_a_player_id_counts_only_as_a_whole_token() -> None:
-    """Planted: ``p-1`` read inside ``p-10``, and inside a body handle."""
+    """Planted: ``p-1`` read inside ``p-10``, inside a body handle, and as the
+    start of a longer word."""
 
     for line in (
         "- [obs p-2:3:0] Saw p-10 in ADMIN.",
         "- [obs p-2:3:0] Found body-p-1-12 in ADMIN.",
         "- [obs p-2:3:0] Saw xp-1 in ADMIN.",
+        "- [obs p-2:3:0] Saw p-1a in ADMIN.",
+        "- [obs p-2:3:0] Saw p-1_old in ADMIN.",
     ):
         assert held(ballot_prompt(observations=(line,))) == frozenset(), line
     assert held(ballot_prompt(observations=("- Saw p-1, then p-10.",))) == {
@@ -8752,6 +8755,78 @@ def test_a_holds_nothing_skip_without_a_validating_ballot_call_raises() -> None:
             )
 
 
+def test_the_loader_names_the_set_and_seed_of_an_unchecked_holds_nothing_skip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: a committed game's holds-nothing voter loses every recorded call;
+    the walk's refusal names the set directory, the seed, the meeting and the
+    voter."""
+
+    opened, _, index = _ballot_meeting()
+    voter = opened.entry.ballots[index].voter
+    seed = int(opened.entry.game_id.rsplit("-", 1)[-1])
+    committed = next(
+        item for item in census_inputs(SAMPLES_4P1I).games if item.seed == seed
+    )
+    events = [
+        replace(
+            event,
+            entry=event.entry.model_copy(
+                update={
+                    "llm_calls": tuple(
+                        call for call in event.entry.llm_calls if call.agent_id != voter
+                    )
+                }
+            ),
+        )
+        if isinstance(event, (MeetingOpened, MeetingApplied))
+        and event.entry.meeting_id == opened.entry.meeting_id
+        else event
+        for event in census_walk_events(SAMPLES_4P1I, seed)
+    ]
+    monkeypatch.setattr(census, "walk_replay", lambda *args, **kwargs: iter(events))
+    with _refusal(
+        ValueError,
+        f"set replays/samples/4p1i, seed {seed}, meeting {opened.entry.meeting_id}, "
+        f"voter {voter}: a SKIP labelled as holding nothing has no recorded ballot "
+        "call",
+    ):
+        census._load_game(
+            Path("replays/samples/4p1i") / f"replay-seed-{seed}.jsonl",
+            seed=seed,
+            roles=committed.roles,
+            manifest_cell=", ".join(committed.era.prompt_stamps or ()),
+            num_players=4,
+            num_impostors=1,
+            tasks_per_crewmate=1,
+            game_map=MAP,
+        )
+
+
+def test_the_loader_checks_the_label_its_constant_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the label the check reads moves; the loader checks that label's
+    SKIPs and no longer the holds-nothing ones."""
+
+    opened, _, index = _ballot_meeting()
+    cast = opened.entry.ballots[index]
+    relabelled = cast.model_copy(update={"grounding_label": "supported"})
+
+    def check(item: Any) -> frozenset[str] | None:
+        return census.holds_nothing_check(
+            opened.entry,
+            item,
+            living=frozenset(opened.state.players),
+            since_tick=0,
+            where="here",
+        )
+
+    assert check(cast) is not None and check(relabelled) is None
+    monkeypatch.setattr(census, "HOLDS_NOTHING_LABEL", "supported")
+    assert check(cast) is None and check(relabelled) is not None
+
+
 def test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter() -> None:
     opened, applied, index = _ballot_meeting()
     voter = opened.entry.ballots[index].voter
@@ -9009,13 +9084,25 @@ def test_the_sighting_clock_differs_from_the_whereabouts_window_where_it_matters
 
 def test_a_sighting_reads_the_resolved_frame_one_tick_before() -> None:
     """Planted: a regroup meeting at tick 9 moved the target after its actions
-    resolved in STORAGE; an action-stamped sighting names the resolved room."""
+    resolved in STORAGE; an action-stamped sighting names the resolved room, and a
+    state-read one the settled room. Every sighting kind reads both frames at
+    T-1; a whereabouts claim reads neither resolved frame."""
 
-    sighting = spot("saw_player", 10)
     path = only_at(-5)
-    assert verdict(sighting, path, resolved={9: ROOM}) == "true"
+    sightings: tuple[census.CheckedPlacementKind, ...] = (
+        "saw_player",
+        "company",
+        "saw_move",
+    )
+    for kind in sightings:
+        sighting = spot(kind, 10)
+        assert verdict(sighting, path, resolved={9: ROOM}) == "true", kind
+        settled_only = {**path, 9: ROOM}
+        assert verdict(sighting, settled_only, resolved={9: FAR}) == "true", kind
+        assert verdict(sighting, path, resolved={8: ROOM}) == "false", kind
     claim = spot("whereabouts", 10)
     assert verdict(claim, path, resolved={9: ROOM}) == "false"
+    assert verdict(claim, path, resolved={10: ROOM}) == "false"
 
 
 def test_a_placement_with_no_route_or_no_room_is_unverifiable_never_false() -> None:
@@ -9567,6 +9654,42 @@ def test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report() 
     assert sum(reports.values()) == 4
 
 
+def test_a_body_reported_twice_joins_its_kill_to_the_first_report() -> None:
+    twice = game(
+        kills=(victim_kill(40, "p-1"),),
+        bodies=(victim_body("body-d", 40, "p-1"),),
+        meetings=(
+            report(52, "body-d"),
+            report(70, "body-d", meeting_id="meeting-1"),
+        ),
+    )
+    reports = table("ticks_from_kill_to_report", twice)
+    assert reports["11 to 20 ticks"] == 1 and sum(reports.values()) == 1
+
+
+def test_every_listed_row_stands_at_zero_in_a_game_with_nothing_to_count() -> None:
+    empty = game()
+    gaps = dict.fromkeys(census.tick_gap_rows(), 0)
+    assert table("ticks_between_kills", empty) == gaps
+    assert table("ticks_from_kill_to_report", empty) == {
+        **gaps,
+        census.NEVER_REPORTED: 0,
+    }
+    assert table("report_openers_by_witness", empty) == {
+        f"{opener}, {row}": 0
+        for opener in (census._OPENER_WITNESS, census._OPENER_OTHER)
+        for row in census.tick_gap_rows()
+    }
+    assert table("holds_nothing_skips_by_source", empty) == dict.fromkeys(
+        census.held_source_rows(), 0
+    )
+    assert table("supported_ejects_not_checkable_by_reason", empty) == dict.fromkeys(
+        census.NOT_CHECKABLE_REASONS, 0
+    )
+    assert table("kills_per_game", empty) == {"0": 1}
+    assert table("sabotages_started_per_game", empty) == {"0": 1}
+
+
 def test_a_same_tick_double_kill_joins_each_body_to_its_own_kill_by_victim() -> None:
     """Planted: two kills on one tick in two rooms; the report names the second
     victim's body. Joined by victim, only that kill reaches the report, whatever
@@ -9673,6 +9796,21 @@ def test_a_sabotage_active_across_a_meeting_is_one_start() -> None:
     assert counts("task_wins_with_sabotage_in_play", lost) == (0, 0, 0)
     opening = game(frames={0: frame({}, sabotage=True)}, end_reason="CREWMATE_TASKS")
     assert table("sabotages_started_per_game", opening) == {"1": 1}
+    # The frames are read in tick order, however the carrier holds them.
+    shuffled = dict(sorted(frames.items(), key=lambda item: (item[0] % 2, item[0])))
+    assert list(shuffled) != sorted(shuffled)
+    assert table("sabotages_started_per_game", game(frames=shuffled)) == {"2": 1}
+
+
+def test_the_sabotage_cell_reads_the_task_win_its_constant_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the ending the cell counts moves; the cell follows it."""
+
+    played = game(frames={0: frame({}, sabotage=True)}, end_reason="IMPOSTOR_PARITY")
+    assert counts("task_wins_with_sabotage_in_play", played) == (0, 0, 0)
+    monkeypatch.setattr(census, "TASK_WIN", "IMPOSTOR_PARITY")
+    assert counts("task_wins_with_sabotage_in_play", played) == (1, 1, 0)
 
 
 def test_who_found_the_body_reads_the_witnesses_since_the_last_meeting() -> None:
