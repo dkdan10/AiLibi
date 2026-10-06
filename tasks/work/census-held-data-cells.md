@@ -1128,3 +1128,5 @@ H2, H4, V1 and V2 are killed only by this round's tests, so each came back green
 | `bash scripts/verify_samples.sh replays/<set>`, for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
 | `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
 | `uv run pytest -m campaign -n 6` | 0 | 337 passed |
+| demo bundle, built in this one checkout at `83806ab0` and at `62a91057` (`uv run python scripts/build_demo_bundle.py --out DIR` each, then `diff -r`) | 0 | 109 files each, empty diff: nothing ships |
+| `bash scripts/check.sh` at `62a91057`, the fix head (run once, output to a file, exit code from the run itself) | 0 | pytest 10,358 passed, 20 skipped, 3 xfailed (10,355 before, plus this round's three); frontend 695 passed; the build succeeds; the commit after it touches only this row |
