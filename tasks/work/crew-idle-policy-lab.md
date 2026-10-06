@@ -156,7 +156,7 @@ or exact bytes drift. Sub-directories of `audits/` are indexed as units (`check_
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
-- [ ] **The cross arms.** Mechanism: a read-only `STAGE_B_IDLE_POLICIES` mapping (`MappingProxyType`) names
+- [x] **The cross arms.** Mechanism: a read-only `STAGE_B_IDLE_POLICIES` mapping (`MappingProxyType`) names
   `stage_b_full_kill_cooldown_6_patrol` and `stage_b_full_kill_cooldown_6_accompany`. `candidate_configs` builds each
   from the cooldown-6 arm's validated payload plus `crew_idle_policy`, so the cooldown is derived, never copied. A
   test holds each arm's `model_dump()` equal to the cooldown-6 arm's plus exactly that one field. Planted, red on its
@@ -164,12 +164,12 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   case, `STAGE_B_KILL_COOLDOWNS` monkeypatched to 7, under which the cross arms follow. Both arms join
   `test_genuine_candidate_reconstructs_in_api_and_repeats`: each reconstructs with `outcome_verified` and repeats
   byte for byte. The arm-count literal becomes 21.
-- [ ] **The wider development split.** Mechanism: a read-only `SPLIT_SEEDS` mapping replaces the conditional at
+- [x] **The wider development split.** Mechanism: a read-only `SPLIT_SEEDS` mapping replaces the conditional at
   `:929`: `development` 1000-1007, `held_out` 2000-2015, `development_wide` 1000-1099. The CLI choices derive from its
   keys, and an unknown split raises `ValueError` before any game. Planted: `held-out` (hyphen) raises; a
   `development_wide` that reaches seed 2000 fails the disjointness test. Its first eight rows equal a `--split
   development` run's rows for the same arms, field for field.
-- [ ] **The coverage cell, exact.** Mechanism: a pure helper over one `WorldState` returns (subjects, covered) by the
+- [x] **The coverage cell, exact.** Mechanism: a pure helper over one `WorldState` returns (subjects, covered) by the
   Outcome's rule, and `measure_replay` adds the four counts `whereabouts_subjects_at_kill_ticks`,
   `whereabouts_covered_at_kill_ticks`, `whereabouts_subjects_at_play_ticks` and `whereabouts_covered_at_play_ticks`.
   Hand-built states give exact counts and turn red on each defect:
@@ -181,16 +181,16 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     once (planted: per-kill counting);
   - the post-tick state is read, not the pre-tick state (planted: `pre_state` swapped in, on a tick where a move
     joins two players).
-- [ ] **Role-blind by property.** Mechanism: a Hypothesis property over states seeded on the canonical map, with
+- [x] **Role-blind by property.** Mechanism: a Hypothesis property over states seeded on the canonical map, with
   random rooms, `alive` and `in_vent` flags and a random role assignment, under `settings(deadline=None)`. The helper's
   result is unchanged under every permutation of roles among players. Perturbed: a variant counting only crewmate
   observers, held in the test, fails the property.
-- [ ] **The rule it restates, pinned at its source.** Mechanism: the helper implements the rule itself, and a
+- [x] **The rule it restates, pinned at its source.** Mechanism: the helper implements the rule itself, and a
   Hypothesis property (same generator, `settings(deadline=None)`) holds it to the engine. A living, non-vented subject
   is covered exactly when `engine.rules._witnesses_in_room(state, room=<its room>, exclude={<it>})` is non-empty.
   Planted source-change case: a monkeypatched `_witnesses_in_room` that also admits vented players fails the pin. An
   engine change to the witness rule therefore cannot silently change what the cell means.
-- [ ] **The walk-in witness rows.** Mechanism: `measure_replay` adds `crew_kill_witnesses`,
+- [x] **The walk-in witness rows.** Mechanism: `measure_replay` adds `crew_kill_witnesses`,
   `crew_kill_witnesses_walked_in` and `kills_with_walk_in_crew_witness`, by the Outcome's definition. A planted
   `advance_tick` sequence, run through the helper's engine arguments, gives exact counts and is red on each defect:
   - a crewmate already in the room is a witness and not a walk-in;
@@ -210,7 +210,7 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     higher, equal or lower; then the same three over play ticks for every seed.
   Stubbed rows (as `test_the_comparison_publishes_ticks_to_parity_over_its_own_arms` does) give exact values.
   Planted: a summary over the wrong arm's rows, and a pair read against `stage_b_full`, each fail.
-- [ ] **No existing count moves.** Mechanism: a run at the head, written outside the tree, of the ten round-1 arms
+- [x] **No existing count moves.** Mechanism: a run at the head, written outside the tree, of the ten round-1 arms
   on `--split development`, and a count-only comparison quoted in Results, as the kill-cooldown card ran its own. The
   rows equal `stage-b-r1-frozen-head.json` on every top-level row field. `counts` is compared on the frozen file's
   own keys, and the new count keys are exactly the seven declared here. At authoring that is 2,240 fields with 0
@@ -218,7 +218,7 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   comparison name that row. The capture holds no
   `"experiment_config"` key, so `tests/orchestrator/test_experiment_arms.py`'s committed-payload census (956 rows in
   101 files) is unchanged.
-- [ ] **The capture is committed, reproducible and read.** Mechanism: one run of the Validation command writes
+- [x] **The capture is committed, reproducible and read.** Mechanism: one run of the Validation command writes
   `audits/tactical-gameplay/stage-b-idle-policy-development.json`. It runs 4 arms on 100 seeds per roster, 800 games,
   at the lab's limits: 96 ticks, 256 calls, 1,000,000 input and 100,000 output tokens, 30 s and $0 per game. Any game
   that aborts or hits a limit keeps its row and is named in Results; nothing is re-run to remove it. A command
@@ -231,10 +231,10 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   reads the two cooldown arms as mechanics only: fake meetings eject nobody, so the hosted rise from 4/227 to 14/195
   is neither confirmed nor explained. A compact check command at the end of the section reproduces every table cell
   from the JSON.
-- [ ] **Registered.** Mechanism: `docs/artifacts.md`'s `audits/` row states the measured tracked bytes and file count
+- [x] **Registered.** Mechanism: `docs/artifacts.md`'s `audits/` row states the measured tracked bytes and file count
   at the PR head. `test_every_counted_registry_row_matches_the_index` and offline `verify_ml_evidence` enforce it.
   Planted: the run before the row is updated is red, and Results quotes it.
-- [ ] **The re-pricing, written.** Mechanism: section 7 gains one paragraph after the four checks, worded as below
+- [x] **The re-pricing, written.** Mechanism: section 7 gains one paragraph after the four checks, worded as below
   (only the ruling's citation filled in), and the `rewards.py` comment gains the clause below, as `#` lines. A new
   `tests/scripts/test_reopening_repricing_note.py` reads file bytes, never imports. It requires exactly one
   paragraph in section 7 beginning `**Dated 2026-10-06`, naming `correct_reports`, `patrol_coverage`,
@@ -243,18 +243,18 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   `correct_reports = sum(` to name `role-blind`, `FITNESS_OBJECTIVE_ID`, `before any search`, `conviction` and
   `2026-07-09`. Planted, as fixed strings in the test: the paragraph removed; moved into section 8; missing
   `patrol_coverage`; doubled; and the comment without the clause. Each is rejected.
-- [ ] **Comment-only, proved the way `d1ea113a` proved it.** Mechanism: the strings-kept AST comparison in
+- [x] **Comment-only, proved the way `d1ea113a` proved it.** Mechanism: the strings-kept AST comparison in
   Validation finds `training/rewards.py` equal at base and head. Every changed line of `git diff <base> --
   training/rewards.py` matches `^[+-]\s*#`, and `training/README.md` is the only other file under `training/` that
   changes. Planted, both red:
   - in a byte copy, `"patrol_coverage": patrol_coverage` becomes `patrol_coverage * 0.5`; the AST comparison exits 1;
   - applied in place, the seed-0 pin fails on `patrol_coverage`.
   The file is restored from the byte copy, never from git, and its `shasum` is equal before and after.
-- [ ] **Nothing frozen moves.** Mechanism: `git diff --stat <base> HEAD` over `replays training/artifacts
+- [x] **Nothing frozen moves.** Mechanism: `git diff --stat <base> HEAD` over `replays training/artifacts
   training/reports agents/tactical/learned tests/training api frontend` prints nothing. The seed-0 test passes
   unchanged. Offline `scripts/verify_ml_evidence.py` reports FAIL 0, never `--complete`. `uv run pytest -m campaign`
   passes. `uv run pytest tests/scripts/test_build_demo_bundle.py` passes, with the bundle's inputs untouched.
-- [ ] **One bounded mutation pass.** Mechanism: a single pass over every production line this card adds or changes,
+- [x] **One bounded mutation pass.** Mechanism: a single pass over every production line this card adds or changes,
   using only these classes: F filter, S swap, N comparison, C constant (a role, kind, room or tick read), M message,
   T tuple member, B branch swap, L loaded source to literal. Each mutant runs alone against the touched suites and
   is restored from a byte copy. A survivor is killed by a new test or named equivalent with its reason. Results
@@ -462,4 +462,311 @@ Limitations to state:
 
 ## Results
 
-Not started.
+### Delivery, 2026-10-06
+
+Branch `work/crew-idle-policy-lab` from `2275bdba`; `main` moved to `83806ab0` (docs and card text only) and was
+merged at `d6070be6`. Commits: `3f3dec11` (the lab code and its tests), `39e8fea7` (the re-pricing note and its
+gate), `e5b1dd80` (the capture, its README section and the registry row), `d6070be6` (the merge), then this card's
+Results. Status and the `tasks/README.md` inventory sentence are left to the orchestrator, as Constraints say.
+
+**Acceptance state.** Every box is checked but one. **The summaries** stays open on one field, explained under
+Deviations: the card asks the coverage summary for a kill-tick total, which none of the seven declared counts
+carries, and the card also fixes the new count keys at exactly seven. The summary publishes `kills` and the games
+without a kill tick instead. The orchestrator picks between the two readings; nothing else waits on it.
+
+**Sections this card rests on.**
+- `docs/architecture.md`: "Layering" (`experiments/` writes its own artifacts and nothing reads them back),
+  "Enforced boundaries" (no `agents/` or `engine/` file changes; import-linter passes in `check.sh`), and
+  "Determinism and the substrate ladder" (fake games repeat byte for byte; nothing recorded moves).
+- `docs/experiment-arms.md`: "The fields" (the cross sets the existing `crew_idle_policy`, so there is no new field)
+  and "One engine-arguments helper" (the lab's two engine calls are unchanged; the new folds read events and states
+  only, and the tests advance through `engine_arguments`).
+- `tasks/decision-2026-09-24-stage-b-wave.md`: section 0 (ruling 12, the ML hold), section 7 (the seven adopted
+  arms), 8.1 (the owner's ruling of 2026-10-06, the committed home the section 7 paragraph cites), 8.2 item 4 (the
+  orchestrator's reading 4, which this card carries) and 8.5 (the one-writer map and the merge before F).
+- `tasks/diagnosis-2026-10-02/README.md` Part 3: card 6 (the cross) and card 3 (the witness rows).
+
+**Decisions.**
+- Orchestrator ruling 1. The lab ran with the fake provider on development seeds only, trained nothing and moved no
+  artifact. Its reading says whether a hand-written idle policy closes the slack a learned crew policy would need.
+  It decides nothing about ML.
+- Orchestrator ruling 2. The whereabouts cell was defined before the run, role-blind, from engine positions, the
+  same way for every role (`whereabouts_coverage`). It is named as the re-pricing of `patrol_coverage`'s measurement
+  step in the README section and in the section 7 paragraph. No crewmate-observer variant was built; the only one in
+  the tree is the perturbed helper inside a test, which the role-blind property rejects.
+- Orchestrator ruling 3. The re-pricing is comment-only, of `d1ea113a`'s class; the pins that read source bytes are
+  named below with their state at the head. The seed-0 pin stays. The note names the two crew terms only, as the
+  rule is written. The grade question (memo D10-R3) stays the owner's open point. The conviction GO's
+  re-registration at a reopening is folded into the note.
+- Orchestrator ruling 4. Diagnosis card 3's two rows (crew-witnessed kills and walk-ins) are included on the
+  existing cooldown arms. They cost one fold and one more arm in the same run, well under an hour.
+- Orchestrator ruling 5. `main` moved under this branch (`83806ab0`, docs only). It was merged, and the capture's
+  fingerprint still equals the merged tree's (`runtime_fingerprint` exit 0 at `d6070be6`), so there was no
+  re-capture. If `route-lines-field` or `census-held-data-cells` lands before this card merges, the branch merges
+  `main` again and re-captures, comparing rows on the frozen file keys.
+- Orchestrator ruling 6. Nothing ships. The demo bundle was built twice in this worktree, at `83806ab0` and at
+  `d6070be6` (`scripts/build_demo_bundle.py --out <scratch>`). `diff -r` prints nothing over 109 files. The
+  orchestrator merges.
+- The observer's role is dropped from the cell. A crewmate-observer variant would read a role, so it could not
+  re-price a role-reading term.
+- The cell reads `TickAdvanced.state`, the state the tick leaves, so a move that joins two players counts on that
+  tick.
+- Sight is same-room only. It is the sight every observer holds in every visibility mode, and the engine's
+  kill-witness rule uses it. An impostor's wider base sight is deliberately not used.
+- `development_wide` has 100 seeds (1000-1099). It begins with `development` and stays below the held-out band, and
+  each paired column holds 100 seeds per roster.
+- The summaries' shape. `whereabouts_coverage[arm][roster]` and `idle_policy_pairs[arm][roster]` mirror
+  `ticks_to_parity`'s shape, so a reader indexes all three the same way. Shares are compared exactly, by cross
+  multiplication, never as floats. A pair is published only when its reference ran in the same comparison.
+  Mismatched seeds, or a game with no subject, raise.
+- The doc gate lives in `tests/scripts/test_reopening_repricing_note.py`. It reads bytes and imports nothing from
+  `training/`. It also refuses a second dated paragraph anywhere in the README and a clause detached from its anchor.
+
+**The capture.** `audits/tactical-gameplay/stage-b-idle-policy-development.json`, written once by the Validation
+command at the clean committed head `39e8fea7`. `source_sha256` is
+`31814833632ed9cca17a7a3a43afe91082b9a23459925ad5989af73e0fe5a51d`. Four arms ran on 100 seeds per roster: 800
+games, all `completed`, every `error` null, none at a limit (the most any game used was 71 ticks, 52 calls, 220,212
+input and 2,990 output tokens). There were 14,190 fake calls, 52,639,727 input and 815,925 output tokens, $0, and
+77.35 s of wall (`/usr/bin/time -p`). The README's compact check, run on the JSON, reprints all 20 table rows, and
+they equal the README's rows in order (`rows printed 20 rows in the tables 20; identical, in order: True`).
+
+The 9p2i tables, quoted from the README (4p1i is there beside them):
+
+| Arm | Task wins | Parity wins | Tasks done | Kills | Crew-witnessed kills | Walked in | Kills with a walk-in | Meetings | Hub waits |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `stage_b_full` | 4 | 96 | 1020/1399 | 497 | 17 | 20/20 | 17 | 228 | 2714 |
+| `stage_b_full_kill_cooldown_6` | 27 | 72 | 1253/1400 | 457 | 32 | 45/45 | 32 | 254 | 4840 |
+| `stage_b_full_kill_cooldown_6_patrol` | 31 | 69 | 1256/1399 | 445 | 45 | 54/54 | 45 | 262 | 0 |
+| `stage_b_full_kill_cooldown_6_accompany` | 34 | 66 | 1277/1399 | 444 | 47 | 53/53 | 47 | 260 | 0 |
+
+| Arm | Coverage at kill ticks | Coverage at play ticks | Games without a kill tick | Covered share per game, min / median / max |
+| --- | ---: | ---: | ---: | ---: |
+| `stage_b_full` | 1479/2862 (51.7%) | 14143/22414 (63.1%) | 0 | 0.083 / 0.533 / 0.846 |
+| `stage_b_full_kill_cooldown_6` | 1650/2713 (60.8%) | 20361/30401 (67.0%) | 0 | 0.200 / 0.600 / 0.900 |
+| `stage_b_full_kill_cooldown_6_patrol` | 1353/2624 (51.6%) | 17095/28247 (60.5%) | 0 | 0.227 / 0.511 / 0.767 |
+| `stage_b_full_kill_cooldown_6_accompany` | 1397/2613 (53.5%) | 17467/28474 (61.3%) | 0 | 0.200 / 0.533 / 0.818 |
+
+The two predeclared readings, quoted from the README:
+
+> **What the cross shows.** On the 9-player roster neither hand-written alternative raises whereabouts coverage.
+> Waiting at the hub keeps more players in company than walking about does, at kill ticks and over the whole game.
+> On the 4-player roster both raise it at kill ticks, from 10.5% to 16.5% and 16.3%, but 48 of the 66 paired seeds
+> read equal. [...] **This reading decides nothing about ML**; the hold on ML stands whatever it reads.
+
+> **The best arm's uncovered remainder.** On 9p2i the best of the three at kill ticks is hub wait itself: 1,063 of
+> its 2,713 subjects (39.2%) are uncovered. On 4p1i it is patrol: 213 of 255 (83.5%). That remainder is an upper
+> bound on what any idle policy, hand-written or learned, could still cover in this cell under these rules.
+
+> **The two cooldown rows, as mechanics.** [...] fake meeting ejects nobody, so the rise in the recorded hosted
+> games, from 4 of 227 kills a crewmate saw in the first Stage-B candidate round to 14 of 195 in the shown 9-player
+> set, is neither confirmed nor explained here.
+
+The paired seeds on 9p2i: patrol's kill-tick share is below hub wait's on 77 of 100 seeds (17 above, 6 equal), and
+accompany's on 70 (22 above, 8 equal). Over play ticks they are below on 93 and 90.
+
+**Validation, at `d6070be6` unless named (exit codes captured directly).**
+
+```
+env | grep -c '^AILIBI_'                                  0
+pytest <the card's eight files> -n 6 --dist loadfile       405 passed in 25.27s
+the capture (Validation command, at 39e8fea7)              exit 0, 77.35 s, 800 games
+runtime_fingerprint == capture source_sha256               exit 0 (at 39e8fea7 and d6070be6)
+  perturbed: one fingerprint character changed in a scratch copy      exit 1
+ten round-1 arms, --split development, into scratch        exit 0
+  keyed count-only comparison against stage-b-r1-frozen-head.json:
+    rows 160; fields compared 2240; differing 0; rows whose new count keys are not exactly the seven 0
+    top-level keys only in the head run: idle_policy_pairs, ticks_to_parity, whereabouts_coverage
+  perturbed: one kills_crew_witnessed raised by 1 in a scratch copy:
+    differing 1: stage_b_full/9p2i/1003: counts ['kills_crew_witnessed']   exit 1
+the four capture arms, --split development, into scratch   exit 0
+  the capture's first eight seeds, --prefix (counts in full): rows 64; fields compared 896; differing 0
+committed-payload census: grep -c '"experiment_config"' on the capture   0
+  pytest tests/orchestrator/test_experiment_arms.py -k committed           2 passed (956 rows, 101 files)
+AST comparison, strings kept, base copy from 2275bdba      exit 0
+  planted: "patrol_coverage": patrol_coverage * 0.5 in a byte copy        exit 1
+git diff 2275bdba -- training/rewards.py | ... | grep -vcE '^[+-]\s*#'    0
+git diff --stat 2275bdba HEAD -- training/ | tail -1      2 files changed, 19 insertions(+), 1 deletion(-)
+git diff --stat 2275bdba HEAD -- replays training/artifacts training/reports agents/tactical/learned tests/training api frontend
+                                                          (prints nothing)
+seed-0 pin, planted in place (byte copy of the planted file over training/rewards.py):
+  1 failed: {'patrol_coverage': 0.3431372549019608} != {'patrol_coverage': 0.6862745098039216}
+  restored from the byte copy: shasum 1cde7fe27b1b... before and after; git status clean; 1 passed
+uv run python scripts/verify_ml_evidence.py   checks: 63 | OK 51 | FAIL 0 | ABSENT 7 | INFO 5; exit 0 (never --complete)
+uv run pytest -m campaign -q -n auto          337 passed, exit 0
+uv run pytest tests/scripts/test_build_demo_bundle.py -q   31 passed
+scripts/validate_task_docs.py                 passed: 390 phase tasks, 390 prompts, 101 work cards; exit 0
+scripts/check_doc_facts.py                    exit 0
+verify_samples.sh: samples/9p2i 50, samples/4p1i 50, ml_corpus/9p2i 150, ml_corpus/4p1i 50,
+                   candidates/stage-b-r1/9p2i 50, each "verified clean"
+build_sample_report.py --sample-dir <each of the five sets> --check   "... is consistent with its replays." x5
+publish_process_scorecard.py --check, publish_gameplay_census.py --check   consistent, exit 0
+the demo bundle, built at 83806ab0 and at d6070be6 in one checkout: diff -r prints nothing (109 files)
+```
+
+`npm --prefix frontend test` and the e2e were not run: no frontend file changes. `generate_prompts --check` runs
+inside `check.sh`; no template changes.
+
+**Planted and perturbed cases, by name** (each red on its defect, green on the shipped code):
+- The cross: `test_a_cross_arm_without_the_cooldown_or_at_hub_wait_fails` (built from `stage_b_full`; at
+  `hub_wait`) and `test_the_cross_arms_follow_the_cooldown_dial` (`STAGE_B_KILL_COOLDOWNS` patched to 7).
+- The splits: `test_a_wide_split_reaching_the_held_out_seeds_fails` (reaching 2000; not beginning with
+  `development`), `test_an_unknown_split_is_refused_before_any_game` (`held-out`, `Development`, `''`,
+  `development `), and `test_the_command_line_offers_exactly_the_declared_splits` (`--split held-out` exits 2).
+- The cell: the five exact hand-built cases. `test_a_cell_counting_only_crewmate_observers_fails_the_property` (the
+  property, run on the perturbed helper, raises). `test_a_witness_rule_that_admits_vented_players_breaks_the_pin`
+  (`engine.rules._witnesses_in_room` patched; the pin raises).
+- The walk-ins: the six parametrized cases, `test_walk_ins_count_per_witness_and_once_per_kill` and
+  `test_a_walk_in_is_read_against_the_kills_own_room`.
+- The summaries: `test_a_summary_over_another_arms_rows_or_a_pair_against_stage_b_full_fails`,
+  `test_pairs_refuse_arms_that_ran_different_seeds` and `test_a_game_without_a_subject_has_no_share`.
+- The note: `test_reopening_repricing_note.py`'s six fixed planted texts (removed, moved into section 8, missing
+  `patrol_coverage`, doubled, copied after section 8, the comment without the clause, detached from the anchor).
+  The gate's functions run on the branch point's own bytes report "section 7 holds 0 paragraphs" and five missing
+  comment terms.
+- The registry: with the capture staged and the row unchanged, `test_every_counted_registry_row_matches_the_index`
+  failed: "audits/: docs/artifacts.md promises 333 files, the index tracks 334" and "promises 28,136,878 tracked
+  bytes, the tracked files contain 31,430,328 bytes". With the row updated, 1 passed.
+
+**The pins that read source bytes** (ruling 3; the class `d1ea113a` established).
+- Value pins compare computed values, which no comment moves. The seed-0 pin passes unchanged and fails on a value
+  change (above).
+- `training.provenance.derivation_fingerprint` hashes the 110-file `derivation_files` closure, which includes
+  `training/rewards.py`. With only `rewards.py` swapped for the base bytes, it reads `354d9de9` at the base and
+  `70c95948` at the head. The version-two `fit_corpus_fingerprint` moves from `92fa327f` to `7f109b57`, and
+  `bakeoff_substrate_sha` from `a77eb4fb` to `14524d8b`. `git grep` finds none of the six prefixes in the tree, so no
+  committed stamp binds them; the committed fits carry version-one identities over corpus bytes alone
+  (`test_current_loader_refuses_historical_fit` is in the 405 above). Script: `fingerprints.py`, in scratch.
+- `scripts/_tournament_progress.py::configuration_fingerprint` hashes every `training/*.py`, so it moves too. It binds
+  only a live tournament's `--resume`, and no progress record is committed. No tournament `--resume` may span this
+  edit. It also hashes provider settings from the environment, so it was not computed here.
+- Offline `verify_ml_evidence`: FAIL 0, above. The corpus FROZEN line and every artifact are untouched (the empty
+  `git diff --stat` above).
+
+**The mutation pass, and the per-line neuter table.** One pass over `experiments/tactical_gameplay.py`, the only
+production module touched (the `training/rewards.py` change is comment-only, proved above). There were 40 per-line
+neuters (A: each added row, line or argument deleted) and 39 mutants of the eight classes (B). Each ran alone with
+`pytest -x` over `tests/experiments/test_tactical_gameplay.py`, `tests/orchestrator/test_experiment_config.py` and
+the kill-cooldown readers' parity test. The file was restored from a byte copy after each run, and its sha256
+(`c185cdcd...`) was re-checked after each run and at the end. Result: 78 killed, 1 equivalent. Two cases were
+planted after reading the diff, before the first probe ran: `test_a_walk_in_is_read_against_the_kills_own_room`
+(every other walk-in case kills in ADMIN, so a constant room read would survive) and the `@example` game in
+`test_on_lab_games_walk_ins_stay_within_crew_witnessed_kills`, with its bound `kills_crew_witnessed <=
+crew_kill_witnesses` (without the forced game, a dropped `fold_kill_witnesses` call could survive on random seeds).
+No probe first came back green except B10.
+
+| id | class | what was neutered or mutated | result | first red test |
+| --- | --- | --- | --- | --- |
+| A1 | neuter | patrol row of STAGE_B_IDLE_POLICIES | killed | `test_genuine_candidate_reconstructs_in_api_and_repeats[stage_b_full_kill_cooldown_6_patrol]` |
+| A2 | neuter | accompany row of STAGE_B_IDLE_POLICIES | killed | `test_genuine_candidate_reconstructs_in_api_and_repeats[stage_b_full_kill_cooldown_6_accompany]` |
+| A3 | neuter | development row of SPLIT_SEEDS | killed | `test_source_identity_binds_the_exact_consumed_roster_before_running` |
+| A4 | neuter | held_out row of SPLIT_SEEDS | killed | `test_the_split_table_keeps_development_apart_from_held_out` |
+| A5 | neuter | development_wide row of SPLIT_SEEDS | killed | `test_the_split_table_keeps_development_apart_from_held_out` |
+| A6 | neuter | crew_idle_policy argument of the cross arm | killed | `test_the_cross_arms_are_the_reference_arm_plus_one_idle_policy` |
+| A7 | neuter | reference payload spread of the cross arm | killed | `test_the_cross_arms_are_the_reference_arm_plus_one_idle_policy` |
+| A8 | neuter | fold_whereabouts call in measure_replay | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` |
+| A9 | neuter | fold_kill_witnesses call in measure_replay | killed | `test_on_lab_games_walk_ins_stay_within_crew_witnessed_kills` |
+| A10 | neuter | zero-initialised counts | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` |
+| A11 | neuter | split refusal | killed | `test_an_unknown_split_is_refused_before_any_game[held-out]` |
+| A12 | neuter | whereabouts_coverage output key | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A13 | neuter | idle_policy_pairs output key | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A14 | neuter | play-tick subjects increment | killed | `test_a_tick_without_a_kill_adds_only_to_the_play_tick_pair` |
+| A15 | neuter | play-tick covered increment | killed | `test_a_tick_without_a_kill_adds_only_to_the_play_tick_pair` |
+| A16 | neuter | kill-tick subjects increment | killed | `test_a_tick_with_two_kills_counts_its_players_once` |
+| A17 | neuter | kill-tick covered increment | killed | `test_a_tick_with_two_kills_counts_its_players_once` |
+| A18 | neuter | crew_kill_witnesses increment | killed | `test_a_kill_witness_walked_in_only_from_another_room_before_the_kill[already-in-the-room]` |
+| A19 | neuter | walked-in increment | killed | `test_a_kill_witness_walked_in_only_from_another_room_before_the_kill[walks-in-before-the-kill]` |
+| A20 | neuter | kills-with-walk-in increment | killed | `test_a_kill_witness_walked_in_only_from_another_room_before_the_kill[walks-in-before-the-kill]` |
+| A21 | neuter | summary games row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A22 | neuter | summary kills row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A23 | neuter | summary four sums | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A24 | neuter | summary games without a kill tick | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A25 | neuter | summary share minimum | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A26 | neuter | summary share median | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A27 | neuter | summary share maximum | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A28 | neuter | pairs reference row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A29 | neuter | pairs seeds row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A30 | neuter | pairs seeds-with-kill-ticks row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A31 | neuter | pairs kill higher row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A32 | neuter | pairs kill equal row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A33 | neuter | pairs kill lower row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A34 | neuter | pairs play higher row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A35 | neuter | pairs play equal row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A36 | neuter | pairs play lower row | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| A37 | neuter | no-share refusal | killed | `test_a_game_without_a_subject_has_no_share` |
+| A38 | neuter | reference-absent return | killed | `test_pairs_need_the_reference_in_the_same_comparison` |
+| A39 | neuter | cross-arm-absent skip | killed | `test_pairs_need_the_reference_in_the_same_comparison` |
+| A40 | neuter | different-seeds refusal | killed | `test_pairs_refuse_arms_that_ran_different_seeds` |
+| B1 | F filter | drop alive from the standing filter | killed | `test_a_dead_player_covers_nothing_and_is_not_a_subject` |
+| B2 | F filter | drop in_vent from the standing filter | killed | `test_a_vented_player_covers_nothing_and_is_not_covered` |
+| B3 | F filter | subjects count every player | killed | `test_a_dead_player_covers_nothing_and_is_not_a_subject` |
+| B4 | F filter | drop the other-room condition | killed | `test_a_kill_witness_walked_in_only_from_another_room_before_the_kill[moves-to-its-own-room]` |
+| B5 | F filter | drop the crew role filter | killed | `test_a_kill_witness_walked_in_only_from_another_room_before_the_kill[an-impostor-walks-in]` |
+| B6 | F filter | drop the kill-tick share filter | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| B7 | F filter | pair kill seeds without the reference's kill tick | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| B8 | S swap | pre-tick state for coverage | killed | `test_the_state_the_tick_leaves_is_read` |
+| B9 | S swap | every player instead of the witness list | killed | `test_a_kill_witness_walked_in_only_from_another_room_before_the_kill[already-in-the-room]` |
+| B10 | S swap | post-tick state for the role read | survived | none (equivalent, below) |
+| B11 | S swap | summary reads the reference arm's rows | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| B12 | S swap | play pairs over the kill seeds | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| B13 | S swap | walk-ins over every witness | killed | `test_a_kill_witness_walked_in_only_from_another_room_before_the_kill[an-impostor-walks-in]` |
+| B14 | N comparison | a subject as its own observer | killed | `test_two_players_in_one_room_cover_each_other_and_a_lone_player_is_uncovered` |
+| B15 | N comparison | kill-tick test inverted | killed | `test_a_tick_without_a_kill_adds_only_to_the_play_tick_pair` |
+| B16 | N comparison | no-share test as a None test | killed | `test_a_game_without_a_subject_has_no_share` |
+| B17 | N comparison | seed-set test inverted | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| B18 | N comparison | reference-absent test inverted | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| B19 | N comparison | split test as a None test | killed | `test_an_unknown_split_is_refused_before_any_game[held-out]` |
+| B20 | C constant | kill room read as ADMIN | killed | `test_a_walk_in_is_read_against_the_kills_own_room` |
+| B21 | C constant | kill-tick kind read as always true | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` |
+| B22 | C constant | arrival kind read as always true | killed | `test_genuine_candidate_reconstructs_in_api_and_repeats[baseline]` |
+| B23 | C constant | share scope read as kill ticks | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| B24 | M message | split refusal message | killed | `test_an_unknown_split_is_refused_before_any_game[held-out]` |
+| B25 | M message | different-seeds message | killed | `test_pairs_refuse_arms_that_ran_different_seeds` |
+| B26 | M message | no-share message | killed | `test_a_game_without_a_subject_has_no_share` |
+| B27 | T tuple | drop subjects-at-kill-ticks key | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` |
+| B28 | T tuple | drop covered-at-kill-ticks key | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` |
+| B29 | T tuple | drop subjects-at-play-ticks key | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` |
+| B30 | T tuple | drop covered-at-play-ticks key | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` |
+| B31 | T tuple | drop crew_kill_witnesses key | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` |
+| B32 | T tuple | drop walked-in key | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` |
+| B33 | T tuple | drop kills-with-walk-in key | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` |
+| B34 | B branch swap | higher and lower swapped | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| B35 | B branch swap | share minimum and maximum swapped | killed | `test_the_comparison_publishes_coverage_and_pairs_over_its_own_arms` |
+| B36 | L literal | cross arm from a literal cooldown 6 | killed | `test_the_cross_arms_follow_the_cooldown_dial` |
+| B37 | L literal | seeds as the development literal | killed | `test_the_wide_split_runs_its_hundred_seeds` |
+| B38 | L literal | command-line choices as the old literal | killed | `test_the_command_line_offers_exactly_the_declared_splits` |
+| B39 | L literal | pairs' reference read as its literal | killed | `test_a_summary_over_another_arms_rows_or_a_pair_against_stage_b_full_fails` |
+
+B10 is equivalent. The role read takes `step.state` in place of `step.pre_state`, and no engine action changes a
+role within a tick, so the two reads are identical for every witness.
+
+**Deviations.**
+- The summaries' kill-tick total (acceptance **The summaries**, left open). A kill tick can hold two kills on 9p2i,
+  so `event:Killed` does not count kill ticks, and none of the seven declared counts does. The card also fixes the
+  new count keys at exactly seven (**No existing count moves**, Record impact). `whereabouts_coverage` publishes
+  `kills` and `games_without_a_kill_tick` in its place. A game has a kill tick exactly when it has a subject at
+  one, because its killer is alive. Option (a): accept this shape. Option (b): add an eighth count, `kill_ticks`,
+  which changes the declared seven, the comparison script and Record impact.
+- `tests/eval/test_kill_cooldown_readers.py`: its comparison stub gains the four coverage keys, because the summary
+  reads them strictly. Constraints name this follow-through. No assertion changed.
+- `build_comparison(split=...)` is typed `str`, and `SPLIT_SEEDS` is the one source of truth that refuses. A
+  `Literal` would make the refusal test a type error.
+- `tasks/work/kill-cooldown-arm.md:307` still says the test counts 19 arms. It is a done card's record of its own
+  head, so it is not edited.
+
+**Limitations.**
+- Fake meetings eject nobody, so the race, kills and coverage are play-layer mechanics. They are not model play and
+  not balance.
+- The cell counts positions, not what an agent rendered, remembered or said: it is an upper bound on held
+  whereabouts.
+- Paired games share a seed and diverge after the first differing decision.
+- 100 development seeds per roster, with no held-out confirmation.
+- The diagnosis's scratch figures (1,813 idle crew-ticks; 14 of 14 walk-ins) are not reproduced here. Those are
+  hosted games, and the lab reads fake ones. In the lab every crewmate witness on both rosters and all four arms
+  walked in on the kill tick, which matches their direction but is a different measurement.
+
+**Open for the owner** (Constraints): which grade of "reads roles" a future objective forbids (the two crew terms
+only, as the note says, or also `meetings_survived` and the teammate witness discount; memo D10-R3), and whether a
+crewmate-observer variant of the cell is ever wanted (it would read a role and could not be the re-pricing).
+
+**The full gate.** `bash scripts/check.sh` runs once at the head that states these numbers; its exit code is
+recorded in the next subsection.
