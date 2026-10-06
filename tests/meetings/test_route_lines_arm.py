@@ -85,7 +85,11 @@ from orchestrator.game import (
     experiment_arm_suffix,
     prompt_versions_for_set,
 )
-from orchestrator.replay import MeetingReplayEntry, read_all_entries
+from orchestrator.replay import (
+    MeetingReplayEntry,
+    read_all_entries,
+    recorded_experiment_config,
+)
 from tests._helpers.scripted_meeting import record_game
 from tests._helpers.scripted_routes import record_routes_game, round_two_config
 from tests.meetings._manager_helpers import (
@@ -204,6 +208,58 @@ def _config_file_problems() -> list[str]:
 
 def test_every_committed_experiment_config_file_reserializes_unchanged() -> None:
     assert _config_file_problems() == []
+
+
+#: Every committed replay set, read through its first replay's recorded settings.
+_COMMITTED_SETS: Final[tuple[str, ...]] = (
+    "samples/9p2i",
+    "samples/4p1i",
+    "ml_corpus/9p2i",
+    "ml_corpus/4p1i",
+    "candidates/stage-b-r1/9p2i",
+)
+
+
+def _committed_payloads_reading_the_field_on() -> list[str]:
+    """Each committed payload, config file or replay set that reads the field ON."""
+
+    found: list[str] = []
+    for suffix in (".jsonl", ".json"):
+        for path in arms_tests._committed_files(suffix):
+            text = path.read_text(encoding="utf-8")
+            documents = (
+                [json.loads(line) for line in text.splitlines()]
+                if suffix == ".jsonl"
+                else [json.loads(text)]
+            )
+            for document in documents:
+                for payload in arms_tests._payloads(document):
+                    if RecordedExperimentConfig.model_validate(
+                        payload
+                    ).route_lines_version:
+                        found.append(path.relative_to(_REPO).as_posix())
+    for path in sorted((_REPO / "replays").rglob("experiment-config.json")):
+        config = RecordedExperimentConfig.model_validate_json(
+            path.read_text(encoding="utf-8")
+        )
+        if config.route_lines_version is not None:
+            found.append(path.relative_to(_REPO).as_posix())
+    for name in _COMMITTED_SETS:
+        first = min((_REPO / "replays" / name).glob("replay-seed-*.jsonl"))
+        recorded = recorded_experiment_config(read_all_entries(first))
+        if (recorded or RecordedExperimentConfig()).route_lines_version is not None:
+            found.append(name)
+    return found
+
+
+def test_every_committed_payload_reads_the_field_off() -> None:
+    """A missing key means OFF: no committed payload, file or set reads the field ON.
+
+    The byte test above cannot see a flipped default, since the omission keys on
+    the default and the bytes would still round-trip; this one can.
+    """
+
+    assert _committed_payloads_reading_the_field_on() == []
 
 
 def test_without_its_omission_the_committed_payloads_and_files_fail(
