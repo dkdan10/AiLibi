@@ -268,11 +268,23 @@ The counts are defined as follows.
   sight every player has in every visibility mode, and an impostor's wider
   sight is deliberately not used. It counts positions, not what anyone noticed,
   remembered or said, so it is an upper bound on the whereabouts any player
-  held.
+  held. It is the role-blind replacement for the step where the one committed
+  training objective measures crew coverage. That objective's
+  `patrol_coverage` term pays a crewmate for sharing a room with a player who
+  is an impostor, which reads a role. `training/README.md` section 7 records
+  that any reopening of the training work redefines that term without reading
+  roles before any search; this cell is the measured candidate, and nothing
+  here adopts it.
 - **At kill ticks** sums the same over the play ticks with at least one kill,
-  each tick counted once however many kills it holds. A killer alone with the
-  body is uncovered, so this figure also says whether a kill had any onlooker.
-  **At play ticks** sums it over every play tick.
+  each tick counted once however many kills it holds. Each killer is one of
+  those subjects, covered when anyone stood with it as the tick ended. That is
+  company at the end of the tick, not an onlooker at the kill. The engine
+  applies a tick's actions in order, so a player who walks in after the kill
+  on the same tick covers the killer without having seen the kill, and a
+  witness who walks out after the kill can leave the killer uncovered.
+  Crew-witnessed kills and the two walk-in counts below read the moment of the
+  kill, from the witnesses the engine recorded. **At play ticks** sums it over
+  every play tick.
 - **Crew-witnessed kills** counts kills a crewmate saw, as the engine recorded
   the kill's witnesses.
 - **Walked in** counts, over all kills, the crewmate witnesses who moved into

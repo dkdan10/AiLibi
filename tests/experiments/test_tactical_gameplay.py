@@ -891,6 +891,50 @@ def test_a_walk_in_is_read_against_the_kills_own_room() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("bystander", "actions", "witnesses", "covered"),
+    [
+        pytest.param(
+            _player("p-3", "WEST_HALL"),
+            (_kill("p-1", "p-2"), _move("p-3", "ADMIN")),
+            (),
+            4,
+            id="walks-in-after-the-kill",
+        ),
+        pytest.param(
+            _player("p-3", "ADMIN"),
+            (_kill("p-1", "p-2"), _move("p-3", "WEST_HALL")),
+            ("p-3",),
+            2,
+            id="walks-out-after-the-kill",
+        ),
+    ],
+)
+def test_kill_tick_coverage_is_company_as_the_tick_ends_not_the_kills_witnesses(
+    bystander: PlayerState,
+    actions: tuple[Action, ...],
+    witnesses: tuple[str, ...],
+    covered: int,
+) -> None:
+    """The kill-tick cell reads the state the tick leaves; the witnesses, the kill.
+
+    ``p-8`` and ``p-9`` cover each other in LABS. A bystander who walks into
+    ADMIN after the kill covers the killer without witnessing it; a witness who
+    walks out after the kill leaves the killer uncovered.
+    """
+
+    game_map = load_canonical_map()
+    engine = engine_arguments(candidate_configs()[lab.STAGE_B_IDLE_REFERENCE])
+    state = _kill_scene(bystander)
+    post, events = advance_tick(state, actions, game_map=game_map, **engine)
+    (kill,) = [event for event in events if isinstance(event, KilledEvent)]
+    assert kill.witnesses == witnesses
+    counts: Counter[str] = Counter()
+    lab.fold_whereabouts(_step(state, post, events, actions), counts)
+    assert counts["whereabouts_subjects_at_kill_ticks"] == 4
+    assert counts["whereabouts_covered_at_kill_ticks"] == covered
+
+
 @st.composite
 def _kill_ticks(draw: st.DrawFn) -> tuple[WorldState, tuple[Action, ...]]:
     """A kill room, killers and victims in it, and bystanders moving about it."""

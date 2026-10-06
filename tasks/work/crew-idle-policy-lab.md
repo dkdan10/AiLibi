@@ -156,6 +156,22 @@ or exact bytes drift. Sub-directories of `audits/` are indexed as units (`check_
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
+- [x] Review correction: the three source-byte pins' base digests are restated as measured. At the branch
+  point `derivation_fingerprint` reads `5f63f37c`, the version-two `fit_corpus_fingerprint` `109da039` and
+  `bakeoff_substrate_sha` `53a87623`; at the head they read `70c95948`, `7f109b57` and `14524d8b`. Mechanism: the
+  inline command under Results, "Review corrections, round 1", run on a tree of the branch point, on the head
+  with only `training/rewards.py` at the branch point's bytes, and on the head; `git grep` for the six prefixes
+  finds only this card.
+- [x] Review correction: the README reads the kill-tick cell as company when the tick ends, not as onlookers at
+  the kill, and names the kill-moment rows. Mechanism:
+  `test_kill_tick_coverage_is_company_as_the_tick_ends_not_the_kills_witnesses` (a walk-in after the kill covers
+  the killer with no witness; a witness who walks out after the kill leaves the killer uncovered), red under the
+  pre-tick-state mutant; the count-only probe under Results on the capture's 800 games. The `audits/` row is
+  re-derived: `test_every_counted_registry_row_matches_the_index` red before, green after.
+- [x] Review correction: the README section itself now names the cell as the role-blind replacement for the
+  measurement step of the `patrol_coverage` term, and Results says where each document names it. Mechanism: the
+  section's definition of the cell (`grep -c patrol_coverage` over the section prints 1), Outcome item 2 and the
+  section 7 paragraph ("the measured candidate for coverage").
 - [x] **The cross arms.** Mechanism: a read-only `STAGE_B_IDLE_POLICIES` mapping (`MappingProxyType`) names
   `stage_b_full_kill_cooldown_6_patrol` and `stage_b_full_kill_cooldown_6_accompany`. `candidate_configs` builds each
   from the cooldown-6 arm's validated payload plus `crew_idle_policy`, so the cooldown is derived, never copied. A
@@ -491,8 +507,10 @@ without a kill tick instead. The orchestrator picks between the two readings; no
   artifact. Its reading says whether a hand-written idle policy closes the slack a learned crew policy would need.
   It decides nothing about ML.
 - Orchestrator ruling 2. The whereabouts cell was defined before the run, role-blind, from engine positions, the
-  same way for every role (`whereabouts_coverage`). It is named as the re-pricing of `patrol_coverage`'s measurement
-  step in the README section and in the section 7 paragraph. No crewmate-observer variant was built; the only one in
+  same way for every role (`whereabouts_coverage`). Outcome item 2 names it as the role-blind replacement for
+  `patrol_coverage`'s measurement step, and from round 1 so does the README section's definition of the cell; the
+  section 7 paragraph calls it the measured candidate for coverage (corrected in round 1: this line first said the
+  README section named it, which it did not). No crewmate-observer variant was built; the only one in
   the tree is the perturbed helper inside a test, which the role-blind property rejects.
 - Orchestrator ruling 3. The re-pricing is comment-only, of `d1ea113a`'s class; the pins that read source bytes are
   named below with their state at the head. The seed-0 pin stays. The note names the two crew terms only, as the
@@ -631,11 +649,12 @@ inside `check.sh`; no template changes.
 - Value pins compare computed values, which no comment moves. The seed-0 pin passes unchanged and fails on a value
   change (above).
 - `training.provenance.derivation_fingerprint` hashes the 110-file `derivation_files` closure, which includes
-  `training/rewards.py`. With only `rewards.py` swapped for the base bytes, it reads `354d9de9` at the base and
-  `70c95948` at the head. The version-two `fit_corpus_fingerprint` moves from `92fa327f` to `7f109b57`, and
-  `bakeoff_substrate_sha` from `a77eb4fb` to `14524d8b`. `git grep` finds none of the six prefixes in the tree, so no
-  committed stamp binds them; the committed fits carry version-one identities over corpus bytes alone
-  (`test_current_loader_refuses_historical_fit` is in the 405 above). Script: `fingerprints.py`, in scratch.
+  `training/rewards.py`. It reads `5f63f37c` at the branch point and `70c95948` at the head. The version-two
+  `fit_corpus_fingerprint` moves from `109da039` to `7f109b57`, and `bakeoff_substrate_sha` from `53a87623` to
+  `14524d8b`. `git grep` finds none of the six prefixes outside this card, so no committed stamp binds them; the
+  committed fits carry version-one identities over corpus bytes alone (`test_current_loader_refuses_historical_fit`
+  is in the 405 above). Corrected in round 1, with the command inline there: the base prefixes first printed here
+  did not reproduce.
 - `scripts/_tournament_progress.py::configuration_fingerprint` hashes every `training/*.py`, so it moves too. It binds
   only a live tournament's `--resume`, and no progress record is committed. No tournament `--resume` may span this
   edit. It also hashes provider settings from the environment, so it was not computed here.
@@ -779,3 +798,223 @@ at `0656f099`, the head whose Results state the numbers above (`main` still at `
 broken. Task docs validation passed, and all 390 prompts were in sync. Strict mypy found no issues in 525 source
 files. Pytest gave 10,333 passed, 20 skipped and 3 xfailed in 397.97 s. The frontend gave 26 test files and 695
 tests passed, and the build completed. This commit changes only this card.
+
+### Review corrections, round 1 (2026-10-06)
+
+Independent verification of `9da3f696` found three blocking problems, all in evidence claims and documentation. This
+round changes no production line. `experiments/tactical_gameplay.py`, everything under `training/` and every other
+hashed source are byte-identical to `9da3f696`, so the capture stands as committed. `runtime_fingerprint` still
+equals its `source_sha256` (exit 0 at this head). `main` is still at `83806ab0`, so there was no merge and no
+re-capture. This round changes four files:
+- `audits/tactical-gameplay/README.md`: two bullets of the idle-policy section;
+- `docs/artifacts.md`: the `audits/` row;
+- `tests/experiments/test_tactical_gameplay.py`: one planted test;
+- this card.
+
+**Finding 1: the base digests did not reproduce.** The pins paragraph above first printed `354d9de9`, `92fa327f` and
+`a77eb4fb` for the branch point's `derivation_fingerprint`, version-two `fit_corpus_fingerprint` and
+`bakeoff_substrate_sha`. Those values do not reproduce. The scratch script that printed them is gone, so the cause
+is not known. The digests were recomputed at this head by two methods, with 110 files in the derivation closure
+each time:
+
+| Tree | `derivation_fingerprint` | `fit_corpus_fingerprint` (v2) | `bakeoff_substrate_sha` |
+| --- | --- | --- | --- |
+| the branch point `2275bdba` | `5f63f37c` | `109da039` | `53a87623` |
+| this head, with only `training/rewards.py` at `2275bdba`'s bytes | `5f63f37c` | `109da039` | `53a87623` |
+| this head | `70c95948` | `7f109b57` | `14524d8b` |
+
+At this head the production `training.bakeoff.map_elites.bakeoff_substrate_sha()` also prints `14524d8b`. The
+first two base prefixes equal the Evidence section's values at `76270d6c`, because nothing in the closure changed
+between those commits. The pins paragraph above now carries the measured values. The commands follow; `SCRATCH` is a
+directory outside the worktree. The second method runs the same command on a `git archive HEAD` tree after
+`git show 2275bdba:training/rewards.py` has overwritten its `training/rewards.py`.
+
+```
+git archive --output="$SCRATCH/base.tar" 2275bdba
+mkdir "$SCRATCH/base" && tar -xf "$SCRATCH/base.tar" -C "$SCRATCH/base"
+uv run python -c "import hashlib, sys; from pathlib import Path; \
+  from training.provenance import derivation_fingerprint as d, fit_corpus_fingerprint as f; \
+  c = Path('replays/ml_corpus/9p2i'); [print(d(r)[:8], f(c, source_root=r)[:8], \
+  hashlib.sha256(('cell-substrate-v2:' + f(c, source_root=r)).encode()).hexdigest()[:8]) \
+  for r in (Path(sys.argv[1]), Path('.').resolve())]" "$SCRATCH/base"
+#   5f63f37c 109da039 53a87623
+#   70c95948 7f109b57 14524d8b                                        exit 0
+git grep -l -e 5f63f37c -e 109da039 -e 53a87623 -e 70c95948 -e 7f109b57 -e 14524d8b
+#   tasks/work/crew-idle-policy-lab.md                                (nothing else)
+```
+
+The pins that read source bytes are still green at this head, and a value change still trips the value pin. The
+checks below ran on this head:
+- Offline `verify_ml_evidence` reads checks 63, OK 51, FAIL 0, ABSENT 7, INFO 5 (exit 0, never `--complete`).
+- The seed-0 pin and `test_current_loader_refuses_historical_fit` are in the 407 passed below.
+- Planted in a byte copy, `"patrol_coverage": patrol_coverage * 0.5` makes the AST comparison exit 1.
+- Applied in place, the same change fails the seed-0 pin:
+  `{'patrol_coverage': 0.3431372549019608} != {'patrol_coverage': 0.6862745098039216}`.
+- Restored from the byte copy, `training/rewards.py` has the same `shasum` before and after (`308a1fbc99eb...`), and
+  the pin passes again.
+
+**Finding 2: the kill-tick cell reads company when the tick ends, not onlookers at the kill.** The README said "A
+killer alone with the body is uncovered, so this figure also says whether a kill had any onlooker." Outcome item 2
+says the same of the kill-tick cell. **Review correction for that Outcome sentence.** The cell reads the state the
+tick leaves, so for a killer it reads company when the tick ends, not an onlooker at the kill. The engine applies a
+tick's actions in order and records a kill's witnesses when the kill applies, which gives two cases:
+- a player who walks into the room after the kill on the same tick covers the killer without witnessing the kill;
+- a witness who walks out after the kill can leave the killer uncovered.
+
+The kill-moment reading is the witness rows (`kills_crew_witnessed`, `crew_kill_witnesses` and the walk-ins), which
+read the engine's witness list. The Outcome stays as the contract was written, and this correction governs how that
+sentence is read. The README bullet now reads:
+
+> **At kill ticks** sums the same over the play ticks with at least one kill, each tick counted once however many
+> kills it holds. Each killer is one of those subjects, covered when anyone stood with it as the tick ended. That is
+> company at the end of the tick, not an onlooker at the kill. The engine applies a tick's actions in order, so a
+> player who walks in after the kill on the same tick covers the killer without having seen the kill, and a witness
+> who walks out after the kill can leave the killer uncovered. Crew-witnessed kills and the two walk-in counts below
+> read the moment of the kill, from the witnesses the engine recorded.
+
+`test_kill_tick_coverage_is_company_as_the_tick_ends_not_the_kills_witnesses` plants both cases through
+`advance_tick` under the cooldown-6 arm's engine arguments:
+- `walks-in-after-the-kill`: the `Killed` event lists no witness, and the killer is covered (4 of 4 at the kill tick);
+- `walks-out-after-the-kill`: the witness is listed, and the killer is uncovered (2 of 4).
+
+Under the pre-tick-state mutant (M4 below) it is red. How often each case happens, count-only, on the capture's 800
+games re-run at this head through `run_candidate` (every arm's kills equal the capture's):
+
+| Roster | Arm | Kills | Killer covered, no witness | of which every companion walked in | A witness, killer uncovered |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 4p1i | `stage_b_full` | 162 | 2 | 2 | 0 |
+| 4p1i | `stage_b_full_kill_cooldown_6` | 105 | 0 | 0 | 0 |
+| 4p1i | `stage_b_full_kill_cooldown_6_patrol` | 93 | 8 | 8 | 0 |
+| 4p1i | `stage_b_full_kill_cooldown_6_accompany` | 94 | 8 | 8 | 0 |
+| 9p2i | `stage_b_full` | 497 | 34 | 34 | 0 |
+| 9p2i | `stage_b_full_kill_cooldown_6` | 457 | 46 | 46 | 0 |
+| 9p2i | `stage_b_full_kill_cooldown_6_patrol` | 445 | 51 | 51 | 1 |
+| 9p2i | `stage_b_full_kill_cooldown_6_accompany` | 444 | 61 | 61 | 1 |
+
+The columns mean the following:
+- "Killer covered, no witness": the killer is covered in the state the tick leaves, and the `Killed` event lists no
+  witness of any role.
+- "Of which every companion walked in": every player covering the killer moved into the kill's room from another
+  room on that tick. None of them is on the witness list, so each one arrived after the kill.
+
+These are lab counts of fake games, not cells of the committed capture. The README therefore states the mechanism
+without them. The probe (about 100 s; it prints counts only):
+
+```
+uv run python - <<'EOF'
+import tempfile
+from collections import Counter
+from pathlib import Path
+
+import experiments.tactical_gameplay as lab
+from engine.events import KilledEvent, MovedEvent
+
+fold, tally, key = lab.fold_kill_witnesses, Counter(), []
+
+
+def probe(step, counts):
+    fold(step, counts)
+    moved = {(e.actor, e.to_room) for e in step.events if isinstance(e, MovedEvent) and e.from_room != e.to_room}
+    for e in step.events:
+        if isinstance(e, KilledEvent):
+            room = step.state.players[e.actor].room
+            company = [i for i, p in step.state.players.items() if i != e.actor and p.alive and not p.in_vent and p.room == room]
+            tally[key[-1], "kills"] += 1
+            tally[key[-1], "killer covered, no witness"] += bool(company) and not e.witnesses
+            tally[key[-1], "of which every companion walked in"] += bool(company) and not e.witnesses and all((i, room) in moved for i in company)
+            tally[key[-1], "witness, killer uncovered"] += bool(e.witnesses) and not company
+
+
+lab.fold_kill_witnesses = probe
+configs = lab.candidate_configs()
+with tempfile.TemporaryDirectory() as tmp:
+    for arm in ("stage_b_full", "stage_b_full_kill_cooldown_6", "stage_b_full_kill_cooldown_6_patrol", "stage_b_full_kill_cooldown_6_accompany"):
+        for name in ("4p1i", "9p2i"):
+            roster = lab.Roster.model_validate_json(Path(f"replays/samples/{name}/roster.json").read_bytes())
+            key.append(f"{name} {arm}")
+            for seed in lab.SPLIT_SEEDS["development_wide"]:
+                lab.run_candidate(seed=seed, roster=roster, config=configs[arm], replay_path=Path(tmp) / f"{arm}-{name}-{seed}.jsonl")
+for (row, column), value in sorted(tally.items()):
+    print(row, column, value)
+EOF
+```
+
+The `audits/` row follows the README's new bytes. Before the row moved, `test_every_counted_registry_row_matches_the_index`
+failed with "audits/: docs/artifacts.md promises 31,430,328 tracked bytes, the tracked files contain 31,431,207
+bytes". With the row at 31,431,207 tracked bytes / 334 files, it passes. The README's tables did not change, and its
+compact check still reprints all 20 rows identically and in order. A `git grep` for the old sentence over `*.md` and
+`*.py` finds it only in this card's Outcome, which this correction covers.
+
+**Finding 3: where the cell is named as the re-pricing.** The Decisions line for ruling 2 said that the README
+section named the cell as the re-pricing of `patrol_coverage`'s measurement step. It did not: none of
+`patrol_coverage`, `re-pric` or `measurement step` appeared in the section. The README's definition of the cell now
+ends with this sentence:
+
+> It is the role-blind replacement for the step where the one committed training objective measures crew coverage.
+> That objective's `patrol_coverage` term pays a crewmate for sharing a room with a player who is an impostor, which
+> reads a role. `training/README.md` section 7 records that any reopening of the training work redefines that term
+> without reading roles before any search; this cell is the measured candidate, and nothing here adopts it.
+
+Outcome item 2 names the cell as the role-blind replacement for `patrol_coverage`'s measurement step. The section 7
+paragraph calls it "the measured candidate for coverage". That paragraph is not edited: the doc gate and the
+comment-only proof pin its bytes. The Decisions line above is corrected in place. Command:
+`sed -n '/^### Development: the crew idle-policy cross/,/^### Held-out: 4p1i/p' audits/tactical-gameplay/README.md |
+grep -c patrol_coverage` prints 1.
+
+**The mutation pass, bounded to the spans the findings name.** The spans are `whereabouts_coverage` and
+`fold_whereabouts`, the kill-tick cell; no production line changed this round. There were ten mutants, of the listed
+classes only. Each ran alone against `tests/experiments/test_tactical_gameplay.py` (`-x -n 4`), and the new test
+also ran alone. The file was restored from a byte copy after each mutant, with its sha256 (`c185cdcd0120...`)
+re-checked. All ten mutants were killed, and none survived. The new test alone came back green on M2, M7, M9 and M10;
+an earlier test kills each of those, as the table names.
+
+| id | class | mutant | result | first red test | new test alone |
+| --- | --- | --- | --- | --- | --- |
+| M1 | F filter | drop `alive` from the standing filter | killed | `test_a_dead_player_covers_nothing_and_is_not_a_subject` | red |
+| M2 | F filter | drop `in_vent` from the standing filter | killed | `test_a_vented_player_covers_nothing_and_is_not_covered` | green |
+| M3 | F filter | covered counts every room (company filter dropped) | killed | `test_two_players_in_one_room_cover_each_other_and_a_lone_player_is_uncovered` | red |
+| M4 | S swap | pre-tick state for the cell | killed | `test_the_state_the_tick_leaves_is_read` | red |
+| M5 | N comparison | company test inverted | killed | `test_two_players_in_one_room_cover_each_other_and_a_lone_player_is_uncovered` | red |
+| M6 | N comparison | kill-tick test inverted | killed | `test_a_tick_without_a_kill_adds_only_to_the_play_tick_pair` | red |
+| M7 | C constant | kill-tick kind read as always true | killed | `test_a_tick_without_a_kill_adds_only_to_the_play_tick_pair` | green |
+| M8 | C constant | room read as `ADMIN` | killed | `test_two_players_in_one_room_cover_each_other_and_a_lone_player_is_uncovered` | red |
+| M9 | S swap | subjects over the standing players only | killed | `test_a_vented_player_covers_nothing_and_is_not_covered` | green |
+| M10 | T tuple | drop the covered-at-kill-ticks key from the declared counts | killed | `test_every_row_carries_the_seven_counts_even_without_a_kill` | green |
+
+This round adds no production line, so there is no per-line neuter row to add. The one new line set is the planted
+test, and its red-on-defect evidence is the "new test alone" column.
+
+**Validation at this head** (exit codes captured directly):
+
+```
+env | grep -c '^AILIBI_'                                  0
+pytest <the card's eight files> -n 6 --dist loadfile       407 passed (405 before, plus the two new cases)
+runtime_fingerprint == capture source_sha256              exit 0
+AST comparison, strings kept, base copy from 2275bdba     exit 0; planted copy exit 1
+git diff 2275bdba -- training/rewards.py | ... | grep -vcE '^[+-]\s*#'   0
+git diff --stat 2275bdba -- training/ | tail -1           2 files changed, 19 insertions(+), 1 deletion(-)
+git diff --stat 2275bdba -- replays training/artifacts training/reports agents/tactical/learned tests/training api frontend
+                                                          (prints nothing)
+uv run python scripts/verify_ml_evidence.py               checks: 63 | OK 51 | FAIL 0 | ABSENT 7 | INFO 5; exit 0
+uv run pytest -m campaign -q -n auto                      337 passed
+uv run pytest tests/scripts/test_build_demo_bundle.py -q  31 passed
+verify_samples.sh: samples/9p2i 50, samples/4p1i 50, ml_corpus/9p2i 150, ml_corpus/4p1i 50,
+                   candidates/stage-b-r1/9p2i 50, each "All N samples verified clean."
+build_sample_report.py --sample-dir <each of the five sets> --check   "... is consistent with its replays." x5
+publish_process_scorecard.py --check, publish_gameplay_census.py --check   "... consistent with the committed recordings."
+ruff check, ruff format --check, mypy on the test file    clean
+```
+
+The capture command and the ten-arm frozen-head comparison were not re-run. No file under `runtime_fingerprint`
+moved, which the fingerprint check proves, so both would reproduce the rows already committed and quoted. The task-doc
+validator, the doc-facts check, the bundle diff and the full gate are recorded below for the head that carries this
+subsection.
+
+**Deviations, round 1.**
+- **The summaries** box stays open. It waits on the orchestrator's pick between the two readings under Deviations
+  above, and no finding of this round touches it. Checking it here would make that pick.
+- The Outcome sentence is corrected by the Review correction above, not edited, because the Outcome is the card's
+  contract.
+- One `git grep` for the old sentence first ran over the whole tree without a path filter. It printed part of one
+  committed audit JSONL line that holds transcript text into this session's tool output. Nothing was written,
+  committed or quoted from it, and the later searches were limited to `*.md` and `*.py`.
