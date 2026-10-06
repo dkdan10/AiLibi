@@ -124,7 +124,7 @@ pre-rendered ANSWERS, not a query surface. It ships:
   `frontend/src/components/ReplayPicker.tsx`), not the 100-replay corpus;
 * verified, current rubric rows for those games when available; obsolete or
   unverified scores are suppressed, while the curated games remain playable;
-* no `tournament-eval-report.json` (the 9p2i one is 29 MB — that is the corpus,
+* no `tournament-eval-report.json` (the 9p2i one is 33 MB — that is the corpus,
   not a demo), so the Dashboard tab renders a card written for this artifact:
   what the demo ships, and where the eval report lives. That card renders no
   part of the failed request. It has to be said explicitly, because the natural

@@ -1014,3 +1014,30 @@ re-run as a check that nothing moved.
 **Limitations.**
 - The pass is bounded to the corpse line's span. A survivor of another class or span is outside it.
 - The `17abded4` gate numbers rest on the orchestrator's relayed log, not on a committed file.
+
+### Follow-through note (2026-10-02)
+
+Added after the merge by [`post-promotion-follow-through`](post-promotion-follow-through.md); nothing above this
+subsection changes. The owner merged this card's PR (#496) with the promotion's on 2026-10-02, verbatim: "Merge both
+and continue". Each correction below is wording only, re-measured at that card's head.
+
+- **The band lines.** "The instrument, the picks and the cases" says "(The band lines list every `seed:meeting`;
+  quoted in the PR.)" PR #496's body does not quote them. `uv run python scripts/measure_featured_criterion.py --list`
+  reproduces them from the committed bytes.
+- **The copy that went live.** The PR's list of copy that goes live omitted three items that did go live: the
+  single-tick route words (`routeSpanOneTick`, "tick {tick}"), the README samples sentence, and the reading guide's
+  exhibit paragraph.
+- **The `git grep` sentence.** Review corrections round 1, Finding 3, says `git grep -n "every meeting ends\|survivors
+  gathered"` finds only the planted wording in `regroup.test.ts`. At `59bbd1be` it finds five lines: in
+  `frontend/src/lib/regroup.test.ts` the planted wording (`:165`), a comment (`:135`) and a test title (`:162`); and
+  two of this card's own past-tense lines (`:809`, `:816`). None is live copy.
+- **"five ticks".** Acceptance's round-1 review correction for the corpse line says "five ticks before its
+  meeting"; the rendered words are "5 ticks before this meeting".
+- **The round-3 merge.** The PR body calls the promotion's review round 3, merged into this branch at `c43b457b`,
+  test-only. That merge brought `21c0684a` (tests) and also `2087821e`, a card commit to the promotion card.
+- **`33f0e776`.** The commit has no message body. It is published on `main` and stands as pushed: closed, no history
+  rewritten.
+- **The public results wording.** Limitations route `PublicResults.tsx`'s "experimental" labels for the adopted
+  arms to `rubric-extractor-era`. The follow-through card took and closed it: the public results page now lists the
+  seven adopted rules under "Rules adopted for the current game:", names the kept vent exit and the kill cooldown as
+  set for these recordings, and labels the factory kind by what it records.

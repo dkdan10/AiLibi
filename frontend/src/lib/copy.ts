@@ -518,6 +518,59 @@ export const SPECTATOR_COPY = Object.freeze({
       "This emergency opening claimed a body nobody had found; the claim was stripped before the transcript.",
   }),
 
+  /** One recorded-behavior group on the public results page. */
+  publicResults: Object.freeze({
+    // The group's agents, by the factory kind its recordings stamp. The
+    // `experimental` kind is exact built-in agents run with recorded tactical
+    // settings, so its label says that and not "experimental".
+    factoryCustom: "Custom agent factory",
+    factoryBuiltInWithSettings: "Built-in agents with recorded tactical settings",
+    factoryScripted: "Built-in scripted agent factory",
+    factoryUnknown: "Agent factory not recorded",
+    recordingCountOne: "{count} recording",
+    recordingCountMany: "{count} recordings",
+    // Three leads, one per kind of recorded setting. A field is listed as
+    // adopted only at a value `lib/adoptedRules.ts` names; a setting these
+    // recordings carry without its being adopted is named as set for them; any
+    // other value off its default stays an experiment.
+    adoptedLead: "Rules adopted for the current game: {rules}.",
+    setForRecordingsLead: "Also in place: {settings}.",
+    experimentsLead: "Recorded experiments: {experiments}.",
+    noRecordedSettings:
+      "No enabled experiments recorded. This alone does not certify the default behavior.",
+    ruleSeparator: "; ",
+    experimentSeparator: ", ",
+    // Each adopted rule in plain words, keyed by the field it adopts.
+    adoptedRules: Object.freeze({
+      vent_witness_rule: "vent use seen only in the room where it happens",
+      vent_entry_policy: "impostors enter a vent only beside a body they have just killed",
+      meeting_reset:
+        "after each meeting, the survivors start again from the meeting room with the bodies cleared",
+      bounded_rebuttal_version: "one reply to a late accusation",
+      report_body_handle_version: "body reports without the time of death",
+      ballot_kill_row_version: "witnessed kills listed on the voter's ballot",
+      impostor_ballot_version: "impostor ballots cast by strategy",
+    }),
+    // Kept in these recordings, not part of the adopted list.
+    ventExitWaits:
+      "impostors in a vent wait briefly for the rooms they can see to clear before coming out, set for these recordings",
+    killCooldownOne: "a kill cooldown of {ticks} tick set for these recordings",
+    killCooldownMany: "a kill cooldown of {ticks} ticks set for these recordings",
+    // The settings that stay experiments.
+    evidenceReasoning: "observation timing and travel checks v{version}",
+    investigation: "bounded missing-player searches",
+    contextualSelfReport: "context-dependent self-reporting",
+    publicAccount: "common public accounts",
+    attributedTestimony: "attributed witness testimony",
+    movementPolicies: "experimental movement or action policies",
+    roundRules: "experimental round or task rules",
+    policyLine: "Impostor policy: {impostor}. Crew policy: {crew}. Rule settings: {rules}.",
+    notRecorded: "not recorded",
+    recorded: "recorded",
+    clockLine: "Observation clock: {clock}.",
+    clockVersion: "v{version}",
+  }),
+
   /** Shared with `RUBRIC_SPOKES` so the walk covers the spoke words too. */
   rubricSpokes: RUBRIC_SPOKES,
 } as const);
@@ -527,5 +580,6 @@ export const DASHBOARD_COPY = SPECTATOR_COPY.dashboard;
 export const MAP_COPY = SPECTATOR_COPY.map;
 export const MEETING_COPY = SPECTATOR_COPY.meeting;
 export const PICKER_COPY = SPECTATOR_COPY.picker;
+export const PUBLIC_RESULTS_COPY = SPECTATOR_COPY.publicResults;
 export const TRANSPORT_COPY = SPECTATOR_COPY.transport;
 export const TURN_COPY = SPECTATOR_COPY.turn;
