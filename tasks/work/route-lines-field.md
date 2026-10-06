@@ -132,6 +132,28 @@ Each item names its enforcing mechanism and a planted or perturbed proof. Each n
 at the base for the stated reason; Results quotes that run. Tests over committed bytes compare digests or booleans,
 so a failure prints no prompt or transcript text.
 
+- [x] Review correction: **the block is read only where the template writes it** (round 1, docs verifier; Codex
+  P2 on PR #501). `route_block_span` reads nothing above the transcript's last closing line and finds the block
+  only after a blank line two lines below the map card's only closing line; any other delimiter line below the
+  transcript raises. Proof: `test_an_open_line_spoken_beside_a_served_block_is_not_read[*]` (A),
+  `test_an_unclosed_open_line_spoken_in_an_off_ballot_is_not_read[*]` (B) and
+  `test_a_whole_block_spoken_in_a_ballot_that_served_none_is_not_read[*]` (C), each over free text, a claim's
+  reason, an alibi's evidence and the memory, with and without a spoken transcript closing line, all 24 red at
+  `740699b6`; `test_a_delimiter_line_below_the_transcript_off_its_place_raises[*]` (10 shapes),
+  `test_a_ballot_rendered_without_the_map_card_has_no_place_for_the_block` and
+  `test_the_fence_stops_at_the_transcript`, the reader's stated limit.
+- [x] Review correction: **the room check follows the room table** (round 1, integrity verifier). Proof:
+  `test_the_room_check_follows_the_room_table` drops WEST_HALL from `meetings.route_lines.CANONICAL_ROOMS` and
+  expects the station-rooms refusal for ADMIN at tick 5 to WEST_HALL at tick 6; the room read replaced by the
+  literal ten rooms turns it red.
+- [x] Review correction: **the instrument's census-against-walk guards are pinned** (round 1, correctness
+  verifier). Proof: `tests/experiments/test_route_lines_replay.py::test_a_census_the_walk_disagrees_with_is_refused_by_name[*]`
+  calls `read_game` on r2 seed 2 with a census one meeting short, one meeting long, a moved tick and a moved
+  meeting id, each expecting `RouteLinesReplayError` and its whole message; each guard replaced by a `None` test
+  turns its case red.
+- [x] Review correction: **the typed check's case count is 20** (round 1, docs verifier). Proof:
+  `uv run pytest --collect-only -q tests/meetings/test_route_lines.py` collects 20
+  `test_the_typed_check_refuses` ids; Results and the PR body say 20.
 - [x] **The field: declared last, validated, omitted at default, format 1.** Mechanism: the model, its validator and
   serializer. `route_lines_version: Literal[1] | None = None` follows `kill_cooldown_ticks`, joins
   `_literal_versions_are_integers`, `FIELD_LAYER` (`meeting`) and `OMITTED_AT_DEFAULT`, and stays out of
@@ -606,7 +628,7 @@ copied in, the three modules fail at collection for the stated reason: `ModuleNo
   lines: `test_an_on_render_that_moves_more_than_its_block_raises`, `test_an_on_render_whose_block_holds_other_lines_raises`;
   an r3 set recorded under another config: `test_an_r3_set_recorded_under_another_config_is_refused_naming_the_column`.
 - A moved state hash in the fake rehearsal: inside `test_the_fake_rehearsal_is_inert`.
-- The typed check: `test_the_typed_check_refuses[*]` (21 cases, among them a `suspect` key, `walking_fits` for
+- The typed check: `test_the_typed_check_refuses[*]` (20 cases, among them a `suspect` key, `walking_fits` for
   REACTOR to MEDBAY in two ticks, `regroup_between` with no regroup tick inside, `regroup_between` where a walk
   fits, a wrong door count and `walking_does_not_fit`).
 - The six neutered builder rules the card names, each red on its own case (mutation table): `max_hops=1`
@@ -666,7 +688,10 @@ owner's**.
 
 **Mutation pass** (one bounded pass at `0a8ad54b`, the eight classes only, each mutant alone against its
 targeted suite, restored from a copy; scratch harness, count only): 39 mutants, 39 killed, no survivor, none
-named equivalent.
+named equivalent. That pass held no row for four lines the round-1 verifiers then probed with listed classes, and
+each survived there: the instrument's three census-against-walk guards in `read_game` and the step's room read.
+Their rows (R01, R02, R05, R09) are added at the foot of the table, red on the planted cases round 1 added; the
+whole round-1 pass is in the review subsection below.
 
 | id | class | site | first red test |
 | --- | --- | --- | --- |
@@ -709,6 +734,10 @@ named equivalent.
 | M38 | N | instrument's served comparison inverted | `test_a_served_block_other_than_its_rebuilt_lines_raises` |
 | M39 | F | instrument's subject filter dropped | `test_the_committed_r2_column_recomputes_from_the_checkouts_bytes` |
 | M40 | B | unreached-reason branches swapped | `test_an_unreached_case_names_its_reason` |
+| R01 | N | `read_game`'s no-such-meeting guard a `None` test (review round 1) | `test_a_census_the_walk_disagrees_with_is_refused_by_name[one meeting short]` |
+| R02 | N | `read_game`'s meeting-id and tick guard a `None` test (review round 1) | `test_a_census_the_walk_disagrees_with_is_refused_by_name[a moved tick]`, `[a moved meeting id]` |
+| R05 | N | `read_game`'s meeting-count guard a `None` test (review round 1) | `test_a_census_the_walk_disagrees_with_is_refused_by_name[one meeting long]` |
+| R09 | L | `RouteStep`'s room read replaced by the literal ten rooms (review round 1) | `test_the_room_check_follows_the_room_table` |
 
 Which probes first came back green: none in the pass itself. Three would have, by the planning analysis done
 before the pass, and got a planted case before it ran: M14 (the door bound was an import-time constant, so no
@@ -739,6 +768,8 @@ already neuter are not repeated.
 | X36 | `VotePromptRenderer`'s two keywords | strict mypy: `meetings/manager.py:2374: Unexpected keyword argument "route_lines_version"` |
 | X37 | the lab's explicit re-export | strict mypy: `tests/experiments/test_route_check_replay.py:1997: ... does not explicitly export attribute "reconcilable"` |
 | X32 | `or doors is None` in `_route_step` | equivalent: `reconcilable` returns `None` whenever the doors are `None`; the clause narrows the type for mypy |
+| X38-X40 | `read_game`'s three census-against-walk guards (review round 1; neutered by R01, R02 and R05) | `test_a_census_the_walk_disagrees_with_is_refused_by_name[...]`, one case each |
+| X41 | `RouteStep`'s room check (review round 1) | `test_the_room_check_follows_the_room_table`, `test_the_typed_check_refuses[a room off the map]` |
 
 Before the neuter pass, reading each check against its case showed three cases that also failed another check
 (the lone off-map room had no doors; the boolean and negative tick cases broke the reading rule) and one check
@@ -782,7 +813,8 @@ reasoning. A lie stated at the table yields a line as plain as the truth. Vent-s
 design (9 of r2's 40). The consecutive rule gives up one r1 case the every-pair leg reaches. The token
 projection is a share of recorded prompt characters, not a tokenizer count. A model could quote a line's door
 count in its rationale; the ballot's rationale rule already forbids bookkeeping figures, and the census card
-counts what the block serves.
+counts what the block serves. The block reader fences off the memory and the transcript, not the spoken room
+labels the template quotes below the transcript; the review subsection states what it does with them.
 
 **Deviations, each named.**
 - `tests/experiments/test_route_check_replay.py`, where the card allowed imports only: the hop-bound test now
@@ -801,3 +833,163 @@ counts what the block serves.
   ran the frontend lint, typecheck, unit tests and build.
 - `eval/vote_correctness.py:45` still says round 2's config carries two ballot arms: it describes that recorded
   config, which is true.
+
+### Review corrections, round 1 (2026-10-06)
+
+Four blocking findings from the round-1 verifiers at `740699b6`, one of them Codex's P2 on PR #501. Fix commit
+`732cda8d`: `meetings/route_lines.py` (the block reader and its docstrings), `tests/meetings/test_route_lines.py`
+and `tests/experiments/test_route_lines_replay.py`; the commits after it change only this card. Every command
+below ran at `732cda8d` in a shell with no `AILIBI_*` export, unless it names another head.
+
+**What changed.**
+- **The block is read only where the template writes it (docs verifier; Codex P2 on PR #501).** Reply to Codex:
+  valid, and fixed the way it proposes, by the block's fixed place below the map card. `route_block_span` read
+  every line of the prompt, and the ballot renders free text, claim reasons, alibi evidence and room labels raw,
+  so a spoken line equal to `<routes>` made an ON ballot raise (A), an OFF ballot with the line unclosed raise
+  (B), and a ballot that served no block read a spoken whole block as served (C); a scratch repro through the
+  real `qwen3_6_27b` vote renderer gave exactly those three at `740699b6`. The reader now reads nothing above
+  the transcript's last closing line; below it, a prompt with no delimiter line carries no block, and otherwise
+  the block must open after a blank line two lines below the map card's only closing line and close after it.
+  Every other delimiter line below the transcript raises: a second open or close, a close with no open, an open
+  anywhere else, a second map closing line, a close above the open. The blank-line check that
+  `without_route_block` made moved into the reader, which now refuses that shape itself. Planted: A, B and C,
+  each over the four model-authored channels (a turn's free text, an accusation's reason, an alibi's evidence,
+  the memory), each with and without a spoken transcript closing line above the delimiter, 24 cases, every one
+  red against the reader of `740699b6` (the old `meetings/route_lines.py` written over a copy and restored);
+  the ten refused shapes in `test_a_delimiter_line_below_the_transcript_off_its_place_raises`; the no-map-card
+  ballot; and the stated limit below. Every pre-existing reader test passes unchanged, its messages included.
+- **The limit, stated at the strength the reader delivers.** The fence covers everything above the
+  transcript's close. Below it the template quotes spoken room labels in contradiction sentences and evidence
+  rows: a delimiter line inside one raises, as does a map closing line on a ballot that carries the block,
+  while a transcript closing line quoted below the block moves the fence past it, so the block reads as absent
+  (`test_the_fence_stops_at_the_transcript` pins that limit). The guarantee is for a ballot that renders the map
+  card, as every ballot of the served set does (the bound vote renderer passes `CANONICAL_MAP_CARD`); rendered
+  without it, a served block has no place and raises. The docstrings of `route_block_span` and
+  `parse_route_lines` say the same. No committed recording holds a spoken string with a line break: over the five
+  committed sets, 4,431 turns carry 71,677 strings in their observations and claims and none holds one, nor does
+  any turn's free text (the command below, count only).
+- **The room check follows the room table (integrity verifier).** `test_the_room_check_follows_the_room_table`
+  monkeypatches `meetings.route_lines.CANONICAL_ROOMS` without WEST_HALL and expects the station-rooms refusal
+  for ADMIN at tick 5 to WEST_HALL at tick 6, which the unpatched table accepts with one door; it is the
+  source-change case for the room read, as `test_the_door_bound_follows_the_room_table` is for `_max_doors`.
+- **The instrument's census-against-walk guards (correctness verifier).**
+  `test_a_census_the_walk_disagrees_with_is_refused_by_name` calls `rlr.read_game` on r2 seed 2 (one meeting)
+  with a census one meeting short, one meeting long, a moved tick and a moved meeting id, and expects
+  `RouteLinesReplayError` with its whole message, as `test_route_check_replay.py` does for the route-check
+  copies of these guards.
+- **20, not 21 (docs verifier).** `uv run pytest --collect-only -q tests/meetings/test_route_lines.py` collects
+  20 `test_the_typed_check_refuses` ids at every commit of this branch; the Results line and the PR body now say
+  20. The other collected counts this Results states were re-collected at `732cda8d`: the wording scan 12, the
+  instruments' refusal 7.
+
+**Consumers.** The lab instrument reads the block through the same three functions in both modes, and both
+`--check` runs reproduce their committed outputs byte for byte, so no committed output, count or artifact row
+moves. The census card's contract (`parse_route_lines`, `ROUTE_BLOCK_OPEN`, `ROUTE_BLOCK_CLOSE`, imported and
+never copied) is unchanged; the reader it imports now reads only the template's block.
+
+**Mutation pass, round 1** (the spans this round changes and the spans the findings name; the eight listed
+classes only; each mutant applied alone to a copy-restored file and run against its targeted suite,
+`tests/meetings/test_route_lines.py` for the module and `tests/experiments/test_route_lines_replay.py` for the
+instrument; scratch harness, count only): 32 mutants, 32 killed, none named equivalent.
+
+| id | class | site | a red test |
+| --- | --- | --- | --- |
+| R01 | N | `read_game`: `index >= len(game.meetings)` a `None` test | `test_a_census_the_walk_disagrees_with_is_refused_by_name[one meeting short]` |
+| R02 | N | `read_game`: the meeting-id and tick comparison a `None` test | `[a moved meeting id]`, `[a moved tick]` |
+| R03 | N | `read_game`: the tick half alone a `None` test | `[a moved tick]` |
+| R04 | N | `read_game`: the meeting-id half alone a `None` test | `[a moved meeting id]` |
+| R05 | N | `read_game`: `len(meetings) != len(game.meetings)` a `None` test | `[one meeting long]` |
+| R06-R08 | M | the three guards' messages a constant | the case of each guard |
+| R09 | L | `RouteStep`'s room read the literal ten rooms | `test_the_room_check_follows_the_room_table` |
+| R10 | M | the room refusal's message a constant | same |
+| R11 | F | the fence dropped (every line read) | `test_an_open_line_spoken_beside_a_served_block_is_not_read[reason-plain]` |
+| R12 | S | the last transcript close swapped for the first | `test_an_open_line_spoken_beside_a_served_block_is_not_read[reason-with-a-close]` |
+| R13 | N | `not fences` a `None` test | `test_a_malformed_line_inside_the_block_raises` |
+| R14 / R15 | N | each half of `not opens and not closes` a `None` test | `test_an_unclosed_open_line_spoken_in_an_off_ballot_is_not_read[...]` |
+| R16 / R17 | N | each half of the at-most-once comparison a `None` test | `test_a_delimiter_line_below_the_transcript_off_its_place_raises[a second open]`, `[a second close]` |
+| R18 | N | `not opens` a `None` test | `[a close with no open]` |
+| R19 | N | the blank-line comparison a `None` test | `test_a_malformed_line_inside_the_block_raises` |
+| R20 | N | the map-card comparison a `None` test | `[a map close quoted below the block]` |
+| R21 | S | the map-card check reads the last map close for the list of them | `[a map close quoted above the map card]` |
+| R22 / R23 | N | each half of the close check a `None` test | `test_a_malformed_line_inside_the_block_raises`, `[a close above the open]` |
+| R24 | S | the opens read off the close delimiter | `test_the_example_line_is_accepted_and_served_as_the_card_words_it` |
+| R25-R29 | M | each of the reader's five messages a constant | the case naming that message |
+| R30 | B | at-most-once and never-opens branches swapped | `[two closes with no open]` |
+| R31 | B | blank-line and map-card branches swapped | `[no blank line and no map card above]` |
+| R32 | B | map-card and close branches swapped | `[no map card above and no close]` |
+
+Which probes first came back green: R21, R31 and R32 survived the first run of this pass; the planted shapes
+`a map close quoted above the map card`, `no blank line and no map card above` and `no map card above and no
+close` were added and each re-ran red. R01, R02, R05 and R09 are the round-1 verifiers' survivors (V31, V34,
+V35 and the room read), red now on the new cases.
+
+**Neuter, round 1** (each line or check of the rewritten reader neutered alone, restored from a copy):
+
+| id | line neutered | red |
+| --- | --- | --- |
+| Y01 | no transcript close returns `None` | `test_a_malformed_line_inside_the_block_raises` |
+| Y02 | no delimiter below the transcript returns `None` | `test_an_unclosed_open_line_spoken_in_an_off_ballot_is_not_read[free_text-with-a-close]` |
+| Y03 | the at-most-once check | `test_a_malformed_line_inside_the_block_raises` |
+| Y04 | the never-opens check | `[a close with no open]` |
+| Y05 | the blank-line check | `test_a_malformed_line_inside_the_block_raises` |
+| Y06 | the map-card check | `[an open a line too low]` |
+| Y07 | the never-closed check | `test_a_malformed_line_inside_the_block_raises` |
+| Y08 | the closes read off the open delimiter | `test_two_rooms_at_one_tick_are_no_step_and_a_walk_across_a_regroup_walks` |
+| Y09 / Y10 | the transcript or the map closing line changed | `test_an_open_line_spoken_beside_a_served_block_is_not_read[free_text-plain]`, `test_the_example_line_is_accepted_and_served_as_the_card_words_it` |
+| Y11 | `without_route_block` keeping the blank line | `test_an_open_line_spoken_beside_a_served_block_is_not_read[free_text-plain]` |
+| Y12 | `RouteStep`'s room check | `test_the_room_check_follows_the_room_table`, `test_the_typed_check_refuses[a room off the map]` |
+
+The earlier neuter rows X22 to X26 named the reader of `740699b6`; its one-block, closed-block and blank-line
+checks are the reader's Y03, Y07 and Y05 now.
+
+**The line-break count** (count only; prints set, turns, strings, strings with a line break, free texts with one):
+
+```
+uv run python -c '
+from pathlib import Path
+from orchestrator.replay import MeetingReplayEntry, read_all_entries
+def strings(v):
+    if isinstance(v, str): return [v]
+    if isinstance(v, dict): v = list(v.values())
+    return [s for w in v for s in strings(w)] if isinstance(v, (list, tuple)) else []
+for name in ("samples/9p2i", "samples/4p1i", "ml_corpus/9p2i", "ml_corpus/4p1i", "candidates/stage-b-r1/9p2i"):
+    turns = [t for p in sorted(Path("replays", name).glob("replay-seed-*.jsonl")) for e in read_all_entries(p) if isinstance(e, MeetingReplayEntry) for t in e.transcript.turns]
+    said = [s for t in turns for s in strings([o.model_dump() for o in t.observations] + [c.model_dump() for c in t.claims])]
+    print(name, len(turns), len(said), sum("\n" in s for s in said), sum("\n" in t.free_text for t in turns))
+'
+```
+
+It prints `samples/9p2i 808 13885 0 0`, `samples/4p1i 117 1460 0 0`, `ml_corpus/9p2i 2539 40295 0 0`,
+`ml_corpus/4p1i 129 1464 0 0` and `candidates/stage-b-r1/9p2i 838 14573 0 0`.
+
+**Validation, round 1** (at `732cda8d`; exit codes captured directly):
+
+| command | exit | result |
+| --- | --- | --- |
+| the card's targeted pytest list, `-n 6` | 0 | 1,550 passed |
+| the 36 new reader tests against the reader of `740699b6` (written over a copy, restored) | 1 | 34 red: all 24 of A, B and C, 8 of the 10 shapes, the no-map-card ballot and the stated limit; the two shapes the old reader already refused (a second open, a close above the open) pass at both |
+| `uv run lint-imports` | 0 | contracts kept |
+| `uv run python -m experiments.lab.route_check_replay --check` | 0 | reproduced |
+| `uv run python -m experiments.lab.route_lines_replay --check` | 0 | reproduced: no committed output moves |
+| `bash scripts/verify_samples.sh` for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, the same five sets | 0 each | consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent |
+| `uv run python scripts/gen_frontend_types.py --check` | 0 | consistent |
+| `uv run python scripts/check_doc_facts.py` | 0 | verified |
+| `uv run python scripts/validate_task_docs.py` | 0 | clean |
+| `uv run python scripts/generate_prompts.py --check` | 0 | clean (no template changed) |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | 63 checks: 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign` | 0 | 337 passed |
+
+No frontend file, template, recording, audit, fixture or media byte changed, so the frontend unit and e2e legs
+outside `check.sh`, the prompt regeneration and the `docs/artifacts.md` rows are not touched.
+
+**Publication.** Unchanged by this round: the reader is not on the bundle's build path, and the bundle diff
+rebuilt in one checkout (`83806ab0` then `732cda8d`, 109 files on each side, the same file set) is again
+exactly five null `route_lines_version` keys in the same four 9p2i files (`data/9p2i/eval/summary.json` one,
+`data/9p2i/replays.json` two, `headless-seed-14.json` and `headless-seed-19.json` one each); removing them gives
+the base bytes. **The merge stays the owner's.**
+
+`bash scripts/check.sh` for this round runs once at the head carrying this subsection; the commit after it
+records its exit code here and changes this card only.
