@@ -991,5 +991,9 @@ exactly five null `route_lines_version` keys in the same four 9p2i files (`data/
 `data/9p2i/replays.json` two, `headless-seed-14.json` and `headless-seed-19.json` one each); removing them gives
 the base bytes. **The merge stays the owner's.**
 
-`bash scripts/check.sh` for this round runs once at the head carrying this subsection; the commit after it
-records its exit code here and changes this card only.
+`bash scripts/check.sh`, the full gate for this round, ran once at `b68023e8` (the head carrying this
+subsection; the commit recording this line changes this card only), in a shell with no `AILIBI_*` export, its
+exit code captured directly: **exit 0**. Ruff check and format clean (559 files), import-linter 4 contracts kept,
+`validate_task_docs` and `generate_prompts --check` clean, strict mypy clean over 530 source files, the default
+tier 10,474 passed, 20 skipped and 3 xfailed, and the frontend lint, typecheck, 695 unit tests in 26 files and
+build all passed.
