@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import sys
 import tempfile
 from collections import Counter
@@ -404,8 +403,12 @@ def test_an_unknown_split_is_refused_before_any_game(
 
     monkeypatch.setattr(lab, "run_candidate", no_work)
     monkeypatch.setattr(lab, "runtime_fingerprint", no_work)
-    with pytest.raises(ValueError, match=re.escape(f"unknown split {split!r}")):
+    with pytest.raises(ValueError) as refused:
         lab.build_comparison(split=split, arms=("baseline",))
+    assert str(refused.value) == (
+        f"unknown split {split!r}; "
+        "declared: ['development', 'development_wide', 'held_out']"
+    )
 
 
 def test_the_command_line_offers_exactly_the_declared_splits(
@@ -1396,30 +1399,35 @@ def test_pairs_need_the_reference_in_the_same_comparison(
     assert set(only_reference["idle_policy_pairs"]) == {_ACCOMPANY}
 
 
+@pytest.mark.parametrize("arm", [_PATROL, _ACCOMPANY])
 def test_pairs_refuse_arms_that_ran_different_seeds(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, arm: str
 ) -> None:
-    arms = _stubbed_comparison(monkeypatch, (_REFERENCE, _PATROL))["arms"]
+    """The refusal names the arm whose seeds differ from its reference's."""
+
+    arms = _stubbed_comparison(monkeypatch, (_REFERENCE, arm))["arms"]
     shorter = {
         **arms,
-        _PATROL: {
-            **arms[_PATROL],
-            "sets": {
-                roster: rows[:-1] for roster, rows in arms[_PATROL]["sets"].items()
-            },
+        arm: {
+            **arms[arm],
+            "sets": {roster: rows[:-1] for roster, rows in arms[arm]["sets"].items()},
         },
     }
-    with pytest.raises(ValueError, match="ran different seeds"):
+    with pytest.raises(ValueError) as refused:
         lab.idle_policy_pairs(shorter)
+    assert str(refused.value) == f"{arm} and its reference ran different seeds"
 
 
-def test_a_game_without_a_subject_has_no_share() -> None:
+@pytest.mark.parametrize("scope", ["kill_ticks", "play_ticks"])
+def test_a_game_without_a_subject_has_no_share(scope: str) -> None:
+    """The refusal names the scope with no subject, on either side of the pair."""
+
     empty = dict.fromkeys(lab.WHEREABOUTS_COUNTS, 0)
-    full = {**empty, "whereabouts_subjects_at_play_ticks": 5}
-    with pytest.raises(ValueError, match="no share"):
-        lab._compare_shares(empty, full, "play_ticks")
-    with pytest.raises(ValueError, match="no share"):
-        lab._compare_shares(full, empty, "play_ticks")
+    full = {**empty, f"whereabouts_subjects_at_{scope}": 5}
+    for arm, reference in ((empty, full), (full, empty)):
+        with pytest.raises(ValueError) as refused:
+            lab._compare_shares(arm, reference, scope)
+        assert str(refused.value) == f"a game without a subject at {scope} has no share"
 
 
 def test_the_wide_split_runs_its_hundred_seeds(
