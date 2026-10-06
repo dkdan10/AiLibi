@@ -3888,38 +3888,42 @@ def turn_placements(turn: MeetingTurn) -> tuple[PlacementFact, ...]:
 
     found: list[PlacementFact] = []
     for observation in turn.observations:
-        if isinstance(observation, SawPlayerObservation):
-            rooms = canonical_rooms(observation.room)
-            if not rooms:
-                continue
-            found.append(
-                PlacementFact(
-                    observation.subject, observation.tick, rooms, "saw_player"
-                )
-            )
-            companions = dict.fromkeys(
-                companion
-                for companion in observation.co_present
-                if companion != observation.subject
-            )
-            found.extend(
-                PlacementFact(companion, observation.tick, rooms, "company")
-                for companion in companions
-            )
-        elif isinstance(observation, SawMoveObservation):
-            rooms = canonical_rooms(observation.to_room)
-            if rooms:
+        # One dispatch over the kinds, the movement sighting among them.
+        match observation:
+            case SawPlayerObservation():
+                rooms = canonical_rooms(observation.room)
+                if not rooms:
+                    continue
                 found.append(
                     PlacementFact(
-                        observation.subject, observation.tick, rooms, "saw_move"
+                        observation.subject, observation.tick, rooms, "saw_player"
                     )
                 )
-        elif isinstance(observation, WhereaboutsClaim):
-            rooms = canonical_rooms(observation.room)
-            if rooms:
-                found.append(
-                    PlacementFact(turn.speaker, observation.tick, rooms, "whereabouts")
+                companions = dict.fromkeys(
+                    companion
+                    for companion in observation.co_present
+                    if companion != observation.subject
                 )
+                found.extend(
+                    PlacementFact(companion, observation.tick, rooms, "company")
+                    for companion in companions
+                )
+            case SawMoveObservation():
+                rooms = canonical_rooms(observation.to_room)
+                if rooms:
+                    found.append(
+                        PlacementFact(
+                            observation.subject, observation.tick, rooms, "saw_move"
+                        )
+                    )
+            case WhereaboutsClaim():
+                rooms = canonical_rooms(observation.room)
+                if rooms:
+                    found.append(
+                        PlacementFact(
+                            turn.speaker, observation.tick, rooms, "whereabouts"
+                        )
+                    )
     return tuple(found)
 
 
