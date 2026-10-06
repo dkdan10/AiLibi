@@ -259,7 +259,7 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   T tuple member, B branch swap, L loaded source to literal. Each mutant runs alone against the touched suites and
   is restored from a byte copy. A survivor is killed by a new test or named equivalent with its reason. Results
   carries the per-line neuter table: each production line, and the test that goes red when it is neutered.
-- [ ] **The full gate.** `bash scripts/check.sh` passes in a clean worktree at the head that states the numbers.
+- [x] **The full gate.** `bash scripts/check.sh` passes in a clean worktree at the head that states the numbers.
 
 **The paragraph for section 7.** Its citation names the committed home of the owner's 2026-10-06 ruling at dispatch:
 the decision memo's section 8.1 (`tasks/decision-2026-09-24-stage-b-wave.md`), which the orchestrator's doctrine
@@ -770,3 +770,12 @@ crewmate-observer variant of the cell is ever wanted (it would read a role and c
 
 **The full gate.** `bash scripts/check.sh` runs once at the head that states these numbers; its exit code is
 recorded in the next subsection.
+
+### The full gate, 2026-10-06
+
+`bash scripts/check.sh > <scratch>/check.log 2>&1; echo "check.sh exit $?"` was run once, in this clean worktree,
+at `0656f099`, the head whose Results state the numbers above (`main` still at `83806ab0`). It printed
+`check.sh exit 0`. Ruff passed, with 554 files already formatted. The four import-linter contracts were kept, 0
+broken. Task docs validation passed, and all 390 prompts were in sync. Strict mypy found no issues in 525 source
+files. Pytest gave 10,333 passed, 20 skipped and 3 xfailed in 397.97 s. The frontend gave 26 test files and 695
+tests passed, and the build completed. This commit changes only this card.
