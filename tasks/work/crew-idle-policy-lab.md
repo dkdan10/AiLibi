@@ -1,6 +1,6 @@
 # The crew idle-policy cross and the objective's re-pricing, written down
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
