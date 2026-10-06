@@ -8669,8 +8669,37 @@ def test_the_check_on_a_ballot_it_never_reads_is_refused() -> None:
             fold_set(inputs(game(meetings=(meeting(ballots=(planted,)),))))
 
 
+def test_the_fold_reads_a_skip_by_the_skip_target_it_imports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the SKIP target moves to a player; the fold counts a checked
+    holds-nothing ballot on that player and refuses the check on a ballot on the
+    old SKIP string, now an EJECT. Each ballot is unconfident, so the recorded
+    tally stays a skip."""
+
+    monkeypatch.setattr(census, "SKIP_TARGET", "p-3")
+    moved = _hold(ballot("p-2", "p-3", label="none_held", confidence=0.1), ("a flag",))
+    planted = game(meetings=(meeting(ballots=(moved,)),))
+    assert counts("holds_nothing_skips_naming_a_candidate", planted) == (1, 1, 0)
+    assert counts("holds_nothing_skips_naming_no_candidate", planted) == (0, 1, 0)
+    assert table("holds_nothing_skips_by_source", planted) == {
+        **dict.fromkeys(census.held_source_rows(), 0),
+        "a flag": 1,
+    }
+    old = _hold(ballot("p-2", "SKIP", label="none_held", confidence=0.1), ("a flag",))
+    with _refusal(
+        ValueError,
+        f"set {PLANTED}, seed {SEED}, meeting meeting-0, voter p-2: an EJECT "
+        "carries the holds-nothing check",
+    ):
+        fold_set(inputs(game(meetings=(meeting(ballots=(old,)),))))
+
+
 def test_the_source_rows_follow_their_type(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Planted: the place type gains a row; the table lists it."""
+    """Planted: the place type gains a row and loses others; the table lists
+    its rows, a checked holds-nothing SKIP naming a candidate in the new row
+    folds into it, and one naming a candidate in a dropped row is refused,
+    naming that row."""
 
     assert census.held_source_rows() == get_args(census.HeldSource)
     monkeypatch.setattr(
@@ -8680,6 +8709,20 @@ def test_the_source_rows_follow_their_type(monkeypatch: pytest.MonkeyPatch) -> N
         "an observation row": 0,
         "a rumour": 0,
     }
+    rumoured = _hold(ballot("p-2", "SKIP", label="none_held"), ("a rumour",))
+    planted = game(meetings=(meeting(ballots=(rumoured,)),))
+    assert table("holds_nothing_skips_by_source", planted) == {
+        "an observation row": 0,
+        "a rumour": 1,
+    }
+    assert counts("holds_nothing_skips_naming_a_candidate", planted) == (1, 1, 0)
+    flagged = _hold(ballot("p-2", "SKIP", label="none_held"), ("a flag",))
+    with _refusal(
+        ValueError,
+        f"set {PLANTED}, seed {SEED}, meeting meeting-0, voter p-2: ['a flag'] are "
+        "not places the holds-nothing check reads",
+    ):
+        fold_set(inputs(game(meetings=(meeting(ballots=(flagged,)),))))
 
 
 def _zero_kind_and_verdict_rows() -> dict[str, int]:
@@ -9674,6 +9717,30 @@ def test_the_ending_rows_follow_the_engines_type(
         "one the engine or the runner records",
     ):
         fold_set(inputs(game(end_reason="IMPOSTOR_PARITY")))
+
+
+def test_the_ending_rows_follow_the_runners_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the runner's stop type gains a value; the table lists it and
+    counts a game ending on it."""
+
+    from engine.win_conditions import WinResultType
+
+    monkeypatch.setattr(
+        census,
+        "GameStopReason",
+        typing.Literal[
+            "TICK_BUDGET_REACHED", "MEETING_PHASE_REACHED", "OPERATOR_ABORT"
+        ],
+    )
+    assert census.game_endings()[-1] == "OPERATOR_ABORT"
+    assert table("games_by_ending", game(end_reason="OPERATOR_ABORT")) == {
+        **dict.fromkeys(get_args(WinResultType), 0),
+        "TICK_BUDGET_REACHED": 0,
+        "MEETING_PHASE_REACHED": 0,
+        "OPERATOR_ABORT": 1,
+    }
 
 
 def test_tick_gaps_and_shares_land_in_their_buckets() -> None:

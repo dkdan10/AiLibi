@@ -157,6 +157,17 @@ card imports them, never copies them.
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
+- [x] Review correction: the ending rows follow the runner's stop type. `GameStopReason` gaining a member lists it
+  as a row of `games_by_ending` and counts a game ending on it (`test_the_ending_rows_follow_the_runners_type`;
+  mutant E1 red).
+- [x] Review correction: the fold reads a SKIP by the `SKIP_TARGET` it imports. Moved to a player, a checked
+  `none_held` ballot on that player is counted by the holds-nothing cells, and the check on a ballot on the old SKIP
+  string is refused as an EJECT carrying it (`test_the_fold_reads_a_skip_by_the_skip_target_it_imports`; mutant S1
+  red).
+- [x] Review correction: the unknown-source refusal follows `HeldSource`. The type gaining a member and losing
+  others, a checked `none_held` SKIP naming a candidate in the new member folds into its own row, and one naming a
+  candidate in a dropped member is refused, naming it (`test_the_source_rows_follow_their_type`, extended; mutants U1
+  and U4 red).
 - [x] Review correction: the SKIP half of the holds-nothing guard is enforced. A committed `none_held` SKIP
   retargeted to a living player carries no check, through `holds_nothing_check` and through the loader's
   `_meeting_fact`, and the guard follows the `SKIP_TARGET` it reads
@@ -1130,3 +1141,90 @@ H2, H4, V1 and V2 are killed only by this round's tests, so each came back green
 | `uv run pytest -m campaign -n 6` | 0 | 337 passed |
 | demo bundle, built in this one checkout at `83806ab0` and at `62a91057` (`uv run python scripts/build_demo_bundle.py --out DIR` each, then `diff -r`) | 0 | 109 files each, empty diff: nothing ships |
 | `bash scripts/check.sh` at `62a91057`, the fix head (run once, output to a file, exit code from the run itself) | 0 | pytest 10,358 passed, 20 skipped, 3 xfailed (10,355 before, plus this round's three); frontend 695 passed; the build succeeds; the commit after it touches only this row |
+
+### Review corrections, round 2 (2026-10-06)
+
+Three blocking findings of the round-2 verifiers on phase 1 (head `0fbf65e1`). Each is a surviving mutant of a listed
+class at a constant the census reads from a source, with no case where the source changes and the output follows it
+(lesson 9). Each is repaired with a planted case in `tests/eval/test_gameplay_census.py`, shaped like
+`test_the_source_rows_follow_their_type`: the type or constant is monkeypatched on the census module, and the output
+must follow it. No production line moves, so every count, the committed census, the scorecard and the demo bundle are
+unchanged, and every ruling in Phase 1's Decisions stands: the carrier fields kept whatever is struck, every item-5
+table built, the `none_held` reading stated as nothing that resolves the vote, each kind on its own clock.
+
+1. **The runner's half of the ending rows had no source-change case** (correctness lens). `game_endings()` reads
+   `get_args` of `WinResultType` and of `GameStopReason`. `test_the_ending_rows_follow_the_engines_type` moves only
+   the first, so the literal `'TICK_BUDGET_REACHED', 'MEETING_PHASE_REACHED'` in place of the second left every suite
+   green. Planted: `test_the_ending_rows_follow_the_runners_type` gives `GameStopReason` a third member,
+   `OPERATOR_ABORT`, and requires `games_by_ending` to list every engine ending and every runner stop at zero, with
+   `OPERATOR_ABORT` at 1 for a game ending on it. Under the literal, that game is refused as an ending neither the
+   engine nor the runner records.
+2. **The fold's SKIP read had no source-change case** (integrity lens). `_fold_held_data` sends a ballot to the
+   holds-nothing count when `ballot.target == SKIP_TARGET`, a constant read from `meetings.voting`. Round 1 moved
+   `census.SKIP_TARGET` only over `holds_nothing_check`, the loader's guard, so the literal `'SKIP'` in the fold
+   survived. Planted: `test_the_fold_reads_a_skip_by_the_skip_target_it_imports` moves `census.SKIP_TARGET` to
+   `p-3`. A checked `none_held` ballot on `p-3` naming a candidate in a flag is counted (naming a candidate 1 of 1,
+   naming none 0 of 1, the flag row 1). The same check on a ballot on the string `SKIP`, now an EJECT, is refused
+   with the fold's own message. Each ballot is unconfident, so the meeting's recorded skip re-tallies as a skip under
+   the game's own `tally_ballots`, which keeps its own constant.
+3. **The unknown-source refusal had no type-change case** (integrity lens). `_fold_holds_nothing` refuses a source
+   outside `held_source_rows()`. The type-change plant folded an empty game, so the literal six-member set at the
+   refusal site survived. Extended: `test_the_source_rows_follow_their_type`, with `HeldSource` patched to two
+   members, now folds a checked `none_held` SKIP naming a candidate in the new member, `a rumour`, and requires it in
+   its own row and counted. It then requires a SKIP naming a candidate in a dropped member, `a flag`, to be refused
+   naming `['a flag']`. That second half also kills U4 below: a survivor of the message-constant class that this
+   round's pass found in the same refusal, because the only refusal case named `a rumour`, so the message's
+   `{unknown}` replaced by `['a rumour']` stayed green.
+
+**The bounded mutation pass over the spans the findings name** (lesson 10; harness `<scratch>/census-fix-r2/mutate.py`:
+edit `eval/gameplay_census.py`, run `tests/eval/test_gameplay_census.py` and
+`tests/scripts/test_publish_gameplay_census.py` with `-n 6`, restore from a saved copy; unmutated, 462 passed, the 460
+of round 1 plus this round's two new tests). The three named survivors E1, S1 and U1 were first run against the tests
+at `0fbf65e1`: each 460 passed, so each was green before this round. 13 mutants of the listed classes: 13 killed, 0
+equivalent. E1, S1, U1 and U4 are killed only by this round's tests. The pass then stopped.
+
+| mutant | class | result | test that went red |
+|---|---|---|---|
+| `E1` `*get_args(GameStopReason)` to the literal `'TICK_BUDGET_REACHED', 'MEETING_PHASE_REACHED'` | canonical literal | killed (was green) | `test_the_ending_rows_follow_the_runners_type` |
+| `E2` `*get_args(WinResultType)` to the four-ending literal | canonical literal | killed, 1 red | `test_the_ending_rows_follow_the_engines_type` |
+| `E3` the endings drop the `GameStopReason` member | drop a tuple member | killed, 6 red | `test_the_committed_census_matches_a_recomputation` among them |
+| `E4` the endings drop the `WinResultType` member | drop a tuple member | killed, 20 red | `test_closeness_reads_the_living_and_the_tasks_left_at_game_over` among them |
+| `S1` fold `ballot.target == SKIP_TARGET` to `== 'SKIP'` | canonical literal | killed (was green) | `test_the_fold_reads_a_skip_by_the_skip_target_it_imports` |
+| `S2` fold `== SKIP_TARGET` to `!= SKIP_TARGET` | inverse comparison | killed, 22 red | `test_a_cited_placement_of_another_player_is_not_read` among them |
+| `S3` fold `ballot.target == SKIP_TARGET` to `ballot.target is None` | None test | killed, 16 red | `test_set_dir_prints_the_committed_section_of_that_set` among them |
+| `S4` fold `held_sources is not None` to `is None` | inverse None test | killed, 68 red | `test_a_cited_turn_resolves_only_within_its_own_meeting` among them |
+| `S5` the fold's SKIP branch and its EJECT refusal swapped | swap adjacent branches | killed, 16 red | `test_set_dir_prints_the_committed_section_of_that_set` among them |
+| `U1` the refusal's `set(held_source_rows())` to the six-source literal | canonical literal | killed (was green) | `test_the_source_rows_follow_their_type` |
+| `U2` the refusal drops its `sorted` wrapper | drop a wrapper | killed, 2 red | `test_the_check_on_a_ballot_it_never_reads_is_refused` and `test_the_source_rows_follow_their_type` |
+| `U3` the refusal reads `checked_placement_kinds()` for `held_source_rows()` | swap a related collection | killed, 15 red | `test_set_dir_prints_the_committed_section_of_that_set` among them |
+| `U4` the refusal's message `{unknown}` to the constant `['a rumour']` | message constant | killed (was green on this pass's first run) | `test_the_source_rows_follow_their_type` |
+
+**Noticed, outside this card.** `test_a_census_walk_without_a_layer_refuses_its_setting_before_advancing` fails
+when it is the first census walk in its process (`uv run pytest` on that test alone: 1 failed, 4 passed, the same at
+`0fbf65e1`, and the test is on `main`). It installs its walk spy before the cached committed game first loads, so the
+spy records that load. The parallel runs of this round and the gates of earlier rounds passed it. It is flagged
+for a separate task and not changed here.
+
+**Verification at the fix head.** Measured on the fix commit; this round changes only
+`tests/eval/test_gameplay_census.py` and this card, so no recorded, published or hashed byte moves and no
+`docs/artifacts.md` row is recomputed.
+
+| command | exit | result |
+|---|---|---|
+| `env \| grep -c '^AILIBI_'` | - | 0 |
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py tests/experiments/test_route_check_replay.py -n 6 --dist loadfile` | 0 | 605 passed (603 before, plus this round's two new tests) |
+| `uv run pytest tests/eval/test_evidence_honesty.py -n 6 --dist loadfile` | 0 | 114 passed |
+| `uv run python -m experiments.lab.route_check_replay --check` (full clone) | 0 | reproduced, 43.1 s |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/candidates/stage-b-r1/9p2i --json-stdout` | 0 | the r1 column; `eval/` unchanged since round 1 |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | 63 checks, 51 OK, 0 FAIL, 7 evidence-branch absent, 5 info |
+| `uv run lint-imports` | 0 | 4 kept, 0 broken |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 phase tasks and prompts; 101 work cards |
+| `uv run python scripts/check_doc_facts.py` | 0 | every checked figure true |
+| `uv run mypy tests/eval/test_gameplay_census.py`; `uv run ruff check` and `ruff format --check` on it | 0 | clean |
+| `git diff --stat origin/main -- replays/ docs/process-scorecard.md docs/process-scorecard.json experiments/lab/results-route-check-replay.json experiments/lab/report-route-check-replay.md` | - | empty |
+| `bash scripts/verify_samples.sh replays/<set>`, for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
+| `uv run pytest -m campaign -n 6` | 0 | 337 passed |
+| demo bundle | - | not rebuilt this round: installing the frontend's packages was refused in this environment. Since `62a91057`, built in one checkout beside `83806ab0` (109 files each, empty diff), only this card and `tests/eval/test_gameplay_census.py` moved (`git diff --stat 62a91057`), neither an input of the bundle, so nothing ships |
