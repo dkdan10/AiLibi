@@ -318,11 +318,11 @@ begins with the eight development seeds above. The held-out split was not run.
 Each game runs under the lab's limits (96 ticks, 256 calls, 1,000,000 input and
 100,000 output tokens, 30 seconds and $0). The rows are
 `stage-b-idle-policy-development.json`. Its runtime fingerprint is
-`31814833632ed9cca17a7a3a43afe91082b9a23459925ad5989af73e0fe5a51d` and its git
-head is `39e8fea7778497d1e297650aab121562ed59ee1a`. All 800 games completed, and
+`d901fcb0f2c67316a4f6bd77a331daf0c2a41e62d8d7dadbc417c9f295d2909e` and its git
+head is `342056181b9551de457a18c4d56917f3e676c175`. All 800 games completed, and
 none aborted or hit a limit; the most any game used was 71 ticks, 52 calls and
 220,212 input tokens. The fake provider made 14,190 calls, reporting 52,639,727
-input and 815,925 output tokens, at $0. The run took 77 seconds on this machine.
+input and 815,925 output tokens, at $0. The run took 110 seconds on this machine.
 Reproduce into an unused path:
 
 ```sh

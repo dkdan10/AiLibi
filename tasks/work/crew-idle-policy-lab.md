@@ -156,6 +156,20 @@ or exact bytes drift. Sub-directories of `audits/` are indexed as units (`check_
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
+- [x] Review correction (round 2): the cell's bound is stated at the strength the code holds, in the README
+  bullet and the `whereabouts_coverage` docstring. Every player a crewmate sees in the state a tick leaves is
+  covered. The cell bounds nothing an impostor sees (the rooms next to its own at base sight, and sight from
+  inside a vent), and nothing a player holds from earlier ticks, from speech or from a departure it watched.
+  Mechanism: `test_every_player_a_crewmate_sees_is_covered`, a Hypothesis property over generated states with no
+  sabotage and with each of the map's sabotages active. It reads the cell one player at a time, and
+  `test_the_per_player_read_counts_exactly_the_covered_players` checks that read. Planted, both red:
+  `test_a_cell_missing_a_player_a_crewmate_sees_fails_the_bound` (a cell that needs two companions) and
+  `test_crewmate_sight_beyond_its_own_room_breaks_the_bound` (an engine change that gives crewmates the adjacent
+  rooms). The limits are pinned by `test_the_cell_does_not_bound_what_an_impostor_sees` (`next-door`,
+  `inside-a-vent`) and `test_the_cell_does_not_bound_a_departure_a_crewmate_watched`. The docstring is in the
+  hashed harness, so the capture is retaken at `34205618`. All 800 rows equal round 1's capture over 69,884 leaf
+  fields, with 0 differing, and `runtime_fingerprint` equals its `source_sha256`. The `audits/` row is
+  re-derived: `test_every_counted_registry_row_matches_the_index` was red before and green after.
 - [x] Review correction: the three source-byte pins' base digests are restated as measured. At the branch
   point `derivation_fingerprint` reads `5f63f37c`, the version-two `fit_corpus_fingerprint` `109da039` and
   `bakeoff_substrate_sha` `53a87623`; at the head they read `70c95948`, `7f109b57` and `14524d8b`. Mechanism: the
@@ -545,7 +559,8 @@ command at the clean committed head `39e8fea7`. `source_sha256` is
 `31814833632ed9cca17a7a3a43afe91082b9a23459925ad5989af73e0fe5a51d`. Four arms ran on 100 seeds per roster: 800
 games, all `completed`, every `error` null, none at a limit (the most any game used was 71 ticks, 52 calls, 220,212
 input and 2,990 output tokens). There were 14,190 fake calls, 52,639,727 input and 815,925 output tokens, $0, and
-77.35 s of wall (`/usr/bin/time -p`). The README's compact check, run on the JSON, reprints all 20 table rows, and
+77.35 s of wall (`/usr/bin/time -p`). Round 2 retook the capture at `34205618`, with every row unchanged; its
+stamp is under "Review corrections, round 2". The README's compact check, run on the JSON, reprints all 20 table rows, and
 they equal the README's rows in order (`rows printed 20 rows in the tables 20; identical, in order: True`).
 
 The 9p2i tables, quoted from the README (4p1i is there beside them):
@@ -775,8 +790,10 @@ role within a tick, so the two reads are identical for every witness.
 **Limitations.**
 - Fake meetings eject nobody, so the race, kills and coverage are play-layer mechanics. They are not model play and
   not balance.
-- The cell counts positions, not what an agent rendered, remembered or said: it is an upper bound on held
-  whereabouts.
+- The cell counts positions, not what an agent rendered, remembered or said. It bounds only what crewmates see in
+  the state a tick leaves. It bounds nothing an impostor sees, nor anything a player holds from earlier ticks, from
+  speech or from a departure it watched. (Corrected in round 2: this line first called the cell an upper bound on
+  held whereabouts.)
 - Paired games share a seed and diverge after the first differing decision.
 - 100 development seeds per roster, with no held-out confirmation.
 - The diagnosis's scratch figures (1,813 idle crew-ticks; 14 of 14 walk-ins) are not reproduced here. Those are
@@ -1040,3 +1057,271 @@ were as follows:
 - The frontend passed 26 test files and 695 tests, and its build completed.
 
 This commit changes only this card.
+
+### Review corrections, round 2 (2026-10-06)
+
+Independent verification of `4a6d4880` found one blocking problem, in a documented claim. This round changes five
+files:
+- `experiments/tactical_gameplay.py`: the `whereabouts_coverage` docstring only, with no code line changed;
+- `tests/experiments/test_tactical_gameplay.py`: five new tests, seven cases;
+- `audits/tactical-gameplay/README.md`: the coverage bullet, and the capture's stamp and wall time;
+- `audits/tactical-gameplay/stage-b-idle-policy-development.json`: the capture, retaken by the harness;
+- `docs/artifacts.md`: the `audits/` row.
+
+This card also changes. `main` is still at `83806ab0`, so there was no merge.
+
+**The finding: the cell was called an upper bound on the whereabouts any player held.** The README bullet said the
+cell "counts positions, not what anyone noticed, remembered or said, so it is an upper bound on the whereabouts any
+player held". The docstring said it "bounds from above the whereabouts any agent held". The code does not deliver
+that. `engine.visibility.compute_visibility_for_player`, which `observation/service.py` turns into packets, gives an
+impostor the adjacent rooms at base sight (`_resolve_observer_visibility_mode`). It also gives sight to an observer
+inside a vent, because it never reads the observer's `in_vent`. So an impostor can see a player the cell leaves
+uncovered. A crewmate's packet also carries the departures it watched (`_moved_players_for_agent`): a player that
+left the crewmate's room, and the room it went to. And the cell reads no memory and no speech.
+
+What the code does deliver is one bound. On the canonical map a crewmate sees only its own room, whatever the
+sabotage: at base sight `_resolve_observer_visibility_mode` gives it `same_room_only`, `lights` gives everyone
+`same_room_only`, and `reactor` leaves the base mode. Only an impostor can enter a vent (`engine.rules.resolve_vent`).
+So every player a crewmate sees in the state a tick leaves stands in that crewmate's room beside a living crewmate
+outside a vent, and the cell counts it covered. The README bullet now reads:
+
+> It counts positions, not what anyone noticed, remembered or said. It bounds one thing: what crewmates see as the
+> tick ends. On this map a crewmate sees only its own room, whatever the sabotage, so every player a crewmate sees
+> in the state the tick leaves is covered, and an uncovered subject is one no crewmate sees then. It does not bound
+> what impostors see. An impostor also sees the rooms next to its own unless the lights are sabotaged, and it still
+> sees from inside a vent, so it can see a player the cell leaves uncovered. Nor does it bound what anyone holds. A
+> player keeps what it saw on earlier ticks and hears what others say, and a crewmate that sees a player leave its
+> room is told which room that player went to, even when the player stands there alone.
+
+The docstring says the same in the module's terms: the cell bounds the players a crewmate sees in the state, and
+nothing an impostor sees or a player holds from earlier ticks, from a departure it watched or from speech.
+
+**Review correction for Outcome item 2.** Its sentence "The cell counts positions, not memories or speech: it is an
+upper bound on what any agent held" is read as follows. The cell counts positions, not memories or speech. It bounds
+only what crewmates see in the state the tick leaves, and nothing an impostor sees or any player holds. The Outcome
+stays as the contract was written, and this correction governs how that sentence is read.
+
+**Review correction for the Limitations line.** Validation's "Limitations to state" carries the same claim: "it is
+an upper bound on held whereabouts". It is corrected the same way, and it stays as written because it is the
+contract. The matching line under Results, "Limitations", is Results text, so it is corrected in place and marked.
+
+**The tests.** Five new tests, seven cases, in `tests/experiments/test_tactical_gameplay.py`:
+- `test_every_player_a_crewmate_sees_is_covered`. A Hypothesis property under `settings(deadline=None)` over the
+  existing seeded canonical-map states (random rooms, `alive`, `in_vent` and roles), with no sabotage or with
+  `lights` or `reactor` active. For every living crewmate outside a vent, every player
+  `compute_visibility_for_player` lists is covered by `lab.whereabouts_coverage`. The cell returns counts, so the
+  test reads one player at a time: a player is covered when removing it lowers the covered count.
+- `test_the_per_player_read_counts_exactly_the_covered_players`. The same generator: summed over all players, that
+  one-player read equals the cell's covered count, so the instrument is exact.
+- `test_a_cell_missing_a_player_a_crewmate_sees_fails_the_bound`. Planted: a cell that needs two companions fails
+  the property.
+- `test_crewmate_sight_beyond_its_own_room_breaks_the_bound`. Planted source change:
+  `engine.visibility._resolve_observer_visibility_mode` is patched so that a crewmate keeps the map's adjacent
+  sight, and the property fails. An engine change to crewmate sight therefore cannot leave the README's bound silently
+  stale.
+- `test_the_cell_does_not_bound_what_an_impostor_sees`, with `next-door` (an impostor in `WEST_HALL`, a lone crewmate
+  in `ADMIN`) and `inside-a-vent` (the impostor in `ADMIN`'s vent). In both the cell returns (3, 0), no crewmate sees
+  anyone, and the impostor sees the crewmate.
+- `test_the_cell_does_not_bound_a_departure_a_crewmate_watched`. One `advance_tick` moves a player from a crewmate's
+  room to `WEST_HALL`. The cell returns (3, 0), and the crewmate's packet from `ObservationService.build_packet` lists
+  `MovedPlayerView(id="p-2", from_room="ADMIN", to_room="WEST_HALL")`.
+
+All seven cases were green on the shipped code, and both planted cases raise. The eight Validation files ran 414
+passed (407 before this round, plus the seven).
+
+**How often each side of the bound occurs.** This is count-only, from the capture's 800 games re-run at `34205618`
+through `run_candidate`. Every arm's subjects and covered counts equal the capture's. "Seen by a crewmate" and "seen
+by an impostor" use `compute_visibility_for_player` in the state the tick leaves. "A crewmate saw it leave" counts an
+uncovered subject that moved this tick out of a room where a living crewmate stands when the tick ends: by the
+packet's departure rule, that crewmate is told where it went.
+
+| Roster | Arm | Uncovered at kill ticks | seen by a crewmate | seen by an impostor | a crewmate saw it leave | Uncovered at play ticks | seen by a crewmate | seen by an impostor | a crewmate saw it leave |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4p1i | `stage_b_full` | 390 | 0 | 36 | 4 | 3,476 | 0 | 741 | 228 |
+| 4p1i | `stage_b_full_kill_cooldown_6` | 256 | 0 | 28 | 4 | 3,342 | 0 | 769 | 129 |
+| 4p1i | `stage_b_full_kill_cooldown_6_patrol` | 213 | 0 | 28 | 8 | 3,238 | 0 | 809 | 276 |
+| 4p1i | `stage_b_full_kill_cooldown_6_accompany` | 215 | 0 | 28 | 8 | 3,238 | 0 | 813 | 288 |
+| 9p2i | `stage_b_full` | 1,383 | 0 | 399 | 100 | 8,271 | 0 | 3,140 | 1,019 |
+| 9p2i | `stage_b_full_kill_cooldown_6` | 1,063 | 0 | 364 | 80 | 10,040 | 0 | 4,140 | 1,138 |
+| 9p2i | `stage_b_full_kill_cooldown_6_patrol` | 1,271 | 0 | 464 | 156 | 11,152 | 0 | 4,504 | 1,558 |
+| 9p2i | `stage_b_full_kill_cooldown_6_accompany` | 1,216 | 0 | 442 | 134 | 11,007 | 0 | 4,517 | 1,590 |
+
+The hub-wait figures equal the verifier's (364 of 1,063 and 4,140 of 10,040 on 9p2i; 28 of 256 and 769 of 3,342 on
+4p1i). These are lab counts of fake games, not cells of the committed capture, so the README states the mechanism
+without them, as round 1 did. The probe takes about 100 s and prints counts only:
+
+```
+PYTHONPATH=. uv run python - stage_b_full stage_b_full_kill_cooldown_6 stage_b_full_kill_cooldown_6_patrol \
+  stage_b_full_kill_cooldown_6_accompany <<'EOF'
+import sys, tempfile
+from collections import Counter
+from pathlib import Path
+import experiments.tactical_gameplay as lab
+from engine.events import KilledEvent, MovedEvent
+from engine.visibility import compute_visibility_for_player
+from engine.world import load_canonical_map
+
+game_map, fold, tally, key = load_canonical_map(), lab.fold_whereabouts, Counter(), []
+
+
+def probe(step, counts):
+    fold(step, counts)
+    players = step.state.players
+    standing = Counter(p.room for p in players.values() if p.alive and not p.in_vent)
+    uncovered = [i for i, p in players.items() if p.alive and (p.in_vent or standing[p.room] < 2)]
+    seen = {"CREWMATE": set(), "IMPOSTOR": set()}
+    for i, p in players.items():
+        if p.alive:
+            seen[p.role].update(compute_visibility_for_player(
+                observer_id=i, world_state=step.state, game_map=game_map).visible_player_ids)
+    crew_rooms = {p.room for p in players.values() if p.alive and p.role == "CREWMATE"}
+    left = {e.actor for e in step.events
+            if isinstance(e, MovedEvent) and e.from_room != e.to_room and e.from_room in crew_rooms}
+    kill = any(isinstance(e, KilledEvent) for e in step.events)
+    for scope in ("play", "kill") if kill else ("play",):
+        tally[key[-1], scope, "uncovered"] += len(uncovered)
+        tally[key[-1], scope, "seen by a crewmate"] += sum(u in seen["CREWMATE"] for u in uncovered)
+        tally[key[-1], scope, "seen by an impostor"] += sum(u in seen["IMPOSTOR"] for u in uncovered)
+        tally[key[-1], scope, "a crewmate saw it leave"] += sum(u in left for u in uncovered)
+
+
+lab.fold_whereabouts = probe
+configs = lab.candidate_configs()
+with tempfile.TemporaryDirectory() as tmp:
+    for arm in sys.argv[1:]:
+        for name in ("4p1i", "9p2i"):
+            roster = lab.Roster.model_validate_json(Path(f"replays/samples/{name}/roster.json").read_bytes())
+            key.append(f"{name} {arm}")
+            for seed in lab.SPLIT_SEEDS["development_wide"]:
+                lab.run_candidate(seed=seed, roster=roster, config=configs[arm],
+                                  replay_path=Path(tmp) / f"{arm}-{name}-{seed}.jsonl")
+for (row, scope, column), value in sorted(tally.items()):
+    print(row, scope, column, value)
+EOF
+```
+
+**The capture is retaken, because the docstring is in the hashed harness.** `runtime_fingerprint` hashes
+`experiments/tactical_gameplay.py`'s own bytes. The capture must equal the fingerprint at the PR head (acceptance
+**The capture is committed, reproducible and read**), so a docstring edit moves the fingerprint and requires a new
+capture. The old file was removed. The Validation command then wrote the new one through the harness at the clean
+committed head `342056181b9551de457a18c4d56917f3e676c175`. It took 109.81 s of wall (`/usr/bin/time -p`). All 800
+games are `completed`, and every `error` is null.
+
+A count-only comparison checked the new capture against round 1's, key by key. It skipped only the stamp keys
+(`source_sha256`, `git_head`, `measured_utc`, `machine`, `world_copy_control`):
+- top-level keys equal;
+- 800 rows, 69,884 leaf fields compared, 0 differing;
+- the stamp keys that moved: `git_head`, `measured_utc`, `source_sha256` and `world_copy_control` (the copy timings);
+- exit 0.
+
+Perturbed: in a scratch copy of the new capture, one `whereabouts_covered_at_kill_ticks` (cooldown-6, 9p2i, the
+fourth seed) was raised by 1. The comparison then printed "differing 1" and exited 1. The script stays in scratch.
+It flattens every key outside the stamp set to leaves and compares them path by path.
+
+The new stamps are as follows:
+- `source_sha256` is `d901fcb0f2c67316a4f6bd77a331daf0c2a41e62d8d7dadbc417c9f295d2909e`, and the Validation
+  fingerprint command exits 0 at this head;
+- `git_head` is `342056181b9551de457a18c4d56917f3e676c175`;
+- the README's inputs paragraph carries both, and its wall time is now 110 seconds.
+
+The README's compact check, run on the new JSON, reprints all 20 rows: "rows printed 20 rows in the tables 20;
+identical, in order: True". The totals are unchanged: 14,190 calls, 52,639,727 input and 815,925 output tokens, $0,
+and at most 71 ticks, 52 calls and 220,212 input tokens in one game.
+
+Record impact says the capture is "written once and never regenerated in place". This round reads that as never
+edited by hand, and never re-taken unless the fingerprint moved. The capture's acceptance already re-takes it when
+the fingerprint moves. Every row is shown unchanged, so no reading of the capture changes.
+
+**The registry.** With the new capture and README staged and the row unchanged,
+`test_every_counted_registry_row_matches_the_index` failed: "audits/: docs/artifacts.md promises 31,431,207 tracked
+bytes, the tracked files contain 31,431,870 bytes". With the row at 31,431,870 tracked bytes / 334 files, it passes.
+`git ls-files -z audits | xargs -0 cat | wc -c` prints 31431870, and `git ls-files audits | wc -l` prints 334.
+
+**The grep for the old wording.** Two searches ran at this head. The first was `git grep -n -i -e "upper bound"
+-e "bounds from above"` over `audits/tactical-gameplay/README.md`, `experiments`, `tests/experiments`, `training`,
+`docs`, this card, the decision memo and `tasks/diagnosis-2026-10-02`. The second searched `*.md` and `*.py` for
+"bounds from above", "upper bound on held", "upper bound on what any agent", "any player held" and "any agent held".
+Before this round they found the README bullet, the docstring and three lines of this card: Outcome item 2, the
+Validation limitation and the Results limitation. Now the claim is left only in the two contract lines this
+correction governs. Every other hit is a different claim:
+- The README's "best arm's uncovered remainder" sentence, and the card lines that predeclare it, say that the share
+  the best arm leaves uncovered bounds what any idle policy could still add in this cell. No share exceeds 1, so
+  that holds, and it is left as written.
+- The other hits are unrelated bounds in older lab reports and training code.
+
+The decision memo's 8.2 item 4 and the section 7 paragraph call the cell role-blind and the measured candidate,
+which stays true. The diagnosis's `ml-tactical.md` proposes a different, crewmate-observer cell, which this card
+did not build.
+
+**The pins that read source bytes.** Nothing under `training/` changed this round (`git diff --stat 4a6d4880 --
+training/` prints nothing), so the round-1 digests stand. Offline `verify_ml_evidence` reads checks 63, OK 51, FAIL 0,
+ABSENT 7, INFO 5 (exit 0, never `--complete`). The AST comparison against `2275bdba` still exits 0.
+
+**The mutation pass, bounded to the span the finding names.** That span is the code of `whereabouts_coverage`; the
+only production change this round is its docstring. There were nine mutants, of the listed classes only. Each ran
+alone against `tests/experiments/test_tactical_gameplay.py` (`-x -n 4`), and the new tests also ran alone (`-k`
+over the seven cases). The file was restored from a byte copy after each run, with its sha256 (`4a4c349ef1b7...`)
+re-checked. All nine were killed, and none survived.
+
+| id | class | mutant | result | first red test | new tests alone |
+| --- | --- | --- | --- | --- | --- |
+| R1 | F filter | drop `alive` from the standing filter | killed | `test_a_tick_with_two_kills_counts_its_players_once` | green |
+| R2 | F filter | drop `in_vent` from the standing filter | killed | `test_a_vented_player_covers_nothing_and_is_not_covered` | red (`inside-a-vent`) |
+| R3 | F filter | drop the whole standing filter | killed | `test_a_tick_with_two_kills_counts_its_players_once` | red (`inside-a-vent`) |
+| R4 | F filter | drop the company filter on covered | killed | `test_two_players_in_one_room_cover_each_other_and_a_lone_player_is_uncovered` | red (the source-change case) |
+| R5 | N comparison | company test inverted (`count <= 1`) | killed | `test_two_players_in_one_room_cover_each_other_and_a_lone_player_is_uncovered` | red (the property) |
+| R6 | N comparison | `in_vent` test inverted | killed | `test_two_players_in_one_room_cover_each_other_and_a_lone_player_is_uncovered` | red (the property) |
+| R7 | C constant | standing room read as `"ADMIN"` | killed | `test_two_players_in_one_room_cover_each_other_and_a_lone_player_is_uncovered` | red (the source-change case) |
+| R8 | S swap | subjects over the standing players only | killed | `test_a_vented_player_covers_nothing_and_is_not_covered` | red (`inside-a-vent`) |
+| R9 | S swap | subjects over every player, the dead included | killed | `test_a_tick_with_two_kills_counts_its_players_once` | green |
+
+The new tests alone came back green on R1 and R9. Those mutants change what a dead player counts for, which the
+bound does not speak to, and an earlier test kills both. On R4 and R7 the property passes, because a cell that
+over-counts cannot break an upper bound. The planted source-change case then goes red instead: it can no longer
+make the property fail. An earlier exact case kills both, as the table names. This round adds no production code line,
+so there is no per-line neuter row to add. The docstring's claims are enforced by the seven cases above.
+
+**Validation at this head** (exit codes captured directly; `34205618` plus the capture, the README stamp, the
+`audits/` row and this card):
+
+```
+env | grep -c '^AILIBI_'                                  0
+pytest <the card's eight files> -n 6 --dist loadfile       414 passed (407 before, plus the seven new cases)
+the capture, retaken at 34205618 (Validation command)      exit 0, 109.81 s, 800 games, all completed
+runtime_fingerprint == capture source_sha256              exit 0
+capture comparison against round 1, count-only            800 rows, 69,884 fields, 0 differing; exit 0
+  perturbed: one covered count raised by 1                 differing 1; exit 1
+README compact check                                      20 rows printed, identical, in order
+AST comparison, strings kept, base copy from 2275bdba     exit 0
+git diff 2275bdba -- training/rewards.py | ... | grep -vcE '^[+-]\s*#'   0
+git diff --stat 2275bdba -- training/ | tail -1           2 files changed, 19 insertions(+), 1 deletion(-)
+git diff --stat 2275bdba -- replays training/artifacts training/reports agents/tactical/learned tests/training api frontend
+                                                          (prints nothing)
+uv run python scripts/verify_ml_evidence.py               checks: 63 | OK 51 | FAIL 0 | ABSENT 7 | INFO 5; exit 0
+uv run pytest -m campaign -q -n auto                      337 passed
+uv run pytest tests/scripts/test_build_demo_bundle.py -q  31 passed
+verify_samples.sh: samples/9p2i 50, samples/4p1i 50, ml_corpus/9p2i 150, ml_corpus/4p1i 50,
+                   candidates/stage-b-r1/9p2i 50, each "All N samples verified clean."
+build_sample_report.py --sample-dir <each of the five sets> --check   "... is consistent with its replays." x5
+publish_process_scorecard.py --check, publish_gameplay_census.py --check   "... consistent with the committed recordings."
+ruff check, ruff format --check, mypy on the two changed Python files   clean
+```
+
+The task-doc validator, the doc-facts check, the bundle diff and the full gate are recorded below for the head that
+carries this subsection.
+
+**Decisions, round 2.**
+- The bound is stated at exactly the strength the code holds, as the crewmates' sight in the state the tick
+  leaves. A stronger bound that names an observer (a crewmate first-hand) would read a role, which the cell was
+  defined not to do (ruling 2), so it is stated as a property of the engine's sight, not as a second cell.
+- The departure limit goes beyond what the finding named. Reading `observation/service.py` for the finding showed
+  that a crewmate is told the room a watched player walked into, on the same tick. That limit is as real as the two
+  the finding named, so it is stated and pinned too.
+- The capture is retaken rather than left with a stale fingerprint, for the reason above.
+
+**Deviations, round 2.**
+- **The summaries** box stays open. It waits on the orchestrator's pick between the two readings under Deviations
+  above, as in round 1. This round's dispatch asked that no box be left unchecked. Checking this one would make the
+  pick, so it stays open, and the orchestrator is told so.
+- The card's **Status** line reads `ready`. It belongs to the orchestrator on `main` (Constraints), so it is not
+  changed here.
