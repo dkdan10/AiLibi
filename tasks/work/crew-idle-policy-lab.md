@@ -1497,3 +1497,16 @@ moved, as the fingerprint check proves, so both would reproduce the rows already
 
 `bash scripts/check.sh` runs once at the head that carries this paragraph. Its exit code is recorded in the next
 commit.
+
+**The full gate, round 3.** `bash scripts/check.sh > <scratch>/check.log 2>&1` ran once in this clean worktree at
+`5744e5dc`, with `main` still at `83806ab0`. The background runner captured its exit code directly: 0. The results
+were as follows:
+- Ruff passed, with 554 files already formatted.
+- Import-linter kept all four contracts, with 0 broken.
+- Task docs validation passed, and all 390 prompts were in sync.
+- Strict mypy found no issues in 525 source files.
+- Pytest gave 10,344 passed, 20 skipped and 3 xfailed in 773.69 s. That is the 10,342 of round 2 plus the two new
+  cases.
+- The frontend passed 26 test files and 695 tests, and its build completed.
+
+This commit changes only this card.
