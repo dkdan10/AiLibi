@@ -1000,7 +1000,7 @@ the one production module phase 1 touches (`scripts/publish_gameplay_census.py` 
 
 **Verification at this head.**
 
-Measured at `0128fc46` (the census code and tests this Results describes); later commits touch only this card.
+Measured at `0128fc46`, except where a row names `b53d4fb1`. `b53d4fb1` changes only the placement reader's dispatch (below); `publish_gameplay_census.py --check` is green on it, so every count above reproduces there, and the demo bundle loads no census module, so its empty diff stands.
 
 | command | exit | result |
 |---|---|---|
@@ -1020,7 +1020,26 @@ Measured at `0128fc46` (the census code and tests this Results describes); later
 | `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
 | `uv run pytest -m campaign -n 6` | 0 | 337 passed |
 | demo bundle, built in this one checkout at `83806ab0` and at `0128fc46` (`uv run python scripts/build_demo_bundle.py --out DIR` each, then `diff -r`) | 0 | 109 files each, empty diff: nothing ships |
-| `bash scripts/check.sh`, once, at the pushed head | pending | run once after this Results is pushed; its exit code lands in the card's last commit |
+| `bash scripts/check.sh` at `ecb8cf7a` | 1 | 1 failed, 10,354 passed: `tests/eval/test_sighting_vocabulary.py::test_the_narrow_sighting_remainder_is_exactly_the_allow_list` named `eval/gameplay_census.py::turn_placements` (fixed below) |
+| `uv run python scripts/publish_gameplay_census.py --check` at `b53d4fb1` | 0 | consistent |
+| `bash scripts/check.sh` at the commit carrying this row, the pushed head | pending | run once at this commit; its exit code lands in the card's last commit |
+
+**The first gate run, and its fix.** The repository's sighting-vocabulary walk (`tests/eval/test_sighting_vocabulary.py`) reads every `isinstance` check over `SawPlayerObservation` that omits `SawMoveObservation` as a narrow first-hand predicate, and it read `turn_placements`' separate `isinstance` branches that way, although the next branch reads the movement sighting. `b53d4fb1` dispatches the three kinds with one `match` statement, which the walk does not read as narrow and which reads every placement as before; the walk's allow-list is untouched. The reader's ten neuters and two mutants (`F1`, `L3`) were re-run on the new dispatch, with one more neuter for the movement case itself, and all twelve went red:
+
+| probe | test that went red |
+|---|---|
+| `place-saw-player-room-skip` | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
+| `place-saw-player` | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-company-not-subject` | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-company-dedupe` | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
+| `place-company` | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-saw-move-to-room` | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-saw-move-rooms` | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-whereabouts-speaker` | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `place-whereabouts-guard` | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
+| `place-saw-move-case (never matches)` | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `F1-companions-filter` | `test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds` |
+| `L3-canonical-rooms-literal` | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
 
 **Limitations.**
 - Each round is one hosted recording of 50 games; the counts describe those games and are no bar.
