@@ -73,9 +73,10 @@ false resume perceptions have no count source, and their carrier is the helper `
 golden's byte-equal re-render of every recorded prompt. The census and scorecard `--set-dir replays/samples/9p2i`
 equal the shipped `samples/9p2i` entries (1,324 of 1,324 and 108 of 108 leaves).
 
-**What `F` must hold.** F is `main` after all three first-wave cards merge, `route-lines-field`,
-`census-held-data-cells` and `crew-idle-policy-lab`, and after the field card's rehearsals pass (the cards' Results
-name each item by key; this card writes none of it):
+**What `F` must hold.** F is `main` after the three first-wave cards, `route-lines-field`, `census-held-data-cells`
+and `crew-idle-policy-lab`, and `rubric-v2-profile` merge, and after the field card's rehearsals pass (the cards'
+Results name each item by key; this card writes none of it; the round reads none of the profile, which lands before
+F because it writes `eval`, `api`, `scripts`, `frontend` and `experiments` and changes the bundle):
 - from `route-lines-field`: the field (written here `route_lines_version`; default None, omitted at default, set only
   from the config file), its `FIELD_LAYER` entry, `READABLE_SETTINGS` readers that thread or refuse, a composite
   `vote_ballot` stamp served through the spine registry, its planted cases, rehearsals and lab rows passed (with
@@ -105,8 +106,9 @@ for an unpinned set (`tests/meetings/test_prompt_byte_golden.py:1360-1376`). Bas
 ## Acceptance
 
 Each item names its enforcing mechanism and the planted or perturbed case that proves it bites. `F` is `main` after
-the three first-wave cards merge (`route-lines-field`, `census-held-data-cells`, `crew-idle-policy-lab`) and the
-field card's rehearsals pass. `P` is the pre-registration `coordination:` commit on `work/stage-b-record-r3`; its
+the three first-wave cards (`route-lines-field`, `census-held-data-cells`, `crew-idle-policy-lab`) and
+`rubric-v2-profile` merge and the field card's rehearsals pass. `P` is the pre-registration `coordination:` commit on
+`work/stage-b-record-r3`; its
 tree differs from `F`'s only in the audit, its `audits/README.md` row and the `audits/` row of `docs/artifacts.md`.
 `Q` is the later `coordination:` commit adding the owner's confirmation as a dated addendum. `C` is
 `replays/candidates/stage-b-r3/9p2i`, `R1` round 1's set, `R2` `replays/samples/9p2i`, `CFG` the round's config.
@@ -369,9 +371,10 @@ before F or after this card: `crew-idle-policy-lab`, which writes `experiments/t
 `docs/artifacts.md`, merges before F, so F holds it. If `main` moves there, stop and ask; otherwise merge `main` in
 and re-run every gate.
 
-**Wave, order and ownership.** Dispatches only at F: after `route-lines-field`, `census-held-data-cells` and
-`crew-idle-policy-lab` merge and the field's rehearsals pass; the rubric cards and `retire-temporal-evidence-v1` stay
-undispatched until this card merges. One writer per file, as the orchestrator's one-writer map assigns: the field
+**Wave, order and ownership.** Dispatches only at F: after `route-lines-field`, `census-held-data-cells`,
+`crew-idle-policy-lab` and `rubric-v2-profile` merge and the field's rehearsals pass; the held `rubric-extractor-era`
+and `retire-temporal-evidence-v1` stay undispatched until this card merges. One writer per file, as the
+orchestrator's one-writer map assigns: the field
 card owns the field, its readers, templates, the route-lines instrument, both instruments' `r3` column, the field's
 tests and the field's row on `docs/experiment-arms.md`; `census-held-data-cells` owns the census cells, the route
 field's conformance cell among them (`route_lines_false_to_the_map` and `route_lines_off_the_table` as Conf.,
