@@ -358,6 +358,21 @@ campaign, on either route):
    was read at the time as 'that candidate was noise' rather than 'this
    measurement is noise'" (`:455-465`) is the recorded lesson.
 
+**Dated 2026-10-06: the objective is re-priced before any search.** Any
+reopening re-prices the crew terms `correct_reports` and `patrol_coverage`
+(`training/rewards.py`, `_crew_terms`) role-blind before any search, under a
+new `FITNESS_OBJECTIVE_ID`. A re-open proposal shows this done beside the four
+checks. The tactical lab's role-blind whereabouts cell
+(`audits/tactical-gameplay/README.md`, the idle-policy section) is the measured
+candidate for coverage. This supersedes in writing the 2026-07-09 ratification
+of the engine-truth co-location proxy (`tasks/phase-15.md:57-62`). The
+conviction model's GO verdict (`training/artifacts/conviction/verdict.json`,
+`fitness_term: ships`) is re-registered at that reopening, before any search,
+as a dated override of its GO, so a re-priced objective ships without the
+conviction supply term. No value, weight, pin or artifact moves with this
+paragraph (owner ruling of 2026-10-06,
+`tasks/decision-2026-09-24-stage-b-wave.md` section 8.1).
+
 **Decide-at-proposal.** A re-open proposal must name its route (A or B), show
 the four checks satisfied in its design, and route the choice to the owner.
 Until such a proposal exists there is nothing to decide — that is the point
