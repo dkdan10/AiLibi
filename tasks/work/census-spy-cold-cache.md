@@ -122,8 +122,13 @@ change, each targeted command in its own process:
 | engine-settings test alone | 1 passed in 1.71s |
 | whole file, serial | 332 passed in 24.02s |
 
-**Full gate.** `bash scripts/check.sh` with the frontend leg: recorded below
-once run on this tip.
+**Full gate.** `bash scripts/check.sh` on `1256f08`, frontend leg included,
+exited 0: ruff, format, import-linter (4 contracts kept), task docs (102 work
+cards), prompt sync (390), strict mypy, then 10,321 Python tests passed with
+43 skipped and 3 xfailed in 1,326.71s on 4 workers under
+`-n auto --dist loadfile`, and the frontend's lint, typecheck, 695 vitest tests
+in 26 files and build. The figures are typed into this paragraph by the commit
+after the one the gate ran on, which is why that commit is docs-only.
 
 **Limitations.** This repairs the three spy users; it adds no gate that would
 catch the next test to patch `census.walk_replay` before reading the cache.
