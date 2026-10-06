@@ -8782,6 +8782,9 @@ def test_the_loader_bounds_since_the_previous_meeting_by_its_tick(
 ) -> None:
     """The loader hands each meeting its predecessor's tick, and 0 to the first."""
 
+    committed = next(
+        item for item in census_inputs(SAMPLES_9P2I).games if len(item.meetings) > 2
+    )
     seen: list[int] = []
     original = census.holds_nothing_check
 
@@ -8790,14 +8793,9 @@ def test_the_loader_bounds_since_the_previous_meeting_by_its_tick(
         return original(*args, since_tick=since_tick, **kwargs)
 
     monkeypatch.setattr(census, "holds_nothing_check", spy)
-    committed = next(
-        item for item in census_inputs(SAMPLES_9P2I).games if len(item.meetings) > 2
-    )
     events = census_walk_events(SAMPLES_9P2I, committed.seed)
     monkeypatch.setattr(census, "walk_replay", lambda *args, **kwargs: iter(events))
-    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(
-        SAMPLES_9P2I
-    )
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(SAMPLES_9P2I)
     loaded = census._load_game(
         Path("unused"),
         seed=committed.seed,

@@ -3616,8 +3616,9 @@ def _fold_kill_cadence(game: GameFacts, acc: _Accumulator) -> None:
     for meeting in game.meetings:
         if meeting.trigger_kind != "report":
             continue
-        reported = bodies.get(meeting.trigger_body or "")
-        if reported is None or reported.victim is None:
+        # The meeting fold has already refused a corpse that joins no kill.
+        reported = bodies[meeting.trigger_body or ""]
+        if reported.victim is None:
             joinable = False
             continue
         reports.setdefault(reported.victim, meeting)
@@ -3686,12 +3687,8 @@ def _fold_body_finders(game: GameFacts, acc: _Accumulator) -> None:
     previous_tick = -1
     for meeting in game.meetings:
         if meeting.trigger_kind == "report":
-            reported = bodies.get(meeting.trigger_body or "")
-            if reported is None:
-                raise ValueError(
-                    f"set {acc.label}, seed {game.seed}, meeting "
-                    f"{meeting.meeting_id}: the reported corpse joins to no kill"
-                )
+            # The meeting fold has already refused a corpse that joins no kill.
+            reported = bodies[meeting.trigger_body or ""]
             witnessed = any(
                 meeting.opener in kill.witnesses
                 for kill in game.kills
