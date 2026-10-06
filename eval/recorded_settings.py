@@ -6,8 +6,8 @@ layer it names in ``threaded_layers`` (:mod:`eval.replay_walk`). That is a
 statement about layers. An instrument reviewed for the wave also states, field
 by field, which recorded settings it reads: a subset of
 :data:`READABLE_SETTINGS`, the wave's eight fields plus the engine's
-task-redistribution rule and its recorded kill cooldown, under the first
-settings format.
+task-redistribution rule, its recorded kill cooldown and the ballot's route
+lines, under the first settings format.
 :func:`read_recorded_settings` wraps the instrument's walk and refuses every
 other recorded setting at the walk's first tick, before its first advance,
 naming the reader and the field. Why each named field is read, and why a field
@@ -34,13 +34,15 @@ from orchestrator.experiment_config import (
 )
 
 #: The most a reviewed instrument may read: the Stage-B wave's eight fields, the
-#: engine's task-redistribution rule and its recorded kill cooldown. Every other
-#: recorded setting, a settings format other than the first, and temporal
-#: delivery stay refused.
+#: engine's task-redistribution rule, its recorded kill cooldown and the ballot's
+#: route lines (``route_lines_version``, a guarded block of the vote prompt that
+#: no ballot parse reads). Every other recorded setting, a settings format other
+#: than the first, and temporal delivery stay refused.
 READABLE_SETTINGS: Final[frozenset[str]] = frozenset(
     {
         "redistribution_policy",
         "kill_cooldown_ticks",
+        "route_lines_version",
         "vent_witness_rule",
         "vent_exit_policy",
         "vent_entry_policy",

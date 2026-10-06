@@ -290,6 +290,21 @@ cited and nothing said), and `not_assessed` (the meeting itself set this vote,
 so there is no voter decision to assess)
 ([`meetings/manager.py`](../meetings/manager.py)).
 
+### route line (what the doors say about a player's stated places)
+
+One line of a ballot's `<routes>` block, served only under the recorded setting
+`route_lines_version`. For one living candidate whose places stated at the table
+change room, it lists each change the station's doors or the public regroup
+allow: the rooms and ticks, the doors between the rooms, and either that walking
+fits (the doors are at most the ticks between) or the regroup tick that falls
+between, which walking cannot decide. A change of room that neither allows is
+left out, so a line never says a move was impossible, and a candidate with no
+allowed change has no line. The line reads statements only, so a lie stated at
+the table yields a line as plain as an honest account; it is the same for every
+voter and every role, and it names, ranks and recommends no one
+([`meetings/route_lines.py`](../meetings/route_lines.py),
+[experiment arms](experiment-arms.md)).
+
 ---
 
 ## The machine-learning program

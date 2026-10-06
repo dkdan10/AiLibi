@@ -145,6 +145,7 @@ from jinja2 import nodes
 from llm.provider import ENV_PROVIDER, PROVIDER_FAKE
 from meetings.constants import ENV_TESTIMONY_SHAPES, testimony_shapes_enabled
 from meetings.corroboration import MeetingTestimonyLedger
+from meetings.route_lines import RouteLine
 from meetings.render_contract import (
     EvidenceRow,
     PromptRenderInputs,
@@ -1049,6 +1050,8 @@ def vote_ballot_prompt(
     voter_role: VoterRole | None = None,
     ballot_kill_row_version: Literal[1] | None = None,
     impostor_ballot_version: Literal[1] | None = None,
+    route_lines: tuple[RouteLine, ...] = (),
+    route_lines_version: Literal[1] | None = None,
 ) -> str:
     """Render a vote-ballot prompt (DESIGN.md §5.5).
 
@@ -1109,17 +1112,31 @@ def vote_ballot_prompt(
     spoke no kill.
 
     ``voter_role``, ``ballot_kill_row_version`` and ``impostor_ballot_version``
-    are the two ballot arms' render inputs, passed straight through: the manager
-    threads the voter's own role and the two values of its evidence profile at
-    every ballot render. The served ``qwen3_6_27b`` body reads them in guarded
+    are the kill-row and strategic-impostor arms' render inputs, passed straight
+    through: the manager threads the voter's own role and the two values of its
+    evidence profile at every ballot render. The served ``qwen3_6_27b`` body reads them in guarded
     blocks: ``ballot_kill_row_version`` rewords the suspicion header's
     partial-summary sentence (the ``own_kill`` rows themselves arrive in
     ``evidence_rows``), and ``impostor_ballot_version`` with an ``"IMPOSTOR"``
     role serves the strategic impostor persona, team block and citation
     paragraph, a sole impostor included. The defaults ``None`` render the
     committed bytes exactly, and every other set references none of the three.
+
+    ``route_lines`` and ``route_lines_version`` are the route-lines arm's render
+    inputs: the lines :func:`meetings.route_lines.build_route_lines` built for
+    this voter's candidates, and the evidence profile's value. The served
+    ``qwen3_6_27b`` body renders them in one guarded ``<routes>`` block between
+    the ``<map>`` card and ``<evidence>``, only while the version is set and a
+    line exists; lines handed over with the version ``None`` raise, since the
+    block would then be silently dropped. The defaults ``()`` and ``None``
+    render the committed bytes exactly, and every other set references neither.
     """
 
+    if route_lines and route_lines_version is None:
+        raise ValueError(
+            "route lines arrived with route_lines_version None: the ballot renders "
+            "them only while their version is set"
+        )
     inputs = _render_inputs_for(render_inputs, map_card=map_card)
     return (
         (environment or _ENV)
@@ -1147,6 +1164,8 @@ def vote_ballot_prompt(
             voter_role=voter_role,
             ballot_kill_row_version=ballot_kill_row_version,
             impostor_ballot_version=impostor_ballot_version,
+            route_lines=route_lines,
+            route_lines_version=route_lines_version,
         )
     )
 
@@ -1262,8 +1281,9 @@ def require_guarded_bodies(
     """Refuse an experiment arm for a set whose served bodies never read its variable.
 
     An experiment arm re-bodies a set's own templates with guarded blocks read
-    off one render variable (the ballot arms read ``ballot_kill_row_version`` and
-    ``impostor_ballot_version``), and its stamp is folded for any registered set.
+    off one render variable (the ballot arms read ``ballot_kill_row_version``,
+    ``impostor_ballot_version`` and ``route_lines_version``), and its stamp is
+    folded for any registered set.
     A set whose body carries no live ``{% if %}`` on that variable would record
     the arm's stamp over bytes the arm never shaped, so a runner refuses it at
     construction. The test is the one :func:`_require_testimony_shapes_bodies`

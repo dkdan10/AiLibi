@@ -81,7 +81,8 @@ _REPO = Path(__file__).resolve().parents[2]
 _SET = "qwen3_6_27b"
 
 #: The eight fields of the wave's version plan (decision memo section 3.3),
-#: and the kill cooldown its balance round added (section 7).
+#: the kill cooldown its balance round added (section 7) and the route lines
+#: round 3 adds (section 8.2 item 2).
 _WAVE_FIELDS: tuple[str, ...] = (
     "vent_witness_rule",
     "vent_exit_policy",
@@ -92,6 +93,7 @@ _WAVE_FIELDS: tuple[str, ...] = (
     "ballot_kill_row_version",
     "impostor_ballot_version",
     "kill_cooldown_ticks",
+    "route_lines_version",
 )
 
 #: How the contract page spells an integer field's values beside ``none``.
@@ -602,6 +604,7 @@ def test_the_ballot_fields_are_config_only() -> None:
     assert CONFIG_ONLY_PROFILE_FIELDS == (
         "ballot_kill_row_version",
         "impostor_ballot_version",
+        "route_lines_version",
     )
     switched = set(EXPERIMENT_ENV_NAMES.values())
     assert not switched & set(CONFIG_ONLY_PROFILE_FIELDS)
@@ -616,6 +619,8 @@ _ENV_NAMES = [
     "AILIBI_IMPOSTOR_BALLOT_VERSION",
     "AILIBI_BALLOT_KILL_ROW",
     "AILIBI_IMPOSTOR_BALLOT",
+    "AILIBI_ROUTE_LINES",
+    "AILIBI_ROUTE_LINES_VERSION",
 ]
 
 

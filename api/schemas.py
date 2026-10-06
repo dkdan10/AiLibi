@@ -1456,6 +1456,7 @@ class ExperimentConfigView(_FrozenView):
     ballot_kill_row_version: Literal[1] | None = None
     impostor_ballot_version: Literal[1] | None = None
     kill_cooldown_ticks: int | None = None
+    route_lines_version: Literal[1] | None = None
 
 
 class TacticalPolicyView(_FrozenView):

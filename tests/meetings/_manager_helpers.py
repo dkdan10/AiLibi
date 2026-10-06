@@ -41,6 +41,7 @@ from meetings.manager import (
     ReporterContext,
     SuspicionEntry,
 )
+from meetings.route_lines import RouteLine
 from meetings.schemas import (
     AccusationClaim,
     Claim,
@@ -188,6 +189,8 @@ def _vote_prompt(
     voter_role: VoterRole | None = None,
     ballot_kill_row_version: Literal[1] | None = None,
     impostor_ballot_version: Literal[1] | None = None,
+    route_lines: tuple[RouteLine, ...] = (),
+    route_lines_version: Literal[1] | None = None,
 ) -> str:
     # ``reporter_id`` (Task 15.5) conforms to the widened VotePromptRenderer
     # contract; surfaced only when supplied so a lever-OFF (``None``) render is

@@ -41,6 +41,7 @@ from agents.memory.beliefs import (
 )
 from meetings.corroboration import MeetingTestimonyLedger
 from meetings.render_contract import EvidenceRow, VoterRole
+from meetings.route_lines import RouteLine
 from meetings.schemas import AlibiClaim as SchemaAlibiClaim
 from meetings.schemas import AlibiSegment
 from meetings.schemas import ContradictionRef as MeetingContradictionRef
@@ -3360,6 +3361,8 @@ class TestSelfRefutedAlibiDowngrade:
             voter_role: VoterRole | None = None,
             ballot_kill_row_version: Literal[1] | None = None,
             impostor_ballot_version: Literal[1] | None = None,
+            route_lines: tuple[RouteLine, ...] = (),
+            route_lines_version: Literal[1] | None = None,
         ) -> str:
             captured[voter_id] = suspicion_graph
             return "cast your ballot"
