@@ -157,6 +157,14 @@ card imports them, never copies them.
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
+- [x] Review correction: the SKIP half of the holds-nothing guard is enforced. A committed `none_held` SKIP
+  retargeted to a living player carries no check, through `holds_nothing_check` and through the loader's
+  `_meeting_fact`, and the guard follows the `SKIP_TARGET` it reads
+  (`test_an_eject_labelled_as_holding_nothing_is_never_checked`; mutants H1 to H4 red).
+- [x] Review correction: the cited placement rows follow their types. `CheckedPlacementKind` gaining a member
+  lists that kind's every verdict row and its edge row at zero, and `PlacementVerdict` gaining a member lists a
+  row of it for every kind (`test_the_cited_placement_rows_follow_the_kind_type` and
+  `test_the_cited_placement_rows_follow_the_verdict_type`; mutants V1 and V2 red).
 - [x] **1. The checked holds-nothing label.**
   - Mechanism: the loader keeps one `bool` per `none_held` SKIP. Its source is the voter's recorded ballot call at
     that meeting: the voter's last call whose response validates as a `VoteBallot`. A `none_held` SKIP with no such
@@ -1050,3 +1058,73 @@ Measured at `0128fc46`, except where a row names `b53d4fb1`. `b53d4fb1` changes 
   reads as "nothing resolves", and it does not judge whether a held line resolves the vote.
 - The placement reader is census-local until phase 2 swaps in the field's.
 - In a shallow clone the drift check also fails on a changed non-recording file beside the recordings.
+
+### Review corrections, round 1 (2026-10-06)
+
+Two blocking findings of the round-1 verifiers on phase 1 (head `99e07d55`), both surviving mutants of the listed
+classes. Each is repaired with a planted case in `tests/eval/test_gameplay_census.py`; no production line moves, so
+every count, the committed census, the scorecard and the demo bundle are unchanged.
+
+1. **The SKIP half of the holds-nothing guard was unenforced** (correctness lens). `holds_nothing_check` returns
+   `None` unless the ballot is a SKIP labelled `none_held`. The ballot schema admits a `none_held` EJECT and no
+   committed set holds one, so replacing `ballot.target != SKIP_TARGET` with `ballot.target is None`, or dropping
+   that disjunct, left both suites green (457 passed). Planted:
+   `test_an_eject_labelled_as_holding_nothing_is_never_checked` takes the first committed `none_held` SKIP of
+   `samples/4p1i` (the `_ballot_meeting` helper), retargets it to the first player, in sorted id order, living at the open other
+   than the voter, and requires `None` from `holds_nothing_check` and `held_sources is None` on the loader's ballot
+   fact from `_meeting_fact`, while the untouched SKIP still carries the check. The guard's `SKIP_TARGET` is a constant
+   read from `meetings.voting` (lesson 9), so the same test then moves `census.SKIP_TARGET` to that player and
+   requires the check to follow: the SKIP is no longer checked and the retargeted ballot is.
+2. **The cited placement rows read from their types had no source-change case** (integrity lens).
+   `checked_placement_kinds()` and `placement_verdicts()` read `get_args` of `CheckedPlacementKind` and
+   `PlacementVerdict`; swapping either for its canonical literal tuple left both suites green, because the only test
+   of the rows compared the table against the same two functions. Planted, shaped like
+   `test_the_source_rows_follow_their_type`: `test_the_cited_placement_rows_follow_the_kind_type` gives
+   `CheckedPlacementKind` a fifth member and requires every verdict row of it and its edge row, at zero, in
+   `cited_placements_by_kind_and_verdict` over a game with nothing to count;
+   `test_the_cited_placement_rows_follow_the_verdict_type` gives `PlacementVerdict` a fourth member and requires a
+   zero row of it for every kind.
+
+**The bounded mutation pass over the spans this round touches and the findings name** (lesson 10; harness
+`<scratch>/census-fix-r1/mutate.py`: edit `eval/gameplay_census.py`, run `tests/eval/test_gameplay_census.py` and
+`tests/scripts/test_publish_gameplay_census.py` with `-n 6`, restore from a saved copy; unmutated, 460 passed). 12
+mutants of the listed classes: 12 killed, 0 equivalent. H1, V1 and V2 are the verifiers' survivors at `99e07d55`; H1,
+H2, H4, V1 and V2 are killed only by this round's tests, so each came back green before it. The pass then stopped.
+
+| mutant | class | result | test that went red |
+|---|---|---|---|
+| `H1` guard `ballot.target != SKIP_TARGET` to `ballot.target is None` | None test | killed (was green) | `test_an_eject_labelled_as_holding_nothing_is_never_checked` |
+| `H2` guard drops the SKIP disjunct | drop a filter | killed (was green) | `test_an_eject_labelled_as_holding_nothing_is_never_checked` |
+| `H3` guard `!= SKIP_TARGET` to `== SKIP_TARGET` | inverse comparison | killed, 11 red | `test_the_loader_reads_the_voters_last_validating_ballot_call` among them |
+| `H4` guard `SKIP_TARGET` to the literal `'SKIP'` | canonical literal | killed (was green) | `test_an_eject_labelled_as_holding_nothing_is_never_checked` |
+| `H5` guard label `!= HOLDS_NOTHING_LABEL` to `is None` | None test | killed, 16 red | `test_the_loader_checks_the_label_its_constant_names` among them |
+| `H6` guard drops the label disjunct | drop a filter | killed, 16 red | `test_the_committed_census_matches_a_recomputation` among them |
+| `V1` `get_args(CheckedPlacementKind)` to the four-kind literal | canonical literal | killed (was green) | `test_the_cited_placement_rows_follow_the_kind_type` |
+| `V2` `get_args(PlacementVerdict)` to the three-verdict literal | canonical literal | killed (was green) | `test_the_cited_placement_rows_follow_the_verdict_type` |
+| `V3` the zero rows drop `EDGE_VERDICT` | drop a tuple member | killed, 6 red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` among them |
+| `V4` the zero rows drop the last verdict | drop a tuple member | killed, 7 red | `test_the_cited_placement_rows_follow_the_verdict_type` among them |
+| `V5` the zero rows drop the last kind | drop a tuple member | killed, 7 red | `test_the_cited_placement_rows_follow_the_kind_type` among them |
+| `V6` the zero row's kind to the constant `saw_player` | message constant | killed, 7 red | `test_the_cited_line_cells_count_true_false_and_mixed_ballots` among them |
+
+**Verification at the fix head.** Measured on the fix commit; this round changes only
+`tests/eval/test_gameplay_census.py` and this card, so no recorded, published or hashed byte moves and no
+`docs/artifacts.md` row is recomputed.
+
+| command | exit | result |
+|---|---|---|
+| `env \| grep -c '^AILIBI_'` | - | 0 |
+| `uv run pytest tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py tests/experiments/test_route_check_replay.py -n 6 --dist loadfile` | 0 | 603 passed (600 before, plus this round's three) |
+| `uv run pytest tests/eval/test_evidence_honesty.py -n 6 --dist loadfile` | 0 | 114 passed |
+| `uv run python -m experiments.lab.route_check_replay --check` (full clone) | 0 | reproduced, 54.8 s |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/candidates/stage-b-r1/9p2i --json-stdout` | 0 | the r1 column, unchanged |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | 63 checks, 51 OK, 0 FAIL, 7 evidence-branch absent, 5 info |
+| `uv run lint-imports` | 0 | 4 kept, 0 broken |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 phase tasks and prompts; 101 work cards |
+| `uv run python scripts/check_doc_facts.py` | 0 | every checked figure true |
+| `uv run mypy tests/eval/test_gameplay_census.py`; `uv run ruff check` and `ruff format --check` on it | 0 | clean |
+| `git diff --stat origin/main -- replays/ docs/process-scorecard.md docs/process-scorecard.json experiments/lab/results-route-check-replay.json experiments/lab/report-route-check-replay.md` | - | empty |
+| `bash scripts/verify_samples.sh replays/<set>`, for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
+| `uv run pytest -m campaign -n 6` | 0 | 337 passed |

@@ -8682,6 +8682,53 @@ def test_the_source_rows_follow_their_type(monkeypatch: pytest.MonkeyPatch) -> N
     }
 
 
+def _zero_kind_and_verdict_rows() -> dict[str, int]:
+    rows = table("cited_placements_by_kind_and_verdict", game())
+    assert set(rows.values()) == {0}
+    return rows
+
+
+def test_the_cited_placement_rows_follow_the_kind_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the checked placement kind type gains a member; every verdict
+    row of it, the edge row among them, is listed at zero."""
+
+    assert census.checked_placement_kinds() == get_args(census.CheckedPlacementKind)
+    monkeypatch.setattr(
+        census,
+        "CheckedPlacementKind",
+        typing.Literal["saw_player", "company", "saw_move", "whereabouts", "heard"],
+    )
+    kinds: tuple[str, ...] = census.checked_placement_kinds()
+    assert kinds[-1] == "heard"
+    rows = _zero_kind_and_verdict_rows()
+    assert {row for row in rows if row.startswith("heard: ")} == {
+        f"heard: {result}"
+        for result in (*get_args(census.PlacementVerdict), census.EDGE_VERDICT)
+    }
+
+
+def test_the_cited_placement_rows_follow_the_verdict_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the placement verdict type gains a member; every kind lists a
+    row of it at zero."""
+
+    assert census.placement_verdicts() == get_args(census.PlacementVerdict)
+    monkeypatch.setattr(
+        census,
+        "PlacementVerdict",
+        typing.Literal["true", "false", "unverifiable", "contested"],
+    )
+    verdicts: tuple[str, ...] = census.placement_verdicts()
+    assert verdicts[-1] == "contested"
+    rows = _zero_kind_and_verdict_rows()
+    assert {row for row in rows if row.endswith(": contested")} == {
+        f"{kind}: contested" for kind in get_args(census.CheckedPlacementKind)
+    }
+
+
 def _ballot_meeting() -> tuple[MeetingOpened, MeetingApplied, int]:
     """A committed meeting holding a holds-nothing SKIP, and that ballot's index."""
 
@@ -8825,6 +8872,51 @@ def test_the_loader_checks_the_label_its_constant_names(
     assert check(cast) is not None and check(relabelled) is None
     monkeypatch.setattr(census, "HOLDS_NOTHING_LABEL", "supported")
     assert check(cast) is None and check(relabelled) is not None
+
+
+def test_an_eject_labelled_as_holding_nothing_is_never_checked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: a committed holds-nothing SKIP is retargeted to a living player;
+    the check, and the loader's ballot fact, carry no holds-nothing check for it.
+    Then the SKIP target the check reads moves to that player, and the check
+    follows it.
+
+    The ballot schema admits an EJECT with this label, so only the SKIP half of
+    the guard keeps it out.
+    """
+
+    opened, applied, index = _ballot_meeting()
+    cast = opened.entry.ballots[index]
+    living = sorted(
+        pid
+        for pid, player in opened.state.players.items()
+        if player.alive and pid != cast.voter
+    )
+    eject = cast.model_copy(update={"target": living[0]})
+    assert eject.grounding_label == census.HOLDS_NOTHING_LABEL
+
+    def check(item: Any) -> frozenset[str] | None:
+        return census.holds_nothing_check(
+            opened.entry,
+            item,
+            living=frozenset(living),
+            since_tick=0,
+            where="here",
+        )
+
+    assert check(cast) is not None
+    assert check(eject) is None
+    ballots = list(opened.entry.ballots)
+    ballots[index] = eject
+    entry = opened.entry.model_copy(update={"ballots": tuple(ballots)})
+    fact = census._meeting_fact(
+        replace(opened, entry=entry), applied, regroup_recorded=False
+    )
+    assert fact.ballots[index].target == living[0]
+    assert fact.ballots[index].held_sources is None
+    monkeypatch.setattr(census, "SKIP_TARGET", living[0])
+    assert check(cast) is None and check(eject) is not None
 
 
 def test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter() -> None:
