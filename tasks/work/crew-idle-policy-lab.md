@@ -1325,3 +1325,12 @@ carries this subsection.
   pick, so it stays open, and the orchestrator is told so.
 - The card's **Status** line reads `ready`. It belongs to the orchestrator on `main` (Constraints), so it is not
   changed here.
+
+**Task docs, the bundle and the full gate, round 2.** The following ran at `87f256f6`:
+- `scripts/validate_task_docs.py` exited 0 ("390 historical phase tasks and 390 prompts; 101 work cards").
+- `scripts/check_doc_facts.py` exited 0.
+- The demo bundle was built in this one worktree at `83806ab0` (the base, `main`) and at `87f256f6`
+  (`scripts/build_demo_bundle.py --out <scratch>`). `diff -r` prints nothing over 109 files, so nothing ships.
+
+`bash scripts/check.sh` runs once at the head that carries this paragraph. Its exit code is recorded in the next
+commit.
