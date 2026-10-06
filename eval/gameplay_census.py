@@ -14,10 +14,11 @@ Count-only, with zero model calls
 :func:`load_census_inputs` walks one replay set through the engine and keeps
 ids, rooms, ticks, kinds, labels, recorded dispositions, plain recorded setting
 values and booleans it computes itself. A recorded prompt is read inside the
-loader only to compute such a boolean or an id (the kill-tick body handle in an
-opening; a served own-kill ballot row; whether a prompt after a regroup carries
-every earlier regroup's notice), and no prompt, speech or rationale text
-leaves it. :func:`fold_set` is a pure fold over that carrier, so every cell is
+loader only to compute such a boolean, an id or a place name (the kill-tick body
+handle in an opening; a served own-kill ballot row; whether a prompt after a
+regroup carries every earlier regroup's notice; the places a holds-nothing
+SKIP's own ballot prompt names a living candidate), and no prompt, speech or
+rationale text leaves it. :func:`fold_set` is a pure fold over that carrier, so every cell is
 plantable from a hand-built :class:`CensusInputs` with no replay on disk, and
 :func:`pool` adds counts and recomputes each rate from the pooled numerator and
 denominator.
@@ -81,6 +82,23 @@ scope. On a walked recording that denominator is empty in every other era: the
 loader marks a meeting regrouped only under the recorded regroup reset, and at
 the historical rebuttal setting the fold raises on any rebuttal.
 
+What a ballot held, and the shape of a game
+-------------------------------------------
+Two checks read a ballot against data, never against a role. The holds-nothing
+check reads a SKIP labelled ``none_held`` against its voter's own recorded
+ballot prompt: whether an observation row, an open contradiction, an evidence
+row or a typed or spoken turn line names a living candidate, by whole token.
+The blocks and memory sections it reads and skips are classified tables pinned
+to the templates and the memory renderer, and an unclassified one raises. The
+cited-line check reads every placement of a supported EJECT's target in its
+cited turn against the honesty instrument's route, each kind at that
+instrument's own clock (:data:`PLACEMENT_WINDOWS`), through its own comparison,
+and an edge row shows the placements a clock one tick earlier would turn true.
+The game-shape tables describe each game's ending, kill cadence, closeness at
+game over, sabotages, body finders and pairs of players, all role-blind. None of
+these is a gate, and none feeds back to an agent: a line held is not a reason to
+vote, and a true cited line is not a correct vote.
+
 The recorded tally
 ------------------
 Every meeting's recorded ballots are re-tallied by the game's own function,
@@ -99,13 +117,13 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Literal, TypeAlias, get_args
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from agents.tactical.crewmate_policy import EMERGENCY_COOLDOWN_TICKS
 from engine.entities import PlayerId, Role, RoomId
@@ -117,10 +135,12 @@ from engine.events import (
     VentEnteredEvent,
     VentExitedEvent,
 )
+from engine.win_conditions import WinResultType
 from engine.world import Map, WorldState, load_canonical_map, resolve_kill_cooldown
 from eval.balance_eval import _CURRENT_REPORT_WALK_CONFIG
 from eval.eras import COMMITTED_SETS as REGISTERED_SETS
 from eval.eras import CommittedSet, era_groups
+from eval.evidence_honesty import _contradicts
 from eval.process_scorecard import AGENT_CLOCK_OFFSET
 from eval.replay_walk import (
     MeetingApplied,
@@ -140,13 +160,19 @@ from meetings.schemas import (
     MeetingOutcome,
     MeetingTranscript,
     MeetingTurn,
+    SawMoveObservation,
+    SawPlayerObservation,
     TaskActivityAccount,
     VoteBallot,
+    WhereaboutsClaim,
 )
+from meetings.transcript import canonical_rooms
 from meetings.voting import SKIP_TARGET, tally_ballots
 from orchestrator.experiment_config import ConfigLayer, RecordedExperimentConfig
 from orchestrator.replay import (
     GameEndReplayEntry,
+    GameStopReason,
+    LLMCallRecord,
     MeetingReplayEntry,
     ReplayLogEntry,
     WinnerSide,
@@ -272,6 +298,140 @@ HOLDS_NOTHING_LABEL: Final[BallotGroundingLabel] = "none_held"
 
 #: The row of a ballot recorded before the meeting layer labelled ballots.
 UNLABELLED: Final[str] = "unlabelled"
+
+#: Where a holds-nothing SKIP's own ballot prompt can name a living candidate:
+#: the places the holds-nothing check reads, each a row of its table.
+HeldSource: TypeAlias = Literal[
+    "an observation row",
+    "an observation row perceived since the previous meeting",
+    "an evidence row",
+    "a flag",
+    "a typed turn line",
+    "a spoken turn line",
+]
+
+#: The ballot prompt's top-level blocks the holds-nothing check reads.
+#: ``tests/eval/test_gameplay_census.py`` pins these and
+#: :data:`UNREAD_BALLOT_BLOCKS` to every top-level tag the ``vote_ballot*.j2``
+#: templates render, and the loader raises on a recorded prompt carrying a tag
+#: in neither.
+READ_BALLOT_BLOCKS: Final[frozenset[str]] = frozenset(
+    {"memory", "transcript", "contradictions", "evidence"}
+)
+
+#: The ballot prompt's top-level blocks the check never reads: they name the
+#: voter, list every candidate, or state who backed whom.
+UNREAD_BALLOT_BLOCKS: Final[frozenset[str]] = frozenset(
+    {"persona", "voice", "testimony_sources", "map", "output_format"}
+)
+
+#: The rendered memory's sections, by the text before a heading's first colon,
+#: with the place each one is read as, or ``None`` for a section the check
+#: never reads (the beliefs section names every living player). A test pins the
+#: keys to every heading :mod:`agents.memory.store` can render, and the loader
+#: raises on a heading in no row.
+MEMORY_SECTIONS: Final[Mapping[str, HeldSource | None]] = MappingProxyType(
+    {
+        "## Your role": None,
+        "## Tasks completed (global)": None,
+        "## Meetings so far": None,
+        "## Where you were": None,
+        "## Recent observations (most salient first)": "an observation row",
+        "## Your current beliefs": None,
+        "## Open contradictions": "a flag",
+    }
+)
+
+#: A top-level block's opening or closing tag, alone on its line.
+_BLOCK_TAG_RE: Final[re.Pattern[str]] = re.compile(r"^<(/?)([a-z_]+)>$")
+
+#: A transcript turn's header line: its id, index, kind and speaker.
+_TURN_HEADER_RE: Final[re.Pattern[str]] = re.compile(r"^- \[[^\]\n]+\] turn \d+ \(")
+
+#: A player id standing as a whole token: never inside a longer id
+#: (``p-1`` in ``p-10``) or a body handle (``body-p-5-12``).
+_PLAYER_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"(?<![\w-])p-\d+(?!\w)")
+
+#: An observation row's id tag, ``[obs {agent}:{tick}:{seq}]``.
+_OBSERVATION_TAG_RE: Final[re.Pattern[str]] = re.compile(
+    r"\[obs p-\d+:(?P<tick>\d+):\d+\]"
+)
+
+#: The spoken placements whose truth the cited-line check reads.
+CheckedPlacementKind: TypeAlias = Literal[
+    "saw_player", "company", "saw_move", "whereabouts"
+]
+
+#: Which engine frame a clock reads: ``settled`` is the state after a tick's
+#: actions, a meeting's tick read from its applied state; ``resolved`` is the
+#: state after the tick's actions before any meeting applied.
+RouteFrame: TypeAlias = Literal["settled", "resolved"]
+
+#: Each placement kind's clock: the frames, and how many ticks before the
+#: spoken tick, its truth is read at. These are the honesty instrument's two
+#: clocks (:mod:`eval.evidence_honesty`): a whereabouts claim for tick N at N and
+#: N-1, I-2's window; a sighting stamped at agent tick T at T-1, settled for a
+#: state-read sighting or resolved for an action-stamped one, and at T-2 for an
+#: action-stamped one, the window its clock alignment holds every recorded
+#: sighting to. A spoken sighting does not say which of the two it was.
+PLACEMENT_WINDOWS: Final[
+    Mapping[CheckedPlacementKind, tuple[tuple[RouteFrame, int], ...]]
+] = MappingProxyType(
+    {
+        "whereabouts": (("settled", 0), ("settled", 1)),
+        "saw_player": (("settled", 1), ("resolved", 1), ("settled", 2)),
+        "company": (("settled", 1), ("resolved", 1), ("settled", 2)),
+        "saw_move": (("settled", 1), ("resolved", 1), ("settled", 2)),
+    }
+)
+
+#: What the route makes of one cited placement.
+PlacementVerdict: TypeAlias = Literal["true", "false", "unverifiable"]
+
+#: The edge row of the cited placements table: false in its kind's window and
+#: true on the settled frame one tick before the window's earliest tick.
+EDGE_VERDICT: Final[str] = "false, but true one tick before its window"
+
+#: Why a supported EJECT's cited line could not be checked, each a row.
+NOT_CHECKABLE_REASONS: Final[tuple[str, str, str]] = (
+    "it cites no turn, only the voter's own observation",
+    "the cited turn places the target nowhere checkable",
+    "every cited placement is unverifiable",
+)
+
+#: The ending a task win records; the type checker holds it to the engine's
+#: vocabulary.
+TASK_WIN: Final[WinResultType] = "CREWMATE_TASKS"
+
+#: Tick-gap buckets: each label with the most ticks it holds, in order; a gap
+#: past the last lands in :data:`LONG_GAP`.
+TICK_GAP_BUCKETS: Final[tuple[tuple[str, int], ...]] = (
+    ("the same tick", 0),
+    ("1 to 2 ticks", 2),
+    ("3 to 5 ticks", 5),
+    ("6 to 10 ticks", 10),
+    ("11 to 20 ticks", 20),
+)
+LONG_GAP: Final[str] = "more than 20 ticks"
+
+#: The kill-to-report row of a kill whose body no meeting reported.
+NEVER_REPORTED: Final[str] = "its body never reported"
+
+#: Share buckets: each label with the largest share it holds, as a numerator
+#: over :data:`SHARE_QUARTERS`, in order.
+SHARE_QUARTERS: Final[int] = 4
+SHARE_BUCKETS: Final[tuple[tuple[str, int], ...]] = (
+    ("none", 0),
+    ("up to a quarter", 1),
+    ("up to a half", 2),
+    ("up to three quarters", 3),
+    ("more than three quarters", 4),
+)
+
+#: Who opened a report meeting: a witness of some kill since the previous
+#: meeting (or the game's start), or any other player.
+_OPENER_WITNESS: Final[str] = "opened by a witness of a kill since the last meeting"
+_OPENER_OTHER: Final[str] = "opened by another player"
 
 #: How many living crew witnesses a held kill had at the next meeting.
 _WITNESS_BANDS: Final[tuple[str, str]] = (
@@ -489,7 +649,7 @@ FIELD_CLASSIFICATION: Final[Mapping[str, FieldUse]] = MappingProxyType(
     {
         "format_version": _not_read("a serialization version, not a game rule"),
         "redistribution_policy": _not_read(
-            "decides who inherits a dead crewmate's tasks; no cell counts tasks"
+            "decides who inherits a dead crewmate's tasks; no cell is forced by it"
         ),
         "meeting_reset": FieldUse(predicates=("meeting_regroup",)),
         "crew_idle_policy": _not_read("moves idle crewmates; no cell is forced by it"),
@@ -656,10 +816,14 @@ def resolve_era(keys: Sequence[EraKey]) -> EraKey:
 
 @dataclass(frozen=True)
 class KillFact:
+    """One kill. ``victim`` is the ``KilledEvent``'s target; the loader always
+    fills it, and a hand-built kill without one joins no body."""
+
     tick: int
     killer: PlayerId
     room: RoomId
     witnesses: frozenset[PlayerId]
+    victim: PlayerId | None = None
 
 
 @dataclass(frozen=True)
@@ -680,11 +844,14 @@ class BodyFact:
     """A corpse, joined to its victim's kill on the tick the corpse first appeared.
 
     ``kill_tick`` comes from that ``KilledEvent``; the body id is an opaque key
-    here and is never parsed.
+    here and is never parsed. ``victim`` is the body's own player id, so a body
+    joins its kill by victim even when two kills share a tick; the loader always
+    fills it.
     """
 
     body_id: str
     kill_tick: int
+    victim: PlayerId | None = None
 
 
 @dataclass(frozen=True)
@@ -717,7 +884,26 @@ class AlibiFact:
 
 
 @dataclass(frozen=True)
+class PlacementFact:
+    """One spoken placement of ``player`` in a turn: when, where, and its kind.
+
+    A sighting places its subject, and its company each by a placement of their
+    own; a movement sighting places its subject at the room it arrived in; a
+    whereabouts claim places its speaker. ``rooms`` is the label's canonical
+    room set, and a label with no canonical room places nobody.
+    """
+
+    player: PlayerId
+    tick: int
+    rooms: frozenset[RoomId]
+    kind: CheckedPlacementKind
+
+
+@dataclass(frozen=True)
 class TurnFact:
+    """One recorded turn. ``placements`` are its spoken placements of the
+    checked kinds; the loader fills them, and a hand-built turn holds none."""
+
     turn_id: str
     index: int
     speaker: PlayerId
@@ -725,6 +911,7 @@ class TurnFact:
     accusations: tuple[PlayerId, ...]
     observations: tuple[ObservationFact, ...]
     alibis: tuple[AlibiFact, ...]
+    placements: tuple[PlacementFact, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -736,6 +923,10 @@ class BallotFact:
     and ``None`` for a ballot that never parsed. ``primary_reason_id`` is the
     turn the ballot cites and ``counter_reason_id`` its counter slot, each a
     recorded id or ``None``; a hand-built ballot without them cites nothing.
+    ``held_sources`` is set by the loader on every SKIP labelled as holding
+    nothing: the places in the voter's own recorded ballot prompt that name a
+    living candidate, empty when none does. It is ``None`` on every other ballot
+    and on a hand-built ballot that does not set it.
     """
 
     voter: PlayerId
@@ -746,6 +937,7 @@ class BallotFact:
     cited_observation_id: str | None
     primary_reason_id: str | None = None
     counter_reason_id: str | None = None
+    held_sources: frozenset[HeldSource] | None = None
 
 
 @dataclass(frozen=True)
@@ -849,6 +1041,22 @@ class GameFacts:
     #: Every impostor's kill cooldown after each engine write of it. The loader
     #: fills it; a hand-built carrier without writes checks none.
     cooldown_writes: tuple[CooldownWrite, ...] = ()
+    #: The recorded reason the game ended, ``None`` without a recorded ending.
+    end_reason: str | None = None
+    #: The completed and the total task instances on the final state, each
+    #: ``None`` on a hand-built carrier that does not set it.
+    final_tasks_completed: int | None = None
+    final_tasks_total: int | None = None
+    #: The honesty instrument's route: every player's room on the settled frame
+    #: after each tick (a meeting's tick read from its applied state), and on
+    #: the frame its actions resolved in. The loader fills both; a hand-built
+    #: carrier without them verifies no placement.
+    settled_rooms: Mapping[int, Mapping[PlayerId, RoomId]] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    resolved_rooms: Mapping[int, Mapping[PlayerId, RoomId]] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
 
 @dataclass(frozen=True)
@@ -922,6 +1130,8 @@ _COOLDOWN: Final[str] = "The kill cooldown"
 _STRUCTURE: Final[str] = "Meeting structure"
 _REBUTTALS: Final[str] = "Rebuttals"
 _BALLOTS: Final[str] = "Ballots"
+_HELD: Final[str] = "What a ballot held"
+_SHAPE: Final[str] = "The shape of a game"
 _BESIDE: Final[str] = "Reported beside the counts"
 
 #: The published order of the headings.
@@ -936,10 +1146,23 @@ HEADINGS: Final[tuple[str, ...]] = (
     _STRUCTURE,
     _REBUTTALS,
     _BALLOTS,
+    _HELD,
+    _SHAPE,
     _BESIDE,
 )
 
 _KILL: Final = ("Killed",)
+_HELD_PROMPT_READS: Final = (
+    "meeting row ballots",
+    "recorded ballot prompt",
+    "state at the meeting",
+)
+_CITED_LINE_READS: Final = (
+    "meeting row ballots",
+    "meeting row turns",
+    "state after the tick",
+    "state after the meeting",
+)
 _VENTS: Final = ("VentEntered", "VentExited")
 _MEETING_ROW: Final = ("meeting row",)
 _SEAT_READS: Final = (
@@ -1590,8 +1813,56 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             "SKIP ballots, whatever the voter's role, whose recorded grounding label "
             "says the voter stated outright that it held nothing that resolves the "
             "vote, over all SKIP ballots. The label restates the voter's own "
-            "statement; it is not a checked fact.",
+            "statement, and the holds-nothing check reads it against the lines "
+            "the voter's own ballot prompt held.",
             ("meeting row ballots",),
+        ),
+        "holds_nothing_skips_naming_no_candidate": CellSpec(
+            "Holds-nothing SKIPs whose prompt names no living candidate",
+            _HELD,
+            "SKIP ballots labelled as holding nothing, whatever the voter's role, "
+            "whose voter's own recorded ballot prompt names no living candidate in "
+            "an observation row, an evidence row, a flag or a typed or spoken turn "
+            "line, over all SKIP ballots labelled as holding nothing. The label "
+            "reads as nothing that resolves the vote, not as nothing held, and a "
+            "line held is not a reason to vote.",
+            _HELD_PROMPT_READS,
+        ),
+        "holds_nothing_skips_naming_a_candidate": CellSpec(
+            "Holds-nothing SKIPs whose prompt names a living candidate",
+            _HELD,
+            "SKIP ballots labelled as holding nothing, whatever the voter's role, "
+            "whose voter's own recorded ballot prompt names a living candidate in "
+            "at least one of those places, over all SKIP ballots labelled as "
+            "holding nothing: the complement of the cell above. A line held is not "
+            "a reason to vote.",
+            _HELD_PROMPT_READS,
+        ),
+        "cited_lines_true_to_the_route": CellSpec(
+            "Supported EJECTs whose cited line the route makes true",
+            _HELD,
+            "EJECT ballots labelled supported, whatever the voter's role, whose "
+            "every checkable placement of the target in the cited turn the engine "
+            "route makes true, over supported EJECTs whose cited turn places the "
+            "target checkably. A true cited line is not a correct vote.",
+            _CITED_LINE_READS,
+        ),
+        "cited_lines_false_to_the_route": CellSpec(
+            "Supported EJECTs whose cited line the route makes false",
+            _HELD,
+            "EJECT ballots labelled supported, whatever the voter's role, with at "
+            "least one placement of the target in the cited turn the engine route "
+            "makes false, over supported EJECTs whose cited turn places the target "
+            "checkably. A voter who believed a false line still held it.",
+            _CITED_LINE_READS,
+        ),
+        "task_wins_with_sabotage_in_play": CellSpec(
+            "Task wins in games with a sabotage in play",
+            _SHAPE,
+            "Games the crew won on tasks in which a sabotage was active before at "
+            "least one play tick, over games the crew won on tasks. This counts "
+            "co-occurrence and measures no delay.",
+            ("game over row", "state before the tick"),
         ),
         "impostor_wins": CellSpec(
             "Games the impostors won",
@@ -1702,6 +1973,111 @@ TABLES: Final[Mapping[str, TableSpec]] = MappingProxyType(
             "meeting layer can write is listed, and unlabelled counts a ballot "
             "recorded before ballots were labelled.",
             ("meeting row ballots",),
+        ),
+        "holds_nothing_skips_by_source": TableSpec(
+            "Where a holds-nothing SKIP's prompt names a living candidate",
+            _HELD,
+            "SKIP ballots labelled as holding nothing, by each place in the voter's "
+            "own recorded ballot prompt that names a living candidate: an "
+            "observation row; an observation row whose id was perceived after the "
+            "previous meeting (after the game began, at its first meeting); an "
+            "evidence row; a flag; a typed turn line; a spoken turn line. One SKIP "
+            "can name a candidate in several places, so the rows overlap and do not "
+            "add up to the cell. Every place is listed.",
+            _HELD_PROMPT_READS,
+        ),
+        "cited_placements_by_kind_and_verdict": TableSpec(
+            "Cited placements of the target, by kind and by what the route makes "
+            "of them",
+            _HELD,
+            "Every placement of the target in the cited turn of a supported EJECT, "
+            "by its kind and by whether the engine route makes it true or false at "
+            "its kind's own clock, or cannot verify it. A whereabouts claim for a "
+            "tick is read at that tick and the one before it; a sighting at the two "
+            "ticks before the tick it names. The edge row counts a false placement "
+            "the route makes true one tick before its window, so a clock off by "
+            "one shows there rather than widening either window. Every row is "
+            "listed.",
+            _CITED_LINE_READS,
+        ),
+        "supported_ejects_not_checkable_by_reason": TableSpec(
+            "Supported EJECTs whose cited line cannot be checked, by reason",
+            _HELD,
+            "EJECT ballots labelled supported that neither cell above counts: the "
+            "ballot cites no turn, only the voter's own observation; the cited "
+            "turn, if it is one of this meeting's, places the target nowhere "
+            "checkable; or the route cannot verify any cited placement. Every row "
+            "is listed.",
+            _CITED_LINE_READS,
+        ),
+        "games_by_ending": TableSpec(
+            "Games by ending",
+            _SHAPE,
+            "Games by the recorded reason they ended. Every ending the engine or "
+            "the runner can record is listed; a game with no recorded ending is "
+            "not evaluable.",
+            ("game over row",),
+        ),
+        "kills_per_game": TableSpec(
+            "Kills per game",
+            _SHAPE,
+            "Games by how many kills they held.",
+            _KILL,
+        ),
+        "ticks_between_kills": TableSpec(
+            "Ticks between consecutive kills",
+            _SHAPE,
+            "Each kill after a game's first, by the ticks since the kill before it "
+            "in the same game.",
+            _KILL,
+        ),
+        "ticks_from_kill_to_report": TableSpec(
+            "Ticks from a kill to the meeting that reported its body",
+            _SHAPE,
+            "Every kill by the ticks from it to the report meeting whose reported "
+            "body is its victim's, a meeting on the kill's own tick included, or "
+            "by its body never being reported. A body joins its kill by victim, so "
+            "two kills on one tick each keep their own row.",
+            ("Killed", "MeetingTriggered"),
+        ),
+        "living_players_at_game_over_by_ending": TableSpec(
+            "Living players at game over, by ending",
+            _SHAPE,
+            "Games by their recorded ending and the players still alive when it "
+            "ended: every player less those killed and those ejected.",
+            ("game over row", "Killed", "meeting row"),
+        ),
+        "tasks_left_at_game_over_by_ending": TableSpec(
+            "Tasks left at game over, by ending",
+            _SHAPE,
+            "Games by their recorded ending and the share of all task instances "
+            "still unfinished on the final state.",
+            ("game over row", "final state"),
+        ),
+        "sabotages_started_per_game": TableSpec(
+            "Sabotages started per game",
+            _SHAPE,
+            "Games by how many times a sabotage went from inactive to active "
+            "between one play tick and the next. A sabotage that stays active "
+            "across a meeting is one start.",
+            ("state before the tick",),
+        ),
+        "report_openers_by_witness": TableSpec(
+            "Who found the body",
+            _SHAPE,
+            "Report meetings by whether their opener was among the recorded "
+            "witnesses of some kill since the previous meeting (since the game "
+            "began, at its first meeting), and by the ticks from the reported "
+            "body's kill to the report. Every row is listed.",
+            ("Killed", "MeetingTriggered"),
+        ),
+        "copresence_share_per_game": TableSpec(
+            "How often a player stood with exactly one other",
+            _SHAPE,
+            "Games by the share of their player-ticks, each a living player standing "
+            "in a room before a play tick, on which exactly one other living player "
+            "stood in the same room. A player inside a vent stands in no room.",
+            ("state before the tick",),
         ),
     }
 )
@@ -1958,6 +2334,8 @@ def _fold_game(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> None
     _fold_meetings(game, inputs, acc)
     _fold_rebuttals(game, acc)
     _fold_ballots(game, acc)
+    _fold_held_data(game, acc)
+    _fold_game_shape(game, acc)
     for discarded in game.discarded:
         acc.tally("actions_thrown_away_on_trigger_ticks", discarded.action_type)
     acc.table_not_evaluable["actions_thrown_away_on_trigger_ticks"] += (
@@ -2966,6 +3344,383 @@ def _fold_ballots(game: GameFacts, acc: _Accumulator) -> None:
 
 
 # ---------------------------------------------------------------------------
+# What a ballot held: the holds-nothing check and the truth of the cited line
+# ---------------------------------------------------------------------------
+
+
+def held_source_rows() -> tuple[HeldSource, ...]:
+    """Every place the holds-nothing check reads, read from its type."""
+
+    rows: tuple[HeldSource, ...] = get_args(HeldSource)
+    return rows
+
+
+def placement_verdicts() -> tuple[PlacementVerdict, ...]:
+    """Every verdict the route gives one cited placement, read from its type."""
+
+    verdicts: tuple[PlacementVerdict, ...] = get_args(PlacementVerdict)
+    return verdicts
+
+
+def checked_placement_kinds() -> tuple[CheckedPlacementKind, ...]:
+    """Every placement kind the cited-line check reads, read from its type."""
+
+    kinds: tuple[CheckedPlacementKind, ...] = get_args(CheckedPlacementKind)
+    return kinds
+
+
+def route_rooms(
+    game: GameFacts,
+    player: PlayerId,
+    tick: int,
+    window: Sequence[tuple[RouteFrame, int]],
+) -> tuple[RoomId, ...]:
+    """``player``'s rooms on the route at each frame and offset of ``window``.
+
+    A frame tick the route does not hold, or a player it does not hold there,
+    contributes nothing, as in the honesty instrument.
+    """
+
+    frames: Mapping[RouteFrame, Mapping[int, Mapping[PlayerId, RoomId]]] = {
+        "settled": game.settled_rooms,
+        "resolved": game.resolved_rooms,
+    }
+    rooms: list[RoomId] = []
+    for frame, offset in window:
+        room = frames[frame].get(tick - offset, {}).get(player)
+        if room is not None:
+            rooms.append(room)
+    return tuple(rooms)
+
+
+def edge_window(kind: CheckedPlacementKind) -> tuple[tuple[RouteFrame, int], ...]:
+    """The settled frame one tick before ``kind``'s window opens."""
+
+    return (("settled", max(offset for _, offset in PLACEMENT_WINDOWS[kind]) + 1),)
+
+
+def placement_verdict(game: GameFacts, placement: PlacementFact) -> PlacementVerdict:
+    """What the route makes of one placement, at its kind's own clock.
+
+    False only when the placement's canonical rooms intersect none of the
+    player's rooms in the window, by the honesty instrument's own comparison;
+    a placement with no canonical room, or with no route room in the window, is
+    unverifiable, never false.
+    """
+
+    rooms = route_rooms(
+        game, placement.player, placement.tick, PLACEMENT_WINDOWS[placement.kind]
+    )
+    if not placement.rooms or not rooms:
+        return "unverifiable"
+    return "false" if _contradicts(placement.rooms, rooms) else "true"
+
+
+def true_at_the_edge(game: GameFacts, placement: PlacementFact) -> bool:
+    """Whether the route makes ``placement`` true one tick before its window."""
+
+    rooms = route_rooms(
+        game, placement.player, placement.tick, edge_window(placement.kind)
+    )
+    return bool(placement.rooms and rooms) and not _contradicts(placement.rooms, rooms)
+
+
+def _fold_held_data(game: GameFacts, acc: _Accumulator) -> None:
+    """Fold the holds-nothing check and the truth of every cited line."""
+
+    # Every row is listed, at zero when nothing lands in it.
+    for source in held_source_rows():
+        acc.tally("holds_nothing_skips_by_source", source, 0)
+    for kind in checked_placement_kinds():
+        for verdict in (*placement_verdicts(), EDGE_VERDICT):
+            acc.tally("cited_placements_by_kind_and_verdict", f"{kind}: {verdict}", 0)
+    for reason in NOT_CHECKABLE_REASONS:
+        acc.tally("supported_ejects_not_checkable_by_reason", reason, 0)
+    for meeting in game.meetings:
+        for ballot in meeting.ballots:
+            where = f"meeting {meeting.meeting_id}, voter {ballot.voter}"
+            if ballot.target == SKIP_TARGET:
+                _fold_holds_nothing(ballot, acc, seed=game.seed, where=where)
+            elif ballot.held_sources is not None:
+                raise ValueError(
+                    f"set {acc.label}, seed {game.seed}, {where}: an EJECT carries "
+                    "the holds-nothing check"
+                )
+            elif ballot.grounding_label == "supported":
+                _fold_cited_line(game, meeting, ballot, acc, where=where)
+
+
+def _fold_holds_nothing(
+    ballot: BallotFact, acc: _Accumulator, *, seed: int, where: str
+) -> None:
+    """Count one SKIP's holds-nothing check, when it is labelled as holding nothing."""
+
+    sources = ballot.held_sources
+    if ballot.grounding_label != HOLDS_NOTHING_LABEL:
+        if sources is not None:
+            raise ValueError(
+                f"set {acc.label}, seed {seed}, {where}: a SKIP not labelled as "
+                "holding nothing carries the holds-nothing check"
+            )
+        return
+    if sources is None:
+        acc.not_evaluable("holds_nothing_skips_naming_no_candidate")
+        acc.not_evaluable("holds_nothing_skips_naming_a_candidate")
+        return
+    unknown = sorted(set(sources) - set(held_source_rows()))
+    if unknown:
+        raise ValueError(
+            f"set {acc.label}, seed {seed}, {where}: {unknown} are not places the "
+            "holds-nothing check reads"
+        )
+    acc.count(
+        "holds_nothing_skips_naming_no_candidate",
+        not sources,
+        seed=seed,
+        where=where,
+    )
+    acc.count(
+        "holds_nothing_skips_naming_a_candidate",
+        bool(sources),
+        seed=seed,
+        where=where,
+    )
+    for source in sources:
+        acc.tally("holds_nothing_skips_by_source", source)
+
+
+def _fold_cited_line(
+    game: GameFacts,
+    meeting: MeetingFact,
+    ballot: BallotFact,
+    acc: _Accumulator,
+    *,
+    where: str,
+) -> None:
+    """Read one supported EJECT's cited turn against the route."""
+
+    reasons = "supported_ejects_not_checkable_by_reason"
+    if ballot.primary_reason_id is None:
+        acc.tally(reasons, NOT_CHECKABLE_REASONS[0])
+        return
+    cited = next(
+        (turn for turn in meeting.turns if turn.turn_id == ballot.primary_reason_id),
+        None,
+    )
+    placements = (
+        ()
+        if cited is None
+        else tuple(spot for spot in cited.placements if spot.player == ballot.target)
+    )
+    if not placements:
+        acc.tally(reasons, NOT_CHECKABLE_REASONS[1])
+        return
+    verdicts: list[PlacementVerdict] = []
+    for placement in placements:
+        verdict = placement_verdict(game, placement)
+        verdicts.append(verdict)
+        acc.tally(
+            "cited_placements_by_kind_and_verdict", f"{placement.kind}: {verdict}"
+        )
+        if verdict == "false" and true_at_the_edge(game, placement):
+            acc.tally(
+                "cited_placements_by_kind_and_verdict",
+                f"{placement.kind}: {EDGE_VERDICT}",
+            )
+    checkable = [verdict for verdict in verdicts if verdict != "unverifiable"]
+    if not checkable:
+        acc.tally(reasons, NOT_CHECKABLE_REASONS[2])
+        return
+    false = "false" in checkable
+    acc.count("cited_lines_true_to_the_route", not false, seed=game.seed, where=where)
+    acc.count("cited_lines_false_to_the_route", false, seed=game.seed, where=where)
+
+
+# ---------------------------------------------------------------------------
+# The shape of a game: role-blind and descriptive
+# ---------------------------------------------------------------------------
+
+
+def game_endings() -> tuple[str, ...]:
+    """Every ending the engine or the runner records, read from their types."""
+
+    return (*get_args(WinResultType), *get_args(GameStopReason))
+
+
+def tick_gap_rows() -> tuple[str, ...]:
+    """Every tick-gap bucket, in order."""
+
+    return (*(label for label, _ in TICK_GAP_BUCKETS), LONG_GAP)
+
+
+def tick_gap_bucket(gap: int) -> str:
+    """The bucket of a gap of ``gap`` ticks; a negative gap raises."""
+
+    if gap < 0:
+        raise ValueError(f"a gap of {gap} ticks runs backwards")
+    for label, most in TICK_GAP_BUCKETS:
+        if gap <= most:
+            return label
+    return LONG_GAP
+
+
+def share_bucket(part: int, whole: int) -> str:
+    """The bucket of the share ``part`` of ``whole``; outside [0, whole] raises."""
+
+    if whole <= 0 or not 0 <= part <= whole:
+        raise ValueError(f"{part} of {whole} is not a share")
+    for label, quarters in SHARE_BUCKETS:
+        if part * SHARE_QUARTERS <= whole * quarters:
+            return label
+    raise ValueError(f"{part} of {whole} lands in no share bucket")
+
+
+def _fold_game_shape(game: GameFacts, acc: _Accumulator) -> None:
+    """Fold the ending, the kill cadence, the closeness at game over, the
+    sabotages, who found each body, and how often players stood in pairs."""
+
+    endings = game_endings()
+    for ending in endings:
+        acc.tally("games_by_ending", ending, 0)
+    reason = game.end_reason
+    if reason is not None and reason not in endings:
+        raise ValueError(
+            f"set {acc.label}, seed {game.seed}: the recorded ending {reason!r} is "
+            "not one the engine or the runner records"
+        )
+    if reason is None:
+        acc.table_not_evaluable["games_by_ending"] += 1
+    else:
+        acc.tally("games_by_ending", reason)
+    _fold_kill_cadence(game, acc)
+    _fold_closeness(game, acc)
+    _fold_sabotage(game, acc)
+    _fold_body_finders(game, acc)
+    _fold_copresence(game, acc)
+
+
+def _fold_kill_cadence(game: GameFacts, acc: _Accumulator) -> None:
+    """Kills per game, the gaps between them, and each kill to its report."""
+
+    for row in tick_gap_rows():
+        acc.tally("ticks_between_kills", row, 0)
+        acc.tally("ticks_from_kill_to_report", row, 0)
+    acc.tally("ticks_from_kill_to_report", NEVER_REPORTED, 0)
+    acc.tally("kills_per_game", str(len(game.kills)))
+    ticks = sorted(kill.tick for kill in game.kills)
+    for earlier, later in zip(ticks, ticks[1:], strict=False):
+        acc.tally("ticks_between_kills", tick_gap_bucket(later - earlier))
+    bodies = {body.body_id: body for body in game.bodies}
+    reports: dict[PlayerId, MeetingFact] = {}
+    joinable = True
+    for meeting in game.meetings:
+        if meeting.trigger_kind != "report":
+            continue
+        reported = bodies.get(meeting.trigger_body or "")
+        if reported is None or reported.victim is None:
+            joinable = False
+            continue
+        reports.setdefault(reported.victim, meeting)
+    for kill in game.kills:
+        if kill.victim is None or not joinable:
+            acc.table_not_evaluable["ticks_from_kill_to_report"] += 1
+            continue
+        report = reports.get(kill.victim)
+        acc.tally(
+            "ticks_from_kill_to_report",
+            NEVER_REPORTED
+            if report is None
+            else tick_gap_bucket(report.tick - kill.tick),
+        )
+
+
+def _fold_closeness(game: GameFacts, acc: _Accumulator) -> None:
+    """The living players and the tasks left when the game ended, by ending."""
+
+    reason = game.end_reason
+    living_table = "living_players_at_game_over_by_ending"
+    tasks_table = "tasks_left_at_game_over_by_ending"
+    if reason is None or any(kill.victim is None for kill in game.kills):
+        acc.table_not_evaluable[living_table] += 1
+    else:
+        removed = {kill.victim for kill in game.kills} | {
+            meeting.ejected for meeting in game.meetings if meeting.ejected is not None
+        }
+        living = len(set(game.roles) - removed)
+        acc.tally(living_table, f"{reason}: {living} living")
+    completed, total = game.final_tasks_completed, game.final_tasks_total
+    if reason is None or completed is None or total is None or total == 0:
+        acc.table_not_evaluable[tasks_table] += 1
+        return
+    acc.tally(tasks_table, f"{reason}: {share_bucket(total - completed, total)}")
+
+
+def _fold_sabotage(game: GameFacts, acc: _Accumulator) -> None:
+    """Sabotage starts, and task wins in games where a sabotage was in play."""
+
+    starts = 0
+    previous = False
+    for tick in sorted(game.frames):
+        active = game.frames[tick].sabotage_active
+        if active and not previous:
+            starts += 1
+        previous = active
+    acc.tally("sabotages_started_per_game", str(starts))
+    if game.end_reason == TASK_WIN:
+        acc.count(
+            "task_wins_with_sabotage_in_play",
+            starts > 0,
+            seed=game.seed,
+            where="the game over row",
+        )
+
+
+def _fold_body_finders(game: GameFacts, acc: _Accumulator) -> None:
+    """Each report meeting by whether a kill witness opened it, and the gap."""
+
+    table_key = "report_openers_by_witness"
+    for opener in (_OPENER_WITNESS, _OPENER_OTHER):
+        for row in tick_gap_rows():
+            acc.tally(table_key, f"{opener}, {row}", 0)
+    bodies = {body.body_id: body for body in game.bodies}
+    previous_tick = -1
+    for meeting in game.meetings:
+        if meeting.trigger_kind == "report":
+            reported = bodies.get(meeting.trigger_body or "")
+            if reported is None:
+                raise ValueError(
+                    f"set {acc.label}, seed {game.seed}, meeting "
+                    f"{meeting.meeting_id}: the reported corpse joins to no kill"
+                )
+            witnessed = any(
+                meeting.opener in kill.witnesses
+                for kill in game.kills
+                if previous_tick < kill.tick <= meeting.tick
+            )
+            opener = _OPENER_WITNESS if witnessed else _OPENER_OTHER
+            gap = tick_gap_bucket(meeting.tick - reported.kill_tick)
+            acc.tally(table_key, f"{opener}, {gap}")
+        previous_tick = meeting.tick
+
+
+def _fold_copresence(game: GameFacts, acc: _Accumulator) -> None:
+    """The game's share of player-ticks spent with exactly one other player."""
+
+    paired = 0
+    player_ticks = 0
+    for frame in game.frames.values():
+        occupancy = Counter(frame.rooms.values())
+        for room in frame.rooms.values():
+            player_ticks += 1
+            if occupancy[room] == 2:
+                paired += 1
+    if player_ticks == 0:
+        acc.table_not_evaluable["copresence_share_per_game"] += 1
+        return
+    acc.tally("copresence_share_per_game", share_bucket(paired, player_ticks))
+
+
+# ---------------------------------------------------------------------------
 # The loader: the one impure step
 # ---------------------------------------------------------------------------
 
@@ -3119,6 +3874,200 @@ def _turn_fact(turn: MeetingTurn) -> TurnFact:
             for claim in turn.claims
             if isinstance(claim, AlibiClaim)
         ),
+        placements=turn_placements(turn),
+    )
+
+
+def turn_placements(turn: MeetingTurn) -> tuple[PlacementFact, ...]:
+    """The turn's spoken placements of the kinds the cited-line check reads.
+
+    A sighting places its subject in its room and each companion it lists there
+    (once each, never the subject again); a movement sighting places its
+    subject in the room it arrived in; a whereabouts claim places the speaker.
+    A label with no canonical room places nobody. These are the placements the
+    route-check replay's placement reader gives these four kinds, which a test
+    holds equal on every committed meeting.
+    """
+
+    found: list[PlacementFact] = []
+    for observation in turn.observations:
+        if isinstance(observation, SawPlayerObservation):
+            rooms = canonical_rooms(observation.room)
+            if not rooms:
+                continue
+            found.append(
+                PlacementFact(
+                    observation.subject, observation.tick, rooms, "saw_player"
+                )
+            )
+            companions = dict.fromkeys(
+                companion
+                for companion in observation.co_present
+                if companion != observation.subject
+            )
+            found.extend(
+                PlacementFact(companion, observation.tick, rooms, "company")
+                for companion in companions
+            )
+        elif isinstance(observation, SawMoveObservation):
+            rooms = canonical_rooms(observation.to_room)
+            if rooms:
+                found.append(
+                    PlacementFact(
+                        observation.subject, observation.tick, rooms, "saw_move"
+                    )
+                )
+        elif isinstance(observation, WhereaboutsClaim):
+            rooms = canonical_rooms(observation.room)
+            if rooms:
+                found.append(
+                    PlacementFact(turn.speaker, observation.tick, rooms, "whereabouts")
+                )
+    return tuple(found)
+
+
+def ballot_call(entry: MeetingReplayEntry, voter: PlayerId) -> LLMCallRecord | None:
+    """The voter's last recorded call whose response validates as a ballot."""
+
+    found: LLMCallRecord | None = None
+    for call in entry.llm_calls:
+        if call.agent_id != voter:
+            continue
+        try:
+            VoteBallot.model_validate_json(call.response_text)
+        except ValidationError:
+            continue
+        found = call
+    return found
+
+
+def ballot_prompt_blocks(prompt: str) -> Mapping[str, tuple[str, ...]]:
+    """A recorded ballot prompt's top-level blocks: each tag's lines.
+
+    A block opens on a line holding only its tag and closes on the line holding
+    only its closing tag; inside it every other line is its content. A tag the
+    census has not classified, a block opened twice or never closed, a closing
+    tag outside a block, and a prompt without its memory or transcript block
+    each raise. The prompt text never leaves the census loader.
+    """
+
+    known = READ_BALLOT_BLOCKS | UNREAD_BALLOT_BLOCKS
+    blocks: dict[str, list[str]] = {}
+    open_tag: str | None = None
+    for line in prompt.splitlines():
+        match = _BLOCK_TAG_RE.match(line)
+        if open_tag is not None:
+            if match is not None and match[1] == "/" and match[2] == open_tag:
+                open_tag = None
+            else:
+                blocks[open_tag].append(line)
+            continue
+        if match is None:
+            continue
+        closing, tag = match[1], match[2]
+        if closing:
+            raise ValueError(f"the closing tag </{tag}> stands outside any block")
+        if tag not in known:
+            raise ValueError(f"the block <{tag}> is not one the census classifies")
+        if tag in blocks:
+            raise ValueError(f"the block <{tag}> opens twice")
+        blocks[tag] = []
+        open_tag = tag
+    if open_tag is not None:
+        raise ValueError(f"the block <{open_tag}> never closes")
+    for required in ("memory", "transcript"):
+        if required not in blocks:
+            raise ValueError(f"the prompt holds no <{required}> block")
+    return MappingProxyType({tag: tuple(lines) for tag, lines in blocks.items()})
+
+
+def _memory_lines(
+    lines: Sequence[str], *, since_tick: int
+) -> Iterator[tuple[HeldSource, str]]:
+    """Each line of the memory sections the check reads, with its place.
+
+    An observation row whose id was perceived after ``since_tick`` is also an
+    observation row perceived since the previous meeting. A heading in no row
+    of :data:`MEMORY_SECTIONS`, or a line before the first heading, raises.
+    """
+
+    started = False
+    section: HeldSource | None = None
+    for line in lines:
+        if line.startswith("## "):
+            heading = line.split(":", 1)[0]
+            if heading not in MEMORY_SECTIONS:
+                raise ValueError(
+                    f"the memory section {heading!r} is not one the census classifies"
+                )
+            started = True
+            section = MEMORY_SECTIONS[heading]
+            continue
+        if not started:
+            raise ValueError("a memory line stands before any section heading")
+        if section is None:
+            continue
+        yield section, line
+        if section == "an observation row":
+            tag = _OBSERVATION_TAG_RE.search(line)
+            if tag is not None and int(tag["tick"]) > since_tick:
+                yield "an observation row perceived since the previous meeting", line
+
+
+def _transcript_lines(lines: Sequence[str]) -> Iterator[tuple[HeldSource, str]]:
+    """Each transcript line but the turn headers, as a typed or a spoken line.
+
+    A line under a turn that opens no typed or spoken line continues the line
+    before it. A line before any turn other than the empty transcript's note
+    raises.
+    """
+
+    current: HeldSource | None = None
+    for line in lines:
+        if _TURN_HEADER_RE.match(line):
+            current = None
+            continue
+        if line.startswith("  said: "):
+            current = "a spoken turn line"
+        elif line.startswith("  - ") or line in ("  saw:", "  claims:"):
+            current = "a typed turn line"
+        elif current is None:
+            if line == "(no turns recorded)":
+                continue
+            raise ValueError("a transcript line stands outside any turn")
+        yield current, line
+
+
+def held_sources(
+    prompt: str,
+    *,
+    voter: PlayerId,
+    living: frozenset[PlayerId],
+    since_tick: int,
+) -> frozenset[HeldSource]:
+    """The places in one recorded ballot prompt that name a living candidate.
+
+    A living candidate is a player living at the meeting's open other than the
+    voter, named as a whole token. Read: the memory's observation rows and open
+    contradictions, the contradictions and evidence blocks, and every transcript
+    line but the turn headers. Never read: every other memory section (the
+    beliefs name every living player), every other block, and the page outside
+    the blocks (the suspicion graph and the candidate list). Only place names
+    leave this function.
+    """
+
+    candidates = living - {voter}
+    blocks = ballot_prompt_blocks(prompt)
+    lines: list[tuple[HeldSource, str]] = [
+        *_memory_lines(blocks["memory"], since_tick=since_tick),
+        *_transcript_lines(blocks["transcript"]),
+        *(("a flag", line) for line in blocks.get("contradictions", ())),
+        *(("an evidence row", line) for line in blocks.get("evidence", ())),
+    ]
+    return frozenset(
+        source
+        for source, line in lines
+        if any(token in candidates for token in _PLAYER_TOKEN_RE.findall(line))
     )
 
 
@@ -3162,18 +4111,53 @@ def regroup_notices_held(
     )
 
 
+def holds_nothing_check(
+    entry: MeetingReplayEntry,
+    ballot: VoteBallot,
+    *,
+    living: frozenset[PlayerId],
+    since_tick: int,
+    where: str,
+) -> frozenset[HeldSource] | None:
+    """One recorded ballot's holds-nothing check, or ``None`` when it has none.
+
+    Only a SKIP labelled as holding nothing is checked, against the prompt of
+    its voter's last recorded call whose response validates as a ballot. Such a
+    SKIP without one, or with a prompt the check cannot read, raises naming
+    ``where`` and the voter.
+    """
+
+    if ballot.target != SKIP_TARGET or ballot.grounding_label != HOLDS_NOTHING_LABEL:
+        return None
+    named = f"{where}, voter {ballot.voter}"
+    call = ballot_call(entry, ballot.voter)
+    if call is None:
+        raise ValueError(
+            f"{named}: a SKIP labelled as holding nothing has no recorded ballot call"
+        )
+    try:
+        return held_sources(
+            call.prompt, voter=ballot.voter, living=living, since_tick=since_tick
+        )
+    except ValueError as error:
+        raise ValueError(f"{named}: {error}") from error
+
+
 def _meeting_fact(
     opened: MeetingOpened,
     applied: MeetingApplied,
     *,
     regroup_recorded: bool,
     earlier_notices: Sequence[str] = (),
+    previous_tick: int = 0,
+    where: str = "",
 ) -> MeetingFact:
     entry = opened.entry
     state = opened.state
     if opened.trigger is None:
         raise ValueError(f"{entry.meeting_id}: a meeting tick with no trigger event")
     living = frozenset(pid for pid, player in state.players.items() if player.alive)
+    meeting_where = f"{where}meeting {entry.meeting_id}"
     opener_calls = [
         call for call in entry.llm_calls if call.agent_id == entry.triggered_by
     ]
@@ -3234,6 +4218,13 @@ def _meeting_fact(
                 cited_observation_id=ballot.primary_reason_observation_id,
                 primary_reason_id=ballot.primary_reason_id,
                 counter_reason_id=ballot.counter_reason_id,
+                held_sources=holds_nothing_check(
+                    entry,
+                    ballot,
+                    living=living,
+                    since_tick=previous_tick,
+                    where=meeting_where,
+                ),
             )
             for ballot in entry.ballots
         ),
@@ -3280,8 +4271,11 @@ def _load_game(
     rows_without_dispositions = 0
     applied_meetings: list[tuple[MeetingOpened, MeetingApplied]] = []
     cooldown_writes: list[CooldownWrite] = []
+    settled_rooms: dict[int, Mapping[PlayerId, RoomId]] = {}
+    resolved_rooms: dict[int, Mapping[PlayerId, RoomId]] = {}
     opened: MeetingOpened | None = None
     game_end: GameEndReplayEntry | None = None
+    final_state: WorldState | None = None
     terminal_tick: int | None = None
     for event in walk_replay(
         path,
@@ -3300,6 +4294,9 @@ def _load_game(
             entries.append(event.entry)
             frames[event.entry.tick] = _frame_of(event.state)
         elif isinstance(event, TickAdvanced):
+            resolved_rooms[event.entry.tick] = settled_rooms[event.entry.tick] = (
+                _rooms_of(event.state)
+            )
             killed: dict[PlayerId, int] = {}
             for engine_event in event.events:
                 if isinstance(engine_event, KilledEvent):
@@ -3309,6 +4306,7 @@ def _load_game(
                             killer=engine_event.actor,
                             room=engine_event.room,
                             witnesses=frozenset(engine_event.witnesses),
+                            victim=engine_event.target,
                         )
                     )
                     killed[engine_event.target] = engine_event.tick
@@ -3350,6 +4348,7 @@ def _load_game(
                     BodyFact(
                         body_id=body_id,
                         kill_tick=killed[body.player_id],
+                        victim=body.player_id,
                     )
                 )
             dispositions = event.entry.action_dispositions
@@ -3369,13 +4368,16 @@ def _load_game(
             if opened is None or opened.entry.meeting_id != event.entry.meeting_id:
                 raise ValueError(f"seed {seed}: a meeting applied without opening")
             applied_meetings.append((opened, event))
+            # A meeting's tick is read from its applied state, as agents read it.
+            settled_rooms[event.entry.tick] = _rooms_of(event.state)
             opened = None
         elif isinstance(event, WalkComplete):
             game_end = event.game_end
+            final_state = event.state
             terminal_tick = event.terminal_tick
             if game_end is not None:
                 entries.append(game_end)
-    if terminal_tick is None:
+    if terminal_tick is None or final_state is None:
         raise ValueError(f"seed {seed}: the walk never reached its terminal tick")
     stamps = prompt_stamps_from_cell(manifest_cell) if applied_meetings else None
     era = _game_era(entries, stamps)
@@ -3400,6 +4402,8 @@ def _load_game(
                 for _, prior in applied_meetings[:index]
                 if regroup_recorded and prior.state.phase == "PLAY"
             ),
+            previous_tick=(applied_meetings[index - 1][1].entry.tick if index else 0),
+            where=f"set {path.parent}, seed {seed}, ",
         )
         for index, (opened_meeting, applied) in enumerate(applied_meetings)
     )
@@ -3417,7 +4421,20 @@ def _load_game(
         winner=game_end.winner if game_end is not None else None,
         terminal_tick=terminal_tick,
         cooldown_writes=tuple(cooldown_writes),
+        end_reason=game_end.reason if game_end is not None else None,
+        final_tasks_completed=sum(
+            1 for task in final_state.tasks.values() if task.completed
+        ),
+        final_tasks_total=len(final_state.tasks),
+        settled_rooms=MappingProxyType(settled_rooms),
+        resolved_rooms=MappingProxyType(resolved_rooms),
     )
+
+
+def _rooms_of(state: WorldState) -> Mapping[PlayerId, RoomId]:
+    """Every player's room on ``state``, the honesty instrument's route frame."""
+
+    return MappingProxyType({pid: player.room for pid, player in state.players.items()})
 
 
 def _regroup_notice(applied: MeetingApplied) -> str:
@@ -3648,8 +4665,35 @@ TERMS: Final[Mapping[str, str]] = MappingProxyType(
         "holds-nothing label": (
             "the grounding label a SKIP ballot carries when its voter stated "
             "outright that it held nothing that resolves the vote. The label "
-            "restates the voter's own statement; nothing checks it against what "
-            "the voter held."
+            "restates the voter's own statement; the holds-nothing check reads it "
+            "against the lines the voter's own ballot prompt held."
+        ),
+        "living candidate": (
+            "a player alive when the meeting opened, other than the voter: someone "
+            "the voter's ballot could name."
+        ),
+        "holds-nothing check": (
+            "whether a SKIP labelled as holding nothing was shown, in its own "
+            "ballot prompt, a line naming a living candidate: an observation row "
+            "of its memory, an open contradiction, an evidence row, or a typed or "
+            "spoken turn line, never a turn's header naming its speaker, the "
+            "beliefs section or the list of candidates, which name every living "
+            "player. Such a line is held data, true or false. The label reads as "
+            "nothing that resolves the vote, not as nothing held, and a line held "
+            "is not a reason to vote."
+        ),
+        "cited line": (
+            "the turn an EJECT ballot cites as its reason, read for its spoken "
+            "placements of the ballot's target: a sighting of the target, the "
+            "target seen as company in another's sighting, the target seen "
+            "arriving in a room, or the target's own whereabouts claim."
+        ),
+        "checkable": (
+            "a cited placement the engine route can verify: its room is a room of "
+            "the map and the route holds the target at the ticks its kind is read "
+            "at. A checkable placement is true when the route puts the target "
+            "there at one of those ticks and false otherwise; a true cited line is "
+            "not a correct vote, and a false one may still have been believed."
         ),
         "rebuttal citation": (
             "a ballot whose cited turn, or whose counter slot (the strongest thing "
@@ -4089,6 +5133,7 @@ def serialize_json(model: BaseModel) -> str:
 
 __all__ = [
     "ALWAYS",
+    "AS_RECORDED",
     "BOUNDED_REBUTTAL",
     "BUTTON_COOLDOWN_TICKS",
     "CELLS",
@@ -4096,8 +5141,8 @@ __all__ = [
     "CENSUS_THREADED_LAYERS",
     "CENSUS_WALK_CONFIG",
     "COUNT_ONLY_NOTE",
+    "EDGE_VERDICT",
     "FIELD_CLASSIFICATION",
-    "AS_RECORDED",
     "FRESH_KILL_WINDOW_TICKS",
     "HEADINGS",
     "HOLDS_NOTHING_LABEL",
@@ -4105,8 +5150,12 @@ __all__ = [
     "IMPOSTOR_BALLOTS_REMOVED",
     "IN_VENT_CAP_TICKS",
     "KILL_TICK_BODY_HANDLE_PATTERN",
+    "LONG_GAP",
     "LOOK_AND_WAIT_EXIT",
     "MEETING_REGROUP",
+    "MEMORY_SECTIONS",
+    "NEVER_REPORTED",
+    "NOT_CHECKABLE_REASONS",
     "NOT_THE_SCORECARD_NOTE",
     "NO_IMPOSTOR_SELF_REPORT",
     "NO_REBUTTAL",
@@ -4114,18 +5163,25 @@ __all__ = [
     "OWN_KILL_BALLOT_ROW",
     "OWN_KILL_ROW_TEXT",
     "PHYSICAL_VENT_WITNESS",
+    "PLACEMENT_WINDOWS",
     "PREDICATES",
     "PUBLIC_BODY_HANDLE",
+    "READ_BALLOT_BLOCKS",
     "REGROUP_NOTICE_TEXT",
     "RETALLY_VARIANTS",
     "ROLE_CORRECTNESS_NOTE",
     "SCHEMA_VERSION",
     "SETTING_DEFAULTS",
     "SETTING_MEANINGS",
+    "SHARE_BUCKETS",
+    "SHARE_QUARTERS",
     "SHORT_WINDOW_TICKS",
     "TABLES",
+    "TASK_WIN",
     "TERMS",
+    "TICK_GAP_BUCKETS",
     "UNLABELLED",
+    "UNREAD_BALLOT_BLOCKS",
     "UNSEEN_SEED_BAND",
     "WITNESS_OUTCOME_ROWS",
     "AlibiFact",
@@ -4139,6 +5195,7 @@ __all__ = [
     "CensusSection",
     "CensusTable",
     "CensusTally",
+    "CheckedPlacementKind",
     "CooldownWrite",
     "CooldownWriter",
     "DiscardedAction",
@@ -4151,24 +5208,38 @@ __all__ = [
     "GameplayCensusConformanceError",
     "GameplayCensusEraError",
     "GameplayCensusFieldError",
+    "HeldSource",
     "KillFact",
     "MeetingFact",
     "ObservationFact",
     "ObservationKind",
     "OwnKillRowFact",
     "Phase",
+    "PlacementFact",
+    "PlacementVerdict",
+    "RouteFrame",
     "SettingPredicate",
     "SettingValue",
     "TableSpec",
     "TriggerKind",
     "TurnFact",
     "VentFact",
+    "ballot_call",
+    "ballot_prompt_blocks",
     "canonical_settings",
     "census_from_inputs",
+    "checked_placement_kinds",
     "compute_gameplay_census",
+    "edge_window",
     "fold_set",
+    "game_endings",
     "grounding_labels",
+    "held_source_rows",
+    "held_sources",
+    "holds_nothing_check",
     "load_census_inputs",
+    "placement_verdict",
+    "placement_verdicts",
     "pool",
     "prompt_stamps_from_cell",
     "recorded_game_eras",
@@ -4176,12 +5247,18 @@ __all__ = [
     "regroup_notices_held",
     "resolve_era",
     "retally",
+    "route_rooms",
     "seat_class",
     "section_from_tally",
     "selector_pick",
     "serialize_json",
     "served_own_kill_rows",
     "setting_value",
+    "share_bucket",
     "tally_outcome",
+    "tick_gap_bucket",
+    "tick_gap_rows",
+    "true_at_the_edge",
+    "turn_placements",
     "verify_era_registry",
 ]

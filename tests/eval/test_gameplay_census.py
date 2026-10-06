@@ -12,6 +12,7 @@ from __future__ import annotations
 import ast
 import dataclasses
 import functools
+import hashlib
 import importlib.util
 import json
 import re
@@ -23,6 +24,7 @@ import typing
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import replace
+from itertools import combinations
 from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import Any, Final, get_args, get_origin
@@ -112,15 +114,22 @@ from meetings.schemas import (
     MeetingTranscript,
     MeetingTurn,
     ObservationClaim,
+    SawMoveObservation,
     SawPlayerObservation,
+    SawVentObservation,
     TaskActivityAccount,
     WhereaboutsClaim,
 )
+from meetings.transcript import canonical_rooms
 from orchestrator import experiment_config
 from orchestrator.experiment_config import (
     FIELD_LAYER,
     RecordedExperimentConfig,
     wave_settings,
+)
+from orchestrator.recording_fingerprint import (
+    recording_fingerprint,
+    replay_seed_from_filename,
 )
 from tests._helpers.committed import (
     CORPUS_4P1I,
@@ -395,9 +404,18 @@ ALLOWED_STRING_FIELDS = frozenset(
         "GameFacts.roles",
         "GameFacts.frames",
         "GameFacts.winner",
+        "GameFacts.end_reason",
+        "GameFacts.settled_rooms",
+        "GameFacts.resolved_rooms",
         "KillFact.killer",
         "KillFact.room",
         "KillFact.witnesses",
+        "KillFact.victim",
+        "BodyFact.victim",
+        "PlacementFact.player",
+        "PlacementFact.rooms",
+        "PlacementFact.kind",
+        "BallotFact.held_sources",
         "VentFact.actor",
         "VentFact.source_room",
         "VentFact.destination_room",
@@ -586,6 +604,13 @@ def test_every_value_the_census_holds_is_read_only() -> None:
         "TERMS": census.TERMS,
         "SETTING_MEANINGS": census.SETTING_MEANINGS,
         "CENSUS_THREADED_LAYERS": CENSUS_THREADED_LAYERS,
+        "READ_BALLOT_BLOCKS": census.READ_BALLOT_BLOCKS,
+        "UNREAD_BALLOT_BLOCKS": census.UNREAD_BALLOT_BLOCKS,
+        "MEMORY_SECTIONS": census.MEMORY_SECTIONS,
+        "PLACEMENT_WINDOWS": census.PLACEMENT_WINDOWS,
+        "NOT_CHECKABLE_REASONS": census.NOT_CHECKABLE_REASONS,
+        "TICK_GAP_BUCKETS": census.TICK_GAP_BUCKETS,
+        "SHARE_BUCKETS": census.SHARE_BUCKETS,
     }
     for name, value in tables.items():
         assert mutable_values(value, name) == [], name
@@ -4725,6 +4750,10 @@ def test_turn_facts_keep_ids_ticks_and_alibi_legs() -> None:
             ObservationFact("task_activity", 2, 3, None),
         ),
         alibis=(AlibiFact("p-2", ((ROOM, 1, 5), (NEIGHBOUR, 6, 8))),),
+        placements=(
+            census.PlacementFact("p-0", 4, frozenset({ROOM}), "saw_player"),
+            census.PlacementFact("p-2", 5, frozenset({ROOM}), "whereabouts"),
+        ),
     )
 
 
@@ -8258,3 +8287,1889 @@ def test_the_cooldown_refusal_names_the_era_its_registry_gives() -> None:
         "map's); the census never pools across eras",
     ):
         census_from_inputs([four, first, other], registry=registry)
+
+
+# --------------------------------------------------------------------------- #
+# What a ballot held: the holds-nothing check                                  #
+# --------------------------------------------------------------------------- #
+
+VOTER = "p-2"
+DEAD = "p-9"
+LIVING = frozenset(ROLES)
+#: The voter's own memory line and a line naming only a dead player: neither
+#: names a living candidate wherever it stands.
+QUIET_OBSERVATION = "- [obs p-2:5:0] You did a task in STORAGE."
+QUIET_TYPED = "  - tick 5: p-2 places THEMSELVES in STORAGE (roll-call answer)."
+QUIET_SAID = '  said: "I was in STORAGE all along."'
+QUIET_EVIDENCE = "- `p-9` — seen near the body (nothing here you could cite)"
+
+
+def ballot_prompt(
+    *,
+    observations: Sequence[str] = (QUIET_OBSERVATION,),
+    open_contradictions: Sequence[str] = (),
+    typed: Sequence[str] = (QUIET_TYPED,),
+    said: Sequence[str] = (QUIET_SAID,),
+    flags: Sequence[str] | None = None,
+    evidence: Sequence[str] | None = (QUIET_EVIDENCE,),
+    extra: Sequence[str] = (),
+    drop: frozenset[str] = frozenset(),
+) -> str:
+    """A ballot prompt shaped as the template renders it.
+
+    Every place the check never reads names a living candidate (``p-3``): the
+    persona, the beliefs section, the turn header, the testimony and map blocks,
+    the suspicion graph, the candidate list and the output format. The places it
+    reads hold only the given lines.
+    """
+
+    def block(tag: str, body: Sequence[str]) -> list[str]:
+        return [] if tag in drop else [f"<{tag}>", *body, f"</{tag}>", ""]
+
+    memory = [
+        "## Your role: CREWMATE",
+        "## Tasks completed (global): 3/14",
+        "",
+        "## Meetings so far:",
+        "- Meeting 1 (tick 9): p-3 EJECTED 4-1 — p-3 was an IMPOSTOR.",
+        "",
+        "## Where you were:",
+        "- STORAGE (ticks 1-5) -> p-3's ADMIN",
+        "",
+        "## Recent observations (most salient first):",
+        *observations,
+        "",
+        "## Your current beliefs:",
+        "- p-3: suspicion 0.40, last seen ADMIN",
+    ]
+    if open_contradictions:
+        memory += ["", "## Open contradictions:", *open_contradictions]
+    transcript = [
+        "- [meeting-0:turn-0] turn 0 (opening) — p-3",
+        "  saw:",
+        *typed,
+        *said,
+    ]
+    lines = [
+        *block("persona", ["You are p-2, voting at a meeting with p-3."]),
+        *block("memory", memory),
+        *block("transcript", transcript),
+        *(block("contradictions", flags) if flags is not None else []),
+        *block("testimony_sources", ["- p-3: 1 voice, 0 accounts"]),
+        *block("map", ["ADMIN is one door from p-3's UPPER_HALL."]),
+        *(block("evidence", evidence) if evidence is not None else []),
+        *extra,
+        "## Your suspicion of each player",
+        "- `p-3`: suspicion 0.40",
+        "## Valid ejection targets",
+        "`p-3`, `p-4` — or SKIP.",
+        *block("output_format", ['{"voter": "p-2", "target": "p-3"}']),
+    ]
+    return "\n".join(lines)
+
+
+def held(prompt: str, *, since_tick: int = 0) -> frozenset[str]:
+    return census.held_sources(
+        prompt, voter=VOTER, living=LIVING, since_tick=since_tick
+    )
+
+
+def test_a_quiet_prompt_names_no_living_candidate_anywhere_the_check_reads() -> None:
+    """Every place outside the check names ``p-3``; nothing inside it does."""
+
+    prompt = ballot_prompt()
+    assert "p-3" in prompt
+    assert held(prompt) == frozenset()
+
+
+def test_each_place_the_check_reads_names_its_own_row() -> None:
+    """Planted: one line naming a living candidate in each place the check reads."""
+
+    cases: list[tuple[dict[str, Any], set[str]]] = [
+        (
+            {"observations": ("- [obs p-2:3:0] Saw p-4 in ADMIN.",)},
+            {"an observation row"},
+        ),
+        (
+            {"observations": ("- [obs p-2:12:0] Saw p-4 in ADMIN.",)},
+            {
+                "an observation row",
+                "an observation row perceived since the previous meeting",
+            },
+        ),
+        (
+            {"observations": ("- Saw p-4 walk ADMIN -> UPPER_HALL.",)},
+            {"an observation row"},
+        ),
+        ({"open_contradictions": ("- p-4 claims ADMIN at tick 6",)}, {"a flag"}),
+        ({"flags": ("- [c1] alibi_vs_sighting — p-4 (subjects: p-4)",)}, {"a flag"}),
+        ({"evidence": ("- `p-4` — seen in ADMIN at tick 6",)}, {"an evidence row"}),
+        ({"typed": ("  - tick 6: p-4 in ADMIN.",)}, {"a typed turn line"}),
+        ({"typed": ("  - accuses p-0 (0.80): vented",)}, {"a typed turn line"}),
+        ({"said": ('  said: "p-1 was with me."',)}, {"a spoken turn line"}),
+        (
+            {"said": ('  said: "Nothing to say,', 'and p-1 never left."')},
+            {"a spoken turn line"},
+        ),
+    ]
+    for overrides, expected in cases:
+        assert held(ballot_prompt(**overrides), since_tick=10) == expected, overrides
+
+
+def test_a_player_id_counts_only_as_a_whole_token() -> None:
+    """Planted: ``p-1`` read inside ``p-10``, and inside a body handle."""
+
+    for line in (
+        "- [obs p-2:3:0] Saw p-10 in ADMIN.",
+        "- [obs p-2:3:0] Found body-p-1-12 in ADMIN.",
+        "- [obs p-2:3:0] Saw xp-1 in ADMIN.",
+    ):
+        assert held(ballot_prompt(observations=(line,))) == frozenset(), line
+    assert held(ballot_prompt(observations=("- Saw p-1, then p-10.",))) == {
+        "an observation row"
+    }
+
+
+def test_the_voter_and_a_dead_player_are_never_candidates() -> None:
+    """Planted: lines naming only the voter, or only a dead player, everywhere."""
+
+    for name in (VOTER, DEAD):
+        line = f"{name} was in ADMIN"
+        prompt = ballot_prompt(
+            observations=(f"- [obs p-2:12:0] {line}",),
+            open_contradictions=(f"- {line}",),
+            typed=(f"  - tick 6: {line}.",),
+            said=(f'  said: "{line}."',),
+            flags=(f"- [c1] {line}",),
+            evidence=(f"- `{name}` — {line}",),
+        )
+        assert held(prompt) == frozenset(), name
+
+
+def test_the_places_the_check_never_reads_name_every_candidate_in_vain() -> None:
+    """Planted: the beliefs section, the suspicion graph, the candidate list, a
+    turn header, the persona, the testimony and map blocks and the output format
+    each name every living candidate; none counts."""
+
+    everyone = ", ".join(sorted(LIVING - {VOTER}))
+    prompt = ballot_prompt().replace(
+        "- p-3: suspicion 0.40, last seen ADMIN", f"- {everyone}: suspicion 0.40"
+    )
+    prompt = prompt.replace("`p-3`, `p-4` — or SKIP.", f"{everyone} — or SKIP.")
+    prompt = prompt.replace("turn 0 (opening) — p-3", "turn 0 (opening) — p-4")
+    assert held(prompt) == frozenset()
+    for heading in ("## Meetings so far:", "## Where you were:", "## Your role:"):
+        assert heading in prompt
+
+
+def test_a_turn_header_is_never_read_as_a_typed_or_spoken_line() -> None:
+    """Planted: a header naming a living speaker, with nothing under it naming one."""
+
+    prompt = ballot_prompt(typed=(), said=('  said: "Quiet."',))
+    assert "turn 0 (opening) — p-3" in prompt
+    assert held(prompt) == frozenset()
+
+
+def test_a_prompt_missing_its_memory_or_transcript_block_raises() -> None:
+    for tag in ("memory", "transcript"):
+        with _refusal(ValueError, f"the prompt holds no <{tag}> block"):
+            held(ballot_prompt(drop=frozenset({tag})))
+    # The other read blocks are optional: the template renders them only when
+    # they hold rows.
+    assert held(ballot_prompt(flags=None, evidence=None)) == frozenset()
+
+
+def test_a_block_the_census_does_not_classify_raises() -> None:
+    """Planted: a recorded prompt carrying a top-level tag in neither table."""
+
+    with _refusal(ValueError, "the block <routes> is not one the census classifies"):
+        held(ballot_prompt(extra=("<routes>", "- p-3: STORAGE -> ADMIN", "</routes>")))
+    with _refusal(ValueError, "the block <memory> opens twice"):
+        held(ballot_prompt(extra=("<memory>", "</memory>")))
+    with _refusal(ValueError, "the block <evidence> never closes"):
+        held(ballot_prompt(evidence=None, extra=("<evidence>",)))
+    with _refusal(ValueError, "the closing tag </map> stands outside any block"):
+        held(ballot_prompt(extra=("</map>",)))
+
+
+def test_a_memory_heading_the_census_does_not_classify_raises() -> None:
+    planted = ballot_prompt().replace(
+        "## Your current beliefs:", "## What others believe:"
+    )
+    with _refusal(
+        ValueError,
+        "the memory section '## What others believe' is not one the census classifies",
+    ):
+        held(planted)
+    stray = ballot_prompt().replace("<memory>\n", "<memory>\nstray line\n")
+    with _refusal(ValueError, "a memory line stands before any section heading"):
+        held(stray)
+
+
+def test_a_transcript_line_outside_any_turn_raises() -> None:
+    planted = ballot_prompt().replace("<transcript>\n", "<transcript>\nstray\n")
+    with _refusal(ValueError, "a transcript line stands outside any turn"):
+        held(planted)
+    empty = ballot_prompt().replace(
+        "- [meeting-0:turn-0] turn 0 (opening) — p-3\n  saw:\n"
+        f"{QUIET_TYPED}\n{QUIET_SAID}",
+        "(no turns recorded)",
+    )
+    assert "(no turns recorded)" in empty
+    assert held(empty) == frozenset()
+
+
+def test_an_observation_row_counts_as_since_the_previous_meeting_only_after_it() -> (
+    None
+):
+    """Planted: an id at the previous meeting's tick, one after it, and a row
+    with no id; at a game's first meeting the boundary is tick 0."""
+
+    def since(line: str, tick: int) -> bool:
+        sources = held(ballot_prompt(observations=(line,)), since_tick=tick)
+        return "an observation row perceived since the previous meeting" in sources
+
+    assert not since("- [obs p-2:10:0] Saw p-4 in ADMIN.", 10)
+    assert since("- [obs p-2:11:0] Saw p-4 in ADMIN.", 10)
+    assert not since("- Saw p-4 in ADMIN.", 0)
+    assert since("- [obs p-2:1:0] Saw p-4 in ADMIN.", 0)
+
+
+#: Every top-level tag a ballot template opens on a line of its own.
+_TEMPLATE_TAG_RE: Final = re.compile(r"^<([a-z_]+)>$", re.MULTILINE)
+
+
+def template_tags(texts: Iterable[str]) -> frozenset[str]:
+    return frozenset(tag for text in texts for tag in _TEMPLATE_TAG_RE.findall(text))
+
+
+def _ballot_templates() -> list[Path]:
+    paths = sorted(
+        (repo_root / "agents" / "strategic" / "prompts").glob("*/vote_ballot*.j2")
+    )
+    assert len(paths) >= 8
+    return paths
+
+
+def test_the_classified_blocks_are_every_tag_the_ballot_templates_render() -> None:
+    texts = [path.read_text(encoding="utf-8") for path in _ballot_templates()]
+    classified = census.READ_BALLOT_BLOCKS | census.UNREAD_BALLOT_BLOCKS
+    assert not census.READ_BALLOT_BLOCKS & census.UNREAD_BALLOT_BLOCKS
+    assert template_tags(texts) == classified
+
+
+def test_a_template_copy_carrying_a_new_tag_fails_the_pin() -> None:
+    """Planted: a copy of the shown set's template with one new top-level block."""
+
+    source = (
+        repo_root
+        / "agents"
+        / "strategic"
+        / "prompts"
+        / "qwen3_6_27b"
+        / "vote_ballot.j2"
+    ).read_text(encoding="utf-8")
+    planted = source.replace(
+        "<map>\n", "<routes>\n{{ route_lines }}\n</routes>\n<map>\n"
+    )
+    classified = census.READ_BALLOT_BLOCKS | census.UNREAD_BALLOT_BLOCKS
+    assert template_tags([planted]) - classified == {"routes"}
+
+
+def _memory_headings(source: str) -> frozenset[str]:
+    """Every ``## `` heading a memory module renders, by its text before a colon."""
+
+    headings: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        text: str | None = None
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            text = node.value
+        elif isinstance(node, ast.JoinedStr) and node.values:
+            first = node.values[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                text = first.value
+        if text is not None and text.startswith("## "):
+            headings.add(text.split(":", 1)[0])
+    return frozenset(headings)
+
+
+def test_the_memory_sections_are_every_heading_the_memory_renders() -> None:
+    source = Path(memory_store.__file__).read_text(encoding="utf-8")
+    assert _memory_headings(source) == set(census.MEMORY_SECTIONS)
+    read = {heading for heading, place in census.MEMORY_SECTIONS.items() if place}
+    assert read == {
+        "## Recent observations (most salient first)",
+        "## Open contradictions",
+    }
+
+
+def test_a_memory_module_rendering_a_new_heading_fails_the_pin() -> None:
+    source = Path(memory_store.__file__).read_text(encoding="utf-8")
+    planted = source.replace(
+        '"## Open contradictions:"', '"## Open contradictions:", "## Rumours:"', 1
+    )
+    assert _memory_headings(planted) - set(census.MEMORY_SECTIONS) == {"## Rumours"}
+
+
+def _hold(ballot_: BallotFact, sources: Iterable[str]) -> BallotFact:
+    return replace(ballot_, held_sources=frozenset(sources))  # type: ignore[arg-type]
+
+
+def test_the_holds_nothing_cells_count_the_check_with_its_complement() -> None:
+    """Planted: two checked holds-nothing SKIPs, one naming a candidate twice over,
+    an unchecked one, and ballots the check never reads."""
+
+    planted = game(
+        meetings=(
+            meeting(
+                ballots=(
+                    _hold(ballot("p-2", "SKIP", label="none_held"), ()),
+                    _hold(
+                        ballot("p-3", "SKIP", label="none_held"),
+                        ("a flag", "a spoken turn line"),
+                    ),
+                    ballot("p-4", "SKIP", label="none_held"),
+                    ballot("p-0", "SKIP", label="supported"),
+                    ballot("p-1", "SKIP"),
+                ),
+            ),
+        ),
+    )
+    assert counts("holds_nothing_skips_naming_no_candidate", planted) == (1, 2, 1)
+    assert counts("holds_nothing_skips_naming_a_candidate", planted) == (1, 2, 1)
+    assert table("holds_nothing_skips_by_source", planted) == {
+        **dict.fromkeys(census.held_source_rows(), 0),
+        "a flag": 1,
+        "a spoken turn line": 1,
+    }
+
+
+def test_the_check_on_a_ballot_it_never_reads_is_refused() -> None:
+    for planted, message in (
+        (
+            _hold(ballot("p-2", "SKIP", label="supported"), ()),
+            "a SKIP not labelled as holding nothing carries the holds-nothing check",
+        ),
+        (
+            _hold(ballot("p-2", "p-3", label="none_held", confidence=0.1), ()),
+            "an EJECT carries the holds-nothing check",
+        ),
+        (
+            _hold(ballot("p-2", "SKIP", label="none_held"), ("a rumour",)),
+            "['a rumour'] are not places the holds-nothing check reads",
+        ),
+    ):
+        with _refusal(
+            ValueError,
+            f"set {PLANTED}, seed {SEED}, meeting meeting-0, voter p-2: " + message,
+        ):
+            fold_set(inputs(game(meetings=(meeting(ballots=(planted,)),))))
+
+
+def test_the_source_rows_follow_their_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Planted: the place type gains a row; the table lists it."""
+
+    assert census.held_source_rows() == get_args(census.HeldSource)
+    monkeypatch.setattr(
+        census, "HeldSource", typing.Literal["an observation row", "a rumour"]
+    )
+    assert table("holds_nothing_skips_by_source", game()) == {
+        "an observation row": 0,
+        "a rumour": 0,
+    }
+
+
+def _ballot_meeting() -> tuple[MeetingOpened, MeetingApplied, int]:
+    """A committed meeting holding a holds-nothing SKIP, and that ballot's index."""
+
+    for seed in (5, 3, 0, 1, 2, 4, 6, 7, 8, 9):
+        events = census_walk_events(SAMPLES_4P1I, seed)
+        for event in events:
+            if not isinstance(event, MeetingOpened):
+                continue
+            for index, cast in enumerate(event.entry.ballots):
+                if cast.target == "SKIP" and cast.grounding_label == "none_held":
+                    applied = next(
+                        item
+                        for item in events
+                        if isinstance(item, MeetingApplied)
+                        and item.entry.meeting_id == event.entry.meeting_id
+                    )
+                    return event, applied, index
+    raise AssertionError("no committed holds-nothing SKIP in the first ten seeds")
+
+
+def test_the_loader_reads_the_voters_last_validating_ballot_call() -> None:
+    opened, applied, index = _ballot_meeting()
+    fact = census._meeting_fact(opened, applied, regroup_recorded=False)
+    voter = opened.entry.ballots[index].voter
+    assert fact.ballots[index].held_sources is not None
+    calls = [call for call in opened.entry.llm_calls if call.agent_id == voter]
+    chosen = census.ballot_call(opened.entry, voter)
+    assert chosen is not None and chosen in calls
+    # A later call of the voter that does not validate as a ballot is passed
+    # over; a later one that does is taken.
+    junk = chosen.model_copy(update={"response_text": "not json"})
+    later = chosen.model_copy(update={"prompt": chosen.prompt + "\n"})
+    entry = opened.entry.model_copy(
+        update={"llm_calls": (*opened.entry.llm_calls, junk)}
+    )
+    assert census.ballot_call(entry, voter) is chosen
+    entry = opened.entry.model_copy(
+        update={"llm_calls": (*opened.entry.llm_calls, later)}
+    )
+    assert census.ballot_call(entry, voter) is later
+    for other, cast in enumerate(fact.ballots):
+        recorded = opened.entry.ballots[other]
+        checked = recorded.target == "SKIP" and recorded.grounding_label == "none_held"
+        assert (cast.held_sources is not None) is checked
+
+
+def test_a_holds_nothing_skip_without_a_validating_ballot_call_raises() -> None:
+    """Planted: the voter's only ballot call no longer validates, and is gone."""
+
+    opened, applied, index = _ballot_meeting()
+    voter = opened.entry.ballots[index].voter
+    broken = tuple(
+        call.model_copy(update={"response_text": "{}"})
+        if call.agent_id == voter
+        else call
+        for call in opened.entry.llm_calls
+    )
+    removed = tuple(call for call in opened.entry.llm_calls if call.agent_id != voter)
+    for calls in (broken, removed):
+        entry = opened.entry.model_copy(update={"llm_calls": calls})
+        with _refusal(
+            ValueError,
+            f"set s, seed 1, meeting {entry.meeting_id}, voter {voter}: a SKIP "
+            "labelled as holding nothing has no recorded ballot call",
+        ):
+            census._meeting_fact(
+                replace(opened, entry=entry),
+                applied,
+                regroup_recorded=False,
+                where="set s, seed 1, ",
+            )
+
+
+def test_a_holds_nothing_prompt_the_check_cannot_read_raises_naming_the_voter() -> None:
+    opened, applied, index = _ballot_meeting()
+    voter = opened.entry.ballots[index].voter
+    call = census.ballot_call(opened.entry, voter)
+    assert call is not None
+    stripped = call.model_copy(
+        update={"prompt": call.prompt.replace("<transcript>", "<transcripts>")}
+    )
+    entry = opened.entry.model_copy(
+        update={
+            "llm_calls": tuple(
+                stripped if item is call else item for item in opened.entry.llm_calls
+            )
+        }
+    )
+    with _refusal(
+        ValueError,
+        f"meeting {entry.meeting_id}, voter {voter}: the block <transcripts> is "
+        "not one the census classifies",
+    ):
+        census._meeting_fact(
+            replace(opened, entry=entry), applied, regroup_recorded=False
+        )
+
+
+def test_the_loader_bounds_since_the_previous_meeting_by_its_tick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The loader hands each meeting its predecessor's tick, and 0 to the first."""
+
+    seen: list[int] = []
+    original = census.holds_nothing_check
+
+    def spy(*args: Any, since_tick: int, **kwargs: Any) -> Any:
+        seen.append(since_tick)
+        return original(*args, since_tick=since_tick, **kwargs)
+
+    monkeypatch.setattr(census, "holds_nothing_check", spy)
+    committed = next(
+        item for item in census_inputs(SAMPLES_9P2I).games if len(item.meetings) > 2
+    )
+    events = census_walk_events(SAMPLES_9P2I, committed.seed)
+    monkeypatch.setattr(census, "walk_replay", lambda *args, **kwargs: iter(events))
+    num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(
+        SAMPLES_9P2I
+    )
+    loaded = census._load_game(
+        Path("unused"),
+        seed=committed.seed,
+        roles=committed.roles,
+        manifest_cell=", ".join(committed.era.prompt_stamps or ()),
+        num_players=num_players,
+        num_impostors=num_impostors,
+        tasks_per_crewmate=tasks_per_crewmate,
+        game_map=MAP,
+    )
+    assert loaded == committed
+    ticks = [item.tick for item in loaded.meetings]
+    per_meeting = [0, *ticks[:-1]]
+    expected = [
+        bound
+        for bound, item in zip(per_meeting, loaded.meetings, strict=True)
+        for _ in item.ballots
+    ]
+    assert len(ticks) >= 2 and seen == expected
+
+
+def test_every_committed_holds_nothing_skip_is_checked() -> None:
+    """The published census: no holds-nothing SKIP of any set is unchecked, and
+    every one is shown a living candidate (the label reads as nothing that
+    resolves the vote, not as nothing held)."""
+
+    payload = _published()
+    expected = {
+        "baseline-9": (764, 203, 560),
+        "samples/9p2i": (214, 22, 166),
+    }
+    sections = {
+        "baseline-9": _era_pool(payload, "baseline-9"),
+        "samples/9p2i": _set_section(payload, "samples/9p2i"),
+    }
+    for name, section in sections.items():
+        skips, flags, since = expected[name]
+        empty = section["cells"]["holds_nothing_skips_naming_no_candidate"]
+        assert (empty["numerator"], empty["denominator"]) == (0, skips), name
+        assert empty["not_evaluable"] == 0
+        by_source = section["tables"]["holds_nothing_skips_by_source"]["counts"]
+        assert by_source["a flag"] == flags, name
+        assert (
+            by_source["an observation row perceived since the previous meeting"]
+            == since
+        ), name
+        assert _pair(section, "skips_holding_nothing")[0] == skips
+
+
+@hypothesis_settings(deadline=None, max_examples=60)
+@given(
+    place=st.sampled_from(
+        ("observations", "open_contradictions", "typed", "said", "flags", "evidence")
+    ),
+    candidate=st.sampled_from(sorted(LIVING - {VOTER})),
+    excluded=st.sampled_from(
+        ("beliefs", "header", "persona", "testimony", "map", "graph", "targets")
+    ),
+    other=st.sampled_from((VOTER, DEAD, "p-10", "body-p-3-4")),
+)
+def test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else(
+    place: str, candidate: str, excluded: str, other: str
+) -> None:
+    """A line naming a living candidate in a place the check reads makes the SKIP
+    held; the same name in a place it never reads, or a line naming only the
+    voter, a dead player or a longer id, never does. Perturbed, a reader taking
+    in the beliefs section fails it."""
+
+    lines = {
+        "observations": f"- [obs p-2:4:0] Saw {candidate} in ADMIN.",
+        "open_contradictions": f"- {candidate} claims ADMIN",
+        "typed": f"  - tick 4: {candidate} in ADMIN.",
+        "said": f'  said: "{candidate} lied."',
+        "flags": f"- [c1] {candidate} lied",
+        "evidence": f"- `{candidate}` — seen in ADMIN",
+    }
+    planted_line: dict[str, Any] = {place: (lines[place],)}
+    assert held(ballot_prompt(**planted_line))
+    quiet: dict[str, Any] = {
+        key: (value.replace(candidate, other),) for key, value in lines.items()
+    }
+    assert held(ballot_prompt(**quiet)) == frozenset()
+    prompt = ballot_prompt()
+    planted = {
+        "beliefs": ("- p-3: suspicion 0.40, last seen ADMIN", f"- {candidate}: 0.9"),
+        "header": ("turn 0 (opening) — p-3", f"turn 0 (opening) — {candidate}"),
+        "persona": ("voting at a meeting with p-3", f"with {candidate}"),
+        "testimony": ("- p-3: 1 voice", f"- {candidate}: 1 voice"),
+        "map": ("p-3's UPPER_HALL", f"{candidate}'s UPPER_HALL"),
+        "graph": ("- `p-3`: suspicion 0.40", f"- `{candidate}`: suspicion 0.40"),
+        "targets": ("`p-3`, `p-4` — or SKIP.", f"`{candidate}` — or SKIP."),
+    }
+    old, new = planted[excluded]
+    assert old in prompt
+    assert held(prompt.replace(old, new)) == frozenset()
+
+
+# --------------------------------------------------------------------------- #
+# What a ballot held: the truth of the cited line                              #
+# --------------------------------------------------------------------------- #
+
+TARGET = "p-3"
+
+
+def spot(
+    kind: census.CheckedPlacementKind,
+    tick: int,
+    room: str = ROOM,
+    player: str = TARGET,
+) -> census.PlacementFact:
+    return census.PlacementFact(player, tick, canonical_rooms(room), kind)
+
+
+def routed(
+    path: Mapping[int, str],
+    *,
+    resolved: Mapping[int, str] | None = None,
+    player: str = TARGET,
+    **overrides: Any,
+) -> GameFacts:
+    """A game whose route puts ``player`` in ``path[tick]`` after each tick.
+
+    ``resolved`` overrides the frame the tick's actions resolved in, as a
+    regroup meeting's tick does; every other tick resolves where it settles.
+    """
+
+    settled = {tick: MappingProxyType({player: room}) for tick, room in path.items()}
+    resolved_rooms = dict(settled)
+    for tick, room in (resolved or {}).items():
+        resolved_rooms[tick] = MappingProxyType({player: room})
+    return game(
+        settled_rooms=MappingProxyType(settled),
+        resolved_rooms=MappingProxyType(resolved_rooms),
+        **overrides,
+    )
+
+
+def verdict(
+    placement: census.PlacementFact,
+    path: Mapping[int, str],
+    *,
+    resolved: Mapping[int, str] | None = None,
+) -> str:
+    return census.placement_verdict(routed(path, resolved=resolved), placement)
+
+
+def edge(placement: census.PlacementFact, path: Mapping[int, str]) -> bool:
+    return census.true_at_the_edge(routed(path), placement)
+
+
+#: A route that keeps the target in FAR at every tick but one.
+def only_at(tick: int, room: str = ROOM) -> dict[int, str]:
+    return {**{at: FAR for at in range(0, 20)}, tick: room}
+
+
+def test_a_whereabouts_claim_is_read_at_its_tick_and_the_one_before() -> None:
+    """Planted: a claim for tick 10 true at 10 only, at 9 only, and at 8 only."""
+
+    claim = spot("whereabouts", 10)
+    assert verdict(claim, only_at(10)) == "true"
+    assert verdict(claim, only_at(9)) == "true"
+    assert verdict(claim, only_at(8)) == "false"
+    assert edge(claim, only_at(8))
+    assert not edge(claim, only_at(7))
+
+
+def test_a_sighting_is_read_at_the_two_ticks_before_its_tick() -> None:
+    """Planted: a sighting stamped at tick 10, true at 10, 9, 8 and 7 only.
+
+    Each kind of sighting reads at 9 and 8, the honesty instrument's sighting
+    clock; read in the whereabouts window (10 and 9) the case true at 8 only
+    would read false and the case true at 10 only would read true.
+    """
+
+    sightings: tuple[census.CheckedPlacementKind, ...] = (
+        "saw_player",
+        "company",
+        "saw_move",
+    )
+    for kind in sightings:
+        sighting = spot(kind, 10)
+        assert verdict(sighting, only_at(10)) == "false", kind
+        assert not edge(sighting, only_at(10)), kind
+        assert verdict(sighting, only_at(9)) == "true", kind
+        assert verdict(sighting, only_at(8)) == "true", kind
+        assert verdict(sighting, only_at(7)) == "false", kind
+        assert edge(sighting, only_at(7)), kind
+        windows = census.PLACEMENT_WINDOWS
+        assert windows[kind] != windows["whereabouts"], kind
+
+
+def test_the_sighting_clock_differs_from_the_whereabouts_window_where_it_matters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Perturbed: the whereabouts window applied to a sighting flips both edges."""
+
+    sighting = spot("saw_player", 10)
+    monkeypatch.setattr(
+        census,
+        "PLACEMENT_WINDOWS",
+        MappingProxyType(
+            {
+                **census.PLACEMENT_WINDOWS,
+                "saw_player": census.PLACEMENT_WINDOWS["whereabouts"],
+            }
+        ),
+    )
+    assert verdict(sighting, only_at(8)) == "false"
+    assert verdict(sighting, only_at(10)) == "true"
+
+
+def test_a_sighting_reads_the_resolved_frame_one_tick_before() -> None:
+    """Planted: a regroup meeting at tick 9 moved the target after its actions
+    resolved in STORAGE; an action-stamped sighting names the resolved room."""
+
+    sighting = spot("saw_player", 10)
+    path = only_at(-5)
+    assert verdict(sighting, path, resolved={9: ROOM}) == "true"
+    claim = spot("whereabouts", 10)
+    assert verdict(claim, path, resolved={9: ROOM}) == "false"
+
+
+def test_a_placement_with_no_route_or_no_room_is_unverifiable_never_false() -> None:
+    """Planted: a non-spatial room, a tick the route never reached, and a player
+    the route does not hold."""
+
+    path = only_at(9)
+    blank = census.PlacementFact(TARGET, 10, frozenset(), "saw_player")
+    assert verdict(blank, path) == "unverifiable"
+    assert not edge(blank, path)
+    assert verdict(spot("saw_player", 90), path) == "unverifiable"
+    assert verdict(spot("saw_player", 10, player="p-4"), path) == "unverifiable"
+    assert verdict(spot("whereabouts", 0), {0: ROOM}) == "true"
+    assert verdict(spot("saw_player", 0), {0: ROOM}) == "unverifiable"
+
+
+def test_a_compound_or_transit_label_is_read_by_its_canonical_rooms() -> None:
+    """The comparison is the honesty instrument's: a compound label is true when
+    any member room holds the target."""
+
+    compound = census.PlacementFact(
+        TARGET, 10, canonical_rooms(f"{FAR}/{ROOM}"), "whereabouts"
+    )
+    assert NEIGHBOUR not in compound.rooms
+    assert verdict(compound, only_at(10)) == "true"
+    assert verdict(compound, {10: NEIGHBOUR, 9: NEIGHBOUR}) == "false"
+
+
+def cited_turn(
+    *placements: census.PlacementFact, turn_id: str = "t1", index: int = 1
+) -> TurnFact:
+    """A turn by a speaker of its own, so no planted meeting holds a rebuttal."""
+
+    return replace(
+        turn(index, f"p-{20 + index}"), turn_id=turn_id, placements=placements
+    )
+
+
+def supported(target: str = TARGET, *, cites: str | None = "t1") -> BallotFact:
+    """A supported EJECT below the floor, so the planted meeting still skips."""
+
+    return replace(
+        ballot("p-2", target, label="supported", confidence=0.1),
+        primary_reason_id=cites,
+    )
+
+
+def cited_game(
+    *ballots: BallotFact,
+    turns: Sequence[TurnFact] = (),
+    path: Mapping[int, str] | None = None,
+) -> GameFacts:
+    return routed(
+        only_at(9) if path is None else path,
+        meetings=(meeting(turns=tuple(turns), ballots=ballots),),
+    )
+
+
+def test_the_cited_line_cells_count_true_false_and_mixed_ballots() -> None:
+    """Planted: a true line, a false line, and a line holding one true and one
+    false placement, which reads false."""
+
+    true_spot = spot("saw_player", 10)  # true at 9
+    false_spot = spot("whereabouts", 12)  # FAR at 12 and 11
+    planted = cited_game(
+        supported(cites="t1"),
+        supported(cites="t2"),
+        supported(cites="t3"),
+        turns=(
+            cited_turn(true_spot, turn_id="t1", index=1),
+            cited_turn(false_spot, turn_id="t2", index=2),
+            cited_turn(true_spot, false_spot, turn_id="t3", index=3),
+        ),
+    )
+    assert counts("cited_lines_true_to_the_route", planted) == (1, 3, 0)
+    assert counts("cited_lines_false_to_the_route", planted) == (2, 3, 0)
+    rows = table("cited_placements_by_kind_and_verdict", planted)
+    assert rows["saw_player: true"] == 2
+    assert rows["whereabouts: false"] == 2
+    assert sum(rows.values()) == 4
+    assert set(rows) == {
+        f"{kind}: {result}"
+        for kind in census.checked_placement_kinds()
+        for result in (*census.placement_verdicts(), census.EDGE_VERDICT)
+    }
+
+
+def test_the_edge_row_counts_a_false_placement_true_one_tick_before_its_window() -> (
+    None
+):
+    planted = cited_game(
+        supported(cites="t1"),
+        supported(cites="t2"),
+        turns=(
+            cited_turn(spot("whereabouts", 11), turn_id="t1", index=1),  # N-2
+            cited_turn(spot("saw_move", 12), turn_id="t2", index=2),  # T-3
+        ),
+    )
+    rows = table("cited_placements_by_kind_and_verdict", planted)
+    assert rows["whereabouts: false"] == 1
+    assert rows[f"whereabouts: {census.EDGE_VERDICT}"] == 1
+    assert rows["saw_move: false"] == 1
+    assert rows[f"saw_move: {census.EDGE_VERDICT}"] == 1
+    assert counts("cited_lines_false_to_the_route", planted) == (2, 2, 0)
+
+
+def test_a_cited_line_that_cannot_be_checked_lands_in_its_reason_row() -> None:
+    """Planted: a ballot citing only its own observation; a cited turn placing
+    only another player; a turn id from another meeting; a cited turn whose every
+    placement is unverifiable; and EJECTs not labelled supported, never read."""
+
+    other = cited_turn(spot("saw_player", 10, player="p-4"), turn_id="t1", index=1)
+    lost = cited_turn(
+        census.PlacementFact(TARGET, 10, frozenset(), "saw_player"),
+        turn_id="t2",
+        index=2,
+    )
+    planted = cited_game(
+        supported(cites=None),
+        supported(cites="t1"),
+        supported(cites="meeting-9:turn-1"),
+        supported(cites="t2"),
+        replace(supported(cites="t1"), grounding_label="off_target"),
+        replace(supported(cites="t1"), grounding_label=None),
+        turns=(other, lost),
+    )
+    reasons = census.NOT_CHECKABLE_REASONS
+    assert table("supported_ejects_not_checkable_by_reason", planted) == {
+        reasons[0]: 1,
+        reasons[1]: 2,
+        reasons[2]: 1,
+    }
+    assert counts("cited_lines_true_to_the_route", planted) == (0, 0, 0)
+    assert (
+        table("cited_placements_by_kind_and_verdict", planted)[
+            "saw_player: unverifiable"
+        ]
+        == 1
+    )
+
+
+def test_a_cited_placement_of_another_player_is_not_read() -> None:
+    """Planted: the cited turn places another player falsely and the target truly."""
+
+    planted = cited_game(
+        supported(),
+        turns=(
+            cited_turn(spot("saw_player", 10), spot("whereabouts", 12, player="p-4")),
+        ),
+    )
+    assert counts("cited_lines_true_to_the_route", planted) == (1, 1, 0)
+    rows = table("cited_placements_by_kind_and_verdict", planted)
+    assert sum(rows.values()) == 1
+
+
+def test_a_cited_turn_resolves_only_within_its_own_meeting() -> None:
+    """Planted: the cited id names a turn of the next meeting, which places the
+    target; this meeting holds no such turn."""
+
+    first = meeting(
+        ballots=(supported(cites="t1"),), turns=(cited_turn(turn_id="t0", index=0),)
+    )
+    second = meeting(
+        meeting_id="meeting-1",
+        tick=30,
+        turns=(cited_turn(spot("saw_player", 10), turn_id="t1"),),
+    )
+    planted = routed(only_at(9), meetings=(first, second))
+    assert (
+        table("supported_ejects_not_checkable_by_reason", planted)[
+            census.NOT_CHECKABLE_REASONS[1]
+        ]
+        == 1
+    )
+    assert counts("cited_lines_true_to_the_route", planted) == (0, 0, 0)
+
+
+@hypothesis_settings(deadline=None, max_examples=80)
+@given(
+    cases=st.lists(
+        st.tuples(
+            st.lists(
+                st.tuples(
+                    st.sampled_from(
+                        ("saw_player", "company", "saw_move", "whereabouts")
+                    ),
+                    st.integers(min_value=0, max_value=21),
+                    st.sampled_from((ROOM, FAR, "MAINTENANCE_SHAFT")),
+                    st.sampled_from((TARGET, "p-4")),
+                ),
+                max_size=4,
+            ),
+            st.booleans(),
+        ),
+        max_size=6,
+    ),
+    path=st.dictionaries(
+        st.integers(min_value=0, max_value=20), st.sampled_from((ROOM, FAR))
+    ),
+)
+def test_true_plus_false_is_every_checkable_cited_line(
+    cases: list[tuple[list[tuple[str, int, str, str]], bool]],
+    path: dict[int, str],
+) -> None:
+    """Every supported EJECT lands in exactly one of the two cells or one reason
+    row. Perturbed, a fold dropping a mixed ballot fails it."""
+
+    turns: list[TurnFact] = []
+    ballots: list[BallotFact] = []
+    for index, (spots_, cites) in enumerate(cases):
+        placements = tuple(
+            census.PlacementFact(
+                player,
+                tick,
+                canonical_rooms(room),
+                kind,  # type: ignore[arg-type]
+            )
+            for kind, tick, room, player in spots_
+        )
+        turns.append(cited_turn(*placements, turn_id=f"t{index}", index=index))
+        ballots.append(supported(cites=f"t{index}" if cites else None))
+    planted = cited_game(*ballots, turns=turns, path=path)
+    true_cell = cell("cited_lines_true_to_the_route", planted)
+    false_cell = cell("cited_lines_false_to_the_route", planted)
+    reasons = table("supported_ejects_not_checkable_by_reason", planted)
+    assert true_cell.denominator == false_cell.denominator
+    assert true_cell.numerator + false_cell.numerator == true_cell.denominator
+    assert true_cell.denominator + sum(reasons.values()) == len(ballots)
+
+
+# The two agreements with the honesty instrument, on the promoted bytes --------
+
+
+@functools.cache
+def _honesty_on_promoted() -> tuple[tuple[int, int], tuple[Mapping[str, Any], ...]]:
+    """I-2's claim and false totals on samples/9p2i, summed over speakers, and
+    every game's reconstructed memories, captured as the instrument's clock check
+    reads them."""
+
+    import eval.evidence_honesty as honesty
+
+    captured: list[Mapping[str, Any]] = []
+    original = honesty._assert_clock_alignment
+
+    def capture(**kwargs: Any) -> None:
+        captured.append(kwargs["memories"])
+        original(**kwargs)
+
+    honesty._assert_clock_alignment = capture
+    try:
+        report = honesty.compute_evidence_honesty(SAMPLES_9P2I)
+    finally:
+        honesty._assert_clock_alignment = original
+    cells = report.false_whereabouts
+    totals = (
+        cells.crew_false.denominator + cells.impostor_false.denominator,
+        cells.crew_false.numerator + cells.impostor_false.numerator,
+    )
+    return totals, tuple(captured)
+
+
+def census_whereabouts_totals(inputs_: CensusInputs) -> tuple[int, int]:
+    """The census's truth reading of every living speaker's whereabouts claim."""
+
+    claims = false = 0
+    for game_ in inputs_.games:
+        for meeting_ in game_.meetings:
+            for turn_ in meeting_.turns:
+                if turn_.speaker not in meeting_.living:
+                    continue
+                for placement in turn_.placements:
+                    if placement.kind != "whereabouts":
+                        continue
+                    result = census.placement_verdict(game_, placement)
+                    if result != "unverifiable":
+                        claims += 1
+                        false += result == "false"
+    return claims, false
+
+
+@pytest.mark.slow
+def test_the_census_reads_every_whereabouts_claim_as_i2_does() -> None:
+    """The census's route and whereabouts window give I-2's totals on the
+    promoted bytes (754 claims, 4 false at authoring), summed over speakers so
+    no role is read. Perturbed, a window of N and N+1 breaks it."""
+
+    expected, _ = _honesty_on_promoted()
+    assert census_whereabouts_totals(census_inputs(SAMPLES_9P2I)) == expected
+    assert expected == (754, 4)
+
+
+@pytest.mark.slow
+def test_the_census_reads_every_recorded_sighting_true_on_its_clock() -> None:
+    """Every saw_player memory row the honesty instrument rebuilt on the promoted
+    bytes, the rows its clock check already holds, reads true or unverifiable
+    under the census's sighting clock. Perturbed, the whereabouts window (T and
+    T-1) names a row."""
+
+    _, memories = _honesty_on_promoted()
+    games = census_inputs(SAMPLES_9P2I).games
+    assert len(memories) == len(games)
+    rows = 0
+    false: list[str] = []
+    for game_, held_memories in zip(games, memories, strict=True):
+        for observer in sorted(held_memories):
+            for event in held_memories[observer].recent(since_tick=0):
+                if event.type != "saw_player":
+                    continue
+                subject = event.payload.get("player_id")
+                room = event.payload.get("room")
+                if not isinstance(subject, str) or not isinstance(room, str):
+                    continue
+                rows += 1
+                placement = census.PlacementFact(
+                    subject, event.tick, canonical_rooms(room), "saw_player"
+                )
+                if census.placement_verdict(game_, placement) == "false":
+                    false.append(f"seed {game_.seed}, {observer} at {event.tick}")
+    assert rows > 20_000
+    assert false == []
+
+
+@pytest.mark.slow
+def test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds() -> (
+    None
+):
+    """On every committed meeting of the two round columns, each turn's placements
+    of the four kinds equal the route-check replay's placement reader's, as a
+    multiset."""
+
+    from experiments.lab.route_check_replay import spoken_placements
+    from orchestrator.replay import MeetingReplayEntry, read_all_entries
+
+    kinds = set(census.checked_placement_kinds())
+    compared = 0
+    for set_dir in (SAMPLES_9P2I, repo_root / "replays/candidates/stage-b-r1/9p2i"):
+        for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+            for entry_ in read_all_entries(path):
+                if not isinstance(entry_, MeetingReplayEntry):
+                    continue
+                lab = spoken_placements(entry_.transcript)
+                for recorded in entry_.transcript.turns:
+                    ours = Counter(
+                        (item.player, item.tick, item.rooms, item.kind)
+                        for item in census.turn_placements(recorded)
+                    )
+                    theirs = Counter(
+                        (item.player, item.tick, item.rooms, item.kind)
+                        for item in lab
+                        if item.turn_id == recorded.turn_id and item.kind in kinds
+                    )
+                    assert ours == theirs, f"{path.name}, {recorded.turn_id}"
+                    compared += sum(ours.values())
+    assert compared > 5_000
+
+
+def test_turn_placements_read_the_four_kinds_and_nothing_else() -> None:
+    speech = MeetingTurn(
+        turn_id="t0",
+        turn_index=1,
+        speaker="p-2",
+        turn_kind="reply",
+        reply_to="t9",
+        observations=(
+            SawPlayerObservation(
+                type="saw_player",
+                tick=4,
+                subject="p-0",
+                room=ROOM,
+                co_present=("p-1", "p-0", "p-1", "p-3"),
+            ),
+            SawPlayerObservation(
+                type="saw_player", tick=5, subject="p-4", room="the hallway"
+            ),
+            SawMoveObservation(
+                type="saw_move", tick=6, subject="p-3", from_room=ROOM, to_room=FAR
+            ),
+            SawVentObservation(type="saw_vent", tick=7, subject="p-0", room=ROOM),
+            WhereaboutsClaim(type="whereabouts", tick=8, room=NEIGHBOUR.lower()),
+            WhereaboutsClaim(type="whereabouts", tick=9, room="nowhere"),
+        ),
+        claims=(
+            AlibiClaim(
+                type="alibi",
+                subject="p-2",
+                route=(AlibiSegment(room=ROOM, from_tick=1, to_tick=5),),
+            ),
+        ),
+        free_text="words",
+    )
+    rooms = canonical_rooms
+    assert census.turn_placements(speech) == (
+        census.PlacementFact("p-0", 4, rooms(ROOM), "saw_player"),
+        census.PlacementFact("p-1", 4, rooms(ROOM), "company"),
+        census.PlacementFact("p-3", 4, rooms(ROOM), "company"),
+        census.PlacementFact("p-3", 6, rooms(FAR), "saw_move"),
+        census.PlacementFact("p-2", 8, rooms(NEIGHBOUR), "whereabouts"),
+    )
+
+
+def test_the_loader_keeps_the_honesty_route_settled_and_resolved() -> None:
+    """On the promoted bytes, which regroup: every tick's settled frame is the
+    walk's state after it, a meeting's tick read from its applied state, and its
+    resolved frame the state its actions resolved in."""
+
+    seed = next(item.seed for item in census_inputs(SAMPLES_9P2I).games)
+    loaded = next(
+        item for item in census_inputs(SAMPLES_9P2I).games if item.seed == seed
+    )
+    advanced: dict[int, Mapping[str, str]] = {}
+    applied: dict[int, Mapping[str, str]] = {}
+    for event in census_walk_events(SAMPLES_9P2I, seed):
+        if isinstance(event, TickAdvanced):
+            advanced[event.entry.tick] = {
+                pid: player.room for pid, player in event.state.players.items()
+            }
+        elif isinstance(event, MeetingApplied):
+            applied[event.entry.tick] = {
+                pid: player.room for pid, player in event.state.players.items()
+            }
+    assert applied and any(applied[tick] != advanced[tick] for tick in applied)
+    assert {tick: dict(rooms) for tick, rooms in loaded.resolved_rooms.items()} == (
+        advanced
+    )
+    assert {tick: dict(rooms) for tick, rooms in loaded.settled_rooms.items()} == {
+        **advanced,
+        **applied,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# The shape of a game                                                          #
+# --------------------------------------------------------------------------- #
+
+
+def victim_kill(tick: int, victim: str, *, killer: str = "p-0", **kw: Any) -> KillFact:
+    return replace(kill(tick, killer, **kw), victim=victim)
+
+
+def victim_body(body_id: str, kill_tick: int, victim: str) -> BodyFact:
+    return BodyFact(body_id=body_id, kill_tick=kill_tick, victim=victim)
+
+
+def test_the_ending_rows_are_the_engines_and_the_runners_read_from_their_types() -> (
+    None
+):
+    from engine.win_conditions import WinResultType
+    from orchestrator.replay import GameStopReason
+
+    assert census.game_endings() == (
+        *get_args(WinResultType),
+        *get_args(GameStopReason),
+    )
+    planted = game(end_reason="IMPOSTOR_PARITY")
+    assert table("games_by_ending", planted) == {
+        **dict.fromkeys(census.game_endings(), 0),
+        "IMPOSTOR_PARITY": 1,
+    }
+    unended = section_from_tally(fold_set(inputs(game())))
+    assert unended.tables["games_by_ending"].not_evaluable == 1
+
+
+def test_the_ending_rows_follow_the_engines_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the engine's ending type gains a value; the table lists it, and a
+    game ending on a value no type names is refused."""
+
+    monkeypatch.setattr(
+        census, "WinResultType", typing.Literal["CREWMATE_TASKS", "DRAW"]
+    )
+    rows = table("games_by_ending", game(end_reason="DRAW"))
+    assert rows["DRAW"] == 1 and "IMPOSTOR_PARITY" not in rows
+    with _refusal(
+        ValueError,
+        f"set {PLANTED}, seed {SEED}: the recorded ending 'IMPOSTOR_PARITY' is not "
+        "one the engine or the runner records",
+    ):
+        fold_set(inputs(game(end_reason="IMPOSTOR_PARITY")))
+
+
+def test_tick_gaps_and_shares_land_in_their_buckets() -> None:
+    labels = [label for label, _ in census.TICK_GAP_BUCKETS]
+    assert [census.tick_gap_bucket(gap) for gap in (0, 1, 2, 3, 5, 6, 10, 11, 20)] == [
+        labels[0],
+        labels[1],
+        labels[1],
+        labels[2],
+        labels[2],
+        labels[3],
+        labels[3],
+        labels[4],
+        labels[4],
+    ]
+    assert census.tick_gap_bucket(21) == census.LONG_GAP
+    assert census.tick_gap_rows() == (*labels, census.LONG_GAP)
+    with _refusal(ValueError, "a gap of -1 ticks runs backwards"):
+        census.tick_gap_bucket(-1)
+    shares = [label for label, _ in census.SHARE_BUCKETS]
+    assert [census.share_bucket(part, 8) for part in (0, 1, 2, 3, 4, 5, 6, 7, 8)] == [
+        shares[0],
+        shares[1],
+        shares[1],
+        shares[2],
+        shares[2],
+        shares[3],
+        shares[3],
+        shares[4],
+        shares[4],
+    ]
+    for part, whole in ((-1, 4), (5, 4), (0, 0)):
+        with _refusal(ValueError, f"{part} of {whole} is not a share"):
+            census.share_bucket(part, whole)
+
+
+def test_the_kill_cadence_counts_kills_their_gaps_and_each_kill_to_its_report() -> None:
+    """Planted: a meeting on the kill's own tick, a same-tick double kill whose
+    second body no one reports, and a kill whose body a later meeting reports."""
+
+    planted = game(
+        kills=(
+            victim_kill(5, "p-2"),
+            victim_kill(12, "p-3"),
+            victim_kill(12, "p-4", killer="p-1"),
+            victim_kill(40, "p-1", killer="p-0"),
+        ),
+        bodies=(
+            victim_body("body-a", 5, "p-2"),
+            victim_body("body-b", 12, "p-3"),
+            victim_body("body-c", 12, "p-4"),
+            victim_body("body-d", 40, "p-1"),
+        ),
+        meetings=(
+            report(5, "body-a"),
+            report(14, "body-c", meeting_id="meeting-1"),
+            report(52, "body-d", meeting_id="meeting-2"),
+        ),
+    )
+    assert table("kills_per_game", planted) == {"4": 1}
+    gaps = table("ticks_between_kills", planted)
+    assert gaps["the same tick"] == 1
+    assert gaps["6 to 10 ticks"] == 1
+    assert gaps[census.LONG_GAP] == 1
+    reports = table("ticks_from_kill_to_report", planted)
+    assert reports["the same tick"] == 1
+    assert reports["1 to 2 ticks"] == 1  # body-c's kill, never body-b's
+    assert reports["11 to 20 ticks"] == 1
+    assert reports[census.NEVER_REPORTED] == 1
+    assert sum(reports.values()) == 4
+
+
+def test_a_same_tick_double_kill_joins_each_body_to_its_own_kill_by_victim() -> None:
+    """Planted: two kills on one tick in two rooms; the report names the second
+    victim's body. Joined by victim, only that kill reaches the report, whatever
+    order the kills are listed in."""
+
+    kills = (victim_kill(12, "p-3", room=ROOM), victim_kill(12, "p-4", room=FAR))
+    bodies = (victim_body("body-x", 12, "p-3"), victim_body("body-y", 12, "p-4"))
+    for ordered in (kills, kills[::-1]):
+        planted = game(
+            kills=ordered,
+            bodies=bodies,
+            meetings=(report(13, "body-y"),),
+        )
+        reports = table("ticks_from_kill_to_report", planted)
+        assert reports["1 to 2 ticks"] == 1
+        assert reports[census.NEVER_REPORTED] == 1
+    swapped = game(
+        kills=(replace(kills[0], victim="p-4"), replace(kills[1], victim="p-3")),
+        bodies=bodies,
+        meetings=(report(13, "body-y"),),
+    )
+    assert table("ticks_from_kill_to_report", swapped)["1 to 2 ticks"] == 1
+
+
+def test_a_kill_or_body_without_a_victim_is_not_joined() -> None:
+    """Hand-built carriers without victims count nothing in the joined tables."""
+
+    unjoined = game(
+        kills=(kill(5),),
+        bodies=(body("body-a", 5),),
+        meetings=(report(6, "body-a"),),
+        end_reason="IMPOSTOR_PARITY",
+    )
+    folded = section_from_tally(fold_set(inputs(unjoined)))
+    report_table = folded.tables["ticks_from_kill_to_report"]
+    assert sum(report_table.counts.values()) == 0
+    assert report_table.not_evaluable == 1
+    living = folded.tables["living_players_at_game_over_by_ending"]
+    assert living.counts == {} and living.not_evaluable == 1
+    half = game(
+        kills=(victim_kill(5, "p-2"),),
+        bodies=(body("body-a", 5),),
+        meetings=(report(6, "body-a"),),
+    )
+    assert (
+        section_from_tally(fold_set(inputs(half)))
+        .tables["ticks_from_kill_to_report"]
+        .not_evaluable
+        == 1
+    )
+
+
+def test_closeness_reads_the_living_and_the_tasks_left_at_game_over() -> None:
+    """Planted: two kills and an ejection among five players, half the tasks done."""
+
+    planted = game(
+        kills=(victim_kill(5, "p-2"), victim_kill(9, "p-3")),
+        meetings=(meeting(**ejecting("p-0")),),
+        end_reason="CREWMATE_EJECT",
+        final_tasks_completed=4,
+        final_tasks_total=8,
+    )
+    assert table("living_players_at_game_over_by_ending", planted) == {
+        "CREWMATE_EJECT: 2 living": 1
+    }
+    assert table("tasks_left_at_game_over_by_ending", planted) == {
+        "CREWMATE_EJECT: up to a half": 1
+    }
+    done = game(
+        end_reason="CREWMATE_TASKS", final_tasks_completed=8, final_tasks_total=8
+    )
+    assert table("tasks_left_at_game_over_by_ending", done) == {
+        "CREWMATE_TASKS: none": 1
+    }
+    for unknown in (
+        game(final_tasks_completed=1, final_tasks_total=8),
+        game(end_reason="CREWMATE_TASKS"),
+        game(end_reason="CREWMATE_TASKS", final_tasks_completed=0, final_tasks_total=0),
+    ):
+        tasks = section_from_tally(fold_set(inputs(unknown))).tables[
+            "tasks_left_at_game_over_by_ending"
+        ]
+        assert tasks.counts == {} and tasks.not_evaluable == 1
+
+
+def test_a_sabotage_active_across_a_meeting_is_one_start() -> None:
+    """Planted: a sabotage active from tick 10 through 20 with a meeting at 15,
+    then a second one from 30; and a task win in a game with each."""
+
+    frames = {
+        tick: frame({}, sabotage=10 <= tick <= 20 or 30 <= tick <= 32)
+        for tick in range(0, 40)
+    }
+    planted = game(
+        frames=frames,
+        meetings=(meeting(tick=15),),
+        end_reason="CREWMATE_TASKS",
+    )
+    assert table("sabotages_started_per_game", planted) == {"2": 1}
+    assert counts("task_wins_with_sabotage_in_play", planted) == (1, 1, 0)
+    quiet = game(frames={0: frame({}), 1: frame({})}, end_reason="CREWMATE_TASKS")
+    assert counts("task_wins_with_sabotage_in_play", quiet) == (0, 1, 0)
+    lost = game(frames=frames, end_reason="IMPOSTOR_PARITY")
+    assert counts("task_wins_with_sabotage_in_play", lost) == (0, 0, 0)
+    opening = game(frames={0: frame({}, sabotage=True)}, end_reason="CREWMATE_TASKS")
+    assert table("sabotages_started_per_game", opening) == {"1": 1}
+
+
+def test_who_found_the_body_reads_the_witnesses_since_the_last_meeting() -> None:
+    """Planted: an opener who saw a kill since the last meeting; one who saw a
+    kill only before it; one who saw the kill on the meeting's own tick; and a
+    button meeting, which reports no body."""
+
+    planted = game(
+        kills=(
+            kill(4, witnesses=("p-2",)),
+            kill(12, witnesses=("p-3",)),
+            kill(30, witnesses=("p-4",)),
+        ),
+        bodies=(body("body-a", 4), body("body-b", 12), body("body-c", 30)),
+        meetings=(
+            report(6, "body-a", opener="p-2"),
+            report(14, "body-b", meeting_id="meeting-1", opener="p-2"),
+            meeting(meeting_id="meeting-2", tick=20, opener="p-3"),
+            report(30, "body-c", meeting_id="meeting-3", opener="p-4"),
+        ),
+    )
+    rows = table("report_openers_by_witness", planted)
+    witness = "opened by a witness of a kill since the last meeting"
+    other = "opened by another player"
+    assert rows[f"{witness}, 1 to 2 ticks"] == 1
+    assert rows[f"{other}, 1 to 2 ticks"] == 1
+    assert rows[f"{witness}, the same tick"] == 1
+    assert sum(rows.values()) == 3
+    assert len(rows) == 2 * len(census.tick_gap_rows())
+
+
+def test_copresence_counts_player_ticks_with_exactly_one_other() -> None:
+    """Planted: a pair, a trio and a loner across two ticks."""
+
+    planted = game(
+        frames={
+            1: frame({"p-0": ROOM, "p-2": ROOM, "p-3": FAR, "p-4": FAR, "p-1": FAR}),
+            2: frame({"p-0": ROOM, "p-2": FAR, "p-3": NEIGHBOUR}),
+        }
+    )
+    # Tick 1: p-0 and p-2 are a pair (2 of 5); tick 2: three loners. 2 of 8.
+    assert table("copresence_share_per_game", planted) == {"up to a quarter": 1}
+    empty = section_from_tally(fold_set(inputs(game())))
+    assert empty.tables["copresence_share_per_game"].not_evaluable == 1
+
+
+def test_a_player_inside_a_vent_stands_in_no_room_for_copresence() -> None:
+    """Planted: the only other player in the room is inside its vent, so the
+    frame the loader builds counts the one standing there as alone."""
+
+    opened = next(event for event in _events() if isinstance(event, TickOpened))
+    state = opened.state
+    first, second, *rest = sorted(state.players)
+    players = dict(state.players)
+    players[first] = replace(players[first], room=ROOM)
+    players[second] = replace(players[second], room=ROOM, in_vent=True)
+    for other in rest:
+        players[other] = replace(players[other], room=FAR)
+    built = census._frame_of(replace(state, players=players))
+    lone = table("copresence_share_per_game", game(frames={1: built}))
+    assert first in built.rooms and second not in built.rooms
+    others = len(rest)
+    assert lone == {census.share_bucket(others if others == 2 else 0, others + 1): 1}
+
+
+def test_the_loader_keeps_each_kill_and_body_victim_and_the_ending() -> None:
+    """On the promoted bytes' seed 1, which holds a same-tick double kill: each
+    kill's victim is its event's target, each body's its own player, the trigger
+    body of every report joins exactly one kill by victim, and the ending and
+    the final task count are the walk's own."""
+
+    seed = 1
+    loaded = next(
+        item for item in census_inputs(SAMPLES_9P2I).games if item.seed == seed
+    )
+    events = census_walk_events(SAMPLES_9P2I, seed)
+    targets = [
+        (engine_event.tick, engine_event.actor, engine_event.target)
+        for event in events
+        if isinstance(event, TickAdvanced)
+        for engine_event in event.events
+        if isinstance(engine_event, KilledEvent)
+    ]
+    assert [(item.tick, item.killer, item.victim) for item in loaded.kills] == targets
+    ticks = Counter(tick for tick, _, _ in targets)
+    assert max(ticks.values()) == 2
+    corpses = {
+        body_id: corpse.player_id
+        for event in events
+        if isinstance(event, TickAdvanced)
+        for body_id, corpse in event.state.bodies.items()
+    }
+    assert {item.body_id: item.victim for item in loaded.bodies} == corpses
+    bodies = {item.body_id: item for item in loaded.bodies}
+    for meeting_ in loaded.meetings:
+        if meeting_.trigger_kind != "report":
+            continue
+        reported = bodies[meeting_.trigger_body or ""]
+        joined = [item for item in loaded.kills if item.victim == reported.victim]
+        assert len(joined) == 1 and joined[0].tick == reported.kill_tick
+    complete = next(event for event in events if isinstance(event, WalkComplete))
+    assert complete.game_end is not None
+    assert loaded.end_reason == complete.game_end.reason
+    assert loaded.final_tasks_total == len(complete.state.tasks)
+    assert loaded.final_tasks_completed == sum(
+        1 for task in complete.state.tasks.values() if task.completed
+    )
+    living = sum(1 for player in complete.state.players.values() if player.alive)
+    removed = {item.victim for item in loaded.kills} | {
+        item.ejected for item in loaded.meetings if item.ejected
+    }
+    assert len(set(loaded.roles) - removed) == living
+
+
+def test_every_committed_game_has_an_ending_and_a_derived_living_count() -> None:
+    """On every committed set, every game records an ending, and the living count
+    the closeness table derives from kills and ejections is the final state's."""
+
+    payload = _published()
+    for section in payload["sets"]:
+        assert section["tables"]["games_by_ending"]["not_evaluable"] == 0
+        living = section["tables"]["living_players_at_game_over_by_ending"]
+        assert living["not_evaluable"] == 0
+        assert sum(living["counts"].values()) == section["games"]
+        tasks = section["tables"]["tasks_left_at_game_over_by_ending"]
+        assert tasks["not_evaluable"] == 0
+        assert sum(tasks["counts"].values()) == section["games"]
+
+
+# --------------------------------------------------------------------------- #
+# The route-check replay's columns: the recording files the lab read          #
+# --------------------------------------------------------------------------- #
+
+#: The route-check replay's committed results, whose columns name the commit and
+#: directory each one read.
+ROUTE_CHECK_JSON: Final = repo_root / "experiments/lab/results-route-check-replay.json"
+
+#: The files beside the replays that the recording fingerprint hashes.
+_FINGERPRINT_SIDECARS: Final = frozenset({"roster.json", "MANIFEST.md"})
+
+
+def is_recording_file(name: str) -> bool:
+    """Whether ``name`` is one of the files the recording fingerprint hashes."""
+
+    return replay_seed_from_filename(name) is not None or name in _FINGERPRINT_SIDECARS
+
+
+def _run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=False
+    )
+
+
+def _tree_listing(repo: Path, treeish: str) -> list[tuple[str, str, str, str]] | None:
+    """``treeish``'s entries as (mode, type, id, name), or ``None`` when absent."""
+
+    listed = _run_git(repo, "ls-tree", treeish)
+    if listed.returncode != 0:
+        return None
+    entries: list[tuple[str, str, str, str]] = []
+    for line in listed.stdout.splitlines():
+        meta, name = line.split("\t", 1)
+        mode, kind, oid = meta.split()
+        entries.append((mode, kind, oid, name))
+    return entries
+
+
+def flat_tree_id(entries: Sequence[tuple[str, str, str, str]]) -> str:
+    """The id git gives a directory holding exactly ``entries``, all files."""
+
+    body = b""
+    for mode, kind, oid, name in sorted(entries, key=lambda item: item[3].encode()):
+        if kind != "blob":
+            raise ValueError(f"{name} is a {kind}; a recording directory is flat")
+        body += f"{mode} {name}".encode() + b"\0" + bytes.fromhex(oid)
+    return hashlib.sha1(f"tree {len(body)}".encode() + b"\0" + body).hexdigest()
+
+
+def recording_blob_problems(repo: Path, *, sha: str, path: str, tree: str) -> list[str]:
+    """Each way the recording files at ``sha:path`` differ from ``HEAD:path``.
+
+    The recording files are the ones the recording fingerprint hashes: every
+    replay, the roster and the manifest. A file added beside them later, such as
+    a derived results file, changes nothing. With the recorded commit in the
+    clone the two listings are compared blob by blob, and the recorded tree is
+    held to the column's. In a shallow clone without it, the recorded tree must
+    be what ``HEAD:path`` reads as with some of its other files left out, which
+    proves every recording file unchanged; a clone where neither holds fails by
+    name.
+    """
+
+    head = _tree_listing(repo, f"HEAD:{path}")
+    if head is None:
+        return [f"HEAD holds no {path}"]
+    recorded = _tree_listing(repo, f"{sha}:{path}")
+    if recorded is not None:
+        problems: list[str] = []
+        recorded_tree = _run_git(repo, "rev-parse", f"{sha}:{path}").stdout.strip()
+        if recorded_tree != tree:
+            problems.append(f"{sha}:{path} is tree {recorded_tree}, not {tree}")
+        before = {name: oid for _, _, oid, name in recorded if is_recording_file(name)}
+        after = {name: oid for _, _, oid, name in head if is_recording_file(name)}
+        for name in sorted(set(before) | set(after)):
+            if name not in after:
+                problems.append(f"{path}/{name}: absent at HEAD")
+            elif name not in before:
+                problems.append(f"{path}/{name}: added since {sha}")
+            elif before[name] != after[name]:
+                problems.append(f"{path}/{name}: a different blob at HEAD")
+        return problems
+    others = [entry for entry in head if not is_recording_file(entry[3])]
+    if len(others) > 12:
+        return [f"{path}: too many files beside the recordings to read"]
+    for size in range(len(others) + 1):
+        for left_out in combinations(others, size):
+            kept = [entry for entry in head if entry not in left_out]
+            if flat_tree_id(kept) == tree:
+                return []
+    return [
+        f"{sha} is not in this clone, and no reading of HEAD:{path} with only "
+        f"files beside its recordings left out is the recorded tree {tree}"
+    ]
+
+
+def _route_check_columns() -> dict[str, Mapping[str, Any]]:
+    payload = json.loads(ROUTE_CHECK_JSON.read_text(encoding="utf-8"))
+    return {column["label"]: column for column in payload["columns"]}
+
+
+def test_the_route_check_columns_read_the_recordings_now_at_head() -> None:
+    """The lab's r2 and r1 columns: each column's recording files at its recorded
+    sha and path are HEAD's, blob for blob. A failed precondition fails by name."""
+
+    columns = _route_check_columns()
+    assert set(columns) >= {"r1", "r2"}
+    assert _run_git(repo_root, "rev-parse", "--show-object-format").stdout.strip() == (
+        "sha1"
+    )
+    for label in ("r2", "r1"):
+        column = columns[label]
+        assert (
+            recording_blob_problems(
+                repo_root, sha=column["sha"], path=column["path"], tree=column["tree"]
+            )
+            == []
+        ), label
+
+
+def _git_write(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=census test",
+            "-c",
+            "user.email=census@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            *args,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+_COLUMN: Final = "replays/samples/9p2i"
+
+
+def _drift_repo(root: Path) -> tuple[Path, str, str]:
+    """A repository whose column holds two replays and their sidecars."""
+
+    repo = root / "origin"
+    column = repo / _COLUMN
+    column.mkdir(parents=True)
+    for name in ("MANIFEST.md", "roster.json", "experiment-config.json"):
+        shutil.copy(SAMPLES_9P2I / name, column / name)
+    for seed in (0, 1):
+        shutil.copy(SAMPLES_9P2I / f"replay-seed-{seed}.jsonl", column)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_write(repo, "add", "-A")
+    _git_write(repo, "commit", "-q", "-m", "column")
+    sha = _git_write(repo, "rev-parse", "HEAD")
+    return repo, sha, _git_write(repo, "rev-parse", f"HEAD:{_COLUMN}")
+
+
+def _commit_change(repo: Path, change: Callable[[Path], None]) -> None:
+    change(repo / _COLUMN)
+    _git_write(repo, "add", "-A")
+    _git_write(repo, "commit", "-q", "-m", "a later change")
+
+
+def _shallow(repo: Path, root: Path) -> Path:
+    clone = root / "shallow"
+    subprocess.run(
+        ["git", "clone", "-q", "--depth", "1", f"file://{repo}", str(clone)],
+        check=True,
+        capture_output=True,
+    )
+    assert _run_git(clone, "rev-parse", "--is-shallow-repository").stdout.strip() == (
+        "true"
+    )
+    return clone
+
+
+def _add_results(column: Path) -> None:
+    (column / "results-game-profile.json").write_text("{}\n", encoding="utf-8")
+
+
+def _rewrite_replay(column: Path) -> None:
+    replay = column / "replay-seed-1.jsonl"
+    replay.write_bytes(replay.read_bytes() + b"\n")
+
+
+def _drop_replay(column: Path) -> None:
+    (column / "replay-seed-1.jsonl").unlink()
+
+
+def test_an_added_results_file_beside_the_recordings_leaves_the_check_green(
+    tmp_path: Path,
+) -> None:
+    """Planted: a derived file committed into the column after the run, read with
+    the recorded commit in the clone and in a shallow clone without it."""
+
+    repo, sha, tree = _drift_repo(tmp_path)
+    _commit_change(repo, _add_results)
+    assert _git_write(repo, "rev-parse", f"HEAD:{_COLUMN}") != tree
+    assert recording_blob_problems(repo, sha=sha, path=_COLUMN, tree=tree) == []
+    clone = _shallow(repo, tmp_path)
+    assert _run_git(clone, "cat-file", "-e", f"{sha}^{{commit}}").returncode != 0
+    assert recording_blob_problems(clone, sha=sha, path=_COLUMN, tree=tree) == []
+
+
+def test_a_changed_or_missing_replay_fails_the_check_by_name(tmp_path: Path) -> None:
+    """Planted: a replay rewritten after the run, and a replay removed, each read
+    with the recorded commit in the clone and in a shallow clone without it."""
+
+    for change, problem in (
+        (_rewrite_replay, f"{_COLUMN}/replay-seed-1.jsonl: a different blob at HEAD"),
+        (_drop_replay, f"{_COLUMN}/replay-seed-1.jsonl: absent at HEAD"),
+    ):
+        root = tmp_path / change.__name__
+        root.mkdir()
+        repo, sha, tree = _drift_repo(root)
+        _commit_change(repo, change)
+        assert recording_blob_problems(repo, sha=sha, path=_COLUMN, tree=tree) == [
+            problem
+        ]
+        clone = _shallow(repo, root)
+        assert recording_blob_problems(clone, sha=sha, path=_COLUMN, tree=tree) == [
+            f"{sha} is not in this clone, and no reading of HEAD:{_COLUMN} with only "
+            f"files beside its recordings left out is the recorded tree {tree}"
+        ]
+
+
+def test_a_recorded_tree_that_is_not_the_columns_fails_the_check(
+    tmp_path: Path,
+) -> None:
+    repo, sha, tree = _drift_repo(tmp_path)
+    wrong = "0" * 40
+    assert recording_blob_problems(repo, sha=sha, path=_COLUMN, tree=wrong) == [
+        f"{sha}:{_COLUMN} is tree {tree}, not {wrong}"
+    ]
+    assert recording_blob_problems(repo, sha=sha, path="replays/absent", tree=tree) == [
+        "HEAD holds no replays/absent"
+    ]
+
+
+def test_the_python_tree_id_is_gits(tmp_path: Path) -> None:
+    repo, _, tree = _drift_repo(tmp_path)
+    listing = _tree_listing(repo, f"HEAD:{_COLUMN}")
+    assert listing is not None and flat_tree_id(listing) == tree
+
+
+def test_the_recording_files_are_the_fingerprints_inputs(tmp_path: Path) -> None:
+    """Every file the check calls a recording file moves the recording
+    fingerprint when its bytes change; every other file beside them does not."""
+
+    column = tmp_path / "column"
+    column.mkdir()
+    for name in ("MANIFEST.md", "roster.json", "experiment-config.json"):
+        shutil.copy(SAMPLES_9P2I / name, column / name)
+    shutil.copy(SAMPLES_9P2I / "replay-seed-0.jsonl", column)
+    _add_results(column)
+    names = sorted(path.name for path in column.iterdir())
+    for name in names:
+        before = recording_fingerprint(column)
+        target = column / name
+        original = target.read_bytes()
+        target.write_bytes(original + b"\n")
+        moved = recording_fingerprint(column) != before
+        target.write_bytes(original)
+        assert moved is is_recording_file(name), name
+    assert is_recording_file("replay-seed-12.jsonl")
+    assert not is_recording_file("replay-seed-12.audit.jsonl")
+
+
+# --------------------------------------------------------------------------- #
+# The held-data cells and the game-shape tables stay a census                  #
+# --------------------------------------------------------------------------- #
+
+#: The cells and tables this round of the census adds.
+HELD_AND_SHAPE_CELLS: Final = (
+    "holds_nothing_skips_naming_no_candidate",
+    "holds_nothing_skips_naming_a_candidate",
+    "cited_lines_true_to_the_route",
+    "cited_lines_false_to_the_route",
+    "task_wins_with_sabotage_in_play",
+)
+HELD_AND_SHAPE_TABLES: Final = (
+    "holds_nothing_skips_by_source",
+    "cited_placements_by_kind_and_verdict",
+    "supported_ejects_not_checkable_by_reason",
+    "games_by_ending",
+    "kills_per_game",
+    "ticks_between_kills",
+    "ticks_from_kill_to_report",
+    "living_players_at_game_over_by_ending",
+    "tasks_left_at_game_over_by_ending",
+    "sabotages_started_per_game",
+    "report_openers_by_witness",
+    "copresence_share_per_game",
+)
+
+
+def test_the_new_cells_and_tables_carry_no_guard_and_no_scope() -> None:
+    """No new count is forced to zero or scoped by a setting: each is counted in
+    every era, and none is guarded by a predicate, so none reads a role there."""
+
+    for key in HELD_AND_SHAPE_CELLS:
+        spec = CELLS[key]
+        assert spec.guard is None and spec.scope is None, key
+        assert spec.heading in (census._HELD, census._SHAPE), key
+    for key in HELD_AND_SHAPE_TABLES:
+        assert TABLES[key].scope is None, key
+        assert TABLES[key].heading in (census._HELD, census._SHAPE), key
+    assert (
+        census.HEADINGS.index(census._HELD)
+        == census.HEADINGS.index(census._BALLOTS) + 1
+    )
+    assert (
+        census.HEADINGS.index(census._SHAPE) == census.HEADINGS.index(census._HELD) + 1
+    )
+
+
+def _held_and_shape(games: Sequence[GameFacts]) -> tuple[Any, Any]:
+    """The new cells and tables, folded by their own folds alone."""
+
+    acc = census._Accumulator(label=PLANTED, values=MappingProxyType({}))
+    for item in games:
+        census._fold_held_data(item, acc)
+        census._fold_game_shape(item, acc)
+    return (
+        {key: tuple(acc.cells[key]) for key in HELD_AND_SHAPE_CELLS},
+        {key: dict(acc.tables[key]) for key in HELD_AND_SHAPE_TABLES},
+    )
+
+
+@hypothesis_settings(deadline=None, max_examples=25)
+@given(data=st.data())
+def test_permuting_the_roles_moves_no_new_count(data: st.DataObject) -> None:
+    """Role-blind numerators: on every committed game of the promoted set, any
+    permutation of the seeded roles leaves every new cell and table as it was.
+    Perturbed, a fold reading the voter's role breaks it."""
+
+    games = census_inputs(SAMPLES_9P2I).games
+    picked = data.draw(st.lists(st.sampled_from(games), min_size=1, max_size=4))
+    permuted = []
+    for item in picked:
+        players = sorted(item.roles)
+        shuffled = data.draw(st.permutations(players))
+        roles = MappingProxyType(
+            {player: item.roles[source] for player, source in zip(players, shuffled)}
+        )
+        permuted.append(replace(item, roles=roles))
+    assert _held_and_shape(permuted) == _held_and_shape(picked)
+
+
+def test_round_1_and_the_promoted_set_never_pool_before_a_new_cell_is_summed() -> None:
+    """Planted: round 1's folded tally pooled with the promoted set's. The era
+    refusal comes before any cell, the new ones included, is read; round 1 is
+    read on its own, with ``--set-dir``."""
+
+    round_1 = fold_set(census_inputs(repo_root / "replays/candidates/stage-b-r1/9p2i"))
+    promoted = fold_set(census_inputs(SAMPLES_9P2I))
+    assert round_1.era != promoted.era
+    for key in HELD_AND_SHAPE_CELLS:
+        assert round_1.cells[key].denominator > 0 or key.startswith("task_wins")
+    with pytest.raises(GameplayCensusEraError, match="differ in settings"):
+        pool(
+            [
+                replace(round_1, cells=_UnsummableCells()),
+                replace(promoted, cells=_UnsummableCells()),
+            ],
+            label="mixed",
+        )
