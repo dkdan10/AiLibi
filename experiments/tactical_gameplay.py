@@ -22,13 +22,14 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Final, Literal
+from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from agents.tactical.experimental import FRESH_KILL_WINDOW_TICKS, IN_VENT_CAP_TICKS
 from engine.actions import Action
 from engine.events import (
+    EngineEvent,
     KilledEvent,
     MeetingTriggeredEvent,
     MovedEvent,
@@ -157,13 +158,50 @@ STAGE_B_KILL_COOLDOWNS: Final[Mapping[str, int]] = MappingProxyType(
     }
 )
 
+#: The idle-policy cross. Each arm is the reference arm, the full Stage-B arm
+#: at kill cooldown 6, with the finished crew's idle policy set; the reference
+#: itself, at the default ``hub_wait``, is the cross's third column.
+STAGE_B_IDLE_REFERENCE: Final[str] = "stage_b_full_kill_cooldown_6"
+STAGE_B_IDLE_POLICIES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "stage_b_full_kill_cooldown_6_patrol": "patrol",
+        "stage_b_full_kill_cooldown_6_accompany": "accompany",
+    }
+)
+
+#: Each split's seeds, the same on both rosters. ``development_wide`` begins
+#: with ``development`` and stays below the held-out seeds.
+SPLIT_SEEDS: Final[Mapping[str, tuple[int, ...]]] = MappingProxyType(
+    {
+        "development": tuple(range(1000, 1008)),
+        "held_out": tuple(range(2000, 2016)),
+        "development_wide": tuple(range(1000, 1100)),
+    }
+)
+
+#: The role-blind whereabouts counts :func:`fold_whereabouts` adds to a row.
+WHEREABOUTS_COUNTS: Final[tuple[str, ...]] = (
+    "whereabouts_subjects_at_kill_ticks",
+    "whereabouts_covered_at_kill_ticks",
+    "whereabouts_subjects_at_play_ticks",
+    "whereabouts_covered_at_play_ticks",
+)
+
+#: The kill-witness counts :func:`fold_kill_witnesses` adds to a row.
+KILL_WITNESS_COUNTS: Final[tuple[str, ...]] = (
+    "crew_kill_witnesses",
+    "crew_kill_witnesses_walked_in",
+    "kills_with_walk_in_crew_witness",
+)
+
 
 def candidate_configs() -> dict[str, RecordedExperimentConfig]:
     """Predeclared comparisons; no automatic promotion of an arm.
 
     One-change arms, the Stage-B arm that sets every round-1 field acting
     during play, one attribution arm per such field, which drops it, and the
-    Stage-B arm at each kill cooldown of the dial.
+    Stage-B arm at each kill cooldown of the dial, and the idle-policy cross
+    over the reference arm.
     """
 
     configs = {
@@ -200,6 +238,13 @@ def candidate_configs() -> dict[str, RecordedExperimentConfig]:
         configs[name] = RecordedExperimentConfig.model_validate(
             {**STAGE_B_FULL_SETTINGS, "kill_cooldown_ticks": ticks}
         )
+    for name, policy in STAGE_B_IDLE_POLICIES.items():
+        configs[name] = RecordedExperimentConfig.model_validate(
+            {
+                **configs[STAGE_B_IDLE_REFERENCE].model_dump(),
+                "crew_idle_policy": policy,
+            }
+        )
     return configs
 
 
@@ -234,6 +279,115 @@ def ticks_to_parity(arms: Mapping[str, Any]) -> dict[str, dict[str, dict[str, An
     return summary
 
 
+def _share(counts: Mapping[str, int], scope: str) -> tuple[int, int]:
+    """(covered, subjects) of one row over ``kill_ticks`` or ``play_ticks``."""
+
+    return (
+        counts[f"whereabouts_covered_at_{scope}"],
+        counts[f"whereabouts_subjects_at_{scope}"],
+    )
+
+
+def whereabouts_coverage_summary(
+    arms: Mapping[str, Any],
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Count-only: per arm and roster, the role-blind whereabouts coverage.
+
+    ``arms`` is the comparison's ``arms`` block. For each arm and roster: the
+    games, the kills, the four coverage sums, the games without a kill tick, and
+    the minimum, median and maximum of one game's covered share at kill ticks
+    over the games with a kill tick (``None`` with none). A game has a kill tick
+    exactly when it has a subject at one.
+    """
+
+    summary: dict[str, dict[str, dict[str, Any]]] = {}
+    for arm, entry in arms.items():
+        for roster, rows in entry["sets"].items():
+            shares = [
+                covered / subjects
+                for covered, subjects in (
+                    _share(row["counts"], "kill_ticks") for row in rows
+                )
+                if subjects
+            ]
+            summary.setdefault(arm, {})[roster] = {
+                "games": len(rows),
+                "kills": sum(row["counts"].get("event:Killed", 0) for row in rows),
+                **{
+                    key: sum(row["counts"][key] for row in rows)
+                    for key in WHEREABOUTS_COUNTS
+                },
+                "games_without_a_kill_tick": len(rows) - len(shares),
+                "kill_tick_share_minimum": min(shares) if shares else None,
+                "kill_tick_share_median": statistics.median(shares) if shares else None,
+                "kill_tick_share_maximum": max(shares) if shares else None,
+            }
+    return summary
+
+
+def _compare_shares(
+    arm: Mapping[str, int], reference: Mapping[str, int], scope: str
+) -> int:
+    """1, 0 or -1 as the arm's covered share is higher, equal or lower; exact."""
+
+    arm_covered, arm_subjects = _share(arm, scope)
+    reference_covered, reference_subjects = _share(reference, scope)
+    if not arm_subjects or not reference_subjects:
+        raise ValueError(f"a game without a subject at {scope} has no share")
+    left = arm_covered * reference_subjects
+    right = reference_covered * arm_subjects
+    return (left > right) - (left < right)
+
+
+def idle_policy_pairs(arms: Mapping[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
+    """Count-only: each idle-policy arm against the reference arm, seed by seed.
+
+    Only a cross arm whose reference ran in the same comparison is paired. Per
+    roster: the seeds, the seeds where both games have a kill tick and, among
+    them, where the arm's kill-tick share is higher, equal or lower; then the
+    same three over play ticks for every seed. Paired games share a seed and
+    diverge after their first differing decision.
+    """
+
+    pairs: dict[str, dict[str, dict[str, Any]]] = {}
+    if STAGE_B_IDLE_REFERENCE not in arms:
+        return pairs
+    reference_sets = arms[STAGE_B_IDLE_REFERENCE]["sets"]
+    for arm in STAGE_B_IDLE_POLICIES:
+        if arm not in arms:
+            continue
+        for roster, rows in arms[arm]["sets"].items():
+            mine = {row["seed"]: row["counts"] for row in rows}
+            theirs = {row["seed"]: row["counts"] for row in reference_sets[roster]}
+            if set(mine) != set(theirs):
+                raise ValueError(f"{arm} and its reference ran different seeds")
+            both = [
+                seed
+                for seed in sorted(mine)
+                if _share(mine[seed], "kill_ticks")[1]
+                and _share(theirs[seed], "kill_ticks")[1]
+            ]
+            kill = [
+                _compare_shares(mine[seed], theirs[seed], "kill_ticks") for seed in both
+            ]
+            play = [
+                _compare_shares(mine[seed], theirs[seed], "play_ticks")
+                for seed in sorted(mine)
+            ]
+            pairs.setdefault(arm, {})[roster] = {
+                "reference": STAGE_B_IDLE_REFERENCE,
+                "seeds": len(mine),
+                "seeds_with_a_kill_tick_in_both": len(both),
+                "kill_tick_share_higher": kill.count(1),
+                "kill_tick_share_equal": kill.count(0),
+                "kill_tick_share_lower": kill.count(-1),
+                "play_tick_share_higher": play.count(1),
+                "play_tick_share_equal": play.count(0),
+                "play_tick_share_lower": play.count(-1),
+            }
+    return pairs
+
+
 def entry_after_own_fresh_kill(
     entry: VentEnteredEvent,
     *,
@@ -260,6 +414,83 @@ def living_player_in_vent(state: WorldState) -> bool:
     """Whether a living player is inside a vent; only an impostor can be."""
 
     return any(player.alive and player.in_vent for player in state.players.values())
+
+
+def whereabouts_coverage(state: WorldState) -> tuple[int, int]:
+    """(subjects, covered subjects) in one state; no role is read.
+
+    Every living player is a subject. A subject is covered when it is not inside
+    a vent and at least one other living player outside a vent stands in its
+    room: the engine's kill-witness rule (``engine.rules._witnesses_in_room``)
+    applied to every player, and the same-room sight every observer holds in
+    every visibility mode. It counts positions, not what anyone noticed.
+
+    It bounds one thing: on the canonical map a crewmate sees only its own
+    room, so every player a crewmate sees in this state is covered. It bounds
+    nothing an impostor sees, since an impostor also sees the adjacent rooms at
+    base sight and still sees from inside a vent, and nothing a player holds
+    from earlier ticks, from a departure it watched or from speech.
+    """
+
+    standing = Counter(
+        player.room
+        for player in state.players.values()
+        if player.alive and not player.in_vent
+    )
+    subjects = sum(player.alive for player in state.players.values())
+    covered = sum(count for count in standing.values() if count > 1)
+    return subjects, covered
+
+
+def fold_whereabouts(step: TickAdvanced, counts: Counter[str]) -> None:
+    """Add one play tick's coverage, read from the state the tick leaves.
+
+    Every play tick adds to the play-tick pair. A kill tick, a play tick with at
+    least one ``Killed`` event, adds the same once to the kill-tick pair however
+    many kills it holds; its killer is a living subject, so it has at least one.
+    """
+
+    subjects, covered = whereabouts_coverage(step.state)
+    counts["whereabouts_subjects_at_play_ticks"] += subjects
+    counts["whereabouts_covered_at_play_ticks"] += covered
+    if any(isinstance(event, KilledEvent) for event in step.events):
+        counts["whereabouts_subjects_at_kill_ticks"] += subjects
+        counts["whereabouts_covered_at_kill_ticks"] += covered
+
+
+def _arrivals(events: Sequence[EngineEvent]) -> set[tuple[str, str]]:
+    """(player, room) for each move a tick made from another room into that room."""
+
+    return {
+        (event.actor, event.to_room)
+        for event in events
+        if isinstance(event, MovedEvent) and event.from_room != event.to_room
+    }
+
+
+def fold_kill_witnesses(step: TickAdvanced, counts: Counter[str]) -> None:
+    """Per kill: its crew witnesses, those who walked in, and whether any did.
+
+    A witness is one the engine recorded on the ``Killed`` event; the role is
+    read as ``kills_crew_witnessed`` reads it. A witness walked in when it moved
+    from another room into the kill's room on the kill tick. The engine applies
+    a tick's actions in order and reads the witnesses when the kill applies, so
+    such a witness arrived before the kill.
+    """
+
+    arrivals = _arrivals(step.events)
+    for event in step.events:
+        if not isinstance(event, KilledEvent):
+            continue
+        crew = [
+            pid
+            for pid in event.witnesses
+            if step.pre_state.players[pid].role == "CREWMATE"
+        ]
+        walked_in = [pid for pid in crew if (pid, event.room) in arrivals]
+        counts["crew_kill_witnesses"] += len(crew)
+        counts["crew_kill_witnesses_walked_in"] += len(walked_in)
+        counts["kills_with_walk_in_crew_witness"] += bool(walked_in)
 
 
 def _remaining_work(state: WorldState, owner: str) -> int:
@@ -521,7 +752,11 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
     engine = engine_arguments(recorded_experiment_config(entries))
     game_map = load_canonical_map()
     adapter: TypeAdapter[Action] = TypeAdapter(Action)
-    counts: Counter[str] = Counter()
+    # The role-blind and kill-witness counts are present in every row, zero
+    # included.
+    counts: Counter[str] = Counter(
+        dict.fromkeys(WHEREABOUTS_COUNTS + KILL_WITNESS_COUNTS, 0)
+    )
     last_move: dict[str, tuple[int, str, str]] = {}
     last_wait: dict[str, tuple[int, int]] = {}
     max_wait = 0
@@ -572,6 +807,8 @@ def measure_replay(path: Path, *, seed: int, roster: Roster) -> GameMetrics:
                 if role == "CREWMATE" and _remaining_work(step.state, actor) == 0:
                     counts["finished_crew_decision_slots"] += 1
         elif isinstance(step, TickAdvanced):
+            fold_whereabouts(step, counts)
+            fold_kill_witnesses(step, counts)
             actions = tuple(adapter.validate_python(raw) for raw in step.entry.actions)
             dispositions = classify_action_dispositions(actions, step.events)
             working = step.pre_state
@@ -912,10 +1149,12 @@ def measure_world_copy_control(*, iterations: int = 5_000) -> dict[str, Any]:
 
 def build_comparison(
     *,
-    split: Literal["development", "held_out"],
+    split: str,
     arms: tuple[str, ...] | None = None,
     include_samples: bool = False,
 ) -> dict[str, Any]:
+    if split not in SPLIT_SEEDS:
+        raise ValueError(f"unknown split {split!r}; declared: {sorted(SPLIT_SEEDS)}")
     root = Path(__file__).resolve().parents[1]
     before = runtime_fingerprint(root)
     configs = candidate_configs()
@@ -926,7 +1165,7 @@ def build_comparison(
         or any(name not in configs for name in selected)
     ):
         raise ValueError("select distinct, declared experiment arms")
-    seeds = tuple(range(1000, 1008) if split == "development" else range(2000, 2016))
+    seeds = SPLIT_SEEDS[split]
     set_names = ("4p1i", "9p2i")
     source_fingerprints = {
         name: recording_fingerprint(root / "replays/samples" / name)
@@ -1015,6 +1254,8 @@ def build_comparison(
                 arm, {"config": configs[arm].model_dump(mode="json"), "sets": {}}
             )["sets"][name] = rows
     output["ticks_to_parity"] = ticks_to_parity(output["arms"])
+    output["whereabouts_coverage"] = whereabouts_coverage_summary(output["arms"])
+    output["idle_policy_pairs"] = idle_policy_pairs(output["arms"])
     if runtime_fingerprint(root) != before:
         raise RuntimeError(
             "runtime source changed during the comparison; rerun on frozen inputs"
@@ -1035,7 +1276,7 @@ def build_comparison(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--split", required=True, choices=("development", "held_out"))
+    parser.add_argument("--split", required=True, choices=tuple(SPLIT_SEEDS))
     parser.add_argument("--arms", nargs="+")
     parser.add_argument("--include-samples", action="store_true")
     args = parser.parse_args()
