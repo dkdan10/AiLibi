@@ -19,15 +19,17 @@ from hypothesis import Phase, example, given, settings
 from hypothesis import strategies as st
 
 import engine.rules as engine_rules
+import engine.visibility as engine_visibility
 import experiments.tactical_gameplay as lab
 from api.replay_loader import ReplayLoader
 from engine.actions import Action, KillAction, MoveAction
-from engine.entities import PlayerState, TaskState
+from engine.entities import PlayerState, SabotageState, TaskState
 from engine.events import EngineEvent, KilledEvent
 from engine.rng import EngineRng
 from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
 from eval.replay_walk import TickAdvanced
+from engine.world import Map, VisibilityMode
 from experiments.tactical_gameplay import (
     Roster,
     candidate_configs,
@@ -35,6 +37,8 @@ from experiments.tactical_gameplay import (
     permute_state_and_actions,
     run_candidate,
 )
+from observation.packet import MovedPlayerView
+from observation.service import ObservationService
 from orchestrator.experiment_config import RecordedExperimentConfig, engine_arguments
 from orchestrator.game import HeadlessGame, build_default_agent_factory
 from orchestrator.replay import GameEndReplayEntry, ReplayEntry, read_all_entries
@@ -779,6 +783,184 @@ def test_a_witness_rule_that_admits_vented_players_breaks_the_pin(
     monkeypatch.setattr(engine_rules, "_witnesses_in_room", admitting_vented)
     with pytest.raises(AssertionError):
         _pin_property(perturbed=True)()
+
+
+# --- What the cell bounds, and what it does not -----------------------------
+
+
+@st.composite
+def _sighted_states(draw: st.DrawFn) -> WorldState:
+    """A coverage state with no sabotage, or one of the map's sabotages active."""
+
+    state = draw(_coverage_states())
+    kind = draw(st.sampled_from((None, *sorted(load_canonical_map().sabotages))))
+    if kind is None:
+        return state
+    return replace(
+        state,
+        sabotage=SabotageState(
+            kind=kind, remaining_ticks=5, affected_rooms=(), active=True
+        ),
+    )
+
+
+def _seen_by(state: WorldState, observer_id: str) -> tuple[str, ...]:
+    return engine_visibility.compute_visibility_for_player(
+        observer_id=observer_id, world_state=state, game_map=load_canonical_map()
+    ).visible_player_ids
+
+
+def _seen_by_crewmates(state: WorldState) -> set[str]:
+    """Every player a living crewmate outside a vent sees, by the engine's sight.
+
+    Only an impostor can enter a vent (``engine.rules.resolve_vent``), so a
+    vented crewmate never occurs in play and is no observer here.
+    """
+
+    return {
+        seen
+        for pid, player in state.players.items()
+        if player.alive and not player.in_vent and player.role == "CREWMATE"
+        for seen in _seen_by(state, pid)
+    }
+
+
+def _covered_by(
+    helper: Callable[[WorldState], tuple[int, int]], state: WorldState, pid: str
+) -> bool:
+    """Whether ``helper`` counts one player covered: removing it lowers the count.
+
+    By the cell's rule, removing a covered player lowers the covered count by
+    one, or by two when it leaves its one companion alone; removing an
+    uncovered player changes nothing.
+    """
+
+    without = replace(
+        state,
+        players={
+            other: player for other, player in state.players.items() if other != pid
+        },
+    )
+    return helper(state)[1] > helper(without)[1]
+
+
+def _crew_sight_bound_property(
+    helper: Callable[[WorldState], tuple[int, int]], *, perturbed: bool = False
+) -> Callable[[], None]:
+    @settings(**_property_settings(perturbed=perturbed))
+    @given(_sighted_states())
+    def check(state: WorldState) -> None:
+        uncovered = sorted(
+            pid
+            for pid in _seen_by_crewmates(state)
+            if not _covered_by(helper, state, pid)
+        )
+        assert uncovered == []
+
+    return check
+
+
+def test_every_player_a_crewmate_sees_is_covered() -> None:
+    """The one bound the cell gives: crewmates' sight in the state it reads."""
+
+    _crew_sight_bound_property(lab.whereabouts_coverage)()
+
+
+def test_the_per_player_read_counts_exactly_the_covered_players() -> None:
+    """The bound's instrument: one player at a time, it sums to the cell's count."""
+
+    @settings(**_property_settings(perturbed=False))
+    @given(_sighted_states())
+    def check(state: WorldState) -> None:
+        cell = lab.whereabouts_coverage
+        assert (
+            sum(_covered_by(cell, state, pid) for pid in state.players)
+            == (cell(state)[1])
+        )
+
+    check()
+
+
+def _two_companions_needed(state: WorldState) -> tuple[int, int]:
+    """Perturbed: a subject counts as covered only with two companions."""
+
+    standing = Counter(
+        player.room
+        for player in state.players.values()
+        if player.alive and not player.in_vent
+    )
+    subjects = sum(player.alive for player in state.players.values())
+    return subjects, sum(count for count in standing.values() if count > 2)
+
+
+def test_a_cell_missing_a_player_a_crewmate_sees_fails_the_bound() -> None:
+    with pytest.raises(AssertionError):
+        _crew_sight_bound_property(_two_companions_needed, perturbed=True)()
+
+
+def test_crewmate_sight_beyond_its_own_room_breaks_the_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Source change: crewmates keep the map's adjacent sight; the bound fails."""
+
+    def the_maps_mode_for_everyone(
+        *, observer: PlayerState, world_state: WorldState, game_map: Map
+    ) -> VisibilityMode:
+        return engine_visibility.resolve_visibility_mode(world_state, game_map)
+
+    monkeypatch.setattr(
+        engine_visibility,
+        "_resolve_observer_visibility_mode",
+        the_maps_mode_for_everyone,
+    )
+    with pytest.raises(AssertionError):
+        _crew_sight_bound_property(lab.whereabouts_coverage, perturbed=True)()
+
+
+@pytest.mark.parametrize(
+    "impostor",
+    [
+        pytest.param(_player("p-1", "WEST_HALL", role="IMPOSTOR"), id="next-door"),
+        pytest.param(
+            _player("p-1", "ADMIN", role="IMPOSTOR", in_vent=True),
+            id="inside-a-vent",
+        ),
+    ],
+)
+def test_the_cell_does_not_bound_what_an_impostor_sees(impostor: PlayerState) -> None:
+    """An impostor sees a lone crewmate from the next room, or from a vent."""
+
+    state = _world(impostor, _player("p-2", "ADMIN"), _player("p-3", "REACTOR"))
+    assert lab.whereabouts_coverage(state) == (3, 0)
+    assert _seen_by_crewmates(state) == set()
+    assert _seen_by(state, "p-1") == ("p-2",)
+
+
+def test_the_cell_does_not_bound_a_departure_a_crewmate_watched(
+    tmp_path: Path,
+) -> None:
+    """A crewmate is told where a player it saw leave went; it stands alone."""
+
+    game_map = load_canonical_map()
+    pre = _world(
+        _player("p-1", "ADMIN"), _player("p-2", "ADMIN"), _player("p-3", "REACTOR")
+    )
+    post, events = advance_tick(
+        pre, [_move("p-2", "WEST_HALL")], game_map=game_map, **engine_arguments(None)
+    )
+    assert lab.whereabouts_coverage(post) == (3, 0)
+    service = ObservationService(
+        game_map=game_map, audit_log_path=tmp_path / "observations.jsonl"
+    )
+    try:
+        packet = service.build_packet(
+            world_state=post, agent_id="p-1", engine_events=events
+        )
+    finally:
+        service.close()
+    assert packet.moved_players == (
+        MovedPlayerView(id="p-2", from_room="ADMIN", to_room="WEST_HALL"),
+    )
 
 
 # --- The kill-witness rows ---------------------------------------------------

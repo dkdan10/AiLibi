@@ -423,8 +423,13 @@ def whereabouts_coverage(state: WorldState) -> tuple[int, int]:
     a vent and at least one other living player outside a vent stands in its
     room: the engine's kill-witness rule (``engine.rules._witnesses_in_room``)
     applied to every player, and the same-room sight every observer holds in
-    every visibility mode. It counts positions, not what anyone noticed, so it
-    bounds from above the whereabouts any agent held.
+    every visibility mode. It counts positions, not what anyone noticed.
+
+    It bounds one thing: on the canonical map a crewmate sees only its own
+    room, so every player a crewmate sees in this state is covered. It bounds
+    nothing an impostor sees, since an impostor also sees the adjacent rooms at
+    base sight and still sees from inside a vent, and nothing a player holds
+    from earlier ticks, from a departure it watched or from speech.
     """
 
     standing = Counter(

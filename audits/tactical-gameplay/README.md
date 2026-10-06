@@ -267,9 +267,18 @@ The counts are defined as follows.
   and no sight radius, so it is the same for every role: sharing a room is the
   sight every player has in every visibility mode, and an impostor's wider
   sight is deliberately not used. It counts positions, not what anyone noticed,
-  remembered or said, so it is an upper bound on the whereabouts any player
-  held. It is the role-blind replacement for the step where the one committed
-  training objective measures crew coverage. That objective's
+  remembered or said. It bounds one thing: what crewmates see as the tick ends.
+  On this map a crewmate sees only its own room, whatever the sabotage, so
+  every player a crewmate sees in the state the tick leaves is covered, and an
+  uncovered subject is one no crewmate sees then. It does not bound what
+  impostors see. An impostor also sees the rooms next to its own unless the
+  lights are sabotaged, and it still sees from inside a vent, so it can see a
+  player the cell leaves uncovered. Nor does it bound what anyone holds. A
+  player keeps what it saw on earlier ticks and hears what others say, and a
+  crewmate that sees a player leave its room is told which room that player
+  went to, even when the player stands there alone. It is the role-blind
+  replacement for the step where the one committed training objective measures
+  crew coverage. That objective's
   `patrol_coverage` term pays a crewmate for sharing a room with a player who
   is an impostor, which reads a role. `training/README.md` section 7 records
   that any reopening of the training work redefines that term without reading
