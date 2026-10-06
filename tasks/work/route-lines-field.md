@@ -1136,3 +1136,13 @@ outside `check.sh`, the prompt regeneration and the `docs/artifacts.md` rows are
 **Publication.** Unchanged by this round: `git diff --stat 685a4396 5bbb6459` lists the two test files only, so
 nothing on the bundle's build path moved, and round 1's bundle diff (`83806ab0` then `732cda8d`, one checkout:
 exactly five null `route_lines_version` keys in four 9p2i files) stands. **The merge stays the owner's.**
+
+`bash scripts/check.sh`, the full gate for this round, ran at `a67f61c4` (the head carrying this subsection;
+the commit recording this paragraph changes this card only), in a shell with no `AILIBI_*` export, its exit code
+captured directly. Its first run exited **127** at the frontend leg, `sh: eslint: command not found`, because
+this fresh worktree held no `frontend/node_modules`; every Python leg had passed (the default tier 10,490
+passed, 20 skipped, 3 xfailed). After `npm ci` in `frontend` (the lockfile's install; no tracked file changed)
+it ran again, whole, at the same head: **exit 0**. Ruff check and format clean (559 files), import-linter 4
+contracts kept, `validate_task_docs` and `generate_prompts --check` clean, strict mypy clean over 530 source
+files, the default tier 10,490 passed, 20 skipped and 3 xfailed (round 1's 10,474 and the 16 new tests), and the
+frontend lint, typecheck, 695 unit tests in 26 files and build all passed.
