@@ -1039,6 +1039,22 @@ def test_the_page_check_bites_a_missing_field_and_a_missing_link() -> None:
     ]
 
 
+def test_the_page_check_bites_the_route_lines_row() -> None:
+    page = _PAGE.read_text(encoding="utf-8")
+    architecture = _ARCHITECTURE.read_text(encoding="utf-8")
+    row = next(
+        line
+        for line in page.splitlines()
+        if line.startswith("| `route_lines_version` |")
+    )
+    assert _page_problems(page.replace(row + "\n", ""), architecture) == [
+        "the page does not state route_lines_version in the meeting layer"
+    ]
+    assert _page_problems(
+        page.replace(row, row.replace("`1`", "one")), architecture
+    ) == ["the page omits route_lines_version's value `1`"]
+
+
 def test_the_page_check_bites_the_cooldown_row_and_its_integer_values() -> None:
     page = _PAGE.read_text(encoding="utf-8")
     architecture = _ARCHITECTURE.read_text(encoding="utf-8")
