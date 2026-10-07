@@ -151,8 +151,10 @@ describe("a card's shelves and facets", () => {
       },
     };
     const html = card(tripped, false);
+    // A dashed box, the same mark a hidden-until-revealed chip carries.
     expect(html).toContain(
-      tripwireLabel("decided_by_a_vote_that_held_nothing", 2).replace(/'/g, "&#x27;"),
+      '<p class="rounded-md border border-dashed border-ink-500 bg-paper-1 px-2 py-1 text-xs text-ink-700">' +
+        tripwireLabel("decided_by_a_vote_that_held_nothing", 2).replace(/'/g, "&#x27;"),
     );
     expect(html).toContain("Kept off the shelves: at meeting 3 a player was voted out");
   });
@@ -179,17 +181,31 @@ describe("the card's timeline", () => {
 
   it("is one labelled image with a mark per meeting and per kill at its tick's share", () => {
     const html = card(profiled, false);
-    expect(html).toContain(`role="img" aria-label="${PROFILE_COPY.facets.timeline}"`);
+    expect(html).toContain(
+      `role="img" aria-label="${PROFILE_COPY.facets.timeline}" class="relative h-4 w-full rounded-sm bg-paper-3 shadow-data"`,
+    );
     for (const meeting of PROFILE.facets.meetings) {
       expect(html).toContain(
         `title="Meeting ${meeting.index + 1} at tick ${meeting.tick}" class="absolute top-0 h-4 w-0.5 bg-ink-900" style="${share(meeting.tick)}"`,
       );
     }
+    // A kill in a regroup's wave is a hollow mark, any other kill a solid one.
+    const mark = "absolute top-1 h-2 w-2 -translate-x-1 rounded-full border-2 border-ink-700";
     for (const kill of PROFILE.facets.kills) {
+      const fill = kill.in_wave ? "bg-paper-0" : "bg-ink-700";
       expect(html).toMatch(
-        new RegExp(`title="Kill at tick ${kill.tick}[^"]*" class="[^"]*" style="${share(kill.tick)}"`),
+        new RegExp(`title="Kill at tick ${kill.tick}[^"]*" class="${mark} ${fill}" style="${share(kill.tick)}"`),
       );
     }
+  });
+
+  it("draws a reveal-only chip dashed and a chip before the reveal solid", () => {
+    const html = card(profiled, true);
+    const chip = "rounded-pill border-2 px-2 py-0.5 font-mono text-3xs font-medium text-ink-900";
+    expect(html).toContain(`<li class="${chip} border-ink-900 bg-paper-2">${shelfTitle("slow_burn")}</li>`);
+    expect(html).toContain(
+      `<li class="${chip} border-dashed border-ink-500 bg-paper-1">${shelfTitle("caught_venting")}</li>`,
+    );
   });
 
   it("has words for every ending a game can record", () => {
