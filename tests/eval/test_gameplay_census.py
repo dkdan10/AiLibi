@@ -30,7 +30,7 @@ from types import MappingProxyType, ModuleType
 from typing import Any, Final, get_args, get_origin
 
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
 from pydantic import BaseModel
@@ -109,6 +109,7 @@ from eval.reporter_justice import ReporterJusticeCells, compute_reporter_justice
 from eval.validity import resolve_roster_knobs, roles_by_seed
 from meetings.schemas import (
     AccusationClaim,
+    ContradictionRef,
     BallotGroundingLabel,
     AlibiClaim,
     AlibiSegment,
@@ -119,11 +120,17 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
     TaskActivityAccount,
+    VoteBallot,
     WhereaboutsClaim,
 )
 import meetings.route_lines as route_lines_module
 from meetings.route_lines import RouteLine, RouteStep, build_route_lines
-from meetings.transcript import CANONICAL_ROOMS, canonical_rooms, room_hops
+from meetings.transcript import (
+    CANONICAL_ROOMS,
+    canonical_rooms,
+    room_hops,
+    turn_observation_id,
+)
 from meetings.voting import SKIP_TARGET
 from orchestrator import experiment_config
 from orchestrator.experiment_config import (
@@ -11170,17 +11177,23 @@ def test_the_census_door_search_is_the_maps_hop_count_on_every_room_pair() -> No
         st.sampled_from(sorted(CANONICAL_ROOMS)), min_size=2, max_size=2, unique=True
     ),
     start=st.integers(0, 40),
-    gap=st.integers(0, 8),
-    regroups=st.frozensets(st.integers(0, 50), max_size=4),
+    gap=st.integers(0, 6),
+    offsets=st.frozensets(st.integers(-2, 8), max_size=4),
 )
+# Two regroup ticks inside the ticks of a pair five doors apart: the first is
+# the one crossed.
+@example(rooms=["REACTOR", "MEDBAY"], start=4, gap=3, offsets=frozenset({1, 2}))
 def test_the_link_check_is_doors_within_the_ticks_or_the_first_regroup_crossed(
-    rooms: list[str], start: int, gap: int, regroups: frozenset[int]
+    rooms: list[str], start: int, gap: int, offsets: frozenset[int]
 ) -> None:
     """Over random room pairs, gaps and regroup ticks: walking fits exactly when
     the doors are at most the ticks between, otherwise the first regroup tick in
     (earlier, later] is crossed, and with neither the step is a breach whatever
-    it reads. Perturbed, ``<`` for ``<=`` or the last regroup tick fails it."""
+    it reads. Perturbed, ``<`` for ``<=`` or the last regroup tick fails it.
+    The regroup ticks are drawn around the earlier tick, so a window often
+    holds two or more of them."""
 
+    regroups = frozenset(start + offset for offset in offsets if start + offset >= 0)
     a, b = rooms
     doors = room_hops(frozenset({a}), frozenset({b}), max_hops=len(CANONICAL_ROOMS))
     assert doors is not None and doors >= 1
@@ -12025,3 +12038,279 @@ def test_the_fold_checks_a_step_against_the_doors_its_inputs_carry() -> None:
         GameplayCensusConformanceError, match="Route steps false to the map"
     ):
         fold_set(replace(inputs(planted), neighbours=cut))
+
+
+class CountedDoors(Mapping[str, tuple[str, ...]]):
+    """A map's doors that count every room whose doors are read, and refuse a
+    search that reads more rooms than the map holds."""
+
+    def __init__(self, doors: Mapping[str, tuple[str, ...]]) -> None:
+        self._doors = dict(doors)
+        self.reads: list[str] = []
+
+    def __getitem__(self, room: str) -> tuple[str, ...]:
+        self.reads.append(room)
+        assert len(self.reads) <= len(self._doors), "the search reads a room again"
+        return self._doors[room]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._doors)
+
+    def __len__(self) -> int:
+        return len(self._doors)
+
+
+def test_the_door_search_reads_each_room_once_and_ends_where_no_door_leads() -> None:
+    """Planted: a target no door path reaches from a start in a ring of rooms.
+    The search marks each room it reaches, the start among them, so it reads
+    each reachable room's doors once and ends with no door count."""
+
+    ring = {"A": ("B", "C"), "B": ("A", "C"), "C": ("A", "B"), "D": ()}
+    doors = CountedDoors(ring)
+    assert census.census_doors(doors, ("A",), ("D",)) is None
+    assert sorted(doors.reads) == ["A", "B", "C"]
+    assert census.census_doors(CountedDoors(ring), ("A",), ("C",)) == 1
+    assert census.census_doors(CountedDoors(ring), ("A", "D"), ("D",)) == 0
+
+
+def test_the_checked_placements_follow_their_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The kinds the cited-line check reads are read from its type: moved, the
+    loader's placements follow (here: company dropped, alibi stays taken in)."""
+
+    speech = MeetingTurn(
+        turn_id="t0",
+        turn_index=0,
+        speaker="p-2",
+        turn_kind="opening",
+        reply_to=None,
+        observations=(
+            SawPlayerObservation(
+                type="saw_player",
+                tick=4,
+                subject="p-0",
+                room="MEDBAY",
+                co_present=("p-1",),
+            ),
+        ),
+        claims=(
+            AlibiClaim(
+                type="alibi",
+                subject="p-3",
+                route=(AlibiSegment(room="STORAGE", from_tick=2, to_tick=2),),
+            ),
+        ),
+        free_text="words",
+    )
+    transcript = MeetingTranscript(turns=(speech,))
+    assert {
+        (item.player, item.kind) for item in census.turn_placements(transcript)["t0"]
+    } == {("p-0", "saw_player"), ("p-1", "company")}
+    monkeypatch.setattr(
+        census,
+        "CheckedPlacementKind",
+        typing.Literal["saw_player", "saw_move", "whereabouts", "alibi_stay"],
+    )
+    assert {
+        (item.player, item.kind) for item in census.turn_placements(transcript)["t0"]
+    } == {("p-0", "saw_player"), ("p-3", "alibi_stay")}
+
+
+def test_the_stated_places_follow_the_fields_route_kinds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The kinds a route line reads are the field's: moved, the stated places
+    follow (here: a vent sighting taken in, the alibi stay dropped)."""
+
+    speech = MeetingTurn(
+        turn_id="t0",
+        turn_index=0,
+        speaker="p-2",
+        turn_kind="opening",
+        reply_to=None,
+        observations=(
+            SawVentObservation(type="saw_vent", tick=5, subject="p-0", room="ADMIN"),
+        ),
+        claims=(
+            AlibiClaim(
+                type="alibi",
+                subject="p-1",
+                route=(AlibiSegment(room="STORAGE", from_tick=2, to_tick=2),),
+            ),
+        ),
+        free_text="words",
+    )
+    transcript = MeetingTranscript(turns=(speech,))
+    assert census.stated_places(transcript) == {
+        "p-1": frozenset({(2, frozenset({"STORAGE"}))})
+    }
+    monkeypatch.setattr(census, "ROUTE_PLACEMENT_KINDS", frozenset({"saw_vent"}))
+    assert census.stated_places(transcript) == {
+        "p-0": frozenset({(5, frozenset({"ADMIN"}))})
+    }
+
+
+def test_the_door_search_reads_no_door_count_for_a_room_off_the_map() -> None:
+    """Planted: a step starting, or ending, in a room the map does not hold, and
+    an empty room set."""
+
+    assert census.census_doors(NEIGHBOURS, ("THE_HALLWAY",), ("MEDBAY",)) is None
+    assert census.census_doors(NEIGHBOURS, ("MEDBAY",), ("THE_HALLWAY",)) is None
+    assert census.census_doors(NEIGHBOURS, (), ("MEDBAY",)) is None
+    assert not true_to_the_map(step("THE_HALLWAY", 6, "MEDBAY", 7, 1))
+
+
+def test_a_line_is_off_the_table_at_an_unstated_first_place() -> None:
+    """Planted: a step whose later place the meeting stated and whose earlier
+    place it did not."""
+
+    candidates = frozenset({"p-0", "p-1"})
+    assert not census.line_on_the_table(
+        line("p-0", step("MEDBAY", 5, "WEST_HALL", 7, 1)),
+        candidates=candidates,
+        stated=STATED,
+    )
+
+
+def _route_row(path: Path, index: int) -> MeetingReplayEntry:
+    rows = [
+        row for row in read_all_entries(path) if isinstance(row, MeetingReplayEntry)
+    ]
+    return rows[index]
+
+
+def test_a_charge_resting_only_on_a_regroup_crossing_needs_the_regroup_ticks(
+    routes_on: Path,
+) -> None:
+    """Planted: an EJECT at the scripted game's second meeting citing the
+    sighting at the regroup tick, whose only pair with an earlier place is a
+    crossing of the regroup. The charge rests on it with the meeting's regroup
+    ticks and on nothing without them."""
+
+    loaded = load_census_inputs(routes_on)
+    fact = loaded.games[0].meetings[1]
+    row = _route_row(routes_on / "replay-seed-0.jsonl", 1)
+    assert row.meeting_id == fact.meeting_id
+    turn_, subject = next(
+        (item, observation.subject)
+        for item in row.transcript.turns
+        for observation in item.observations
+        if isinstance(observation, SawPlayerObservation)
+        and observation.room == "MEDBAY"
+    )
+    voter = sorted(fact.living - {subject})[0]
+    planted = row.model_copy(
+        update={
+            "ballots": (
+                VoteBallot(
+                    voter=voter,
+                    target=subject,
+                    confidence=0.9,
+                    primary_reason_id=turn_.turn_id,
+                    rationale_text="planted",
+                ),
+            )
+        }
+    )
+    assert fact.regroup_ticks
+    with_regroup = census.route_charge_fact(
+        planted, living=fact.living, regroup_ticks=fact.regroup_ticks
+    )
+    without = census.route_charge_fact(
+        planted, living=fact.living, regroup_ticks=frozenset()
+    )
+    assert (with_regroup.charges, with_regroup.charges_on_reconcilable_pair) == (1, 1)
+    assert (without.charges, without.charges_on_reconcilable_pair) == (1, 0)
+
+
+def test_a_dead_player_brings_no_charge_by_ballot_or_flag(routes_on: Path) -> None:
+    """Planted: the scripted game's first meeting, its charges against the
+    opener by ballot and by a flag of two of the opener's sightings, read with
+    the opener counted among the living and not."""
+
+    loaded = load_census_inputs(routes_on)
+    fact = loaded.games[0].meetings[0]
+    row = _route_row(routes_on / "replay-seed-0.jsonl", 0)
+    sighted = [
+        turn_observation_id(turn=item, index=index)
+        for item in row.transcript.turns
+        for index, observation in enumerate(item.observations)
+        if isinstance(observation, SawPlayerObservation)
+        and observation.subject == fact.opener
+    ]
+    flag = ContradictionRef(
+        contradiction_id="c-planted",
+        kind="alibi_vs_sighting",
+        event_a_id=sighted[0],
+        event_b_id=sighted[1],
+        subjects=(fact.opener,),
+        description="planted",
+    )
+    planted = row.model_copy(update={"contradictions": (flag,)})
+    alive = census.route_charge_fact(
+        planted, living=fact.living, regroup_ticks=fact.regroup_ticks
+    )
+    ballots = sum(1 for item in row.ballots if item.target == fact.opener)
+    assert alive.charges == ballots + 1
+    dead = census.route_charge_fact(
+        planted, living=fact.living - {fact.opener}, regroup_ticks=fact.regroup_ticks
+    )
+    assert (dead.charges, dead.charges_on_reconcilable_pair) == (0, 0)
+
+
+def test_the_loader_refuses_a_route_block_its_settings_do_not_serve(
+    routes_on: Path, tmp_path: Path
+) -> None:
+    """Planted: the scripted ON game with the setting struck from its recorded
+    config and the arm from its stamps, so only the served blocks remain."""
+
+    copy = _restamped(
+        routes_on, tmp_path / "unserved", lambda text: text.replace(_ARM, "")
+    )
+    replay = copy / "replay-seed-0.jsonl"
+    rows = [
+        json.loads(text) for text in replay.read_text(encoding="utf-8").splitlines()
+    ]
+    struck = 0
+    for row in rows:
+        config = row.get("experiment_config")
+        if isinstance(config, dict) and "route_lines_version" in config:
+            del config["route_lines_version"]
+            struck += 1
+    assert struck > 1
+    replay.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    with pytest.raises(
+        GameplayCensusConformanceError,
+        match=r"seed 0, meeting [^,]+, voter p-\d+: a ballot carries route lines its "
+        "game's settings do not serve",
+    ):
+        load_census_inputs(copy)
+
+
+def _second_line_by_another_voter(settings: Mapping[str, SettingValue]) -> GameFacts:
+    return game(
+        settings,
+        meetings=(
+            routes_meeting(
+                route_ballot("p-4", SKIP_TARGET, line("p-0", WALK), line("p-0", WALK))
+            ),
+        ),
+    )
+
+
+def test_a_route_line_breach_names_whichever_voter_was_served_it() -> None:
+    assert_breach_names_its_place(
+        _second_line_by_another_voter(ROUTE_ON),
+        "route_lines_off_the_table",
+        "meeting meeting-0, voter p-4",
+    )
+
+
+def test_an_incoherent_charge_fact_names_whichever_meeting_holds_it() -> None:
+    planted = _charges_game(
+        charged_meeting("gathering-9", 12, census.RouteChargeFact(1, 2))
+    )
+    with pytest.raises(ValueError, match="more charges rest") as refused:
+        fold_set(inputs(planted))
+    assert f"set {PLANTED}, seed {SEED}, meeting gathering-9: " in str(refused.value)

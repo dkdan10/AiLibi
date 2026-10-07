@@ -245,3 +245,14 @@ def test_ordered_pairs_are_every_pair_in_the_placement_order() -> None:
     ]
     with pytest.raises(ValueError, match="ordered by tick"):
         route_lines.reconcilable(own[-1], own[0], regroup_ticks=frozenset())
+
+
+def test_ordered_pairs_sort_their_input_by_the_placement_key() -> None:
+    """Planted: the subject's placements handed over in reverse order."""
+
+    own = placements_of(_universe(*_TURNS), _SUBJECT)
+    assert [(a.tick, b.tick) for a, b in ordered_pairs(tuple(reversed(own)))] == [
+        (14, 15),
+        (14, 16),
+        (15, 16),
+    ]

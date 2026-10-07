@@ -12,8 +12,8 @@ These four definitions are the charge half of the offline route-check replay
 (``experiments/lab/route_check_replay.py``), moved here so the gameplay census
 can count them; the replay imports them back and keeps no copy. The placement
 reader, its sort key and the pair rule are imported from their one home,
-:mod:`meetings.route_lines`, and never defined here. This module imports only
-:mod:`meetings`, the standard library and nothing under ``experiments/``.
+:mod:`meetings.route_lines`, and never defined here. It imports only :mod:`meetings`
+and the standard library, never anything under ``experiments/``.
 """
 
 from __future__ import annotations
