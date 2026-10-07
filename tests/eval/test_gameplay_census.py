@@ -10955,22 +10955,36 @@ def test_a_meeting_without_its_charge_fact_is_not_evaluable() -> None:
         (
             census.RouteChargeFact(1, 1),
             "p-0",
-            "an ejection's pairs are missing",
+            "an ejection's pairs are missing, or its charge rests on a pair it does "
+            "not have",
         ),
         (
             census.RouteChargeFact(1, 1, ejected_pairs=0, ejected_charged_on_pair=True),
             "p-0",
-            "its charge rests on a pair it does not have",
+            "an ejection's pairs are missing, or its charge rests on a pair it does "
+            "not have",
         ),
     ],
 )
 def test_an_incoherent_charge_fact_is_refused_naming_its_meeting(
     fact: census.RouteChargeFact, ejected: str | None, message: str
 ) -> None:
+    """Folded twice: as planted, and under another set label, another seed and
+    the meeting renamed. Each refusal is matched whole, so none of the three is
+    read as a constant at any of the fold's three refusals."""
+
     planted = _charges_game(charged_meeting("meeting-3", 12, fact, ejected=ejected))
-    with pytest.raises(ValueError, match=message) as refused:
-        fold_set(inputs(planted))
-    assert f"set {PLANTED}, seed {SEED}, meeting meeting-3: " in str(refused.value)
+    for label, folded, place in (
+        (PLANTED, planted, f"set {PLANTED}, seed {SEED}, meeting meeting-3"),
+        (
+            "other/set",
+            _renamed_meetings(planted, SEED + 4),
+            f"set other/set, seed {SEED + 4}, meeting gathering-3",
+        ),
+    ):
+        with pytest.raises(ValueError) as refused:
+            fold_set(inputs(folded, label=label))
+        assert str(refused.value) == f"{place}: {message}"
 
 
 def test_a_witness_meeting_is_a_report_opened_by_a_witness_since_the_last_one() -> None:
@@ -11544,7 +11558,8 @@ def _reach(*ballots: BallotFact, charged: bool = True) -> tuple[int, int, int]:
 def test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter() -> None:
     """Planted: a line shown only to a SKIP voter does not reach, nor does a line
     about another candidate; a line about the ejected player on an EJECT ballot
-    does."""
+    does. Only an ejecting ballot with no recorded call voids the reading: a SKIP
+    ballot without one beside readable ejecting ballots does not."""
 
     ejecting_ballot = route_ballot("p-4", "p-0")
     assert _reach(
@@ -11564,6 +11579,12 @@ def test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter() -> No
     )
     # An ejecting ballot with no recorded call cannot be read.
     assert _reach(ballot("p-4", "p-0")) == (0, 0, 1)
+    # A SKIP ballot with no recorded call is no ejecting ballot: the ejecting
+    # voters' lines are read, the one about the ejected player reaching.
+    assert _reach(
+        route_ballot("p-4", "p-0", line("p-0", WALK)), ballot("p-3", SKIP_TARGET)
+    ) == (1, 1, 0)
+    assert _reach(route_ballot("p-4", "p-0"), ballot("p-3", SKIP_TARGET)) == (0, 1, 0)
 
 
 def test_every_route_line_cell_and_table_reads_n_a_without_the_setting() -> None:
@@ -12324,7 +12345,8 @@ def test_a_charge_resting_only_on_a_regroup_crossing_needs_the_regroup_ticks(
     """Planted: an EJECT at the scripted game's second meeting citing the
     sighting at the regroup tick, whose only pair with an earlier place is a
     crossing of the regroup. The charge rests on it with the meeting's regroup
-    ticks and on nothing without them."""
+    ticks and on nothing without them; at an ejection of its target, so do the
+    ejected player's pair and the charge on it."""
 
     loaded = load_census_inputs(routes_on)
     fact = loaded.games[0].meetings[1]
@@ -12360,6 +12382,13 @@ def test_a_charge_resting_only_on_a_regroup_crossing_needs_the_regroup_ticks(
     )
     assert (with_regroup.charges, with_regroup.charges_on_reconcilable_pair) == (1, 1)
     assert (without.charges, without.charges_on_reconcilable_pair) == (1, 0)
+    ejecting_row = planted.model_copy(update={"ejected_player_id": subject})
+    assert census.route_charge_fact(
+        ejecting_row, living=fact.living, regroup_ticks=fact.regroup_ticks
+    ) == census.RouteChargeFact(1, 1, ejected_pairs=1, ejected_charged_on_pair=True)
+    assert census.route_charge_fact(
+        ejecting_row, living=fact.living, regroup_ticks=frozenset()
+    ) == census.RouteChargeFact(1, 0, ejected_pairs=0, ejected_charged_on_pair=False)
 
 
 def test_a_dead_player_brings_no_charge_by_ballot_or_flag(routes_on: Path) -> None:
@@ -12397,11 +12426,52 @@ def test_a_dead_player_brings_no_charge_by_ballot_or_flag(routes_on: Path) -> No
     assert (dead.charges, dead.charges_on_reconcilable_pair) == (0, 0)
 
 
+def test_the_loader_reads_each_meetings_charges_over_the_players_living_at_its_open(
+    routes_on: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The loader hands the charge reader each meeting's row, the players living
+    at its open and its regroup ticks. Spied on the field's scripted game, whose
+    two meetings both open with players dead, so the living set at an open is
+    never the roster: the roster less every player killed or ejected before it."""
+
+    reader = census.route_charge_fact
+    calls: list[tuple[str, frozenset[str], frozenset[int]]] = []
+
+    def spied(
+        entry: MeetingReplayEntry,
+        *,
+        living: frozenset[str],
+        regroup_ticks: frozenset[int],
+    ) -> census.RouteChargeFact:
+        calls.append((entry.meeting_id, living, regroup_ticks))
+        return reader(entry, living=living, regroup_ticks=regroup_ticks)
+
+    monkeypatch.setattr(census, "route_charge_fact", spied)
+    (played,) = load_census_inputs(routes_on).games
+    assert len(played.meetings) == 2
+    assert calls == [
+        (fact.meeting_id, fact.living, fact.regroup_ticks) for fact in played.meetings
+    ]
+    ejected: set[str] = set()
+    for fact in played.meetings:
+        killed = {
+            kill.victim
+            for kill in played.kills
+            if kill.victim is not None and kill.tick < fact.tick
+        }
+        assert killed, fact.meeting_id
+        assert fact.living == frozenset(played.roles) - killed - ejected
+        if fact.ejected is not None:
+            ejected.add(fact.ejected)
+
+
 def test_the_loader_refuses_a_route_block_its_settings_do_not_serve(
     routes_on: Path, tmp_path: Path
 ) -> None:
     """Planted: the scripted ON game with the setting struck from its recorded
-    config and the arm from its stamps, so only the served blocks remain."""
+    config and the arm from its stamps, so only the served blocks remain. The
+    refusal is matched whole, naming the copy's own set directory, so the
+    loader's place is never read as a constant."""
 
     copy = _restamped(
         routes_on, tmp_path / "unserved", lambda text: text.replace(_ARM, "")
@@ -12418,12 +12488,19 @@ def test_the_loader_refuses_a_route_block_its_settings_do_not_serve(
             struck += 1
     assert struck > 1
     replay.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
-    with pytest.raises(
-        GameplayCensusConformanceError,
-        match=r"seed 0, meeting [^,]+, voter p-\d+: a ballot carries route lines its "
-        "game's settings do not serve",
-    ):
+    # The first voter of the first meeting whose recorded prompt carries a line.
+    first = _route_row(routes_on / "replay-seed-0.jsonl", 0)
+    voter = next(
+        item.voter
+        for item in first.ballots
+        if census.ballot_route_lines(first, item.voter, served=True, where="")
+    )
+    with pytest.raises(GameplayCensusConformanceError) as refused:
         load_census_inputs(copy)
+    assert str(refused.value) == (
+        f"set {copy}, seed 0, meeting {first.meeting_id}, voter {voter}: a ballot "
+        "carries route lines its game's settings do not serve"
+    )
 
 
 def _second_line_by_another_voter(settings: Mapping[str, SettingValue]) -> GameFacts:
