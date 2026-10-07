@@ -1,15 +1,15 @@
 // Stories for the tournament dashboard (Task 12.10;
 // design/phase-12/stage-1-design.md §3.6, slice 8). They drive the PRESENTATIONAL
 // <TournamentDashboardView/> — the connected <TournamentDashboard/> only adds the
-// store wiring + the `/eval/rubric` fetch, which Storybook can't host — with mock
+// store wiring + the `/eval/game-profile` fetch, which Storybook can't host — with mock
 // DTOs in the exact served shape, so each state + honesty requirement is visible
 // in isolation:
 //   • loading / loaded / no-report (the contract's state set);
 //   • the typed `conversion` + `gate_metrics` blocks render;
 //   • the honesty caveats ride ATTACHED — small-n (vote correctness), low-power /
 //     populated-bins (calibration curves), and the conversion / gate sentinels;
-//   • the interestingness histogram + its deep-link buckets, plus the absent
-//     (unscored-set) and stale rubric states;
+//   • the moments panel (shelf sizes and facet counts per value, the
+//     reveal-only sizes only revealed), plus the absent and stale profile states;
 //   • the Task 19.14 `deduction` block, so the proof-vs-inference panel renders
 //     BOTH cross-tab partitions with their own denominators — the story fixture
 //     is deliberately built so the two partitions disagree on the SPLIT while
@@ -20,12 +20,12 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import {
   TournamentDashboardView,
-  type RubricState,
+  type ProfileState,
 } from "../components/TournamentDashboard";
 import type {
   CalibrationBin,
-  RubricGameView,
-  RubricView,
+  GameFacetsView,
+  GameProfileView,
   TournamentEvalReport,
   WilsonRateCell,
 } from "../types/api";
@@ -90,47 +90,70 @@ function wilsonCell(numerator: number, denominator: number): WilsonRateCell {
   };
 }
 
-const WIN_SHAPES = [
-  "eject-decided",
-  "stopwatch-some-eject",
-  "stopwatch-no-eject",
-  "impostor-win",
-] as const;
-
-function rubricGame(seed: number, score: number): RubricGameView {
-  const shape = WIN_SHAPES[seed % WIN_SHAPES.length] ?? "stopwatch-no-eject";
+function facets(seed: number): GameFacetsView {
   return {
     seed,
-    score,
-    reason: score >= 67 ? "CREWMATE_EJECT" : "CREWMATE_TASKS",
-    n_meetings: score >= 67 ? 3 : score >= 33 ? 2 : 1,
-    win_shape: shape,
-    ejected_impostors: score >= 67 ? 2 : score >= 33 ? 1 : 0,
-    accused_impostors: score >= 50 ? 2 : 1,
-    survived_accused: score >= 67 ? 0 : 1,
-    r1_decisive: Math.min(1, score / 100 + 0.2),
-    r2_deception: Math.max(0, score / 100 - 0.2),
-    r3_arcs: score / 100,
-    r7_legible: Math.min(1, score / 100 + 0.1),
+    ticks: 30 + seed,
+    meetings: Array.from({ length: (seed % 3) + 1 }, (_, index) => ({
+      index,
+      tick: 10 + index * 10,
+      trigger: "report" as const,
+      regrouped: true,
+    })),
+    kills: Array.from({ length: (seed % 4) + 1 }, (_, index) => ({
+      tick: 5 + index * 6,
+      in_wave: index % 2 === 1,
+    })),
+    reports: [],
+    bodies_never_found: seed % 2,
+    moments: [],
+    tripped: [],
   };
 }
 
-// A distribution skewed toward Med (real mean ≈ 45): 7 low · 12 med · 5 high.
-const RUBRIC_SCORES: number[] = [
-  12, 18, 22, 27, 29, 31, 33, // low (< 33.3) — 27/29/31 land low, 33 is med edge
-  36, 38, 41, 42, 44, 47, 49, 52, 55, 58, 61, 64, // med
-  70, 74, 79, 84, 91, // high (>= 66.7)
-];
+function member(seed: number) {
+  return { seed, meetings: [0], kill_ticks: [] };
+}
 
-const RUBRIC_VIEW: RubricView = {
-  viewModelVersion: "12.2.0",
+const PROFILE_SEEDS = Array.from({ length: 24 }, (_, i) => i * 2 + 5);
+
+const PROFILE_VIEW: GameProfileView = {
+  viewModelVersion: "6",
+  rubric_version: 2,
+  era: "stage-b-r2",
+  manifest_key: "1e48c40",
+  source_fingerprint: "sha256:0",
   seedset: "9p2i",
-  git_head: "1e48c40",
-  manifest_sha: "1e48c40",
   stale: false,
-  per_game: RUBRIC_SCORES.map((score, i) => rubricGame(i * 2 + 5, score)).sort(
-    (a, b) => b.score - a.score,
-  ),
+  constants: {
+    slow_burn_ticks: 20,
+    wave_slack_ticks: 4,
+    close_call_margin: 1,
+    third_round_meetings: 3,
+    down_to_the_wire_start: 3,
+    runaway_share: "1/2",
+    leak_p_level: "0.05",
+    saturation_share: "3/4",
+  },
+  catalogue: [],
+  pre_reveal: {
+    shelves: [
+      { name: "the_reporter_saw_it_happen", members: PROFILE_SEEDS.slice(0, 7).map(member) },
+      { name: "double_kill", members: PROFILE_SEEDS.slice(3, 6).map(member) },
+      { name: "a_close_call", members: PROFILE_SEEDS.slice(8, 16).map(member) },
+    ],
+    chips: [],
+    games: PROFILE_SEEDS.map(facets),
+    tripwires: { readings: [] },
+  },
+  reveal: {
+    shelves: [{ name: "caught_venting", members: PROFILE_SEEDS.slice(0, 9).map(member) }],
+    decided_without_proof: {
+      right: { name: "decided_without_proof_right", members: PROFILE_SEEDS.slice(10, 18).map(member) },
+      wrong: { name: "decided_without_proof_wrong", members: PROFILE_SEEDS.slice(18, 24).map(member) },
+    },
+    games: [],
+  },
 };
 
 // A small mixed balance roster (9 crew / 5 impostor / 2 tick-budget wins).
@@ -452,7 +475,7 @@ function baseReport(): TournamentEvalReport {
   };
 }
 
-const READY_RUBRIC: RubricState = { status: "ready", view: RUBRIC_VIEW };
+const READY_PROFILE: ProfileState = { status: "ready", view: PROFILE_VIEW };
 
 const meta: Meta<typeof TournamentDashboardView> = {
   title: "Dashboard/TournamentDashboard",
@@ -460,6 +483,7 @@ const meta: Meta<typeof TournamentDashboardView> = {
   parameters: { layout: "fullscreen" },
   args: {
     onRefresh: () => {},
+    reveal: false,
   },
   decorators: [
     (Story) => (
@@ -474,13 +498,24 @@ export default meta;
 type Story = StoryObj<typeof TournamentDashboardView>;
 
 // The headline state: every metric block + the attached honesty caveats + the
-// deep-linking interestingness histogram.
+// moments panel, before the reveal.
 export const Loaded: Story = {
   args: {
     report: baseReport(),
     isLoading: false,
     error: null,
-    rubric: READY_RUBRIC,
+    profile: READY_PROFILE,
+  },
+};
+
+// The same, revealed: the reveal-only shelf sizes join the panel.
+export const LoadedRevealed: Story = {
+  args: {
+    report: baseReport(),
+    isLoading: false,
+    error: null,
+    profile: READY_PROFILE,
+    reveal: true,
   },
 };
 
@@ -510,31 +545,31 @@ export const UnderPowered: Story = {
     })(),
     isLoading: false,
     error: null,
-    rubric: READY_RUBRIC,
+    profile: READY_PROFILE,
   },
 };
 
-// Loaded report, but the served set has no rubric (the 4p1i 404) — the histogram
-// shows its first-class empty state.
-export const NoRubric: Story = {
+// Loaded report, but the served set ships no profile (a 404) — the panel shows
+// its first-class empty state.
+export const NoProfile: Story = {
   args: {
     report: baseReport(),
     isLoading: false,
     error: null,
-    rubric: { status: "absent" },
+    profile: { status: "absent" },
   },
 };
 
-// Loaded report, rubric present but stale (git_head ≠ manifest) — the histogram
-// renders with a "scores may be stale" badge instead of passing them off as fresh.
-export const StaleRubric: Story = {
+// Loaded report, profile present but stale — the panel hides its counts and says
+// why, instead of passing them off as current.
+export const StaleProfile: Story = {
   args: {
     report: baseReport(),
     isLoading: false,
     error: null,
-    rubric: {
+    profile: {
       status: "ready",
-      view: { ...RUBRIC_VIEW, stale: true, git_head: "deadbee" },
+      view: { ...PROFILE_VIEW, stale: true, manifest_key: "deadbee" },
     },
   },
 };
@@ -544,7 +579,7 @@ export const Loading: Story = {
     report: null,
     isLoading: true,
     error: null,
-    rubric: { status: "loading" },
+    profile: { status: "loading" },
   },
 };
 
@@ -555,6 +590,6 @@ export const NoReport: Story = {
     report: null,
     isLoading: false,
     error: "API request to /api/eval/tournament-report failed (status 404): not found",
-    rubric: { status: "absent" },
+    profile: { status: "absent" },
   },
 };

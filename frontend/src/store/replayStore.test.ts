@@ -33,7 +33,7 @@ vi.mock("../api/client", () => ({
   getMemory: vi.fn(),
   getEvalCostSummary: vi.fn(),
   getTournamentReport: vi.fn(),
-  getRubric: vi.fn(),
+  getGameProfile: vi.fn(),
 }));
 
 const mocked = vi.mocked(api);
