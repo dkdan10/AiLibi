@@ -122,6 +122,27 @@ describe("a card's shelves and facets", () => {
     expect(html).not.toMatch(/score|\/100|rank/i);
   });
 
+  it("counts the meetings by what opened them", () => {
+    const opened = (meetings: CardProfile["facets"]["meetings"]) =>
+      card({ ...profiled, profile: { ...PROFILE, facets: { ...PROFILE.facets, meetings } } }, false);
+    const two = opened([
+      { index: 0, tick: 12, trigger: "report", regrouped: true },
+      { index: 1, tick: 31, trigger: "emergency", regrouped: true },
+    ]);
+    expect(two).toContain("2 meetings · 1 reported, 1 called");
+    expect(two).toContain('title="Meeting 1 at tick 12"');
+    expect(two).toContain('title="Meeting 2 at tick 31"');
+    // One report and two called meetings, so a count of the called meetings
+    // as reported reads differently from the true line.
+    const three = opened([
+      { index: 0, tick: 12, trigger: "emergency", regrouped: true },
+      { index: 1, tick: 31, trigger: "report", regrouped: true },
+      { index: 2, tick: 40, trigger: "emergency", regrouped: false },
+    ]);
+    expect(three).toContain("3 meetings · 1 reported, 2 called");
+    expect(three).toContain('title="Meeting 3 at tick 40"');
+  });
+
   it("renders no reveal-only shelf, ending or annotation unrevealed", () => {
     expect(leakedRevealWords(card(profiled, false), PROFILE)).toEqual([]);
   });

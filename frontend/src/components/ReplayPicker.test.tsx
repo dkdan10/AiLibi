@@ -240,6 +240,37 @@ describe("Browse by moment", () => {
     expect(html).toContain("A wrong call on believable evidence is part of the game.");
   });
 
+  it("lists each half's games under that half's own heading", () => {
+    // Seed 8 is the only game the table got wrong, seed 7 the only one it got
+    // right, and neither half is empty.
+    const paired: GameProfileView = {
+      ...PROFILE,
+      pre_reveal: { ...PROFILE.pre_reveal, games: [facets(3), facets(7), facets(8), facets(26, true)] },
+      reveal: {
+        ...PROFILE.reveal,
+        decided_without_proof: {
+          right: { name: "decided_without_proof_right", members: [member(7)] },
+          wrong: { name: "decided_without_proof_wrong", members: [member(8)] },
+        },
+      },
+    };
+    const cards = buildCards(paired, [3, 7, 8, 26].map(meta));
+    const html = render({ profile: paired, cards, totalCount: cards.length, reveal: true });
+    const wrongAt = html.indexOf(`aria-label="${shelfTitle("decided_without_proof_wrong")}"`);
+    const rightAt = html.indexOf(`aria-label="${shelfTitle("decided_without_proof_right")}"`);
+    const allAt = html.indexOf(`aria-label="${PROFILE_COPY.allGames}"`);
+    expect(wrongAt).toBeGreaterThan(-1);
+    expect(rightAt).toBeGreaterThan(wrongAt);
+    expect(allAt).toBeGreaterThan(rightAt);
+    const wrongHalf = html.slice(wrongAt, rightAt);
+    const rightHalf = html.slice(rightAt, allAt);
+    const opens = (region: string, seed: number) =>
+      region.split(`aria-label="Open replay seed ${seed}"`).length - 1;
+    expect([opens(wrongHalf, 8), opens(wrongHalf, 7)]).toEqual([1, 0]);
+    expect([opens(rightHalf, 7), opens(rightHalf, 8)]).toEqual([1, 0]);
+    expect(html).not.toContain(PROFILE_COPY.pair.emptyHalf);
+  });
+
   it("a wrong half listed alone fails the pair check (planted)", () => {
     // The two halves are one block: wrong immediately followed by right.
     const together = (sections: readonly ReelSection[]) => {
@@ -266,13 +297,17 @@ describe("Browse by moment", () => {
 });
 
 describe("the no-profile and stale states", () => {
+  // The absent state names no set as the one expected to ship a profile and
+  // states no per-set count, so it reads true on any set served without one.
+  const assertSetNeutral = (text: string) => {
+    expect(text).not.toContain("4p1i");
+    expect(text).not.toMatch(/fixture/i);
+    expect(text).not.toMatch(/ships one|which ships|is scored|default 9p2i/i);
+    expect(text).not.toMatch(/\b\d+ of (?:its )?\d+\b/);
+    expect(text).not.toMatch(/median \d+ ticks/);
+  };
+
   it("words a set without a profile without naming another set", () => {
-    const assertSetNeutral = (text: string) => {
-      expect(text).not.toContain("4p1i");
-      expect(text).not.toMatch(/fixture/i);
-      expect(text).not.toMatch(/ships one|which ships|default 9p2i/i);
-      expect(text).not.toMatch(/\b\d+ of (?:its )?\d+\b/);
-    };
     for (const view of ["replays", "highlights"] as const) {
       for (const reveal of [false, true]) {
         const html = render({
@@ -289,6 +324,24 @@ describe("the no-profile and stale states", () => {
     }
     expect(DASHBOARD_COPY.momentsAbsentBody).toContain("ships no game-shape profile");
     assertSetNeutral(DASHBOARD_COPY.momentsAbsentBody);
+    expect(DASHBOARD_COPY.momentsAbsentBody).not.toContain("9p2i");
+  });
+
+  it("a set named as the profiled one or a per-set count fails the neutrality check (planted)", () => {
+    // Each line breaks one rule of the check, so a rule dropped from it lets
+    // its line through.
+    for (const planted of [
+      "This set ships no game-shape profile; the four-player 4p1i does the same.",
+      "This set ships no game-shape profile, as a fixture would.",
+      "This set ships no game-shape profile; the other one ships one.",
+      "This set ships no game-shape profile, unlike the set which ships it.",
+      "This set ships no game-shape profile; the nine-player set is scored.",
+      "This set ships no game-shape profile, unlike the default 9p2i.",
+      "This set ships no game-shape profile; 12 of 50 games hold a shelf elsewhere.",
+      "This set ships no game-shape profile; its games run a median 41 ticks.",
+    ]) {
+      expect(() => assertSetNeutral(planted)).toThrow();
+    }
   });
 
   it("keeps the stale and absent states distinct", () => {

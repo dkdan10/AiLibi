@@ -1556,6 +1556,33 @@ def test_a_reported_body_joining_no_kill_raises() -> None:
         shelves_of(joined)
 
 
+def test_a_reported_body_joining_two_corpses_raises_at_both_readers() -> None:
+    """Planted: two corpses share the reported body's id, seed 7, meeting index 1.
+
+    The shelves and the facets each join the body, so each refusal names the
+    count, the body, the set, the seed and the meeting, none of them a default.
+    """
+
+    seen = kill(5, "p-1", "p-2")
+    called = meeting(0, tick=6, seed=7)
+    report = meeting(
+        1, tick=8, trigger="report", opener="p-2", body=body_id(seen), seed=7
+    )
+    one = blind_game(seed=7, kills=(seen,), meetings=(called, report))
+    (body,) = one.bodies
+    corpses = dataclasses.replace(
+        one, bodies=(body, dataclasses.replace(body, victim="p-3"))
+    )
+    message = (
+        r"^set elsewhere, seed 7, meeting index 1: "
+        r"the reported body body-p-1-5 joins 2 corpses$"
+    )
+    with pytest.raises(gp.GameProfileConformanceError, match=message):
+        gp.candidate_pointers(corpses, label="elsewhere")
+    with pytest.raises(gp.GameProfileConformanceError, match=message):
+        gp._game_facets(corpses, moments=(), readings={}, label="elsewhere")
+
+
 def test_double_kill() -> None:
     hit = shelves_of(blind_game(kills=(kill(5, "p-1"), kill(5, "p-2"), kill(9, "p-3"))))
     assert hit[gp.DOUBLE_KILL] == gp.Pointer(kill_ticks=(5,))
