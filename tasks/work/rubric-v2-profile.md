@@ -309,7 +309,7 @@ seen red before the code it guards exists.
   `docs/game-profile.md`, scoped in `scripts/verify_ml_evidence.py`'s two tables. Mechanism:
   `test_every_counted_registry_row_matches_the_index` and offline `scripts/verify_ml_evidence.py`. Planted: a stale
   row fails; Results quotes the red run.
-- [ ] **21. The wave lessons hold.** Each production line is neutered alone and its suite goes red (Results carries
+- [x] **21. The wave lessons hold.** Each production line is neutered alone and its suite goes red (Results carries
   the neuter table). One bounded mutation pass over the changed spans with exactly F drop a filter, S swap a
   collection, N None or comparison, K read to constant, M message argument, T drop a tuple member, B swap branches, L
   loaded source to literal; every survivor killed or named equivalent. No test is weakened: Results names each
@@ -853,4 +853,10 @@ No survivor is named equivalent.
 - Task documents that cite `/eval/rubric` or the v1 views in the present tense (`tasks/work/rubric-genuine-class-selfcheck.md`,
   `tasks/work/rubric-extractor-era.md`) are other cards' and history; this card does not write them.
 
-**The house gate.** `bash scripts/check.sh` runs once, whole, at the pushed head that carries these Results; its exit code and counts are recorded in the commit after it, with item 21.
+**The house gate.** `bash scripts/check.sh` ran once, whole, in this clean worktree at the pushed head `a23b07ef`
+(the Results commit; the commit recording this changes only this paragraph and item 21's box), its exit code read
+directly from the script, not through a pipe: **exit 0**. Its steps: `ruff check .` all passed; `ruff format --check .`
+567 files already formatted; `lint-imports` 5 contracts kept, 0 broken; `validate_task_docs.py` passed (390 phase
+tasks, 390 prompts, 102 work cards); `generate_prompts.py --check` "All 390 prompts are in sync."; `mypy .` no issues in 538 source files;
+`pytest -n auto --dist loadfile` 10,855 passed, 20 skipped, 3 xfailed in 347.5 s; frontend `npm run lint`, `npm run
+tsc:check`, `npm run test` (27 files, 808 tests passed) and `npm run build` clean.
