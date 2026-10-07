@@ -420,7 +420,9 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   and `bash scripts/check.sh` passes at the head that states the numbers.
   - Phase 1: `--check` is green on the regenerated pages and `bash scripts/check.sh` ran once at the pushed head
     (Results); phase 2 runs both again.
-  - Phase 2 (2026-10-07): `--check` is green on the regenerated pages at `39e03863`, and `bash scripts/check.sh` runs once at the pushed head, its exit code recorded in the last card commit (Results, round 3).
+  - Phase 2 (2026-10-07): `--check` is green on the regenerated pages at `39e03863`; `bash scripts/check.sh` exited 0 at
+    `ca6ab4c6` (10,697 passed; frontend 695 passed), after a first run at `1b2bc938` failed on the field suite's pin of
+    the replaced entry (Results, round 3).
 
 ## Constraints
 
@@ -1728,7 +1730,7 @@ were each re-run, red, against the test added for it in `39e03863`. The pass the
 | demo bundle, built in this one checkout at `2228eb4a` (`main`) and at `39e03863` (`uv run python scripts/build_demo_bundle.py --out DIR` each, then `diff -r`) | 0 | 109 files each, empty diff: nothing ships |
 | `bash scripts/check.sh` at `1b2bc938` (output to a file, exit code from the run itself) | 1 | 1 failed, 10,696 passed, 20 skipped, 3 xfailed: `tests/meetings/test_route_lines_arm.py::test_the_census_classifies_it_as_not_read` pinned the entry this card replaces (Decision 9; fixed in the next commit) |
 | `uv run pytest tests/meetings/test_route_lines_arm.py -n 6` after the fix | 0 | 57 passed |
-| `bash scripts/check.sh` at the pushed head after the fix (run once, output to a file, exit code from the run itself) | pending | recorded in the last card commit |
+| `bash scripts/check.sh` at `ca6ab4c6`, the pushed head after the fix (run once, output to a file, exit code from the run itself) | 0 | pytest 10,697 passed, 20 skipped, 3 xfailed; frontend 695 passed; the build succeeds; the commit after it touches only this row and the box above |
 
 **Limitations.**
 - Each round is one hosted recording of 50 games; the counts describe those games and are no bar.
