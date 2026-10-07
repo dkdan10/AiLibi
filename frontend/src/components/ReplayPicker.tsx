@@ -162,7 +162,7 @@ export function featuredForSet(set: string | null): readonly FeaturedGame[] {
  *  untouched, so revealing re-applies them exactly. The ejection criterion reads
  *  whether some meeting voted someone out, from the profile's reveal facets, so
  *  a card with no profile entry cannot match it. */
-function matchesFilters(
+export function matchesFilters(
   card: HighlightCardData,
   f: ReplayFilterState,
   reveal: boolean,

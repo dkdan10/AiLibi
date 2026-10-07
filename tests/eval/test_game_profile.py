@@ -925,7 +925,8 @@ def test_a_fold_reading_the_carrier_fails_both_properties(
     bytes_of = _closing_over(
         monkeypatch,
         lambda fact: (
-            fact.roles["p-0"] == "IMPOSTOR" or fact.end_reason == "CREWMATE_TASKS"
+            fact.roles[min(fact.roles)] == "IMPOSTOR"
+            or fact.end_reason == "CREWMATE_TASKS"
         ),
     )
     inputs = carrier(
@@ -954,8 +955,46 @@ def test_a_fold_reading_the_carrier_fails_both_properties(
             planted_inputs, planted_sc
         )
 
+    @_PROPERTY
+    @given(planted=planted_sets(), data=st.data())
+    def ending_property(
+        planted: tuple[CensusInputs, SetInputs], data: st.DataObject
+    ) -> None:
+        planted_inputs, planted_sc = planted
+        endings = {
+            fact.seed: data.draw(st.sampled_from(sorted(WINNERS)))
+            for fact in planted_inputs.games
+        }
+        assert bytes_of(*with_endings(planted_inputs, planted_sc, endings)) == bytes_of(
+            planted_inputs, planted_sc
+        )
+
     with pytest.raises(AssertionError):
         roles_property()
+    with pytest.raises(AssertionError):
+        ending_property()
+
+    # The committed carrier: an impostor's role moved onto the first seat of
+    # every game, and every ending set to a task win, each move the planted
+    # reading.
+    shown = census_inputs(SAMPLES_9P2I)
+    shown_sc = committed_scorecard()
+
+    def onto_first_seat(roles: Mapping[PlayerId, Role]) -> dict[PlayerId, Role]:
+        first = min(roles)
+        impostor = next(seat for seat in sorted(roles) if roles[seat] == "IMPOSTOR")
+        moved = dict(roles)
+        moved[impostor], moved[first] = roles[first], roles[impostor]
+        return moved
+
+    moved_roles = {fact.seed: onto_first_seat(fact.roles) for fact in shown.games}
+    assert bytes_of(*with_roles(shown, shown_sc, moved_roles)) != bytes_of(
+        shown, shown_sc
+    )
+    task_wins = {fact.seed: "CREWMATE_TASKS" for fact in shown.games}
+    assert bytes_of(*with_endings(shown, shown_sc, task_wins)) != bytes_of(
+        shown, shown_sc
+    )
 
 
 def test_a_fold_reading_the_ending_fails_the_ending_property(

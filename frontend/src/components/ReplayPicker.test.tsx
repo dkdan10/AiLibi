@@ -5,11 +5,12 @@ import {
   ReplayBrowserView,
   buildCards,
   cardProfiles,
+  matchesFilters,
   reelSections,
   type ReelSection,
   type ReplayBrowserViewProps,
 } from "./ReplayPicker";
-import { EMPTY_FILTERS } from "./ReplayFilters";
+import { EMPTY_FILTERS, parseFilterParams, writeFilterParams } from "./ReplayFilters";
 import { shelfTitle } from "./HighlightCard";
 import { DASHBOARD_COPY, PICKER_COPY, PROFILE_COPY } from "../lib/copy";
 import type { GameFacetsView, GameProfileView, ReplayMetadataView } from "../types/api";
@@ -291,5 +292,35 @@ describe("the no-profile and stale states", () => {
     const html = render({ view: "replays", profile: null, profileMissing: true, cards: buildCards(null, LIST) });
     expect(html).toContain("33 ticks");
     expect(html).toContain("Open replay seed 3");
+  });
+});
+
+describe("the outcome filters", () => {
+  it("act only once outcomes are revealed", () => {
+    const byWinner = { ...EMPTY_FILTERS, winner: "CREWMATES" as const };
+    for (const card of CARDS) {
+      expect(matchesFilters(card, byWinner, false)).toBe(true);
+      expect(matchesFilters(card, byWinner, true)).toBe(false);
+    }
+  });
+
+  it("read that someone was voted out, from the profile's reveal facets", () => {
+    const voted = { ...EMPTY_FILTERS, hasEjection: true };
+    const kept = CARDS.filter((card) => matchesFilters(card, voted, true)).map((c) => c.seed);
+    expect(kept).toEqual([7, 26]);
+    expect(CARDS.every((card) => matchesFilters(card, voted, false))).toBe(true);
+    const bare = buildCards(null, LIST);
+    expect(bare.some((card) => matchesFilters(card, voted, true))).toBe(false);
+  });
+
+  it("keep two URL keys, and the retired score and win-shape keys read nothing", () => {
+    expect(parseFilterParams("?winner=IMPOSTORS&hasEjection=1&scoreBucket=high&winShape=x")).toEqual({
+      winner: "IMPOSTORS",
+      hasEjection: true,
+    });
+    expect(writeFilterParams("?set=9p2i", { winner: "CREWMATES", hasEjection: true })).toBe(
+      "?set=9p2i&winner=CREWMATES&hasEjection=1",
+    );
+    expect(writeFilterParams("?set=9p2i&winner=CREWMATES", EMPTY_FILTERS)).toBe("?set=9p2i");
   });
 });
