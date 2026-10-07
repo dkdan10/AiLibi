@@ -157,6 +157,22 @@ card imports them, never copies them.
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
+- [x] Review correction (round 6): the charge-fact refusals name their own set, seed and meeting. Each incoherent-fact
+  plant is folded a second time under `other/set`, seed 11 and its meeting renamed, and every refusal is matched whole
+  (`test_an_incoherent_charge_fact_is_refused_naming_its_meeting`); mutants `R6-M1` to `R6-M9` red, a constant for the
+  seed, the set or the meeting at each of the fold's three refusals.
+- [x] Review correction (round 6): only an ejecting ballot with no recorded call leaves the reach cell not evaluable. An
+  ejecting ballot carrying a line about the ejected player beside a SKIP ballot with no recorded call reads 1 of 1
+  (`test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter`); mutant `R6-S1` red.
+- [x] Review correction (round 6): the loader reads each meeting's charges over the players living at its open. A spy on
+  the field's scripted game holds every call's living set and regroup ticks to the meeting's own, and each meeting's
+  living set to the roster less every player killed or ejected before it
+  (`test_the_loader_reads_each_meetings_charges_over_the_players_living_at_its_open`); mutant `R6-S7` red.
+- [x] Review correction (round 6, the fixer's own pass): the ejected player's charge on a pair reads the meeting's
+  regroup ticks, and the loader's refusal of an unserved route block names its own place. The regroup-crossing plant
+  also ejects its target (`test_a_charge_resting_only_on_a_regroup_crossing_needs_the_regroup_ticks`), and the refusal
+  is matched whole, naming the copy's set directory
+  (`test_the_loader_refuses_a_route_block_its_settings_do_not_serve`); mutants `R6-K4` and `R6-M10` red.
 - [x] Review correction (round 5): `route_lines_per_meeting` counts the players some ballot carried a line about,
   never the distinct lines. A planted meeting whose two ballots carry different true lines about one player lands in
   row 1 (`test_two_different_lines_about_one_player_are_one_player_with_a_line`); mutant `R5-S1` red.
@@ -1920,3 +1936,141 @@ the session's harness names, as round 4's did; the dispatch named another model'
 stated place lies after its meeting's tick, so the census's counts on the committed rounds cannot themselves show the
 slice. The presence cell is still exercised only by planted carriers, the field's scripted game and the reach
 derivation, since no committed set carries the route lines.
+
+### Review corrections, round 6 (2026-10-07)
+
+Three blocking findings of the round-6 dispatch, on `e78fd7cc` (correctness lens), each a survivor of a listed class over
+a span phase 2 wrote. All three are valid and are repaired by tests alone. The fixer's own bounded pass over every phase-2
+span then found two more survivors, killed the same way. No production line, recorded byte, page or JSON moves. Every
+ruling in Phase 1's Decisions and in rounds 1 to 5 stands.
+
+1. **The charge-fact refusals' seed and set** (class M). `_fold_route_charges` raises at three places, each naming
+   `set {acc.label}, seed {seed}, {where}`. Every incoherent-fact plant folded only `planted/set` at seed 7, so a
+   constant for the seed or the set survived at each of the three; this round's pass found the meeting (`{where}`)
+   surviving at the second and third as well, since only the first refusal's meeting was varied (round 3's
+   `M4-charges-where`).
+2. **The reach cell's not-evaluable guard** (class S). `any(ballot.route_lines is None for ballot in ejecting)` swapped
+   for every ballot of the meeting survived: no plant put a SKIP ballot without a recorded call beside readable ejecting
+   ballots. There the head reads 1 of 1 and the mutant 0 of 0 with 1 not evaluable, voiding an ejection item 4b counts.
+3. **The loader's living argument to `route_charge_fact`** (class S). `living=living` swapped for
+   `frozenset(state.players)` survived: the dead-player test calls the reader directly with its own living set, and no
+   recording the loader reads names a dead player in a ballot or a flag. The repair is the finding's first option, a spy
+   on the loader's call.
+4. **From this round's pass: the ejected player's charge on a pair with no regroup ticks** (`R6-K4`, class K).
+   `misjudging_pairs(own, charged, regroup_ticks=frozenset())` survived: on the committed rounds no ejection's charge
+   rests only on a crossing of the regroup, and the regroup-crossing plant ejected no one.
+5. **From this round's pass: the loader's place in the unserved-route-block refusal** (`R6-M10`, class M). The `where`
+   argument at `ballot_route_lines`'s call site swapped for the constant `set planted, seed 0, meeting meeting-0`
+   survived: the loader test matched the refusal by a search for its seed, meeting and voter.
+
+**Sections this rests on.** As round 3: `docs/architecture.md` "Layering" and "Determinism and the substrate ladder";
+`tasks/work/route-lines-field.md` (the census contract); item 3's charge cells and their refusals; item 4b's reach cell
+(ejections charged on a reconcilable pair whose ejecting voter was served a line about the ejected player);
+`eval/route_charges.py`, whose charges the census counts only against the living players a ballot or a flag names.
+
+**What changed** (`tests/eval/test_gameplay_census.py` only).
+- `test_an_incoherent_charge_fact_is_refused_naming_its_meeting`: each of the four plants is folded as planted and again
+  under `other/set`, seed 11 and its meeting renamed `gathering-3` (`_renamed_meetings`, as
+  `assert_breach_names_its_place` does), and each refusal is matched whole; the third refusal's two plants now carry its
+  whole text.
+- `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter`: two plants beside a SKIP ballot with no
+  recorded call. An ejecting ballot carrying a walk about the ejected player reads 1 of 1, 0 not evaluable; one carrying
+  no line reads 0 of 1.
+- `test_the_loader_reads_each_meetings_charges_over_the_players_living_at_its_open` (new): a spy on
+  `census.route_charge_fact` during `load_census_inputs` on the field's scripted game records each call's meeting, living
+  set and regroup ticks. The calls are exactly the two meetings' (`MeetingFact.meeting_id`, `.living`,
+  `.regroup_ticks`), and each meeting's living set is the roster less every player killed before its tick or ejected at
+  an earlier meeting (8 of 9 at the first, 5 of 9 at the second), so it is never the roster.
+- `test_a_charge_resting_only_on_a_regroup_crossing_needs_the_regroup_ticks`: the planted row also ejects the charge's
+  target. With the meeting's regroup ticks its fact is `RouteChargeFact(1, 1, ejected_pairs=1,
+  ejected_charged_on_pair=True)`; without them `RouteChargeFact(1, 0, ejected_pairs=0, ejected_charged_on_pair=False)`.
+- `test_the_loader_refuses_a_route_block_its_settings_do_not_serve`: the refusal is matched whole, naming the copy's own
+  set directory, seed 0, the first meeting's id and the first voter served a line.
+
+**Neuter and mutation table** (lessons 1 and 10). This round's diff holds no production line, so the pass runs over the
+phase-2 spans the dispatch names: `_fold_route_charges`, `_fold_route_lines`, `route_charge_fact` and the phase-2
+call-site arguments of `_meeting_fact` in `eval/gameplay_census.py`, and `eval/route_charges.py`. It covers every raise
+site's message arguments, every call-site argument and every collection read the eight classes reach, 38 probes. Each
+was run alone (harness `<scratch>/fix-r6-census/mut.py`: edit one span, run the seven route suites of round 5's
+verification with `-x`, restore from a saved copy), first against the round-5 tests (`e78fd7cc`'s test file run in place
+of this round's), then against this round's at `372e66d8`. The red test is the first one `-x` met.
+
+| probe | class | round-5 tests | this round | test that went red |
+|---|---|---|---|---|
+| `R6-M1` first refusal's `seed {seed}` for `seed 7` (the finding's) | M | survived | killed | `test_an_incoherent_charge_fact_is_refused_naming_its_meeting` (first refusal's plant) |
+| `R6-M2` second refusal's `seed {seed}` for `seed 7` (the finding's) | M | survived | killed | the same (second refusal's plant) |
+| `R6-M3` third refusal's `seed {seed}` for `seed 7` (the finding's) | M | survived | killed | the same (third refusal's first plant) |
+| `R6-M4` first refusal's `set {acc.label}` for `set planted/set` (the finding's) | M | survived | killed | the same (first refusal's plant) |
+| `R6-M5` second refusal's `set {acc.label}` for `set planted/set` | M | survived | killed | the same (second refusal's plant) |
+| `R6-M6` third refusal's `set {acc.label}` for `set planted/set` (the finding's) | M | survived | killed | the same (third refusal's first plant) |
+| `R6-M7` first refusal's `{where}` for `meeting meeting-3` | M | killed | killed | round 5: `test_an_incoherent_charge_fact_names_whichever_meeting_holds_it`; this round: the first refusal's plant |
+| `R6-M8` second refusal's `{where}` for `meeting meeting-3` | M | survived | killed | `test_an_incoherent_charge_fact_is_refused_naming_its_meeting` (second refusal's plant) |
+| `R6-M9` third refusal's `{where}` for `meeting meeting-3` | M | survived | killed | the same (third refusal's first plant) |
+| `R6-S1` the reach guard over `meeting.ballots` for `ejecting` (the finding's) | S | survived | killed | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `R6-S2` the reach count over `meeting.ballots` for `ejecting` | S | killed | killed | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `R6-F1` the `ejecting` filter `if ballot.target == meeting.ejected` dropped | F | killed | killed | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `R6-N1` the reach guard's `is None` for `is not None` | N | killed | killed | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `R6-N2` the ejection-on-a-pair count's `pairs > 0` for `pairs is not None` | N | killed | killed | `test_the_committed_census_matches_a_recomputation` |
+| `R6-N3` the witness-meeting count's `pairs > 0` for `pairs is not None` | N | killed | killed | `test_the_committed_census_matches_a_recomputation` |
+| `R6-S3` a ballot's candidates `meeting.living` for `meeting.living - {ballot.voter}` | S | killed | killed | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_the_voters_own_line]` |
+| `R6-F2` the one-line-per-candidate filter `line.subject in subjects or` dropped | F | killed | killed | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_second_line]` |
+| `R6-K1` the map check's `regroup_ticks=meeting.regroup_ticks` for `frozenset()` | K | killed | killed | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `R6-N4` `if lines is None` for `if lines is not None` | N | killed | killed | `test_impostor_fate_splits_seen_unseen_and_never_vented` (crashes on a ballot with no route lines) |
+| `R6-F3` the ballot targets' `if ballot.target in living` dropped | F | killed | killed | `test_a_dead_player_brings_no_charge_by_ballot_or_flag` |
+| `R6-F4` the flag subjects' `if subject in living` dropped | F | killed | killed | `test_a_dead_player_brings_no_charge_by_ballot_or_flag` |
+| `R6-S4` a charge's pairs over `universe` for the target's `own` | S | killed | killed | `test_the_committed_census_matches_a_recomputation` |
+| `R6-S5` the ejected player's pairs `ordered_pairs(universe)` for `ordered_pairs(own)` | S | killed | killed | `test_the_committed_census_matches_a_recomputation` |
+| `R6-S6` the ejected player's charge on a pair over `universe` for `own` | S | killed | killed | `test_every_value_the_census_holds_is_read_only` |
+| `R6-K2` a charge's pairs with `regroup_ticks=frozenset()` | K | killed | killed | `test_a_charge_resting_only_on_a_regroup_crossing_needs_the_regroup_ticks` |
+| `R6-K3` the ejected player's pairs with `regroup_ticks=frozenset()` | K | killed | killed | `test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting[r2]` |
+| `R6-N5` the ejected player's pairs' `is not None` for `is None` | N | killed | killed | `test_every_value_the_census_holds_is_read_only` |
+| `R6-K4` the ejected player's charge on a pair with `regroup_ticks=frozenset()` (this pass's) | K | survived | killed | `test_a_charge_resting_only_on_a_regroup_crossing_needs_the_regroup_ticks` |
+| `R6-S7` the loader's `living=living` for `frozenset(state.players)` (the finding's) | S | survived | killed | `test_the_loader_reads_each_meetings_charges_over_the_players_living_at_its_open` |
+| `R6-K5` the loader's `regroup_ticks=regroup_ticks` for `frozenset()` | K | killed | killed | `test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting[r2]` |
+| `R6-L1` the loader's `served=route_lines_served` for `True` | L | killed | killed | `test_the_loader_refuses_a_route_block_its_settings_do_not_serve` |
+| `R6-M10` the loader's `where=meeting_where` at `ballot_route_lines` for a constant (this pass's) | M | survived | killed | `test_the_loader_refuses_a_route_block_its_settings_do_not_serve` |
+| `R6-N6` `charges_against`'s `primary_reason_id is None` for `is not None` | N | killed | killed | `test_the_committed_census_matches_a_recomputation` |
+| `R6-F5` `charges_against`'s `if target not in flag.subjects` filter dropped | F | killed | killed | `test_a_charge_rests_on_a_cited_placement_or_a_flag_of_placements` |
+| `R6-D1` a flag's events `(flag.event_a_id, flag.event_b_id)` less `event_b_id` | D | killed | killed | `test_the_committed_census_matches_a_recomputation` |
+| `R6-F6` `misjudging_pairs`'s charged-end filter dropped | F | killed | killed | `test_the_committed_census_matches_a_recomputation` |
+| `R6-S8` `ordered_pairs`'s `ordered[index + 1 :]` for `ordered` | S | killed | killed | `test_the_committed_census_matches_a_recomputation` |
+| `R6-F7` `ordered_pairs`'s `sorted(..., key=_placement_key)` wrapper dropped | F | killed | killed | `test_ordered_pairs_sort_their_input_by_the_placement_key` |
+
+Classes: M replaces a message argument with a constant, S swaps one collection for a related one, F drops a filter or
+wrapper on a collection, N replaces a comparison with a None test or its inverse, K replaces a tick read with a constant,
+L replaces a read of a loaded source with the canonical literal, D drops one member of a tuple. 38 probes: 26 killed by
+the round-5 tests; the other 12 (the findings' five seed and set constants with the sixth at the second refusal, the two
+meeting constants, `R6-S1`, `R6-S7`, `R6-K4` and `R6-M10`) killed by this round's tests; 0 survivors, 0 named
+equivalent. The pass then stopped.
+
+**Verification at this head.** The code head is this round's test commit, `372e66d8`; the card commits after it touch
+only this card.
+
+| command | exit | result |
+|---|---|---|
+| `env`, counting `AILIBI_` names with `grep -c` | 0 | 0 names |
+| `uv run pytest tests/eval/test_route_charges.py tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py tests/experiments/test_route_check_replay.py tests/meetings/test_route_lines.py tests/meetings/test_route_lines_arm.py tests/experiments/test_route_lines_replay.py -n 6 --dist loadfile` | 0 | 878 passed |
+| `uv run pytest tests/eval/test_evidence_honesty.py -n 6 --dist loadfile` | 0 | 114 passed |
+| `uv run python -m experiments.lab.route_check_replay --check` | 0 | reproduced |
+| `uv run python -m experiments.lab.route_lines_replay --check` | 0 | reproduced |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/candidates/stage-b-r1/9p2i --json-stdout` | 0 | 82,949 bytes of JSON |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | 0 | every check passed; 7 report EVIDENCE-BRANCH-ABSENT, the expected fresh-clone state |
+| `bash scripts/verify_samples.sh replays/<set>`, for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
+| `uv run lint-imports` | 0 | 4 kept, 0 broken |
+| `uv run python scripts/validate_task_docs.py` | 0 | Task docs validation passed: 390 phase tasks and prompts; 102 work cards |
+| `uv run python scripts/check_doc_facts.py` | 0 | budgets verified |
+| `git diff --stat origin/main --` the recordings, the scorecard page and JSON, and both lab JSONs and reports | 0 | empty |
+| `git diff --stat e78fd7cc 372e66d8 --` every source, script, page, recording and lab directory | 0 | empty: the round's code diff is the one test file |
+| `uv run ruff check`, `ruff format --check` and `mypy` on `tests/eval/test_gameplay_census.py` | 0 | clean |
+| `uv run pytest -m campaign -n 6 --dist loadfile` | 0 | 337 passed |
+
+**Commit trailer.** As rounds 4 and 5: this round's commits carry `Co-Authored-By: Claude Opus 5.5`, the model that wrote
+them and the line the session's harness names; the dispatch named another model's line, which would misattribute them.
+
+**Limitations.** As round 3. The living-set spy holds the loader's argument on the field's scripted game; the swap it
+kills, `R6-S7`, moved no committed count (it survived the round-5 tests, the census's recomputation and both rounds'
+meeting-by-meeting agreements among them), so the committed rounds cannot themselves tell the living set from the
+roster. Likewise the regroup-crossing ejection is a planted row: `R6-K4` moved no committed count either.
