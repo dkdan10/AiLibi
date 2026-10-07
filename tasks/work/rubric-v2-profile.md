@@ -1136,7 +1136,7 @@ defects.
    corpses. `test_a_reported_body_joining_two_corpses_raises_at_both_readers` gives the reported body a second corpse
    under the same id, at seed 7 and meeting index 1, and requires the full message "set elsewhere, seed 7, meeting
    index 1: the reported body body-p-1-5 joins 2 corpses" from both readers that join a body, `candidate_pointers`
-   and `_game_facets`. The probe found five more survivors there, the set, seed and meeting index arguments of the two
+   and `_game_facets`. The probe found six more survivors there, the set, seed and meeting index arguments of the two
    call sites (GP11 to GP16), all red now; round 1's item 6 is narrowed to say so.
 4. The set-neutral check on the no-profile copy had been weakened: `b46c5c53` dropped its "is scored" alternative,
    its "median N ticks" pattern and the check that the dashboard's absent copy names no `9p2i`, all three added by
@@ -1233,3 +1233,27 @@ logged its exit code directly).
 - Frontend: `npm run lint`, `npm run tsc:check`, `npm run build` exit 0; `npm test`: 27 files, 811 tests passed (808
   and the three new cases); `npm run e2e` (serial, one worker): 15 passed, 3 skipped (the README media capture), exit
   0, 1.4 min.
+
+**The bundle, re-measured in one checkout.** `git checkout --detach ef1a2a59`, `uv run python
+scripts/build_demo_bundle.py --out <scratch>/bundle-base`, then `git checkout --detach e59047ca` (the pushed head,
+checked out detached because another worktree of this clone holds the branch name), `--out <scratch>/bundle-head`,
+then a byte comparison of every file and a key-by-key JSON diff of every common file (scratch `bundle_diff.py`): 109
+files to 110, 71 JSON files to 72. Added `data/9p2i/eval/game-profile.json` (6,232 bytes; its games, its shelf members
+and the right half hold seeds 14 and 19 only, the wrong half none). Changed exactly the five replay views
+(`data/9p2i/replays/headless-seed-19.json`, `-14.json`, `data/4p1i/replays/headless-seed-2.json`, `-11.json`,
+`-29.json`), each in `viewModelVersion` only. The other 66 JSON files byte-identical; no
+`data/4p1i/eval/game-profile.json`; `index.html` and eight hashed assets differ (the new viewer). This is the outcome
+round 1 measured.
+
+**The gate, round 2.** Two environments, quoted separately.
+- Local, this full-history worktree: `bash scripts/check.sh` ran once, whole, at the pushed head `e59047ca` (the
+  commit recording this changes only this card: the bundle and gate paragraphs and one count in finding 3), with a
+  clean tree, its exit code read from the background run's own report, not through a pipe: **exit 0**. Its steps:
+  `ruff check .` all passed; `ruff format --check .` 567 files already formatted; `lint-imports` 5 contracts kept, 0
+  broken; `validate_task_docs.py` passed (390 phase tasks, 390 prompts, 102 work cards); `generate_prompts.py
+  --check` all 390 in sync; `mypy .` no issues in 538 source files; `pytest -n auto --dist loadfile` 10,863 passed,
+  20 skipped, 3 xfailed in 352.3 s; frontend `npm run lint`, `npm run tsc:check`, `npm run test` (27 files, 811
+  tests passed) and `npm run build` clean.
+- CI, a shallow `actions/checkout`: run 37640184843 at `e59047ca`, conclusion success. Project checks (job
+  112856749054) 10,843 passed, 40 skipped, 3 xfailed in 1,041.9 s, with no failure; Frontend checks and Frontend e2e
+  (Playwright) success.
