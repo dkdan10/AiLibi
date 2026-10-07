@@ -148,7 +148,8 @@ from orchestrator.replay import (
     read_all_entries,
     recorded_experiment_config,
 )
-from tests._helpers.scripted_routes import record_routes_game
+from tests._helpers.scripted_meeting import record_game
+from tests._helpers.scripted_routes import record_routes_game, round_two_config
 from tests._helpers.committed import (
     CORPUS_4P1I,
     CORPUS_9P2I,
@@ -10801,6 +10802,30 @@ def test_a_loader_given_no_regroup_ticks_breaks_the_round_2_agreement() -> None:
     assert all(re.match(r"seed \d+ meeting \d+: \w+ is ", line) for line in broken)
 
 
+@pytest.mark.slow
+def test_a_meetings_regroup_ticks_are_the_earlier_meetings_resume_ticks(
+    routes_on: Path,
+) -> None:
+    """The carrier's regroup ticks are the public regroups before the meeting:
+    none at a game's first meeting, then the tick after each earlier meeting,
+    never the meeting's own regroup or a later one. Pinned on round 2's committed
+    recording and on the field's scripted game, both recorded under a config
+    that regroups."""
+
+    for loaded in (census_inputs(SAMPLES_9P2I), load_census_inputs(routes_on)):
+        assert any(
+            fact.regroup_ticks for item in loaded.games for fact in item.meetings
+        )
+        for item in loaded.games:
+            if item.meetings:
+                assert item.meetings[0].regroup_ticks == frozenset()
+            for index, fact in enumerate(item.meetings):
+                assert fact.regroup_ticks == frozenset(
+                    prior.tick + 1 for prior in item.meetings[:index]
+                ), f"seed {item.seed}, {fact.meeting_id}"
+                assert all(tick <= fact.tick for tick in fact.regroup_ticks)
+
+
 def charged_meeting(
     meeting_id: str,
     tick: int,
@@ -11307,6 +11332,45 @@ def test_the_route_lines_cells_count_ballots_lines_and_steps() -> None:
     }
 
 
+def test_two_different_lines_about_one_player_are_one_player_with_a_line() -> None:
+    """Planted: two ballots served different true lines about one player. The
+    meeting has two distinct lines and one player with a line, so it lands in
+    row 1; its two steps are each counted by their reading."""
+
+    onward = step("WEST_HALL", 7, "ADMIN", 8, 1)
+    assert "ADMIN" in NEIGHBOURS["WEST_HALL"]
+    first, second = line("p-0", WALK), line("p-0", onward)
+    assert first != second
+    folded = game(
+        ROUTE_ON,
+        meetings=(
+            routes_meeting(
+                route_ballot("p-2", SKIP_TARGET, first),
+                route_ballot("p-3", SKIP_TARGET, second),
+                stated_places=stated(
+                    **{"p-0": ((6, "MEDBAY"), (7, "WEST_HALL"), (8, "ADMIN"))}
+                ),
+            ),
+        ),
+    )
+    assert {key: counts(key, folded) for key in ROUTE_LINE_CELLS} == {
+        "meetings_with_a_route_line": (1, 1, 0),
+        "ballots_carrying_route_lines": (2, 2, 0),
+        "route_lines_false_to_the_map": (0, 2, 0),
+        "route_lines_off_the_table": (0, 2, 0),
+    }
+    assert table("route_lines_per_meeting", folded) == {
+        "0": 0,
+        "1": 1,
+        "2": 0,
+        "3 or more": 0,
+    }
+    assert table("route_steps_by_reading", folded) == {
+        "walking_fits": 2,
+        "regroup_between": 0,
+    }
+
+
 def test_three_or_more_players_with_a_line_share_a_row() -> None:
     stated_three = stated(
         **{
@@ -11724,22 +11788,53 @@ def _restamped(source: Path, destination: Path, change: Callable[[str], str]) ->
 
 _ARM: Final = "+vote_ballot.qwen3_6_27b.v8.route_lines_v1"
 
+#: A fake game's seed other than the scripted game's 0, with three meetings.
+_FAKE_ROUTES_SEED: Final = 3
+
+
+@pytest.fixture(scope="module")
+def fake_routes_on(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A fake game at seed 3 recorded with the route lines setting: no turn
+    states a place, so no line is served, but the setting and its stamp hold."""
+
+    directory = tmp_path_factory.mktemp("fake-routes-on") / "9p2i"
+    with pytest.MonkeyPatch.context() as patch:
+        for name in list(os.environ):
+            if name.startswith("AILIBI_"):
+                patch.delenv(name)
+        record_game(
+            directory,
+            seed=_FAKE_ROUTES_SEED,
+            config=round_two_config(route_lines=True),
+        )
+    return directory
+
+
+def _stamp_refusal(directory: Path, seed: int, *, lacks: bool) -> str:
+    """The whole refusal of a set whose ballot stamp and settings disagree."""
+
+    return (
+        f"set {directory}, seed {seed}: the ballot stamp "
+        + ("lacks" if lacks else "credits")
+        + " the route lines arm while the recorded settings "
+        + ("serve" if lacks else "do not serve")
+        + " route lines"
+    )
+
 
 def test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises(
-    routes_on: Path, routes_off: Path, tmp_path: Path
+    routes_on: Path, routes_off: Path, fake_routes_on: Path, tmp_path: Path
 ) -> None:
     """Planted: the ON game's stamp with the route lines arm dropped, and the OFF
-    game's stamp crediting it."""
+    game's stamp crediting it. A seed-3 game with its arm dropped is named by its
+    own set and seed."""
 
     lacking = _restamped(
         routes_on, tmp_path / "lacking", lambda text: text.replace(_ARM, "")
     )
-    with pytest.raises(
-        GameplayCensusConformanceError,
-        match=r"seed 0: the ballot stamp lacks the route lines arm while the "
-        "recorded settings serve route lines",
-    ):
+    with pytest.raises(GameplayCensusConformanceError) as refused:
         load_census_inputs(lacking)
+    assert str(refused.value) == _stamp_refusal(lacking, 0, lacks=True)
     crediting = _restamped(
         routes_off,
         tmp_path / "crediting",
@@ -11748,12 +11843,18 @@ def test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises(
             "vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1" + _ARM + " ",
         ),
     )
-    with pytest.raises(
-        GameplayCensusConformanceError,
-        match=r"seed 0: the ballot stamp credits the route lines arm while the "
-        "recorded settings do not serve route lines",
-    ):
+    with pytest.raises(GameplayCensusConformanceError) as refused:
         load_census_inputs(crediting)
+    assert str(refused.value) == _stamp_refusal(crediting, 0, lacks=False)
+    assert load_census_inputs(fake_routes_on).games[0].seed == _FAKE_ROUTES_SEED
+    elsewhere = _restamped(
+        fake_routes_on, tmp_path / "elsewhere", lambda text: text.replace(_ARM, "")
+    )
+    with pytest.raises(GameplayCensusConformanceError) as refused:
+        load_census_inputs(elsewhere)
+    assert str(refused.value) == _stamp_refusal(
+        elsewhere, _FAKE_ROUTES_SEED, lacks=True
+    )
 
 
 def test_the_stamp_check_follows_the_arm_spines_derivation(
@@ -11819,19 +11920,39 @@ def _with_prompts(
     )
 
 
+#: Planted breaks of a served step, each with the field parser's own reason.
+_UNPARSED_STEPS: Final = (
+    ("walking fits", "walking flies", "a route step is not in the served form"),
+    (
+        " 1 door apart",
+        " 1 doors apart",
+        "a route step's door noun agrees with its count",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("served", "planted", "reason"),
+    _UNPARSED_STEPS,
+    ids=["step-form", "door-noun"],
+)
 def test_a_route_block_the_fields_parser_refuses_raises_naming_the_voter(
-    routes_on: Path,
+    routes_on: Path, served: str, planted: str, reason: str
 ) -> None:
+    """The refusal names the voter and carries the field parser's reason."""
+
     row, voter = _served_entry(routes_on / "replay-seed-0.jsonl")
     where = "set planted, seed 0, meeting m"
     assert census.ballot_route_lines(row, voter, served=True, where=where)
-    planted = _with_prompts(
-        row, lambda text: text.replace("walking fits", "walking flies")
-    )
+    broken = _with_prompts(row, lambda text: text.replace(served, planted))
+    call = census.ballot_call(broken, voter)
+    assert call is not None and planted in call.prompt
+    with pytest.raises(ValueError, match=f"^{re.escape(reason)}$"):
+        route_lines_module.parse_route_lines(call.prompt)
     with pytest.raises(GameplayCensusConformanceError) as refused:
-        census.ballot_route_lines(planted, voter, served=True, where=where)
-    assert str(refused.value).startswith(
-        f"{where}, voter {voter}: the route lines block does not parse: "
+        census.ballot_route_lines(broken, voter, served=True, where=where)
+    assert str(refused.value) == (
+        f"{where}, voter {voter}: the route lines block does not parse: {reason}"
     )
 
 
