@@ -665,11 +665,9 @@ def meeting_readings(
     where: str,
     classes: Mapping[str, LabelClass],
 ) -> frozenset[str]:
-    """The tripwire readings one meeting's ejection trips."""
+    """The tripwire readings one meeting's ejection trips; none at a skip."""
 
     ejected = meeting.ejected
-    if ejected is None:
-        return frozenset()
     ejecting = [ballot for ballot in meeting.ballots if ballot.target == ejected]
     for ballot in ejecting:
         if classes[ballot.grounding_label] == "unclassified":

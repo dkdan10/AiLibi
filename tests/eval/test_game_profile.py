@@ -443,6 +443,27 @@ def test_the_blind_projection_holds_no_role_ending_task_count_or_report() -> Non
     )
 
 
+def test_every_projection_and_reading_is_frozen() -> None:
+    kinds = (
+        *_BLIND_TYPES,
+        gp.RevealGame,
+        gp.Pointer,
+        gp.Distance,
+        gp.LeakRow,
+        gp.CandidateClass,
+        gp.PreRevealReading,
+        gp.ProfileStamp,
+    )
+    for kind in kinds:
+        assert getattr(kind, "__dataclass_params__").frozen, kind.__name__
+    blind = blind_game(kills=(kill(5, "p-1"),))
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        blind.seed = 3  # type: ignore[misc]
+    for model in (gp.GameProfile, gp.Shelf, gp.GameFacets, gp.ClassTable):
+        assert model.model_config.get("frozen") is True, model.__name__
+        assert model.model_config.get("extra") == "forbid", model.__name__
+
+
 def test_the_reveal_game_adds_the_roles_the_ending_and_the_task_count() -> None:
     inputs = carrier(game(end_reason="CREWMATE_TASKS", tasks=(14, 14)))
     (reveal,) = revealed(inputs)
@@ -1349,8 +1370,29 @@ def test_a_same_tick_double_kill_joins_each_body_by_victim() -> None:
 
 def test_a_reported_body_joining_no_kill_raises() -> None:
     report = meeting(0, tick=8, trigger="report", opener="p-2", body="body-nobody")
-    with pytest.raises(gp.GameProfileConformanceError, match="joins 0 corpses"):
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted, seed 0, meeting index 0: the reported body "
+        r"body-nobody joins 0 corpses$",
+    ):
         shelves_of(blind_game(meetings=(report,)))
+    seen = kill(5, "p-1", "p-2")
+    twice = dataclasses.replace(
+        blind_game(kills=(seen,), meetings=(report,)),
+        kills=(
+            gp.BlindKill(tick=5, room="CAFETERIA", victim="p-1", witnesses=frozenset()),
+            gp.BlindKill(tick=6, room="CAFETERIA", victim="p-1", witnesses=frozenset()),
+        ),
+    )
+    joined = dataclasses.replace(
+        twice,
+        meetings=(dataclasses.replace(twice.meetings[0], trigger_body=body_id(seen)),),
+    )
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"meeting index 0: the reported body body-p-1-5 joins 2 kills$",
+    ):
+        shelves_of(joined)
 
 
 def test_double_kill() -> None:
