@@ -11954,3 +11954,74 @@ def test_the_fields_reach_is_derivable_from_the_census_through_the_field(
     assert dict(folded.tables["route_steps_by_reading"]) == published["steps"]
     assert folded.cells["route_lines_false_to_the_map"].numerator == 0
     assert folded.cells["route_lines_off_the_table"].numerator == 0
+
+
+def test_stated_places_are_the_route_kinds_only() -> None:
+    """A vent sighting states no place a route line reads; an alibi stay states
+    its two ends; every place keeps its tick and canonical rooms."""
+
+    turns = (
+        MeetingTurn(
+            turn_id="t0",
+            turn_index=0,
+            speaker="p-2",
+            turn_kind="opening",
+            reply_to=None,
+            observations=(
+                SawPlayerObservation(
+                    type="saw_player", tick=4, subject="p-0", room="MEDBAY"
+                ),
+                SawVentObservation(
+                    type="saw_vent", tick=5, subject="p-0", room="ADMIN"
+                ),
+            ),
+            claims=(
+                AlibiClaim(
+                    type="alibi",
+                    subject="p-1",
+                    route=(AlibiSegment(room="STORAGE", from_tick=2, to_tick=6),),
+                ),
+            ),
+            free_text="words",
+        ),
+    )
+    assert census.stated_places(MeetingTranscript(turns=turns)) == {
+        "p-0": frozenset({(4, frozenset({"MEDBAY"}))}),
+        "p-1": frozenset({(2, frozenset({"STORAGE"})), (6, frozenset({"STORAGE"}))}),
+    }
+
+
+def test_the_stamp_check_splits_a_composite_stamp_wherever_the_arm_stands() -> None:
+    first = "vote_ballot.qwen3_6_27b.v8.route_lines_v1+" + (
+        "vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1"
+    )
+    assert census.route_lines_stamped((first,))
+    assert census.route_lines_stamped(("crewmate_report.qwen3_6_27b.v6", first))
+    assert not census.route_lines_stamped(
+        ("vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1",)
+    )
+    # The arm's suffix on another template's stamp is not the ballot's arm.
+    assert not census.route_lines_stamped(
+        ("crewmate_report.qwen3_6_27b.v6.route_lines_v1",)
+    )
+
+
+def test_the_fold_checks_a_step_against_the_doors_its_inputs_carry() -> None:
+    """The step check reads the set's own copy of the map: with the one door
+    between MEDBAY and WEST_HALL taken out of it, a walk across it is a breach."""
+
+    planted = game(
+        ROUTE_ON,
+        meetings=(routes_meeting(route_ballot("p-3", SKIP_TARGET, line("p-0", WALK))),),
+    )
+    fold_set(inputs(planted))
+    cut = MappingProxyType(
+        {
+            room: tuple(n for n in near if {room, n} != {"MEDBAY", "WEST_HALL"})
+            for room, near in NEIGHBOURS.items()
+        }
+    )
+    with pytest.raises(
+        GameplayCensusConformanceError, match="Route steps false to the map"
+    ):
+        fold_set(replace(inputs(planted), neighbours=cut))
