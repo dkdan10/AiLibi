@@ -92,6 +92,43 @@ export type ProfileState =
   | { readonly status: "absent" }
   | { readonly status: "error"; readonly message: string };
 
+/** A settled moments request, tagged with the request it answers. */
+export interface MomentsLoad {
+  readonly request: string;
+  readonly state: ProfileState;
+}
+
+/** The panel's state: loading until the current request settles, so a set
+ *  switch or a refresh never shows the previous request's counts. */
+export function activeMoments(settled: MomentsLoad | null, request: string): ProfileState {
+  return settled !== null && settled.request === request ? settled.state : { status: "loading" };
+}
+
+/** What the set's profile request settles to, for the moments panel. */
+export async function momentsState(request: Promise<GameProfileView>): Promise<ProfileState> {
+  try {
+    return { status: "ready", view: await request };
+  } catch (cause: unknown) {
+    // A set that ships no profile is a first-class empty state, not an error
+    // — the same 404 read `ReplayPicker` uses for the Highlights tab.
+    if (cause instanceof ApiError && cause.status === 404) {
+      return { status: "absent" };
+    }
+    // An HTTP failure is reported by STATUS, never by `ApiError.message`:
+    // that folds the response BODY in, and a file server answers with its
+    // own HTML error page — the same reason the no-report panel below
+    // refuses to print a transport error. Any other error (a view-model
+    // contract mismatch) is app-authored and says something useful.
+    const message =
+      cause instanceof ApiError
+        ? `profile request failed (status ${cause.status})`
+        : cause instanceof Error
+          ? cause.message
+          : String(cause);
+    return { status: "error", message };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Presentational section primitives
 // ---------------------------------------------------------------------------
@@ -1174,8 +1211,10 @@ function DetailedTournamentDashboard() {
   // a live set switch. It goes through `api/client`'s `getGameProfile`, so this
   // panel reads the live API in a normal build and the pre-baked JSON in the
   // static demo bundle, behind the view-model version gate.
-  const [profile, setProfile] = useState<ProfileState>({ status: "loading" });
+  const [settled, setSettled] = useState<MomentsLoad | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const request = `${seedSet ?? ""}#${reloadNonce}`;
+  const profile = activeMoments(settled, request);
 
   // Populate the set list so the selector works even when the dashboard is the
   // first view visited; adopts the server default into `seedSet` when unset.
@@ -1185,40 +1224,15 @@ function DetailedTournamentDashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    setProfile({ status: "loading" });
-    getGameProfile(seedSet ?? undefined)
-      .then((view: GameProfileView) => {
-        if (!cancelled) {
-          setProfile({ status: "ready", view });
-        }
-      })
-      .catch((cause: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        // A set that ships no profile is a first-class empty state, not an error
-        // — the same 404 read `ReplayPicker` uses for the Highlights tab.
-        if (cause instanceof ApiError && cause.status === 404) {
-          setProfile({ status: "absent" });
-          return;
-        }
-        // An HTTP failure is reported by STATUS, never by `ApiError.message`:
-        // that folds the response BODY in, and a file server answers with its
-        // own HTML error page — the same reason the no-report panel below
-        // refuses to print a transport error. Any other error (a view-model
-        // contract mismatch) is app-authored and says something useful.
-        const message =
-          cause instanceof ApiError
-            ? `profile request failed (status ${cause.status})`
-            : cause instanceof Error
-              ? cause.message
-              : String(cause);
-        setProfile({ status: "error", message });
-      });
+    void momentsState(getGameProfile(seedSet ?? undefined)).then((state) => {
+      if (!cancelled) {
+        setSettled({ request, state });
+      }
+    });
     return () => {
       cancelled = true;
     };
-  }, [reloadNonce, seedSet]);
+  }, [request, seedSet]);
 
   // Load the report for the active set on mount + on each live set switch, so the
   // view always reflects the selected set's latest report.

@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { MomentsPanel, type ProfileState } from "./TournamentDashboard";
+import { MomentsPanel, activeMoments, momentsState, type ProfileState } from "./TournamentDashboard";
+import { ApiError } from "../api/client";
 import { shelfTitle } from "./HighlightCard";
 import { DASHBOARD_COPY } from "../lib/copy";
 import type { GameFacetsView, GameProfileView } from "../types/api";
@@ -102,6 +103,9 @@ describe("the moments panel", () => {
     expect(html).toContain(DASHBOARD_COPY.momentsFacetMeetings);
     expect(html).toContain(DASHBOARD_COPY.momentsFacetKills);
     expect(html).toContain(DASHBOARD_COPY.momentsFacetUnfound);
+    expect(html.split(`>${DASHBOARD_COPY.momentsGamesColumn}</th>`).length - 1).toBeGreaterThan(1);
+    expect(html).toContain(`<th class="font-normal">${DASHBOARD_COPY.momentsShelfColumn}</th>`);
+    expect(html).toContain(`<th class="font-normal">${DASHBOARD_COPY.momentsValueColumn}</th>`);
   });
 
   it("shows no reveal-only shelf, name or size before the reveal", () => {
@@ -141,10 +145,37 @@ describe("the moments panel", () => {
     expect(absent).toContain(DASHBOARD_COPY.momentsAbsentBody);
     const stale = panel({ status: "ready", view: { ...VIEW, stale: true } });
     expect(stale).toContain(DASHBOARD_COPY.momentsStaleCaveat);
+    expect(stale).toContain(`>${DASHBOARD_COPY.momentsStaleCaveatTitle}</p>`);
     expect(rows(stale)).toEqual([]);
     expect(panel({ status: "loading" })).toContain(DASHBOARD_COPY.momentsLoading);
     const error = panel({ status: "error", message: "profile request failed (status 500)" });
     expect(error).toContain(DASHBOARD_COPY.momentsError.replace("'", "&#x27;"));
     expect(error).toContain("status 500");
+  });
+});
+
+describe("the panel's request", () => {
+  it("is ready on a profile, absent on a 404, and an error by status otherwise", async () => {
+    expect(await momentsState(Promise.resolve(VIEW))).toEqual({ status: "ready", view: VIEW });
+    const missing = new ApiError(404, "/eval/game-profile", "not found");
+    expect(await momentsState(Promise.reject(missing))).toEqual({ status: "absent" });
+    const failed = new ApiError(500, "/eval/game-profile", "<html>a server page</html>");
+    expect(await momentsState(Promise.reject(failed))).toEqual({
+      status: "error",
+      message: "profile request failed (status 500)",
+    });
+    expect(await momentsState(Promise.reject(new Error("version 7")))).toEqual({
+      status: "error",
+      message: "version 7",
+    });
+    expect(await momentsState(Promise.reject("plain"))).toEqual({ status: "error", message: "plain" });
+  });
+
+  it("reads loading until the current request settles, after a set switch or a refresh", () => {
+    const ready: ProfileState = { status: "ready", view: VIEW };
+    expect(activeMoments(null, "9p2i#0")).toEqual({ status: "loading" });
+    expect(activeMoments({ request: "9p2i#0", state: ready }, "9p2i#0")).toBe(ready);
+    expect(activeMoments({ request: "9p2i#0", state: ready }, "4p1i#0")).toEqual({ status: "loading" });
+    expect(activeMoments({ request: "9p2i#0", state: ready }, "9p2i#1")).toEqual({ status: "loading" });
   });
 });

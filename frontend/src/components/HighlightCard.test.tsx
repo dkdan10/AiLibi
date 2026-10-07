@@ -173,3 +173,50 @@ describe("a card's shelves and facets", () => {
     expect(html).not.toContain(PROFILE_COPY.facets.timeline);
   });
 });
+
+describe("the card's timeline", () => {
+  const share = (tick: number) => `left:${Math.min(100, (tick / 44) * 100)}%`;
+
+  it("is one labelled image with a mark per meeting and per kill at its tick's share", () => {
+    const html = card(profiled, false);
+    expect(html).toContain(`role="img" aria-label="${PROFILE_COPY.facets.timeline}"`);
+    for (const meeting of PROFILE.facets.meetings) {
+      expect(html).toContain(
+        `title="Meeting ${meeting.index + 1} at tick ${meeting.tick}" class="absolute top-0 h-4 w-0.5 bg-ink-900" style="${share(meeting.tick)}"`,
+      );
+    }
+    for (const kill of PROFILE.facets.kills) {
+      expect(html).toMatch(
+        new RegExp(`title="Kill at tick ${kill.tick}[^"]*" class="[^"]*" style="${share(kill.tick)}"`),
+      );
+    }
+  });
+
+  it("has words for every ending a game can record", () => {
+    // The engine's win results, then its stop reasons.
+    for (const ending of [
+      "CREWMATE_EJECT",
+      "CREWMATE_TASKS",
+      "IMPOSTOR_PARITY",
+      "IMPOSTOR_SABOTAGE",
+      "TICK_BUDGET_REACHED",
+      "MEETING_PHASE_REACHED",
+    ]) {
+      const ended: HighlightCardData = {
+        ...profiled,
+        profile: { ...PROFILE, revealFacets: { ...PROFILE.revealFacets!, ending } },
+      };
+      expect(card(ended, true)).toContain("Ended: ");
+    }
+  });
+
+  it("lists the eyewitness chip on a game that sits on no shelf", () => {
+    const chipOnly: HighlightCardData = {
+      ...profiled,
+      profile: { ...PROFILE, shelves: [], revealShelves: [] },
+    };
+    const html = card(chipOnly, false);
+    expect(html).toContain(`aria-label="${PROFILE_COPY.cardShelves}"`);
+    expect(html).toContain("An eyewitness voted on it at meeting 3");
+  });
+});

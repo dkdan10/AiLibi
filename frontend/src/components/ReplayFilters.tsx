@@ -28,6 +28,7 @@
 
 import type { ReactNode } from "react";
 
+import { PROFILE_COPY } from "../lib/copy";
 import type { Winner } from "../types/api";
 
 export interface ReplayFilterState {
@@ -224,7 +225,7 @@ export function ReplayFilters({
                   onChange({ ...filters, hasEjection: e.target.checked });
                 }}
               />
-              someone was voted out
+              {PROFILE_COPY.filterVotedOut}
             </label>
           </FilterField>
         </>

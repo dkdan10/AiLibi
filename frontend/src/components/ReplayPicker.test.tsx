@@ -1,17 +1,28 @@
+import { isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
   ReplayBrowserView,
+  activeProfile,
+  browserState,
   buildCards,
   cardProfiles,
   matchesFilters,
   reelSections,
+  settledProfile,
   type ReelSection,
   type ReplayBrowserViewProps,
 } from "./ReplayPicker";
-import { EMPTY_FILTERS, parseFilterParams, writeFilterParams } from "./ReplayFilters";
+import {
+  EMPTY_FILTERS,
+  ReplayFilters,
+  parseFilterParams,
+  writeFilterParams,
+  type ReplayFilterState,
+} from "./ReplayFilters";
 import { shelfTitle } from "./HighlightCard";
+import { ApiError } from "../api/client";
 import { DASHBOARD_COPY, PICKER_COPY, PROFILE_COPY } from "../lib/copy";
 import type { GameFacetsView, GameProfileView, ReplayMetadataView } from "../types/api";
 
@@ -324,5 +335,194 @@ describe("the outcome filters", () => {
       "?set=9p2i&winner=CREWMATES&hasEjection=1",
     );
     expect(writeFilterParams("?set=9p2i&winner=CREWMATES", EMPTY_FILTERS)).toBe("?set=9p2i");
+  });
+
+  it("let every game through once revealed while the ejection filter is off", () => {
+    for (const card of CARDS) {
+      expect(matchesFilters(card, EMPTY_FILTERS, true)).toBe(true);
+    }
+  });
+});
+
+/** The first `<input>` element in a rendered tree, read without a DOM. */
+function firstInput(node: ReactNode): { onChange: (event: unknown) => void } | null {
+  if (Array.isArray(node)) {
+    for (const child of node as readonly ReactNode[]) {
+      const hit = firstInput(child);
+      if (hit !== null) return hit;
+    }
+    return null;
+  }
+  if (!isValidElement(node)) return null;
+  const props = node.props as { children?: ReactNode; onChange?: (event: unknown) => void };
+  if (node.type === "input" && props.onChange !== undefined) {
+    return { onChange: props.onChange };
+  }
+  return firstInput(props.children);
+}
+
+describe("the ejection filter", () => {
+  const bar = (filters: ReplayFilterState, onChange: (next: ReplayFilterState) => void) => ({
+    filters,
+    onChange,
+    set: "9p2i",
+    resultCount: 2,
+    totalCount: 3,
+    reveal: true,
+    onReveal: () => {},
+  });
+
+  it("is a checkbox in plain words that shows its state and can be disabled", () => {
+    const on = { ...EMPTY_FILTERS, hasEjection: true };
+    const html = renderToStaticMarkup(<ReplayFilters {...bar(on, () => {})} disabled />);
+    expect(html).toContain(
+      `<input type="checkbox" class="accent-ink-900" disabled="" checked=""/>${PROFILE_COPY.filterVotedOut}`,
+    );
+    const off = renderToStaticMarkup(<ReplayFilters {...bar(EMPTY_FILTERS, () => {})} />);
+    expect(off).toContain('<input type="checkbox" class="accent-ink-900"/>');
+  });
+
+  it("turns on when ticked", () => {
+    const seen: ReplayFilterState[] = [];
+    const input = firstInput(ReplayFilters(bar(EMPTY_FILTERS, (next) => seen.push(next))));
+    expect(input).not.toBeNull();
+    input?.onChange({ target: { checked: true } });
+    expect(seen).toEqual([{ ...EMPTY_FILTERS, hasEjection: true }]);
+  });
+});
+
+describe("what each list renders", () => {
+  const opens = (html: string, seed: number) =>
+    html.split(`aria-label="Open replay seed ${seed}"`).length - 1;
+
+  it("describes each shelf and lists its games as cards", () => {
+    const html = render();
+    expect(html).toContain(
+      `<p class="text-sm text-ink-700">${PROFILE_COPY.shelves.double_kill.description}</p>`,
+    );
+    // Seed 7: the reporter shelf, double kill and All games; seed 3: double kill and All games.
+    expect(opens(html, 7)).toBe(3);
+    expect(opens(html, 3)).toBe(2);
+    expect(html).toContain(`<p class="text-sm text-ink-700">${PROFILE_COPY.allGamesNote}</p>`);
+  });
+
+  it("heads the revealed half and the pair, and lists the pair's games", () => {
+    const html = render({ reveal: true });
+    expect(html).toContain(`>${PROFILE_COPY.revealHeading}</h3>`);
+    expect(html).toContain(`>${PROFILE_COPY.revealNote.replace(/'/g, "&#x27;")}</p>`);
+    expect(html).toContain(`>${PROFILE_COPY.pair.heading}</h3>`);
+    expect(html).toContain(`>${PROFILE_COPY.pair.note}</p>`);
+    // Seed 7 adds runaway and the right half once revealed.
+    expect(opens(html, 7)).toBe(5);
+  });
+
+  it("puts the reveal-only shelves in the profile's order before the pair", () => {
+    expect(reelSections(PROFILE, true).map((section) => section.key)).toEqual([
+      "shelf-the_reporter_saw_it_happen",
+      "shelf-double_kill",
+      "shelf-a_third_round",
+      "reveal-caught_venting",
+      "reveal-runaway",
+      "reveal-decided_without_proof_wrong",
+      "reveal-decided_without_proof_right",
+      "all",
+    ]);
+  });
+
+  it("lists a shelf's games in seed order whatever order they are served in", () => {
+    const shuffled = {
+      ...PROFILE,
+      pre_reveal: {
+        ...PROFILE.pre_reveal,
+        shelves: [{ name: "double_kill", members: [member(7), member(3)] }],
+      },
+    };
+    expect(reelSections(shuffled, false)[0]?.seeds).toEqual([3, 7]);
+  });
+
+  it("names the region, the load failure and the stale state in their own words", () => {
+    expect(render()).toContain(`<section aria-label="${PROFILE_COPY.heading}"`);
+    expect(render({ view: "replays" })).toContain('<section aria-label="Replay browser"');
+    expect(render({ status: "error", error: "boom" })).toContain(`${PROFILE_COPY.loadError} boom`);
+    expect(render({ profile: { ...PROFILE, stale: true } })).toContain(
+      `<p>${PROFILE_COPY.staleBody}</p>`,
+    );
+    expect(render({ status: "loading", set: null })).toContain(PROFILE_COPY.loading);
+    expect(render()).toContain(`>${PROFILE_COPY.heading}</h2>`);
+    expect(render({ profile: { ...PROFILE, stale: true } })).toContain(
+      `>${PROFILE_COPY.browseReplays}</button>`,
+    );
+    expect(render({ view: "replays", cards: [], totalCount: 0 })).toContain(
+      "No replays in the configured replay directory.",
+    );
+  });
+});
+
+describe("the profile request and the browser's status", () => {
+  const ready = { status: "ready", profile: PROFILE, error: null } as const;
+  const loading = { status: "loading", profile: null, error: null } as const;
+  const state = (over: Partial<Parameters<typeof browserState>[0]>) =>
+    browserState({
+      view: "highlights",
+      seedSet: "9p2i",
+      availableSetsError: null,
+      profile: ready,
+      replayList: LIST,
+      replayListError: null,
+      ...over,
+    });
+
+  it("settles ready on a profile, absent on a 404 and failed otherwise", async () => {
+    expect(await settledProfile(Promise.resolve(PROFILE))).toEqual(ready);
+    const missing = new ApiError(404, "/eval/game-profile", "not found");
+    expect(await settledProfile(Promise.reject(missing))).toEqual({
+      status: "absent",
+      profile: null,
+      error: null,
+    });
+    expect(await settledProfile(Promise.reject(new Error("version 7")))).toEqual({
+      status: "error",
+      profile: null,
+      error: "version 7",
+    });
+    expect(await settledProfile(Promise.reject("plain"))).toEqual({
+      status: "error",
+      profile: null,
+      error: "plain",
+    });
+  });
+
+  it("reads loading until a request made for the active set settles", () => {
+    expect(activeProfile(null, "9p2i")).toEqual(loading);
+    expect(activeProfile({ set: "9p2i", load: ready }, "9p2i")).toBe(ready);
+    expect(activeProfile({ set: "9p2i", load: ready }, "4p1i")).toEqual(loading);
+    expect(activeProfile({ set: "9p2i", load: ready }, null)).toEqual(loading);
+  });
+
+  it("drives the reel by the sets, the profile and the replay list, in that order", () => {
+    expect(state({})).toEqual({ status: "ready", error: null });
+    expect(state({ seedSet: null, availableSetsError: "sets down" })).toEqual({
+      status: "error",
+      error: "sets down",
+    });
+    expect(state({ availableSetsError: "sets down" })).toEqual({ status: "ready", error: null });
+    expect(
+      state({ profile: { status: "error", profile: null, error: "boom" }, replayListError: "list" }),
+    ).toEqual({ status: "error", error: "boom" });
+    expect(state({ replayListError: "list down" })).toEqual({ status: "error", error: "list down" });
+    expect(state({ profile: loading })).toEqual({ status: "loading", error: null });
+    expect(state({ replayList: null })).toEqual({ status: "loading", error: null });
+  });
+
+  it("drives the Replays browser by the replay list alone", () => {
+    const replays = (over: Partial<Parameters<typeof browserState>[0]>) =>
+      state({ view: "replays", ...over });
+    expect(replays({ profile: loading })).toEqual({ status: "ready", error: null });
+    expect(replays({ profile: { status: "error", profile: null, error: "boom" } })).toEqual({
+      status: "ready",
+      error: null,
+    });
+    expect(replays({ replayList: null })).toEqual({ status: "loading", error: null });
+    expect(replays({ replayListError: "list down" })).toEqual({ status: "error", error: "list down" });
   });
 });

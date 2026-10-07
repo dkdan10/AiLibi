@@ -541,6 +541,9 @@ export const SPECTATOR_COPY = Object.freeze({
       "These shelves read how the game ended, whether a meeting voted someone out, or a player's role, so they stay hidden until you reveal outcomes.",
     countOne: "{count} game",
     countMany: "{count} games",
+    cardShelves: "Shelves this game sits on",
+    loading: "Loading moments…",
+    filterVotedOut: "someone was voted out",
     absentTitle: "No game-shape profile for this set",
     absentBody:
       "The served set ({set}) ships no game-shape profile, so its games sit on no shelf. Browse Replays to inspect this set without one.",

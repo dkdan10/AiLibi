@@ -329,7 +329,7 @@ export function HighlightCard({ data, onOpen, reveal }: HighlightCardProps) {
           {(profile.shelves.length > 0 ||
             profile.eyewitness.length > 0 ||
             (reveal && profile.revealShelves.length > 0)) && (
-            <ul className="flex flex-wrap gap-1.5" aria-label="Shelves this game sits on">
+            <ul className="flex flex-wrap gap-1.5" aria-label={PROFILE_COPY.cardShelves}>
               {profile.shelves.map((name) => (
                 <Chip key={name} text={shelfTitle(name)} />
               ))}

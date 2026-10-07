@@ -561,7 +561,7 @@ export function ReplayBrowserView({
           set !== null
             ? `Loading ${set}…`
             : isHighlights
-              ? "Loading moments…"
+              ? PROFILE_COPY.loading
               : "Loading replays…"
         }
       />
@@ -712,6 +712,78 @@ export function SetSelector({
   );
 }
 
+// ── the profile request and the browser's status (pure) ─────────────────────
+
+/** The set's profile request: loading, then ready, absent (a 404: the set ships
+ *  none, a first-class empty state, not an error) or failed. */
+export type ProfileLoad =
+  | { readonly status: "loading"; readonly profile: null; readonly error: null }
+  | { readonly status: "ready"; readonly profile: GameProfileView; readonly error: null }
+  | { readonly status: "absent"; readonly profile: null; readonly error: null }
+  | { readonly status: "error"; readonly profile: null; readonly error: string };
+
+const PROFILE_LOADING: ProfileLoad = { status: "loading", profile: null, error: null };
+
+/** A settled profile request, tagged with the set it was made for. */
+export interface SetProfileLoad {
+  readonly set: string;
+  readonly load: ProfileLoad;
+}
+
+/** The active set's profile: loading until a request made for that set settles,
+ *  so a live set switch never shows the previous set's shelves. */
+export function activeProfile(settled: SetProfileLoad | null, seedSet: string | null): ProfileLoad {
+  return settled !== null && settled.set === seedSet ? settled.load : PROFILE_LOADING;
+}
+
+/** What the set's profile request settles to. */
+export async function settledProfile(request: Promise<GameProfileView>): Promise<ProfileLoad> {
+  try {
+    return { status: "ready", profile: await request, error: null };
+  } catch (err: unknown) {
+    if (err instanceof ApiError && err.status === 404) {
+      return { status: "absent", profile: null, error: null };
+    }
+    return {
+      status: "error",
+      profile: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/** The browser's status. The reel is driven by the profile and the replay list;
+ *  the Replays browser by the replay list (the profile only enriches it). */
+export function browserState(input: {
+  readonly view: BrowserView;
+  readonly seedSet: string | null;
+  readonly availableSetsError: string | null;
+  readonly profile: ProfileLoad;
+  readonly replayList: readonly ReplayMetadataView[] | null;
+  readonly replayListError: string | null;
+}): { readonly status: BrowserStatus; readonly error: string | null } {
+  if (input.view === "highlights") {
+    // A /sets failure leaves seedSet null, so the profile fetch never starts and
+    // the request would read "loading" forever: surface the sets error instead
+    // of a permanent silent spinner (else the Highlights route dead-ends).
+    if (input.seedSet === null && input.availableSetsError !== null) {
+      return { status: "error", error: input.availableSetsError };
+    }
+    if (input.profile.status === "error") {
+      return { status: "error", error: input.profile.error };
+    }
+    if (input.replayListError !== null) {
+      return { status: "error", error: input.replayListError };
+    }
+    const waiting = input.profile.status === "loading" || input.replayList === null;
+    return { status: waiting ? "loading" : "ready", error: null };
+  }
+  if (input.replayListError !== null) {
+    return { status: "error", error: input.replayListError };
+  }
+  return { status: input.replayList === null ? "loading" : "ready", error: null };
+}
+
 // ── connected container ──────────────────────────────────────────────────────
 
 export function ReplayPicker() {
@@ -747,13 +819,10 @@ export function ReplayPicker() {
   // effectively replays | highlights here; narrow defensively.
   const browserView: BrowserView = view === "highlights" ? "highlights" : "replays";
 
-  // The set's game-shape profile (the reel's lists + the cards' entries). 404 →
-  // "absent" (the set ships none) is a first-class empty state, NOT an error.
-  const [profile, setProfile] = useState<GameProfileView | null>(null);
-  const [profileStatus, setProfileStatus] = useState<
-    "loading" | "absent" | "error" | "ready"
-  >("loading");
-  const [profileError, setProfileError] = useState<string | null>(null);
+  // The set's game-shape profile (the reel's lists + the cards' entries): the last
+  // settled request, read as loading until one made for the active set settles.
+  const [settled, setSettled] = useState<SetProfileLoad | null>(null);
+  const profileLoad = activeProfile(settled, seedSet);
 
   // Filters hydrate from the URL at mount (reads), then sync back (the same
   // URLSearchParams pattern as 12.4).
@@ -771,30 +840,17 @@ export function ReplayPicker() {
   }, [loadSets]);
 
   // Re-fetch the profile for the ACTIVE set, live, whenever the set changes — no
-  // reload. 404 → "absent" (the set ships none) is a first-class empty
-  // state, NOT an error. Skipped until a set is resolved (seedSet !== null).
+  // reload. Skipped until a set is resolved (seedSet !== null).
   useEffect(() => {
     if (seedSet === null) {
       return;
     }
     let cancelled = false;
-    setProfileStatus("loading");
-    getGameProfile(seedSet)
-      .then((loaded) => {
-        if (cancelled) return;
-        setProfile(loaded);
-        setProfileStatus("ready");
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        if (err instanceof ApiError && err.status === 404) {
-          setProfile(null);
-          setProfileStatus("absent");
-          return;
-        }
-        setProfileError(err instanceof Error ? err.message : String(err));
-        setProfileStatus("error");
-      });
+    void settledProfile(getGameProfile(seedSet)).then((load) => {
+      if (!cancelled) {
+        setSettled({ set: seedSet, load });
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -827,7 +883,10 @@ export function ReplayPicker() {
     };
   }, [filters]);
 
-  const allCards = useMemo(() => buildCards(profile, replayList), [profile, replayList]);
+  const allCards = useMemo(
+    () => buildCards(profileLoad.profile, replayList),
+    [profileLoad, replayList],
+  );
   const cards = useMemo(
     () => allCards.filter((card) => matchesFilters(card, filters, revealOutcome)),
     [allCards, filters, revealOutcome],
@@ -845,37 +904,14 @@ export function ReplayPicker() {
     });
   }, [seedSet, replayList]);
 
-  // Status: the reel is driven by the profile and the replay list; the browser
-  // by the replay list (the profile is best-effort enrichment there).
-  let status: BrowserStatus;
-  let error: string | null;
-  if (browserView === "highlights") {
-    // A /sets failure leaves seedSet null, so the profile fetch never starts and
-    // profileStatus would hang on "loading" forever — surface the sets error
-    // instead of a permanent silent spinner (else the Highlights route dead-ends).
-    if (seedSet === null && availableSetsError !== null) {
-      status = "error";
-      error = availableSetsError;
-    } else if (profileStatus === "error") {
-      status = "error";
-      error = profileError;
-    } else if (replayListError !== null) {
-      status = "error";
-      error = replayListError;
-    } else {
-      status =
-        profileStatus === "loading" || replayList === null ? "loading" : "ready";
-      error = null;
-    }
-  } else {
-    status =
-      replayList === null && replayListError === null
-        ? "loading"
-        : replayListError !== null
-          ? "error"
-          : "ready";
-    error = replayListError;
-  }
+  const { status, error } = browserState({
+    view: browserView,
+    seedSet,
+    availableSetsError,
+    profile: profileLoad,
+    replayList,
+    replayListError,
+  });
 
   return (
     <div className="flex flex-col gap-4">
@@ -916,9 +952,9 @@ export function ReplayPicker() {
         // Prefer the ACTIVE set (updates immediately on switch) over the profile's
         // seedset, which lags behind the in-flight fetch — otherwise the loading
         // cue reads "Loading <old set>…" while the new set loads (Task 12.13 review).
-        set={seedSet ?? profile?.seedset ?? null}
-        profile={profileStatus === "ready" ? profile : null}
-        profileMissing={profileStatus === "absent"}
+        set={seedSet ?? profileLoad.profile?.seedset ?? null}
+        profile={profileLoad.profile}
+        profileMissing={profileLoad.status === "absent"}
         featured={featured}
         reveal={revealOutcome}
         onReveal={() => {
