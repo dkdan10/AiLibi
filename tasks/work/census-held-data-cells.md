@@ -157,6 +157,19 @@ card imports them, never copies them.
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
+- [x] Review correction (round 5): `route_lines_per_meeting` counts the players some ballot carried a line about,
+  never the distinct lines. A planted meeting whose two ballots carry different true lines about one player lands in
+  row 1 (`test_two_different_lines_about_one_player_are_one_player_with_a_line`); mutant `R5-S1` red.
+- [x] Review correction (round 5): a meeting's carrier `regroup_ticks` are the resume ticks of the earlier meetings
+  only: none at a game's first meeting, never its own regroup or a later one, pinned on round 2's committed recording
+  and on the field's scripted game (`test_a_meetings_regroup_ticks_are_the_earlier_meetings_resume_ticks`); mutants
+  `R5-F1` and `R5-F2` red.
+- [x] Review correction (round 5): the stamp refusal names its set and seed, and the route-block refusal carries the
+  field parser's reason. A seed-3 fake game with the setting and its arm dropped is refused naming its own set and
+  seed, every stamp refusal is matched whole (`test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises`),
+  and the step-form and door-noun breaks each carry the parser's own reason
+  (`test_a_route_block_the_fields_parser_refuses_raises_naming_the_voter[step-form]` and `[door-noun]`); mutants
+  `R5-Ma`, `R5-Mb` and `R5-Mf` red.
 - [x] Review correction (round 4): the presence cell counts meetings where some ballot carried a line, never
   meetings holding ballots. A meeting whose one ballot carries a recorded call and no line keeps
   `meetings_with_a_route_line` at 1 of 2 (`test_the_route_lines_cells_count_ballots_lines_and_steps`), and the field's
@@ -1807,3 +1820,100 @@ beyond the gate; the gate's row records its exit code.
 
 **Limitations.** As round 3. The presence cell is still exercised only by planted carriers, the field's scripted game
 and the reach derivation, since no committed set carries the route lines.
+
+### Review corrections, round 5 (2026-10-07)
+
+Three blocking findings of the round-5 dispatch, on `c25feb26` (correctness lens), each a survivor of a listed class over
+a span phase 2 wrote. All three are valid and are repaired by tests alone: no production line, recorded byte, page or
+JSON moves. Every ruling in Phase 1's Decisions and in rounds 1 to 4 stands.
+
+1. **`route_lines_per_meeting` counts players, not lines** (class S). The row argument
+   `len({line.subject for line in distinct})` swapped for `len(distinct)` survived, since every planted meeting's
+   distinct lines were about distinct players. A planted meeting whose two ballots carry different true lines about one
+   player tells the two apart: the head lands it in row 1, the mutant in row 2.
+2. **A meeting's `regroup_ticks` are the earlier meetings' only** (class S). The loader's `applied_meetings[:index]`
+   swapped for `applied_meetings` survived: no committed count moves, because every stated place on the committed
+   rounds is at or before its meeting's tick, and so is every planted one. The repair is the finding's first option, a
+   pin of the carrier field on recorded regroup games, never a claim that the mutant is equivalent: no mechanism of the
+   census bounds a stated tick by the meeting's tick, so a later recording could tell the two apart.
+3. **The two refusals' message arguments** (class M). In the stamp refusal, `seed {seed}` for the literal `seed 0`
+   survived (the only planted game was seed 0 and the test matched by search) and `set {path.parent}` for a constant
+   survived (no test read it); in the route-block refusal, the parser's `{error}` for a constant survived (the test
+   read only the prefix).
+
+**Sections this rests on.** As round 3: `docs/architecture.md` "Layering" and "Determinism and the substrate ladder";
+`tasks/work/route-lines-field.md` (the census contract); `orchestrator.replay.derive_regroup_ticks`, whose docstring
+gives the regroup ticks that follow the meetings before the current one; `meetings.route_lines.parse_route_lines`, which
+refuses with its own reason; item 4's table ("meetings by candidates with a line") and its refusals.
+
+**What changed** (`tests/eval/test_gameplay_census.py` only).
+- `test_two_different_lines_about_one_player_are_one_player_with_a_line` (new): one meeting, `p-2` served MEDBAY 6 to
+  WEST_HALL 7 about `p-0` and `p-3` served WEST_HALL 7 to ADMIN 8 about `p-0`, all three places stated.
+  `route_lines_per_meeting` reads row 1 = 1, `route_steps_by_reading` 2 walks, both conformance cells 0 of 2.
+- `test_a_meetings_regroup_ticks_are_the_earlier_meetings_resume_ticks` (new): on round 2's committed recording
+  (`replays/samples/9p2i`) and on the field's scripted game, every game's first meeting holds no regroup tick, each
+  meeting holds exactly the tick after each earlier meeting, and none after its own tick.
+- `test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises`: both seed-0 refusals are now matched whole,
+  naming the restamped set's directory, and a new module fixture `fake_routes_on` records a fake game at seed 3 under
+  round 2's config with the setting (3 meetings; no line is served, but the setting and its stamp hold). With its arm
+  dropped it is refused naming its own set directory and seed 3.
+- `test_a_route_block_the_fields_parser_refuses_raises_naming_the_voter`: parametrized over two planted breaks of a
+  served step, `walking fits` to `walking flies` (the field's "a route step is not in the served form") and
+  `1 door apart` to `1 doors apart` (its "a route step's door noun agrees with its count"). Each asserts the field's
+  parser raises exactly that reason on the broken prompt, and that the census's refusal is the whole message ending in
+  it.
+
+**Neuter and mutation table** (lessons 1 and 10). This round's diff holds no production line, so the pass runs over the
+spans the findings name: `_fold_route_lines`'s row count, the loader's regroup-tick derivation, the stamp refusal and
+the loader's `where`, and `ballot_route_lines`'s refusal, all in `eval/gameplay_census.py`; `eval/route_charges.py` is
+untouched this round. Each probe was run alone (harness `<scratch>/fix-r5-census/mut.py`: edit one span, run
+`tests/eval/test_gameplay_census.py` and `tests/eval/test_route_charges.py` with `-x`, restore from a saved copy), first
+against the round-4 tests (a copy of `c25feb26`'s test file run in place of this round's), then against this round's.
+
+| probe | class | round-4 tests | this round | test that went red |
+|---|---|---|---|---|
+| `R5-S1` the row count `len({line.subject for line in distinct})` for `len(distinct)` (the finding's) | S | survived | killed | `test_two_different_lines_about_one_player_are_one_player_with_a_line` |
+| `R5-S2` the row count over the last ballot's `lines` for `distinct` | S | killed | killed | crashes on planted meetings with no ballot (`test_corpse_age_reads_the_kill_event_tick_never_the_body_id` first) |
+| `R5-F1` the regroup ticks over `applied_meetings` for `applied_meetings[:index]` (the finding's) | S | survived | killed | `test_a_meetings_regroup_ticks_are_the_earlier_meetings_resume_ticks` |
+| `R5-F2` the regroup ticks over `applied_meetings[: index + 1]` (the meeting's own regroup) | S | survived | killed | `test_a_meetings_regroup_ticks_are_the_earlier_meetings_resume_ticks` |
+| `R5-L1` `derive_regroup_ticks(None, ...)` for the recorded config | L | killed | killed | `test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting[r2]`; also the scripted game's test |
+| `R5-Ma` the stamp refusal's `seed {seed}` for `seed 0` (the finding's M-a) | M | survived | killed | `test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises` (the seed-3 plant) |
+| `R5-Mb` the stamp refusal's `set {path.parent}` for `set planted` (the finding's M-b) | M | survived | killed | `test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises` |
+| `R5-B1` the stamp refusal's `lacks` and `credits` branches swapped | B | killed | killed | `test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises`; also `test_the_stamp_check_follows_the_arm_spines_derivation` |
+| `R5-B2` its `serve` and `do not serve` branches swapped | B | killed | killed | `test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises` |
+| `R5-Mg` the loader's `where` for `set planted, seed 0, ` (the finding's M-g, re-checked) | M | killed | killed | `test_the_loader_names_the_set_and_seed_of_an_unchecked_holds_nothing_skip` |
+| `R5-Mf` the route-block refusal's `{error}` for `refused` (the finding's M-f) | M | survived | killed | `test_a_route_block_the_fields_parser_refuses_raises_naming_the_voter[step-form]` |
+
+Classes: S swaps one collection for a related one, L replaces a read of a loaded source with a literal, M replaces a
+message argument with a constant, B swaps adjacent branches. 11 probes: 5 killed by the round-4 tests, the other 6 (the
+finding's five and `R5-F2`) killed by this round's tests; 0 survivors, 0 named equivalent. The pass then stopped.
+
+**Verification at this head.** The code head is this round's test commit, `584576a3`; the card commits after it touch
+only this card.
+
+| command | exit | result |
+|---|---|---|
+| `env`, counting `AILIBI_` names with `grep -c` | 1 (no match) | 0 |
+| `uv run pytest tests/eval/test_route_charges.py tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py tests/experiments/test_route_check_replay.py tests/meetings/test_route_lines.py tests/meetings/test_route_lines_arm.py tests/experiments/test_route_lines_replay.py -n 6 --dist loadfile` | 0 | 877 passed |
+| `uv run pytest tests/eval/test_evidence_honesty.py -n 6 --dist loadfile` | 0 | 114 passed |
+| `uv run python -m experiments.lab.route_check_replay --check` | 0 | reproduced |
+| `uv run python -m experiments.lab.route_lines_replay --check` | 0 | reproduced |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/candidates/stage-b-r1/9p2i --json-stdout` | 0 | 82,949 bytes of JSON |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/verify_ml_evidence.py` (offline) | 0 | every check passed; 7 report EVIDENCE-BRANCH-ABSENT, the expected fresh-clone state |
+| `bash scripts/verify_samples.sh replays/<set>`, for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
+| `uv run lint-imports` | 0 | 4 kept, 0 broken |
+| `uv run python scripts/validate_task_docs.py` | 0 | Task docs validation passed: 390 phase tasks and prompts; 102 work cards |
+| `uv run python scripts/check_doc_facts.py` | 0 | budgets verified |
+| `git diff --stat origin/main --` the recordings, the scorecard page and JSON, and both lab JSONs and reports | 0 | empty |
+| `uv run ruff check`, `ruff format --check` and `mypy` on `tests/eval/test_gameplay_census.py` | 0 | clean |
+
+**Commit trailer.** This round's commits carry `Co-Authored-By: Claude Opus 5.5`, the model that wrote them and the line
+the session's harness names, as round 4's did; the dispatch named another model's line, which would misattribute them.
+
+**Limitations.** As round 3. The regroup pin holds the carrier on the two regroup recordings it reads; no committed
+stated place lies after its meeting's tick, so the census's counts on the committed rounds cannot themselves show the
+slice. The presence cell is still exercised only by planted carriers, the field's scripted game and the reach
+derivation, since no committed set carries the route lines.
