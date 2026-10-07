@@ -157,6 +157,12 @@ card imports them, never copies them.
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
+- [x] Review correction (round 4): the presence cell counts meetings where some ballot carried a line, never
+  meetings holding ballots. A meeting whose one ballot carries a recorded call and no line keeps
+  `meetings_with_a_route_line` at 1 of 2 (`test_the_route_lines_cells_count_ballots_lines_and_steps`), and the field's
+  reach derivation holds the presence and ballot cells to the route-lines replay's own per-meeting counts (116 of 117
+  and 665 of 691 on round 2; 123 of 124 and 692 of 717 on round 1;
+  `test_the_fields_reach_is_derivable_from_the_census_through_the_field`); mutants `R4-S1` and `R4-N1` red.
 - [x] Review correction (round 3): phase 2 is built now that `route-lines-field` has merged. This branch merges
   `main` (both sides of `tests/eval/test_gameplay_census.py` kept) and builds items 3, 4 and 4b as contracted
   (`test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting`,
@@ -1742,3 +1748,61 @@ were each re-run, red, against the test added for it in `39e03863`. The pass the
   showing a line, not changing a vote.
 - The r2 agreement reads `replays/samples/9p2i` as the route-check replay pinned it; a promotion that replaces that set
   retires or re-points the r2 agreement, as the card's Constraints say, and the r1 agreement survives it.
+
+### Review corrections, round 4 (2026-10-07)
+
+One blocking finding of the round-4 dispatch, on `50830711` (correctness lens): the presence cell
+`meetings_with_a_route_line` survived its argument `bool(distinct)` swapped for `bool(meeting.ballots)`, a listed
+class S mutant (one collection swapped for a related one). Every planted meeting with no line held no ballots, so a
+count of meetings holding ballots read the same; on a route-lines carrier a meeting whose ballots carry no line tells
+the two apart (on the round-2 carrier with the field builder's lines, 116 of 117 against 117 of 117). The finding is
+valid and is repaired by tests alone: no production line, recorded byte, page or JSON moves. Every ruling in Phase 1's
+Decisions and in rounds 1 to 3 stands.
+
+**Sections this rests on.** As round 3: `docs/architecture.md` "Layering" and "Determinism and the substrate ladder";
+`tasks/work/route-lines-field.md` (the census contract); item 4's presence cell ("meetings where some ballot carried a
+line, over meetings").
+
+**What changed.**
+- `test_the_route_lines_cells_count_ballots_lines_and_steps`: the second meeting now holds one ballot carrying a
+  recorded call and no line (it held none before), and the test asserts every planted meeting holds ballots. The
+  presence cell stays 1 of 2; `ballots_carrying_route_lines` reads 2 of 4, 1 not evaluable (was 2 of 3); the tables and
+  conformance cells are unchanged.
+- `test_the_fields_reach_is_derivable_from_the_census_through_the_field`: on each round column the census's presence
+  cell equals the route-lines replay's count of meetings serving a line over its meetings, and the ballot cell equals
+  its `ballots_with_block` over `ballots`, both read from the committed `experiments/lab/results-route-lines-replay.json`,
+  never typed in. The test also asserts that some meeting in the column serves no line, so the assertion can tell the
+  two counts apart. At this head: 116 of 117 meetings and 665 of 691 ballots on round 2; 123 of 124 and 692 of 717 on
+  round 1.
+
+**Neuter and mutation table** (lessons 1 and 10), over the one production span the finding names, `_fold_route_lines`'s
+presence count in `eval/gameplay_census.py`. Each was run alone (harness `<scratch>/fix-r4-census/mut.py`: edit the
+argument, run `tests/eval/test_gameplay_census.py`, `tests/meetings/test_route_lines.py` and
+`tests/meetings/test_route_lines_arm.py` with `-x`, restore from a saved copy), first against the round-3 tests at
+`50830711`, then against this round's.
+
+| probe | class | round-3 tests | this round | test that went red |
+|---|---|---|---|---|
+| `R4-S1` `bool(distinct)` for `bool(meeting.ballots)` | S | survived | killed | `test_the_route_lines_cells_count_ballots_lines_and_steps`; also `test_the_fields_reach_is_derivable_from_the_census_through_the_field[r2]` and `[r1]` (117/117 and 124/124 against 116/117 and 123/124) |
+| `R4-S2` `bool(distinct)` for `bool(meeting.living)` | S | killed | killed | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `R4-N1` `bool(distinct)` for some ballot's `route_lines is not None` | N | survived | killed | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `R4-N2` `bool(distinct)` for `not distinct` | N | killed | killed | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `presence-argument` `bool(distinct)` for `True` (the neuter) | neuter | killed | killed | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+
+5 probes: 3 killed by the round-3 tests, the other 2 (`R4-S1`, the finding's, and `R4-N1`) killed by this round's planted
+meeting; 0 survivors, 0 named equivalent. The pass then stopped.
+
+**Verification at this head.** The code head is this round's test commit, `e91d8332`; the card commits after it touch
+only this card. The demo bundle diff, the lab `--check` runs and every other row of round 3's table do not depend on a test-only
+change and were not re-run beyond the gate; the gate's row records its exit code.
+
+| command | exit | result |
+|---|---|---|
+| `uv run pytest tests/eval/test_gameplay_census.py -k test_the_route_lines_cells_count_ballots_lines_and_steps` | 0 | 1 passed |
+| `uv run pytest tests/eval/test_gameplay_census.py -k test_the_fields_reach_is_derivable_from_the_census_through_the_field` | 0 | 2 passed (r2, r1) |
+| `uv run ruff check`, `ruff format --check` and `mypy` on `tests/eval/test_gameplay_census.py` | 0 | clean |
+| `uv run python scripts/validate_task_docs.py` | 0 | Task docs validation passed: 390 phase tasks and prompts; 102 work cards |
+| `bash scripts/check.sh` at the pushed head after this card commit (run once, output to a file, exit code from the run itself) | pending | recorded by the card commit after the run |
+
+**Limitations.** As round 3. The presence cell is still exercised only by planted carriers, the field's scripted game
+and the reach derivation, since no committed set carries the route lines.
