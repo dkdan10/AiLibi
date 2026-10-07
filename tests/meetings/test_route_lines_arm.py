@@ -921,9 +921,9 @@ def test_the_golden_refuses_it_once_the_field_leaves_its_reads(
         golden.walk_directory(games.scripted_on.parent)
 
 
-def test_the_census_classifies_it_as_not_read() -> None:
+def test_the_census_reads_it_by_its_route_lines_predicate() -> None:
+    """The census reads the field by the predicate that scopes its route line cells."""
+
     use = FIELD_CLASSIFICATION[_FIELD]
-    assert (
-        use.reason == "adds role-blind route lines to a ballot; no cell is forced by it"
-    )
-    assert not use.predicates and not use.value_read_by
+    assert use.predicates == ("route_lines",)
+    assert not use.reason and not use.value_read_by

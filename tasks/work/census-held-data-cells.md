@@ -1359,8 +1359,14 @@ game-shape profile, 8.5's order and one-writer map). Ruling R13 (the census join
    share their scope, so they have no publishing twin and carry their own planted breaches (`ROUTE_GUARD_BREACHES`).
 8. `SCHEMA_VERSION` stays 2: the JSON gains cells, tables, terms and a row only. Its in-tree readers (the publisher,
    `scripts/verify_ml_evidence.py`, the census's tests) read it unchanged.
-9. Follow-through outside the card's file list: none. `docs/artifacts.md`'s census row names the new groups; the
-   `experiments/lab/` row's size does not move (170 files, 7.0 MB).
+9. Follow-through outside the card's file list: one test in the field card's merged file,
+   `tests/meetings/test_route_lines_arm.py`. Its `test_the_census_classifies_it_as_not_read` pinned the not-read
+   `FIELD_CLASSIFICATION` entry that this card is contracted to replace with its predicate (item 4; both cards'
+   coordination paragraphs), so the first full gate failed on it; it now reads
+   `test_the_census_reads_it_by_its_route_lines_predicate` and pins the predicate. The field card has merged and
+   writes that file no more; no assertion is dropped, only the pinned classification follows the contract.
+   `docs/artifacts.md`'s census row names the new groups; the `experiments/lab/` row's size does not move (170
+   files, 7.0 MB).
 
 **Measured at this head, count-only, through the production path** (`uv run python scripts/publish_gameplay_census.py
 --check` recomputes the four committed sets; the r1 column is `--set-dir replays/candidates/stage-b-r1/9p2i
@@ -1720,7 +1726,9 @@ were each re-run, red, against the test added for it in `39e03863`. The pass the
 | `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
 | `uv run pytest -m campaign -n 6` | 0 | 337 passed |
 | demo bundle, built in this one checkout at `2228eb4a` (`main`) and at `39e03863` (`uv run python scripts/build_demo_bundle.py --out DIR` each, then `diff -r`) | 0 | 109 files each, empty diff: nothing ships |
-| `bash scripts/check.sh` at the pushed head (run once, output to a file, exit code from the run itself) | pending | recorded in the last card commit |
+| `bash scripts/check.sh` at `1b2bc938` (output to a file, exit code from the run itself) | 1 | 1 failed, 10,696 passed, 20 skipped, 3 xfailed: `tests/meetings/test_route_lines_arm.py::test_the_census_classifies_it_as_not_read` pinned the entry this card replaces (Decision 9; fixed in the next commit) |
+| `uv run pytest tests/meetings/test_route_lines_arm.py -n 6` after the fix | 0 | 57 passed |
+| `bash scripts/check.sh` at the pushed head after the fix (run once, output to a file, exit code from the run itself) | pending | recorded in the last card commit |
 
 **Limitations.**
 - Each round is one hosted recording of 50 games; the counts describe those games and are no bar.
