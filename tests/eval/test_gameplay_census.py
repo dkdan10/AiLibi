@@ -5060,8 +5060,18 @@ def _walked(path: Path) -> GameFacts:
 
 
 def _spied_walk(monkeypatch: pytest.MonkeyPatch) -> list[ReplayWalkEvent]:
-    """Record every event the census's walk yields, to see where it refused."""
+    """Record every event the census's walk yields, to see where it refused.
 
+    The committed game is loaded before the spy goes in, and the spy goes in
+    before any other patch. ``_walked`` reads that game for its roles and
+    manifest cell through the same ``walk_replay`` the spy replaces, so on a
+    worker whose cache is still cold a spy installed first records the whole
+    committed walk, and a refusal that advanced nothing reads as every tick of
+    that game. Warming the cache here, under the production profile, keeps the
+    one carrier every later reader shares the production one.
+    """
+
+    _committed_game()
     yielded: list[ReplayWalkEvent] = []
     from eval.replay_walk import walk_replay as real
 
@@ -5130,12 +5140,12 @@ def test_a_census_walk_without_a_layer_refuses_its_setting_before_advancing(
 
     path = _stamped_copy(tmp_path, {name: value})
     layer = FIELD_LAYER[name]
+    yielded = _spied_walk(monkeypatch)
     monkeypatch.setattr(
         census,
         "CENSUS_WALK_CONFIG",
         replace(CENSUS_WALK_CONFIG, threaded_layers=CENSUS_THREADED_LAYERS - {layer}),
     )
-    yielded = _spied_walk(monkeypatch)
     with pytest.raises(ValueError) as refused:
         _walked(path)
     message = str(refused.value)
@@ -5158,8 +5168,8 @@ def test_the_census_walk_takes_its_engine_settings_from_the_spines_helper(
     assert dict(_walked(path).era.values) == {
         "redistribution_policy": "least_remaining_work"
     }
-    monkeypatch.setattr(experiment_config, "_THREADED_ENGINE_FIELDS", ())
     yielded = _spied_walk(monkeypatch)
+    monkeypatch.setattr(experiment_config, "_THREADED_ENGINE_FIELDS", ())
     with pytest.raises(
         ValueError, match="redistribution_policy='least_remaining_work'"
     ):
