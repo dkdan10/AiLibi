@@ -689,7 +689,8 @@ def test_the_page_says_what_it_is_not_and_defines_its_terms() -> None:
 def test_the_page_states_what_a_held_or_a_true_line_is_not() -> None:
     """The held-data caveats stand on the page: a line held is not a reason to
     vote, the label reads as nothing that resolves the vote rather than nothing
-    held, and a true cited line is not a correct vote."""
+    held, a true cited line is not a correct vote, a reconcilable pair proves no
+    innocence, and showing a route line is not changing a vote."""
 
     page = " ".join((ROOT / command.MARKDOWN_PATH).read_text(encoding="utf-8").split())
     for caveat in (
@@ -698,8 +699,12 @@ def test_the_page_states_what_a_held_or_a_true_line_is_not() -> None:
         "A true cited line is not a correct vote",
         "a false one may still have been believed",
         "This counts co-occurrence and measures no delay",
+        "A reconcilable pair proves no innocence",
+        "Showing a line is not changing a vote",
     ):
         assert caveat in page, caveat
+    assert "A reconcilable pair proves no innocence" in census.TERMS["reconciles"]
+    assert "showing a line is not changing a vote" in census.TERMS["route line"]
     assert "is not a reason to vote" in census.TERMS["holds-nothing check"]
     assert "a true cited line is not a correct vote" in census.TERMS["checkable"]
 

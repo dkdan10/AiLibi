@@ -17,7 +17,8 @@ values and booleans it computes itself. A recorded prompt is read inside the
 loader only to compute such a boolean, an id or a place name (the kill-tick body
 handle in an opening; a served own-kill ballot row; whether a prompt after a
 regroup carries every earlier regroup's notice; the places a holds-nothing
-SKIP's own ballot prompt names a living candidate), and no prompt, speech or
+SKIP's own ballot prompt names a living candidate; the route lines a ballot
+carried, read back by the route field's own parser), and no prompt, speech or
 rationale text leaves it. :func:`fold_set` is a pure fold over that carrier, so every cell is
 plantable from a hand-built :class:`CensusInputs` with no replay on disk, and
 :func:`pool` adds counts and recomputes each rate from the pooled numerator and
@@ -94,6 +95,15 @@ cited-line check reads every placement of a supported EJECT's target in its
 cited turn against the honesty instrument's route, each kind at that
 instrument's own clock (:data:`PLACEMENT_WINDOWS`), through its own comparison,
 and an edge row shows the placements a clock one tick earlier would turn true.
+The route-reconcilable charges count, through the route-check replay's own
+charge functions (:mod:`eval.route_charges`) and the route field's placement
+reader and pair rule (:mod:`meetings.route_lines`, their one home), the charges
+and ejections resting on a stated pair of places the map or the public regroup
+reconciles; a reconcilable pair proves no innocence. In games recorded with the
+route lines setting, the census reads every served route line back and checks
+each step against its own search over the station's doors, the game's regroup
+ticks and the places the meeting stated, and a step or line that disagrees
+raises.
 The game-shape tables describe each game's ending, kill cadence, closeness at
 game over, sabotages, body finders and pairs of players, all role-blind. None of
 these is a gate, and none feeds back to an agent: a line held is not a reason to
@@ -142,6 +152,7 @@ from eval.eras import COMMITTED_SETS as REGISTERED_SETS
 from eval.eras import CommittedSet, era_groups
 from eval.evidence_honesty import _contradicts
 from eval.process_scorecard import AGENT_CLOCK_OFFSET
+from eval.route_charges import charges_against, misjudging_pairs, ordered_pairs
 from eval.replay_walk import (
     MeetingApplied,
     MeetingOpened,
@@ -160,15 +171,22 @@ from meetings.schemas import (
     MeetingOutcome,
     MeetingTranscript,
     MeetingTurn,
-    SawMoveObservation,
-    SawPlayerObservation,
     TaskActivityAccount,
     VoteBallot,
-    WhereaboutsClaim,
 )
-from meetings.transcript import canonical_rooms
+from meetings.route_lines import (
+    ROUTE_PLACEMENT_KINDS,
+    RouteLine,
+    RouteReading,
+    RouteStep,
+    parse_route_lines,
+    placements_of,
+    reconcilable,
+    spoken_placements,
+)
 from meetings.voting import SKIP_TARGET, tally_ballots
 from orchestrator.experiment_config import ConfigLayer, RecordedExperimentConfig
+from orchestrator.game import EXPERIMENT_ARM_TEMPLATES, experiment_arm_suffix
 from orchestrator.replay import (
     GameEndReplayEntry,
     GameStopReason,
@@ -176,6 +194,7 @@ from orchestrator.replay import (
     MeetingReplayEntry,
     ReplayLogEntry,
     WinnerSide,
+    derive_regroup_ticks,
     read_all_entries,
     recorded_experiment_config,
     recorded_substrate_flags,
@@ -308,6 +327,7 @@ HeldSource: TypeAlias = Literal[
     "a flag",
     "a typed turn line",
     "a spoken turn line",
+    "a route line",
 ]
 
 #: The ballot prompt's top-level blocks the holds-nothing check reads.
@@ -316,7 +336,7 @@ HeldSource: TypeAlias = Literal[
 #: templates render, and the loader raises on a recorded prompt carrying a tag
 #: in neither.
 READ_BALLOT_BLOCKS: Final[frozenset[str]] = frozenset(
-    {"memory", "transcript", "contradictions", "evidence"}
+    {"memory", "transcript", "contradictions", "evidence", "routes"}
 )
 
 #: The ballot prompt's top-level blocks the check never reads: they name the
@@ -398,6 +418,13 @@ NOT_CHECKABLE_REASONS: Final[tuple[str, str, str]] = (
     "the cited turn places the target nowhere checkable",
     "every cited placement is unverifiable",
 )
+
+#: The recorded setting that serves route lines (:mod:`meetings.route_lines`).
+ROUTE_LINES_FIELD: Final[str] = "route_lines_version"
+
+#: The route lines per meeting table counts meetings by the players some ballot
+#: carried a line about, listing each count below this one and pooling the rest.
+ROUTE_LINE_COUNT_CAP: Final[int] = 3
 
 #: The ending a task win records; the type checker holds it to the engine's
 #: vocabulary.
@@ -593,6 +620,9 @@ NO_IMPOSTOR_SELF_REPORT: Final = SettingPredicate(
 OWN_KILL_BALLOT_ROW: Final = SettingPredicate(
     key="own_kill_ballot_row", conditions=(("ballot_kill_row_version", 1),)
 )
+ROUTE_LINES: Final = SettingPredicate(
+    key="route_lines", conditions=((ROUTE_LINES_FIELD, 1),)
+)
 ALWAYS: Final = SettingPredicate(key="always", conditions=(), always=True)
 
 #: Every predicate a cell may carry, by key.
@@ -609,6 +639,7 @@ PREDICATES: Final[Mapping[str, SettingPredicate]] = MappingProxyType(
             NO_REBUTTAL,
             NO_IMPOSTOR_SELF_REPORT,
             OWN_KILL_BALLOT_ROW,
+            ROUTE_LINES,
             ALWAYS,
         )
     }
@@ -691,9 +722,7 @@ FIELD_CLASSIFICATION: Final[Mapping[str, FieldUse]] = MappingProxyType(
                 "cell checks every cooldown write against"
             )
         ),
-        "route_lines_version": _not_read(
-            "adds role-blind route lines to a ballot; no cell is forced by it"
-        ),
+        "route_lines_version": FieldUse(predicates=("route_lines",)),
     }
 )
 
@@ -929,7 +958,10 @@ class BallotFact:
     ``held_sources`` is set by the loader on every SKIP labelled as holding
     nothing: the places in the voter's own recorded ballot prompt that name a
     living candidate, empty when none does. It is ``None`` on every other ballot
-    and on a hand-built ballot that does not set it.
+    and on a hand-built ballot that does not set it. ``route_lines`` are the
+    route lines the voter's own recorded ballot prompt carried, read back by
+    the route field's own parser, ``()`` when it carried none; ``None`` for a
+    ballot with no recorded ballot call and on a hand-built ballot.
     """
 
     voter: PlayerId
@@ -941,6 +973,7 @@ class BallotFact:
     primary_reason_id: str | None = None
     counter_reason_id: str | None = None
     held_sources: frozenset[HeldSource] | None = None
+    route_lines: tuple[RouteLine, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -952,6 +985,25 @@ class OwnKillRowFact:
     room: RoomId
     tick: int
     citation_id: str | None
+
+
+@dataclass(frozen=True)
+class RouteChargeFact:
+    """One meeting's charges, and the stated pairs the map or the regroup reconciles.
+
+    ``charges`` counts the charges at the table: for every living player a
+    ballot or a flag names, :func:`eval.route_charges.charges_against`.
+    ``charges_on_reconcilable_pair`` counts those resting on a pair the map or
+    the public regroup reconciles. ``ejected_pairs`` counts the ejected
+    player's reconcilable pairs and ``ejected_charged_on_pair`` says whether a
+    charge against them rested on one; both are ``None`` at a meeting that
+    ejected no one.
+    """
+
+    charges: int
+    charges_on_reconcilable_pair: int
+    ejected_pairs: int | None = None
+    ejected_charged_on_pair: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -969,7 +1021,12 @@ class MeetingFact:
     recorded call with an agent id at a meeting after a regroup: whether its
     prompt carries the notice of every earlier regroup of the game. It is empty
     at a game's first meeting, without a regroup, and on a hand-built carrier
-    that does not set it.
+    that does not set it. ``route_charges`` is the meeting's
+    :class:`RouteChargeFact`, filled by the loader and ``None`` on a hand-built
+    carrier. ``regroup_ticks`` are the public regroup ticks before the meeting
+    (:func:`orchestrator.replay.derive_regroup_ticks`), and ``stated_places``
+    each player's places the meeting stated of the kinds a route line reads,
+    as (tick, canonical rooms); a hand-built carrier holds none.
     """
 
     meeting_id: str
@@ -997,6 +1054,11 @@ class MeetingFact:
     bodies_after: frozenset[str]
     regrouped: bool
     regroup_notices_held: tuple[bool, ...] = ()
+    route_charges: RouteChargeFact | None = None
+    regroup_ticks: frozenset[int] = frozenset()
+    stated_places: Mapping[PlayerId, frozenset[tuple[int, frozenset[RoomId]]]] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
     def __post_init__(self) -> None:
         if (self.outcome == "EJECTED") != (self.ejected is not None):
@@ -1134,6 +1196,7 @@ _STRUCTURE: Final[str] = "Meeting structure"
 _REBUTTALS: Final[str] = "Rebuttals"
 _BALLOTS: Final[str] = "Ballots"
 _HELD: Final[str] = "What a ballot held"
+_ROUTES: Final[str] = "Stated places the map or the regroup reconciles"
 _SHAPE: Final[str] = "The shape of a game"
 _BESIDE: Final[str] = "Reported beside the counts"
 
@@ -1150,6 +1213,7 @@ HEADINGS: Final[tuple[str, ...]] = (
     _REBUTTALS,
     _BALLOTS,
     _HELD,
+    _ROUTES,
     _SHAPE,
     _BESIDE,
 )
@@ -1165,6 +1229,19 @@ _CITED_LINE_READS: Final = (
     "meeting row turns",
     "state after the tick",
     "state after the meeting",
+)
+_CHARGE_READS: Final = (
+    "meeting row turns",
+    "meeting row ballots",
+    "meeting row flags",
+    "state at the meeting",
+    "earlier meeting rows",
+)
+_ROUTE_LINE_READS: Final = (
+    "recorded ballot prompt",
+    "meeting row turns",
+    "state at the meeting",
+    "earlier meeting rows",
 )
 _VENTS: Final = ("VentEntered", "VentExited")
 _MEETING_ROW: Final = ("meeting row",)
@@ -1825,8 +1902,9 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             _HELD,
             "SKIP ballots labelled as holding nothing, whatever the voter's role, "
             "whose voter's own recorded ballot prompt names no living candidate in "
-            "an observation row, an evidence row, a flag or a typed or spoken turn "
-            "line, over all SKIP ballots labelled as holding nothing. The label "
+            "an observation row, an evidence row, a flag, a typed or spoken turn "
+            "line or a route line, over all SKIP ballots labelled as holding "
+            "nothing. The label "
             "reads as nothing that resolves the vote, not as nothing held, and a "
             "line held is not a reason to vote.",
             _HELD_PROMPT_READS,
@@ -1858,6 +1936,106 @@ CELLS: Final[Mapping[str, CellSpec]] = MappingProxyType(
             "makes false, over supported EJECTs whose cited turn places the target "
             "checkably. A voter who believed a false line still held it.",
             _CITED_LINE_READS,
+        ),
+        "charges_on_a_reconcilable_pair": CellSpec(
+            "Charges resting on a stated pair the map or the regroup reconciles",
+            _ROUTES,
+            "Charges at the table, whatever the role of the voter or of the player "
+            "charged, one of whose stated places is an end of a stated pair that "
+            "reconciles, over every charge at the table. A charge is an EJECT "
+            "ballot whose cited turn states a place of its target, or a flag whose "
+            "two events each state a place of a player it names. A reconcilable "
+            "pair proves no innocence.",
+            _CHARGE_READS,
+        ),
+        "ejections_on_a_reconcilable_pair": CellSpec(
+            "Ejections whose ejected player had a stated pair that reconciles",
+            _ROUTES,
+            "Ejections, whatever the ejected player's role, where the meeting "
+            "stated a pair of the ejected player's places that reconciles, over all "
+            "ejections. A reconcilable pair proves no innocence: the two places "
+            "could both be true, and either could be false.",
+            _CHARGE_READS,
+        ),
+        "ejections_charged_on_a_reconcilable_pair": CellSpec(
+            "Ejections charged on a stated pair that reconciles",
+            _ROUTES,
+            "Ejections, whatever the ejected player's role, where some charge "
+            "against the ejected player rested on a stated pair that reconciles, "
+            "over all ejections. A reconcilable pair proves no innocence.",
+            _CHARGE_READS,
+        ),
+        "witness_meeting_ejections_on_a_reconcilable_pair": CellSpec(
+            "Ejections at witness meetings whose ejected player had a stated pair "
+            "that reconciles",
+            _ROUTES,
+            "The first of the two counts above at witness meetings only: ejections "
+            "at witness meetings where the meeting stated a pair of the ejected "
+            "player's places that reconciles, over ejections at witness meetings.",
+            (*_CHARGE_READS, "Killed"),
+        ),
+        "witness_meeting_ejections_charged_on_a_reconcilable_pair": CellSpec(
+            "Ejections at witness meetings charged on a stated pair that reconciles",
+            _ROUTES,
+            "The second of the two counts above at witness meetings only: "
+            "ejections at witness meetings where some charge against the ejected "
+            "player rested on a stated pair that reconciles, over ejections at "
+            "witness meetings.",
+            (*_CHARGE_READS, "Killed"),
+        ),
+        "meetings_with_a_route_line": CellSpec(
+            "Meetings where a ballot carried a route line",
+            _ROUTES,
+            "Meetings where some voter's own recorded ballot prompt carried a route "
+            "line, over meetings.",
+            _ROUTE_LINE_READS,
+            scope=ROUTE_LINES,
+        ),
+        "ballots_carrying_route_lines": CellSpec(
+            "Ballots carrying route lines",
+            _ROUTES,
+            "Ballots, whatever the voter's role, whose voter's own recorded ballot "
+            "prompt carried the route lines block, over ballots with a recorded "
+            "ballot call.",
+            _ROUTE_LINE_READS,
+            scope=ROUTE_LINES,
+        ),
+        "route_lines_false_to_the_map": CellSpec(
+            "Route steps false to the map",
+            _ROUTES,
+            "Steps of the route lines served on every ballot whose door count, "
+            "reading or regroup tick disagrees with this census's own reading, "
+            "over every step served. The census counts the fewest doors between "
+            "the step's two rooms by its own search over the station's doors; "
+            "walking fits when the doors are at most the ticks between, otherwise "
+            "the step names the first public regroup tick after its earlier tick, "
+            "up to its later one, and a change of room that neither allows is never "
+            "served.",
+            _ROUTE_LINE_READS,
+            ROUTE_LINES,
+            ROUTE_LINES,
+        ),
+        "route_lines_off_the_table": CellSpec(
+            "Route lines off the table",
+            _ROUTES,
+            "Route lines served on a ballot about a player who is not a living "
+            "candidate of its voter, with a place the meeting never stated for that "
+            "player, or a second line for one player on one ballot, over every line "
+            "served.",
+            _ROUTE_LINE_READS,
+            ROUTE_LINES,
+            ROUTE_LINES,
+        ),
+        "ejections_charged_on_a_reconcilable_pair_shown_a_route_line": CellSpec(
+            "Ejections charged on a stated pair that reconciles, with a route line "
+            "shown to an ejecting voter",
+            _ROUTES,
+            "Ejections charged on a stated pair that reconciles at which some voter "
+            "who voted to eject that player was served a route line about them, "
+            "over ejections charged on such a pair. Every served step reconciles. "
+            "Showing a line is not changing a vote.",
+            (*_CHARGE_READS, "recorded ballot prompt"),
+            scope=ROUTE_LINES,
         ),
         "task_wins_with_sabotage_in_play": CellSpec(
             "Task wins in games with a sabotage in play",
@@ -1984,7 +2162,8 @@ TABLES: Final[Mapping[str, TableSpec]] = MappingProxyType(
             "own recorded ballot prompt that names a living candidate: an "
             "observation row; an observation row whose id was perceived after the "
             "previous meeting (after the game began, at its first meeting); an "
-            "evidence row; a flag; a typed turn line; a spoken turn line. One SKIP "
+            "evidence row; a flag; a typed turn line; a spoken turn line; a route "
+            "line. One SKIP "
             "can name a candidate in several places, so the rows overlap and do not "
             "add up to the cell. Every place is listed.",
             _HELD_PROMPT_READS,
@@ -2012,6 +2191,23 @@ TABLES: Final[Mapping[str, TableSpec]] = MappingProxyType(
             "checkable; or the route cannot verify any cited placement. Every row "
             "is listed.",
             _CITED_LINE_READS,
+        ),
+        "route_lines_per_meeting": TableSpec(
+            "Meetings by the players with a route line",
+            _ROUTES,
+            "Meetings by how many players some ballot carried a route line about: "
+            "0, 1, 2, or 3 or more. Every row is listed.",
+            _ROUTE_LINE_READS,
+            ROUTE_LINES,
+        ),
+        "route_steps_by_reading": TableSpec(
+            "Route steps by reading",
+            _ROUTES,
+            "The steps of each meeting's distinct route lines by reading: walking "
+            "fits, or the public regroup falls between, so walking cannot decide "
+            "it. Every reading is listed.",
+            _ROUTE_LINE_READS,
+            ROUTE_LINES,
         ),
         "games_by_ending": TableSpec(
             "Games by ending",
@@ -2158,6 +2354,13 @@ class _Accumulator:
         cell[0] += 1
 
     def not_evaluable(self, key: str) -> None:
+        """Count one entry of ``key`` that cannot be evaluated.
+
+        A cell whose scope does not hold for this group counts nothing.
+        """
+
+        if not _in_scope(CELLS[key].scope, self.values):
+            return
         self.cells[key][2] += 1
 
     def tally(self, name: str, row: str, amount: int = 1) -> None:
@@ -2338,6 +2541,7 @@ def _fold_game(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> None
     _fold_rebuttals(game, acc)
     _fold_ballots(game, acc)
     _fold_held_data(game, acc)
+    _fold_routes(game, inputs, acc)
     _fold_game_shape(game, acc)
     for discarded in game.discarded:
         acc.tally("actions_thrown_away_on_trigger_ticks", discarded.action_type)
@@ -3540,6 +3744,282 @@ def _fold_cited_line(
 
 
 # ---------------------------------------------------------------------------
+# Stated places the map or the regroup reconciles, and the route lines
+# ---------------------------------------------------------------------------
+
+
+def is_witness_meeting(
+    fact: MeetingFact, *, kills: Sequence[KillFact], previous_tick: int | None
+) -> bool:
+    """A report whose reporter the kill facts record witnessing a kill since the last meeting."""
+
+    if fact.trigger_kind != "report":
+        return False
+    floor = -1 if previous_tick is None else previous_tick
+    return any(
+        fact.opener in kill.witnesses and floor < kill.tick <= fact.tick
+        for kill in kills
+    )
+
+
+def route_readings() -> tuple[RouteReading, ...]:
+    """Every reading a route step can give, read from the route field's type."""
+
+    readings: tuple[RouteReading, ...] = get_args(RouteReading)
+    return readings
+
+
+def route_line_count_rows() -> tuple[str, ...]:
+    """The route lines per meeting rows: each count below the cap, then the rest."""
+
+    return (
+        *(str(count) for count in range(ROUTE_LINE_COUNT_CAP)),
+        f"{ROUTE_LINE_COUNT_CAP} or more",
+    )
+
+
+def route_line_count_row(count: int) -> str:
+    """The row of a meeting with route lines about ``count`` players."""
+
+    rows = route_line_count_rows()
+    return rows[min(count, ROUTE_LINE_COUNT_CAP)]
+
+
+def census_doors(
+    neighbours: Mapping[RoomId, tuple[RoomId, ...]],
+    from_rooms: Iterable[RoomId],
+    to_rooms: Iterable[RoomId],
+) -> int | None:
+    """The fewest doors from any of ``from_rooms`` to any of ``to_rooms``.
+
+    A breadth-first search over ``neighbours``, the census's own copy of the
+    station's doors, and deliberately not the meeting layer's hop count. ``0``
+    when the two sets share a room; ``None`` when a room is not on the map or
+    no door path links them.
+    """
+
+    start = frozenset(from_rooms)
+    targets = frozenset(to_rooms)
+    if not start or not targets or not (start | targets) <= set(neighbours):
+        return None
+    frontier = sorted(start)
+    seen = set(frontier)
+    doors = 0
+    while frontier:
+        if any(room in targets for room in frontier):
+            return doors
+        doors += 1
+        reached: list[RoomId] = []
+        for room in frontier:
+            for neighbour in neighbours[room]:
+                if neighbour not in seen:
+                    seen.add(neighbour)
+                    reached.append(neighbour)
+        frontier = reached
+    return None
+
+
+def census_reading(
+    doors: int, *, from_tick: int, to_tick: int, regroup_ticks: frozenset[int]
+) -> tuple[RouteReading, int | None] | None:
+    """The reading a change of room over ``doors`` doors gives, by the rule.
+
+    Walking fits when the doors are at most the ticks between; otherwise the
+    first public regroup tick after ``from_tick``, up to ``to_tick``, is crossed;
+    ``None`` when neither allows the change.
+    """
+
+    if doors <= to_tick - from_tick:
+        return "walking_fits", None
+    crossed = sorted(tick for tick in regroup_ticks if from_tick < tick <= to_tick)
+    if crossed:
+        return "regroup_between", crossed[0]
+    return None
+
+
+def step_true_to_the_map(
+    step: RouteStep,
+    *,
+    neighbours: Mapping[RoomId, tuple[RoomId, ...]],
+    regroup_ticks: frozenset[int],
+) -> bool:
+    """Whether a served step's door count, reading and regroup tick are the census's."""
+
+    doors = census_doors(neighbours, step.from_rooms, step.to_rooms)
+    if doors is None or doors == 0 or doors != step.doors:
+        return False
+    reading = census_reading(
+        doors,
+        from_tick=step.from_tick,
+        to_tick=step.to_tick,
+        regroup_ticks=regroup_ticks,
+    )
+    return reading == (step.reading, step.regroup_tick)
+
+
+def line_on_the_table(
+    line: RouteLine,
+    *,
+    candidates: frozenset[PlayerId],
+    stated: Mapping[PlayerId, frozenset[tuple[int, frozenset[RoomId]]]],
+) -> bool:
+    """Whether a line names a candidate and only places the meeting stated for it."""
+
+    places = stated.get(line.subject, frozenset())
+    return line.subject in candidates and all(
+        (tick, frozenset(rooms)) in places
+        for step in line.steps
+        for tick, rooms in (
+            (step.from_tick, step.from_rooms),
+            (step.to_tick, step.to_rooms),
+        )
+    )
+
+
+def _fold_routes(game: GameFacts, inputs: CensusInputs, acc: _Accumulator) -> None:
+    """Fold the route-reconcilable charges and the route lines each ballot carried."""
+
+    # Every row is listed, at zero when nothing lands in it.
+    for row in route_line_count_rows():
+        acc.tally("route_lines_per_meeting", row, 0)
+    for reading in route_readings():
+        acc.tally("route_steps_by_reading", reading, 0)
+    for index, meeting in enumerate(game.meetings):
+        witness = is_witness_meeting(
+            meeting,
+            kills=game.kills,
+            previous_tick=game.meetings[index - 1].tick if index else None,
+        )
+        _fold_route_charges(meeting, acc, seed=game.seed, witness=witness)
+        _fold_route_lines(meeting, inputs, acc, seed=game.seed)
+
+
+def _fold_route_charges(
+    meeting: MeetingFact, acc: _Accumulator, *, seed: int, witness: bool
+) -> None:
+    """Count one meeting's charges and, at an ejection, its ejected player's pairs."""
+
+    where = f"meeting {meeting.meeting_id}"
+    on_pair = "ejections_on_a_reconcilable_pair"
+    charged_on_pair = "ejections_charged_on_a_reconcilable_pair"
+    witness_on_pair = "witness_meeting_ejections_on_a_reconcilable_pair"
+    witness_charged = "witness_meeting_ejections_charged_on_a_reconcilable_pair"
+    fact = meeting.route_charges
+    if fact is None:
+        acc.not_evaluable("charges_on_a_reconcilable_pair")
+        if meeting.ejected is not None:
+            acc.not_evaluable(on_pair)
+            acc.not_evaluable(charged_on_pair)
+            if witness:
+                acc.not_evaluable(witness_on_pair)
+                acc.not_evaluable(witness_charged)
+        return
+    if not 0 <= fact.charges_on_reconcilable_pair <= fact.charges:
+        raise ValueError(
+            f"set {acc.label}, seed {seed}, {where}: more charges rest on a "
+            "reconcilable pair than the table brought"
+        )
+    for charge in range(fact.charges):
+        acc.count(
+            "charges_on_a_reconcilable_pair",
+            charge < fact.charges_on_reconcilable_pair,
+            seed=seed,
+            where=where,
+        )
+    ejected = (fact.ejected_pairs, fact.ejected_charged_on_pair)
+    if meeting.ejected is None:
+        if ejected != (None, None):
+            raise ValueError(
+                f"set {acc.label}, seed {seed}, {where}: a meeting that ejected no "
+                "one carries an ejection's pairs"
+            )
+        return
+    pairs, charged = ejected
+    if pairs is None or charged is None or (charged and not pairs):
+        raise ValueError(
+            f"set {acc.label}, seed {seed}, {where}: an ejection's pairs are "
+            "missing, or its charge rests on a pair it does not have"
+        )
+    acc.count(on_pair, pairs > 0, seed=seed, where=where)
+    acc.count(charged_on_pair, charged, seed=seed, where=where)
+    if witness:
+        acc.count(witness_on_pair, pairs > 0, seed=seed, where=where)
+        acc.count(witness_charged, charged, seed=seed, where=where)
+    if not charged:
+        return
+    reach = "ejections_charged_on_a_reconcilable_pair_shown_a_route_line"
+    ejecting = [
+        ballot for ballot in meeting.ballots if ballot.target == meeting.ejected
+    ]
+    if any(ballot.route_lines is None for ballot in ejecting):
+        acc.not_evaluable(reach)
+        return
+    acc.count(
+        reach,
+        any(
+            line.subject == meeting.ejected
+            for ballot in ejecting
+            for line in ballot.route_lines or ()
+        ),
+        seed=seed,
+        where=where,
+    )
+
+
+def _fold_route_lines(
+    meeting: MeetingFact, inputs: CensusInputs, acc: _Accumulator, *, seed: int
+) -> None:
+    """Count the route lines each ballot carried, re-checking every one served."""
+
+    distinct: set[RouteLine] = set()
+    for ballot in meeting.ballots:
+        where = f"meeting {meeting.meeting_id}, voter {ballot.voter}"
+        lines = ballot.route_lines
+        if lines is None:
+            acc.not_evaluable("ballots_carrying_route_lines")
+            continue
+        acc.count("ballots_carrying_route_lines", bool(lines), seed=seed, where=where)
+        candidates = meeting.living - {ballot.voter}
+        subjects: set[PlayerId] = set()
+        for line in lines:
+            acc.count(
+                "route_lines_off_the_table",
+                line.subject in subjects
+                or not line_on_the_table(
+                    line, candidates=candidates, stated=meeting.stated_places
+                ),
+                seed=seed,
+                where=where,
+            )
+            subjects.add(line.subject)
+            for step in line.steps:
+                acc.count(
+                    "route_lines_false_to_the_map",
+                    not step_true_to_the_map(
+                        step,
+                        neighbours=inputs.neighbours,
+                        regroup_ticks=meeting.regroup_ticks,
+                    ),
+                    seed=seed,
+                    where=where,
+                )
+        distinct.update(lines)
+    acc.count(
+        "meetings_with_a_route_line",
+        bool(distinct),
+        seed=seed,
+        where=f"meeting {meeting.meeting_id}",
+    )
+    acc.tally(
+        "route_lines_per_meeting",
+        route_line_count_row(len({line.subject for line in distinct})),
+    )
+    for line in distinct:
+        for step in line.steps:
+            acc.tally("route_steps_by_reading", step.reading)
+
+
+# ---------------------------------------------------------------------------
 # The shape of a game: role-blind and descriptive
 # ---------------------------------------------------------------------------
 
@@ -3837,7 +4317,9 @@ def _frame_of(state: WorldState) -> Frame:
     )
 
 
-def _turn_fact(turn: MeetingTurn) -> TurnFact:
+def _turn_fact(
+    turn: MeetingTurn, placements: tuple[PlacementFact, ...] = ()
+) -> TurnFact:
     observations = tuple(
         ObservationFact(
             kind=observation.type,
@@ -3874,60 +4356,174 @@ def _turn_fact(turn: MeetingTurn) -> TurnFact:
             for claim in turn.claims
             if isinstance(claim, AlibiClaim)
         ),
-        placements=turn_placements(turn),
+        placements=placements,
     )
 
 
-def turn_placements(turn: MeetingTurn) -> tuple[PlacementFact, ...]:
-    """The turn's spoken placements of the kinds the cited-line check reads.
+def turn_placements(
+    transcript: MeetingTranscript,
+) -> Mapping[str, tuple[PlacementFact, ...]]:
+    """Each turn's spoken placements of the kinds the cited-line check reads.
 
-    A sighting places its subject in its room and each companion it lists there
-    (once each, never the subject again); a movement sighting places its
-    subject in the room it arrived in; a whereabouts claim places the speaker.
-    A label with no canonical room places nobody. These are the placements the
-    route-check replay's placement reader gives these four kinds, which a test
-    holds equal on every committed meeting.
+    Read by the route field's placement reader,
+    :func:`meetings.route_lines.spoken_placements`, their one home: a sighting
+    places its subject and each companion it lists, a movement sighting its
+    subject in the room it arrived in, a whereabouts claim its speaker; a label
+    with no canonical room places nobody. Keyed by turn id, each turn's in a
+    fixed order.
     """
 
-    found: list[PlacementFact] = []
-    for observation in turn.observations:
-        # One dispatch over the kinds, the movement sighting among them.
-        match observation:
-            case SawPlayerObservation():
-                rooms = canonical_rooms(observation.room)
-                if not rooms:
-                    continue
-                found.append(
-                    PlacementFact(
-                        observation.subject, observation.tick, rooms, "saw_player"
-                    )
+    kinds = frozenset(checked_placement_kinds())
+    found: dict[str, list[PlacementFact]] = {}
+    for spot in spoken_placements(transcript):
+        if spot.kind in kinds:
+            found.setdefault(spot.turn_id, []).append(
+                PlacementFact(
+                    spot.player,
+                    spot.tick,
+                    spot.rooms,
+                    spot.kind,
                 )
-                companions = dict.fromkeys(
-                    companion
-                    for companion in observation.co_present
-                    if companion != observation.subject
-                )
-                found.extend(
-                    PlacementFact(companion, observation.tick, rooms, "company")
-                    for companion in companions
-                )
-            case SawMoveObservation():
-                rooms = canonical_rooms(observation.to_room)
-                if rooms:
-                    found.append(
-                        PlacementFact(
-                            observation.subject, observation.tick, rooms, "saw_move"
-                        )
-                    )
-            case WhereaboutsClaim():
-                rooms = canonical_rooms(observation.room)
-                if rooms:
-                    found.append(
-                        PlacementFact(
-                            turn.speaker, observation.tick, rooms, "whereabouts"
-                        )
-                    )
-    return tuple(found)
+            )
+    return MappingProxyType(
+        {
+            turn: tuple(sorted(spots, key=_placement_order))
+            for turn, spots in found.items()
+        }
+    )
+
+
+def _placement_order(spot: PlacementFact) -> tuple[int, tuple[RoomId, ...], str, str]:
+    """A turn's placements in a fixed order: by tick, rooms, player and kind."""
+
+    return spot.tick, tuple(sorted(spot.rooms)), spot.player, spot.kind
+
+
+def stated_places(
+    transcript: MeetingTranscript,
+) -> Mapping[PlayerId, frozenset[tuple[int, frozenset[RoomId]]]]:
+    """Each player's places the meeting stated, of the kinds a route line reads.
+
+    Read by :func:`meetings.route_lines.spoken_placements` and kept as (tick,
+    canonical rooms) for the kinds :data:`meetings.route_lines.ROUTE_PLACEMENT_KINDS`
+    names.
+    """
+
+    found: dict[PlayerId, set[tuple[int, frozenset[RoomId]]]] = {}
+    for spot in spoken_placements(transcript):
+        if spot.kind in ROUTE_PLACEMENT_KINDS:
+            found.setdefault(spot.player, set()).add((spot.tick, spot.rooms))
+    return MappingProxyType(
+        {player: frozenset(places) for player, places in sorted(found.items())}
+    )
+
+
+def route_charge_fact(
+    entry: MeetingReplayEntry,
+    *,
+    living: frozenset[PlayerId],
+    regroup_ticks: frozenset[int],
+) -> RouteChargeFact:
+    """One meeting's charges and its ejected player's pairs, as the route-check
+    replay counts them, through :mod:`eval.route_charges` and the route field's
+    placement reader and pair rule."""
+
+    universe = spoken_placements(entry.transcript)
+    targets = {ballot.target for ballot in entry.ballots if ballot.target in living} | {
+        subject
+        for flag in entry.contradictions
+        for subject in flag.subjects
+        if subject in living
+    }
+    charges = 0
+    resting = 0
+    for target in sorted(targets):
+        own = placements_of(universe, target)
+        for charge in charges_against(
+            target,
+            ballots=entry.ballots,
+            contradictions=entry.contradictions,
+            universe=universe,
+        ):
+            charges += 1
+            if misjudging_pairs(own, charge.placements, regroup_ticks=regroup_ticks):
+                resting += 1
+    ejected = entry.ejected_player_id
+    if ejected is None:
+        return RouteChargeFact(charges, resting)
+    own = placements_of(universe, ejected)
+    charged = frozenset().union(
+        *(
+            charge.placements
+            for charge in charges_against(
+                ejected,
+                ballots=entry.ballots,
+                contradictions=entry.contradictions,
+                universe=universe,
+            )
+        )
+    )
+    return RouteChargeFact(
+        charges,
+        resting,
+        ejected_pairs=sum(
+            1
+            for earlier, later in ordered_pairs(own)
+            if reconcilable(earlier, later, regroup_ticks=regroup_ticks) is not None
+        ),
+        ejected_charged_on_pair=bool(
+            misjudging_pairs(own, charged, regroup_ticks=regroup_ticks)
+        ),
+    )
+
+
+def route_lines_stamped(stamps: Sequence[str]) -> bool:
+    """Whether a game's prompt stamps credit the route lines arm.
+
+    The arm's stamp is the ballot template's own stamp with the suffix the arm
+    spine derives from the field and its ON value
+    (:func:`orchestrator.game.experiment_arm_suffix`), joined by ``+`` with any
+    other arm the ballot served.
+    """
+
+    ((name, value),) = ROUTE_LINES.conditions
+    suffix = experiment_arm_suffix(name, value)
+    return any(
+        part.startswith(f"{template}.") and part.endswith(f".{suffix}")
+        for stamp in stamps
+        for part in stamp.split("+")
+        for template in EXPERIMENT_ARM_TEMPLATES[name]
+    )
+
+
+def ballot_route_lines(
+    entry: MeetingReplayEntry, voter: PlayerId, *, served: bool, where: str
+) -> tuple[RouteLine, ...] | None:
+    """The route lines the voter's own recorded ballot prompt carried.
+
+    Read back by the route field's own parser,
+    :func:`meetings.route_lines.parse_route_lines`, from the voter's last call
+    whose response validates as a ballot; ``None`` without one. A block the
+    parser refuses, and a block in a game whose settings do not serve route
+    lines, raise :class:`GameplayCensusConformanceError` naming ``where`` and
+    the voter.
+    """
+
+    call = ballot_call(entry, voter)
+    if call is None:
+        return None
+    named = f"{where}, voter {voter}"
+    try:
+        lines = parse_route_lines(call.prompt)
+    except ValueError as error:
+        raise GameplayCensusConformanceError(
+            f"{named}: the route lines block does not parse: {error}"
+        ) from error
+    if lines and not served:
+        raise GameplayCensusConformanceError(
+            f"{named}: a ballot carries route lines its game's settings do not serve"
+        )
+    return lines
 
 
 def ballot_call(entry: MeetingReplayEntry, voter: PlayerId) -> LLMCallRecord | None:
@@ -4053,11 +4649,11 @@ def held_sources(
 
     A living candidate is a player living at the meeting's open other than the
     voter, named as a whole token. Read: the memory's observation rows and open
-    contradictions, the contradictions and evidence blocks, and every transcript
-    line but the turn headers. Never read: every other memory section (the
-    beliefs name every living player), every other block, and the page outside
-    the blocks (the suspicion graph and the candidate list). Only place names
-    leave this function.
+    contradictions, the contradictions, evidence and route lines blocks, and
+    every transcript line but the turn headers. Never read: every other memory
+    section (the beliefs name every living player), every other block, and the
+    page outside the blocks (the suspicion graph and the candidate list). Only
+    place names leave this function.
     """
 
     candidates = living - {voter}
@@ -4067,6 +4663,7 @@ def held_sources(
         *_transcript_lines(blocks["transcript"]),
         *(("a flag", line) for line in blocks.get("contradictions", ())),
         *(("an evidence row", line) for line in blocks.get("evidence", ())),
+        *(("a route line", line) for line in blocks.get("routes", ())),
     ]
     return frozenset(
         source
@@ -4155,6 +4752,8 @@ def _meeting_fact(
     earlier_notices: Sequence[str] = (),
     previous_tick: int = 0,
     where: str = "",
+    regroup_ticks: frozenset[int] = frozenset(),
+    route_lines_served: bool = False,
 ) -> MeetingFact:
     entry = opened.entry
     state = opened.state
@@ -4175,6 +4774,7 @@ def _meeting_fact(
         if isinstance(event, (MovedEvent, TaskProgressedEvent, TaskCompletedEvent))
     )
     after = applied.state
+    placements = turn_placements(entry.transcript)
     return MeetingFact(
         meeting_id=entry.meeting_id,
         tick=entry.tick,
@@ -4207,7 +4807,10 @@ def _meeting_fact(
             for flag in entry.contradictions
             if flag.kind == "vent_sighting"
         ),
-        turns=tuple(_turn_fact(turn) for turn in entry.transcript.turns),
+        turns=tuple(
+            _turn_fact(turn, placements.get(turn.turn_id, ()))
+            for turn in entry.transcript.turns
+        ),
         ballots=tuple(
             BallotFact(
                 voter=ballot.voter,
@@ -4227,6 +4830,12 @@ def _meeting_fact(
                     ballot,
                     living=living,
                     since_tick=previous_tick,
+                    where=meeting_where,
+                ),
+                route_lines=ballot_route_lines(
+                    entry,
+                    ballot.voter,
+                    served=route_lines_served,
                     where=meeting_where,
                 ),
             )
@@ -4252,6 +4861,11 @@ def _meeting_fact(
         bodies_after=frozenset(after.bodies),
         regrouped=regroup_recorded and after.phase == "PLAY",
         regroup_notices_held=regroup_notices_held(entry, earlier_notices),
+        route_charges=route_charge_fact(
+            entry, living=living, regroup_ticks=regroup_ticks
+        ),
+        regroup_ticks=regroup_ticks,
+        stated_places=stated_places(entry.transcript),
     )
 
 
@@ -4385,6 +4999,16 @@ def _load_game(
         raise ValueError(f"seed {seed}: the walk never reached its terminal tick")
     stamps = prompt_stamps_from_cell(manifest_cell) if applied_meetings else None
     era = _game_era(entries, stamps)
+    route_lines_served = ROUTE_LINES.holds(era.values)
+    if stamps is not None and route_lines_stamped(stamps) != route_lines_served:
+        raise GameplayCensusConformanceError(
+            f"set {path.parent}, seed {seed}: the ballot stamp "
+            + ("lacks" if route_lines_served else "credits")
+            + " the route lines arm while the recorded settings "
+            + ("serve" if route_lines_served else "do not serve")
+            + " route lines"
+        )
+    recorded_config = recorded_experiment_config(entries)
     regroup_recorded = MEETING_REGROUP.holds(era.values)
     if regroup_recorded:
         for opened_meeting, applied in applied_meetings:
@@ -4408,6 +5032,11 @@ def _load_game(
             ),
             previous_tick=(applied_meetings[index - 1][1].entry.tick if index else 0),
             where=f"set {path.parent}, seed {seed}, ",
+            regroup_ticks=derive_regroup_ticks(
+                recorded_config,
+                [prior.entry.tick for _, prior in applied_meetings[:index]],
+            ),
+            route_lines_served=route_lines_served,
         )
         for index, (opened_meeting, applied) in enumerate(applied_meetings)
     )
@@ -4679,8 +5308,9 @@ TERMS: Final[Mapping[str, str]] = MappingProxyType(
         "holds-nothing check": (
             "whether a SKIP labelled as holding nothing was shown, in its own "
             "ballot prompt, a line naming a living candidate: an observation row "
-            "of its memory, an open contradiction, an evidence row, or a typed or "
-            "spoken turn line, never a turn's header naming its speaker, the "
+            "of its memory, an open contradiction, an evidence row, a typed or "
+            "spoken turn line, or a route line, never a turn's header naming its "
+            "speaker, the "
             "beliefs section or the list of candidates, which name every living "
             "player. Such a line is held data, true or false. The label reads as "
             "nothing that resolves the vote, not as nothing held, and a line held "
@@ -4698,6 +5328,37 @@ TERMS: Final[Mapping[str, str]] = MappingProxyType(
             "at. A checkable placement is true when the route puts the target "
             "there at one of those ticks and false otherwise; a true cited line is "
             "not a correct vote, and a false one may still have been believed."
+        ),
+        "stated pair": (
+            "two places a meeting's turns stated for one player, each at a tick, "
+            "in two different rooms: a sighting of the player, the player seen as "
+            "company in another's sighting, the player seen arriving in a room or "
+            "seen at a vent, the player's own whereabouts, or either end of a stay "
+            "in an alibi route."
+        ),
+        "reconciles": (
+            "said of a stated pair: the station's doors link its two rooms within "
+            "the ticks between, or the public regroup falls between its two ticks, "
+            "so walking cannot decide it. A reconcilable pair proves no innocence: "
+            "it says the two places could both be true, and either could be false."
+        ),
+        "charge": (
+            "an EJECT ballot whose cited turn states a place of its target, or a "
+            "flag naming a player whose two events each state a place of that "
+            "player. A charge rests on a reconcilable pair when one of its stated "
+            "places is an end of a stated pair that reconciles."
+        ),
+        "witness meeting": (
+            "a report meeting whose reporter the engine recorded as a witness of a "
+            "kill since the previous meeting (since the game began, at its first)."
+        ),
+        "route line": (
+            "a line the route lines setting adds to a ballot about one candidate: "
+            "each change of room among the places this meeting stated for that "
+            "player, with the doors between the rooms, read as walking fits or as "
+            "the public regroup falling between. A change of room that neither "
+            "allows is left out. A line weighs no statement and says nothing about "
+            "anyone's role, and showing a line is not changing a vote."
         ),
         "rebuttal citation": (
             "a ballot whose cited turn, or whose counter slot (the strongest thing "
@@ -4753,6 +5414,11 @@ SETTING_MEANINGS: Final[Mapping[str, str]] = MappingProxyType(
         "ballot_kill_row_version": (
             "whether a kill witness's ballot gets its own first-hand kill row: "
             "version 1 serves it."
+        ),
+        "route_lines_version": (
+            "whether a ballot carries route lines: version 1 serves a line about "
+            "each candidate whose stated places change room in a way the doors or "
+            "the public regroup allow."
         ),
     }
 )
@@ -5174,6 +5840,9 @@ __all__ = [
     "REGROUP_NOTICE_TEXT",
     "RETALLY_VARIANTS",
     "ROLE_CORRECTNESS_NOTE",
+    "ROUTE_LINES",
+    "ROUTE_LINES_FIELD",
+    "ROUTE_LINE_COUNT_CAP",
     "SCHEMA_VERSION",
     "SETTING_DEFAULTS",
     "SETTING_MEANINGS",
@@ -5221,6 +5890,7 @@ __all__ = [
     "Phase",
     "PlacementFact",
     "PlacementVerdict",
+    "RouteChargeFact",
     "RouteFrame",
     "SettingPredicate",
     "SettingValue",
@@ -5230,8 +5900,11 @@ __all__ = [
     "VentFact",
     "ballot_call",
     "ballot_prompt_blocks",
+    "ballot_route_lines",
     "canonical_settings",
+    "census_doors",
     "census_from_inputs",
+    "census_reading",
     "checked_placement_kinds",
     "compute_gameplay_census",
     "edge_window",
@@ -5241,6 +5914,8 @@ __all__ = [
     "held_source_rows",
     "held_sources",
     "holds_nothing_check",
+    "is_witness_meeting",
+    "line_on_the_table",
     "load_census_inputs",
     "placement_verdict",
     "placement_verdicts",
@@ -5251,6 +5926,11 @@ __all__ = [
     "regroup_notices_held",
     "resolve_era",
     "retally",
+    "route_charge_fact",
+    "route_line_count_row",
+    "route_line_count_rows",
+    "route_lines_stamped",
+    "route_readings",
     "route_rooms",
     "seat_class",
     "section_from_tally",
@@ -5259,6 +5939,8 @@ __all__ = [
     "served_own_kill_rows",
     "setting_value",
     "share_bucket",
+    "stated_places",
+    "step_true_to_the_map",
     "tally_outcome",
     "tick_gap_bucket",
     "tick_gap_rows",

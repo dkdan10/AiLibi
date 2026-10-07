@@ -87,6 +87,7 @@ from eval.gameplay_census import (
     canonical_settings,
     census_from_inputs,
     fold_set,
+    load_census_inputs,
     pool,
     prompt_stamps_from_cell,
     resolve_era,
@@ -120,17 +121,27 @@ from meetings.schemas import (
     TaskActivityAccount,
     WhereaboutsClaim,
 )
-from meetings.transcript import canonical_rooms
+import meetings.route_lines as route_lines_module
+from meetings.route_lines import RouteLine, RouteStep, build_route_lines
+from meetings.transcript import CANONICAL_ROOMS, canonical_rooms, room_hops
+from meetings.voting import SKIP_TARGET
 from orchestrator import experiment_config
 from orchestrator.experiment_config import (
     FIELD_LAYER,
     RecordedExperimentConfig,
     wave_settings,
 )
+from orchestrator.game import experiment_arm_suffix
 from orchestrator.recording_fingerprint import (
     recording_fingerprint,
     replay_seed_from_filename,
 )
+from orchestrator.replay import (
+    MeetingReplayEntry,
+    read_all_entries,
+    recorded_experiment_config,
+)
+from tests._helpers.scripted_routes import record_routes_game
 from tests._helpers.committed import (
     CORPUS_4P1I,
     CORPUS_9P2I,
@@ -460,6 +471,10 @@ ALLOWED_STRING_FIELDS = frozenset(
         "MeetingFact.bodies_after",
         "DiscardedAction.action_type",
         "CooldownWrite.player",
+        "MeetingFact.stated_places",
+        "RouteLine.subject",
+        "RouteStep.from_rooms",
+        "RouteStep.to_rooms",
     }
 )
 
@@ -481,6 +496,21 @@ def carrier_problems(root: type) -> list[str]:
         if model in seen_types:
             continue
         seen_types.add(model)
+        if isinstance(model, type) and issubclass(model, BaseModel):
+            if not model.model_config.get("frozen"):
+                problems.append(f"{model.__name__} is not frozen")
+            for field_name, info in model.model_fields.items():
+                name = f"{model.__name__}.{field_name}"
+                for part in _parts(info.annotation):
+                    if part is str and name not in ALLOWED_STRING_FIELDS:
+                        problems.append(f"{name} holds text")
+                    if (get_origin(part) or part) in (dict, list, set):
+                        problems.append(f"{name} is a mutable container")
+                    if isinstance(part, type) and (
+                        dataclasses.is_dataclass(part) or issubclass(part, BaseModel)
+                    ):
+                        pending.append(part)
+            continue
         if not dataclasses.is_dataclass(model):
             continue
         if not model.__dataclass_params__.frozen:  # type: ignore[attr-defined]
@@ -493,7 +523,9 @@ def carrier_problems(root: type) -> list[str]:
                     problems.append(f"{name} holds text")
                 if (get_origin(part) or part) in (dict, list, set):
                     problems.append(f"{name} is a mutable container")
-                if isinstance(part, type) and dataclasses.is_dataclass(part):
+                if isinstance(part, type) and (
+                    dataclasses.is_dataclass(part) or issubclass(part, BaseModel)
+                ):
                     pending.append(part)
     return sorted(set(problems))
 
@@ -937,6 +969,7 @@ def test_every_predicate_is_listed_under_its_own_key() -> None:
         "no_rebuttal": census.NO_REBUTTAL,
         "no_impostor_self_report": census.NO_IMPOSTOR_SELF_REPORT,
         "own_kill_ballot_row": census.OWN_KILL_BALLOT_ROW,
+        "route_lines": census.ROUTE_LINES,
         "always": census.ALWAYS,
     }
     assert all(key == predicate.key for key, predicate in PREDICATES.items())
@@ -1170,7 +1203,8 @@ def test_on_baseline_9_every_scoped_cell_and_table_reads_n_a() -> None:
     So each cell and table counted only under one of those settings publishes
     nothing in every baseline-9 column, and the page shows n/a rather than a
     measured 0. The promoted stage-b-r2 set records all three, so its column
-    counts them.
+    counts them. No committed set records the route lines, so every cell and
+    table counted only under them reads n/a in every column.
     """
 
     payload = _published()
@@ -1193,19 +1227,29 @@ def test_on_baseline_9_every_scoped_cell_and_table_reads_n_a() -> None:
             if scope is not None:
                 assert (view["counts"], view["not_evaluable"]) == ({}, 0), key
     promoted = _set_section(payload, "samples/9p2i")
-    assert all(view["in_scope"] for view in promoted["cells"].values())
+    route_lines = census.ROUTE_LINES.describe()
+    for kind in ("cells", "tables"):
+        for key, view in promoted[kind].items():
+            assert view["in_scope"] is (view["scope"] != route_lines), key
     page = (repo_root / "docs" / "gameplay-census.md").read_text(encoding="utf-8")
     four = " n/a |" * 4
+    five = " n/a |" * 5
+    for key, spec in CELLS.items():
+        if spec.scope is census.ROUTE_LINES:
+            assert f"| {spec.title} |{five}\n" in page, key
     assert f"| Vent trips ended by a regroup |{four} 47/140 (33.6%) |" in page
     assert f"| Surfacings at the cap |{four} 5/72 (6.9%) |" in page
     # Each scoped table lists the promoted set's rows, and every baseline-9
     # column beside them reads n/a, never a measured 0.
-    assert page.count(f"| (none) |{four}") == 0
+    # The two route lines tables have no row anywhere and read n/a in every
+    # column; every other scoped table lists the promoted set's rows.
+    assert page.count(f"| (none) |{four}") == page.count(f"| (none) |{five}") == 2
     assert f"| the opener, answering an impostor |{four} 59 |" in page
     assert f"| Moved |{four} 46 |" in page
     assert all(
         _set_section(payload, "samples/9p2i")["tables"][key]["counts"]
-        for key in SCOPED_TABLES
+        for key, scope in SCOPED_TABLES.items()
+        if scope is not census.ROUTE_LINES
     )
 
 
@@ -2169,8 +2213,9 @@ def test_every_guarded_cell_has_a_planted_pair() -> None:
     planted = {row[0] for row in GUARD_PAIRS}
     always = {key for key, spec in CELLS.items() if spec.guard is census.ALWAYS}
     bounded = {"rebuttals_differing_from_selector"}
+    routes = {row[0] for row in ROUTE_GUARD_BREACHES}
     guarded = {key for key, spec in CELLS.items() if spec.guard is not None}
-    assert guarded == planted | always | bounded
+    assert guarded == planted | always | bounded | routes
 
 
 def test_a_rebuttal_off_the_selector_raises_under_either_value() -> None:
@@ -2374,6 +2419,13 @@ SCOPED_CELLS: Mapping[str, SettingPredicate] = MappingProxyType(
         "trips_closed_by_regroup": census.MEETING_REGROUP,
         "ballots_citing_a_rebuttal": census.BOUNDED_REBUTTAL,
         "ballots_countering_with_a_rebuttal": census.BOUNDED_REBUTTAL,
+        "meetings_with_a_route_line": census.ROUTE_LINES,
+        "ballots_carrying_route_lines": census.ROUTE_LINES,
+        "route_lines_false_to_the_map": census.ROUTE_LINES,
+        "route_lines_off_the_table": census.ROUTE_LINES,
+        "ejections_charged_on_a_reconcilable_pair_shown_a_route_line": (
+            census.ROUTE_LINES
+        ),
     }
 )
 
@@ -2384,6 +2436,8 @@ SCOPED_TABLES: Mapping[str, SettingPredicate] = MappingProxyType(
     {
         "trigger_tick_events_dropped_by_regroup": census.MEETING_REGROUP,
         "rebuttal_beneficiaries": census.BOUNDED_REBUTTAL,
+        "route_lines_per_meeting": census.ROUTE_LINES,
+        "route_steps_by_reading": census.ROUTE_LINES,
     }
 )
 
@@ -2419,6 +2473,7 @@ _SCOPE_SETTINGS = st.fixed_dictionaries(
         ),
         "bounded_rebuttal_version": st.sampled_from((None, 1)),
         "vent_witness_rule": st.sampled_from(("both_rooms", "physical")),
+        "route_lines_version": st.sampled_from((None, 1)),
     },
 )
 
@@ -2439,9 +2494,11 @@ def test_every_cell_and_table_counts_exactly_when_its_scope_holds(
         guard_on = spec.guard is not None and spec.guard.holds(values)
         for hit in hits:
             accumulator.count(key, hit and not guard_on, seed=SEED, where="tick 1")
+        # A not-evaluable entry is counted, like any other, only in scope.
+        accumulator.not_evaluable(key)
         numerator = sum(hit and not guard_on for hit in hits)
         expected = (
-            [numerator, len(hits), 0]
+            [numerator, len(hits), 1]
             if _expected_in_scope(spec.scope, values)
             else [0, 0, 0]
         )
@@ -4738,7 +4795,8 @@ def test_turn_facts_keep_ids_ticks_and_alibi_legs() -> None:
         ),
         free_text="words",
     )
-    assert census._turn_fact(speech) == TurnFact(
+    placements = census.turn_placements(MeetingTranscript(turns=(speech,)))
+    assert census._turn_fact(speech, placements["t0"]) == TurnFact(
         turn_id="t0",
         index=3,
         speaker="p-2",
@@ -5072,6 +5130,24 @@ def _stamped_copy(directory: Path, settings: Mapping[str, object]) -> Path:
     return path
 
 
+def _credit_route_lines(stamp: str) -> str:
+    """``stamp`` with the route lines arm credited, as the arm spine derives it."""
+
+    if not stamp.startswith("vote_ballot."):
+        return stamp
+    return f"{stamp}.{experiment_arm_suffix('route_lines_version', 1)}"
+
+
+def _stamps_for(path: Path, stamps: tuple[str, ...] | None) -> tuple[str, ...]:
+    """The committed game's stamps, the route lines arm credited when ``path``
+    records the route lines setting, as a recording serving them is stamped."""
+
+    config = recorded_experiment_config(read_all_entries(path))
+    if config is None or config.route_lines_version is None:
+        return stamps or ()
+    return tuple(sorted(_credit_route_lines(stamp) for stamp in stamps or ()))
+
+
 def _walked(path: Path) -> GameFacts:
     """``path`` loaded through the census's own walk, as the loader runs it."""
 
@@ -5080,7 +5156,7 @@ def _walked(path: Path) -> GameFacts:
         path,
         seed=LOADER_SEED,
         roles=committed.roles,
-        manifest_cell=", ".join(committed.era.prompt_stamps or ()),
+        manifest_cell=", ".join(_stamps_for(path, committed.era.prompt_stamps)),
         num_players=4,
         num_impostors=1,
         tasks_per_crewmate=1,
@@ -5122,11 +5198,20 @@ def test_the_census_walk_reads_every_later_setting_it_declares(tmp_path: Path) -
     """
 
     settings = dict(LATER_SETTINGS)
-    walked = _walked(_stamped_copy(tmp_path, settings))
+    path = _stamped_copy(tmp_path, settings)
+    walked = _walked(path)
     committed = _committed_game()
     assert dict(walked.era.values) == settings
+    # The route lines setting is served under its arm's stamp.
+    credited = _stamps_for(path, committed.era.prompt_stamps)
+    assert credited != committed.era.prompt_stamps
     assert walked == replace(
-        committed, era=replace(committed.era, settings=canonical_settings(settings))
+        committed,
+        era=replace(
+            committed.era,
+            settings=canonical_settings(settings),
+            prompt_stamps=credited,
+        ),
     )
     for key in (
         "look_and_wait_exit",
@@ -8312,6 +8397,11 @@ QUIET_OBSERVATION = "- [obs p-2:5:0] You did a task in STORAGE."
 QUIET_TYPED = "  - tick 5: p-2 places THEMSELVES in STORAGE (roll-call answer)."
 QUIET_SAID = '  said: "I was in STORAGE all along."'
 QUIET_EVIDENCE = "- `p-9` — seen near the body (nothing here you could cite)"
+#: The route lines block's fixed header, which names no player.
+ROUTES_HEADER = (
+    "Each line below takes the places this table stated for one player, in tick "
+    "order, and reads each change of room against the station's doors."
+)
 
 
 def ballot_prompt(
@@ -8322,6 +8412,7 @@ def ballot_prompt(
     said: Sequence[str] = (QUIET_SAID,),
     flags: Sequence[str] | None = None,
     evidence: Sequence[str] | None = (QUIET_EVIDENCE,),
+    routes: Sequence[str] | None = None,
     extra: Sequence[str] = (),
     drop: frozenset[str] = frozenset(),
 ) -> str:
@@ -8367,6 +8458,7 @@ def ballot_prompt(
         *(block("contradictions", flags) if flags is not None else []),
         *block("testimony_sources", ["- p-3: 1 voice, 0 accounts"]),
         *block("map", ["ADMIN is one door from p-3's UPPER_HALL."]),
+        *(block("routes", [ROUTES_HEADER, *routes]) if routes is not None else []),
         *(block("evidence", evidence) if evidence is not None else []),
         *extra,
         "## Your suspicion of each player",
@@ -8417,6 +8509,16 @@ def test_each_place_the_check_reads_names_its_own_row() -> None:
         ({"typed": ("  - tick 6: p-4 in ADMIN.",)}, {"a typed turn line"}),
         ({"typed": ("  - accuses p-0 (0.80): vented",)}, {"a typed turn line"}),
         ({"said": ('  said: "p-1 was with me."',)}, {"a spoken turn line"}),
+        (
+            {
+                "routes": (
+                    "- `p-4`, places stated at this table: ADMIN at tick 5 to "
+                    "WEST_HALL at tick 6, 1 door apart, walking fits.",
+                )
+            },
+            {"a route line"},
+        ),
+        ({"routes": ()}, set()),
         (
             {"said": ('  said: "Nothing to say,', 'and p-1 never left."')},
             {"a spoken turn line"},
@@ -8495,8 +8597,8 @@ def test_a_prompt_missing_its_memory_or_transcript_block_raises() -> None:
 def test_a_block_the_census_does_not_classify_raises() -> None:
     """Planted: a recorded prompt carrying a top-level tag in neither table."""
 
-    with _refusal(ValueError, "the block <routes> is not one the census classifies"):
-        held(ballot_prompt(extra=("<routes>", "- p-3: STORAGE -> ADMIN", "</routes>")))
+    with _refusal(ValueError, "the block <rumours> is not one the census classifies"):
+        held(ballot_prompt(extra=("<rumours>", "- p-3: STORAGE", "</rumours>")))
     with _refusal(ValueError, "the block <memory> opens twice"):
         held(ballot_prompt(extra=("<memory>", "</memory>")))
     with _refusal(ValueError, "the block <evidence> never closes"):
@@ -8582,11 +8684,9 @@ def test_a_template_copy_carrying_a_new_tag_fails_the_pin() -> None:
         / "qwen3_6_27b"
         / "vote_ballot.j2"
     ).read_text(encoding="utf-8")
-    planted = source.replace(
-        "<map>\n", "<routes>\n{{ route_lines }}\n</routes>\n<map>\n"
-    )
+    planted = source.replace("<map>\n", "<rumours>\n{{ rumours }}\n</rumours>\n<map>\n")
     classified = census.READ_BALLOT_BLOCKS | census.UNREAD_BALLOT_BLOCKS
-    assert template_tags([planted]) - classified == {"routes"}
+    assert template_tags([planted]) - classified == {"rumours"}
 
 
 def _memory_headings(source: str) -> frozenset[str]:
@@ -9068,7 +9168,15 @@ def test_every_committed_holds_nothing_skip_is_checked() -> None:
 @hypothesis_settings(deadline=None, max_examples=60)
 @given(
     place=st.sampled_from(
-        ("observations", "open_contradictions", "typed", "said", "flags", "evidence")
+        (
+            "observations",
+            "open_contradictions",
+            "typed",
+            "said",
+            "flags",
+            "evidence",
+            "routes",
+        )
     ),
     candidate=st.sampled_from(sorted(LIVING - {VOTER})),
     excluded=st.sampled_from(
@@ -9091,6 +9199,10 @@ def test_a_living_candidate_in_a_read_place_always_holds_and_nowhere_else(
         "said": f'  said: "{candidate} lied."',
         "flags": f"- [c1] {candidate} lied",
         "evidence": f"- `{candidate}` — seen in ADMIN",
+        "routes": (
+            f"- `{candidate}`, places stated at this table: ADMIN at tick 5 to "
+            "WEST_HALL at tick 6, 1 door apart, walking fits."
+        ),
     }
     planted_line: dict[str, Any] = {place: (lines[place],)}
     assert held(ballot_prompt(**planted_line))
@@ -9575,8 +9687,9 @@ def test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds()
     None
 ):
     """On every committed meeting of the two round columns, each turn's placements
-    of the four kinds equal the route-check replay's placement reader's, as a
-    multiset."""
+    of the four kinds, as the census groups them by turn, equal the route-check
+    replay's placement reader's (the route field's, which the replay imports
+    back), as a multiset."""
 
     from experiments.lab.route_check_replay import spoken_placements
     from orchestrator.replay import MeetingReplayEntry, read_all_entries
@@ -9589,10 +9702,11 @@ def test_the_census_placement_reader_is_the_route_check_replays_on_these_kinds()
                 if not isinstance(entry_, MeetingReplayEntry):
                     continue
                 lab = spoken_placements(entry_.transcript)
+                by_turn = census.turn_placements(entry_.transcript)
                 for recorded in entry_.transcript.turns:
                     ours = Counter(
                         (item.player, item.tick, item.rooms, item.kind)
-                        for item in census.turn_placements(recorded)
+                        for item in by_turn.get(recorded.turn_id, ())
                     )
                     theirs = Counter(
                         (item.player, item.tick, item.rooms, item.kind)
@@ -9639,13 +9753,16 @@ def test_turn_placements_read_the_four_kinds_and_nothing_else() -> None:
         free_text="words",
     )
     rooms = canonical_rooms
-    assert census.turn_placements(speech) == (
-        census.PlacementFact("p-0", 4, rooms(ROOM), "saw_player"),
-        census.PlacementFact("p-1", 4, rooms(ROOM), "company"),
-        census.PlacementFact("p-3", 4, rooms(ROOM), "company"),
-        census.PlacementFact("p-3", 6, rooms(FAR), "saw_move"),
-        census.PlacementFact("p-2", 8, rooms(NEIGHBOUR), "whereabouts"),
-    )
+    # In the census's order: by tick, rooms, player and kind.
+    assert census.turn_placements(MeetingTranscript(turns=(speech,))) == {
+        "t0": (
+            census.PlacementFact("p-0", 4, rooms(ROOM), "saw_player"),
+            census.PlacementFact("p-1", 4, rooms(ROOM), "company"),
+            census.PlacementFact("p-3", 4, rooms(ROOM), "company"),
+            census.PlacementFact("p-3", 6, rooms(FAR), "saw_move"),
+            census.PlacementFact("p-2", 8, rooms(NEIGHBOUR), "whereabouts"),
+        )
+    }
 
 
 def test_the_loader_keeps_the_honesty_route_settled_and_resolved() -> None:
@@ -10423,7 +10540,11 @@ def test_the_new_cells_and_tables_carry_no_guard_and_no_scope() -> None:
         == census.HEADINGS.index(census._BALLOTS) + 1
     )
     assert (
-        census.HEADINGS.index(census._SHAPE) == census.HEADINGS.index(census._HELD) + 1
+        census.HEADINGS.index(census._ROUTES) == census.HEADINGS.index(census._HELD) + 1
+    )
+    assert (
+        census.HEADINGS.index(census._SHAPE)
+        == census.HEADINGS.index(census._ROUTES) + 1
     )
 
 
@@ -10478,3 +10599,1358 @@ def test_round_1_and_the_promoted_set_never_pool_before_a_new_cell_is_summed() -
             ],
             label="mixed",
         )
+
+
+# --------------------------------------------------------------------------- #
+# Stated places the map or the regroup reconciles: the route charges          #
+# --------------------------------------------------------------------------- #
+
+#: The route-lines replay's committed results: the field's reach on the
+#: committed columns, rendered ON beside the ballots as recorded.
+ROUTE_LINES_JSON: Final = repo_root / "experiments/lab/results-route-lines-replay.json"
+
+#: The two round columns the census is held to, meeting by meeting.
+_ROUND_COLUMNS: Final = ("r2", "r1")
+
+
+def _previous_tick(item: GameFacts, index: int) -> int | None:
+    return item.meetings[index - 1].tick if index else None
+
+
+def census_route_records(
+    loaded: CensusInputs,
+) -> dict[tuple[int, int], dict[str, object]]:
+    """Each meeting's charge facts as the census holds them, keyed by (seed, meeting)."""
+
+    records: dict[tuple[int, int], dict[str, object]] = {}
+    for item in loaded.games:
+        for index, fact in enumerate(item.meetings):
+            charges = fact.route_charges
+            assert charges is not None, (item.seed, index)
+            record: dict[str, object] = {
+                "charges": charges.charges,
+                "charges_on_reconcilable_pair": charges.charges_on_reconcilable_pair,
+                "witness_meeting": census.is_witness_meeting(
+                    fact, kills=item.kills, previous_tick=_previous_tick(item, index)
+                ),
+            }
+            if fact.ejected is not None:
+                record["reconcilable_pairs"] = charges.ejected_pairs
+                record["misjudged"] = charges.ejected_charged_on_pair
+            records[(item.seed, index)] = record
+    return records
+
+
+def lab_route_records(
+    column: Mapping[str, Any],
+) -> dict[tuple[int, int], dict[str, object]]:
+    """The same facts as the route-check replay's committed column records them."""
+
+    records: dict[tuple[int, int], dict[str, object]] = {}
+    for row in column["meetings"]:
+        record: dict[str, object] = {
+            "charges": row["charges"],
+            "charges_on_reconcilable_pair": row["charges_on_reconcilable_pair"],
+            "witness_meeting": row["witness_meeting"],
+        }
+        case = row.get("case")
+        if case is not None:
+            record["reconcilable_pairs"] = case["reconcilable_pairs"]
+            record["misjudged"] = case["misjudged"]
+        records[(row["seed"], row["meeting"])] = record
+    return records
+
+
+def route_check_disagreements(
+    lab: Mapping[tuple[int, int], Mapping[str, object]],
+    ours: Mapping[tuple[int, int], Mapping[str, object]],
+) -> list[str]:
+    """Every (seed, meeting, field) where the census and the replay differ."""
+
+    problems: list[str] = []
+    for seed, index in sorted(set(lab) | set(ours)):
+        where = f"seed {seed} meeting {index}"
+        if (seed, index) not in ours:
+            problems.append(f"{where}: absent from the census")
+            continue
+        if (seed, index) not in lab:
+            problems.append(f"{where}: absent from the route-check replay")
+            continue
+        theirs, mine = lab[(seed, index)], ours[(seed, index)]
+        for name in sorted(set(theirs) | set(mine)):
+            if theirs.get(name) != mine.get(name):
+                problems.append(
+                    f"{where}: {name} is {mine.get(name)!r} in the census and "
+                    f"{theirs.get(name)!r} in the route-check replay"
+                )
+    return problems
+
+
+def _round_column(label: str) -> tuple[Mapping[str, Any], CensusInputs]:
+    """One round column of the route-check replay and the census carrier of its
+    directory, after the column's recordings are held to HEAD's blob for blob."""
+
+    column = _route_check_columns()[label]
+    problems = recording_blob_problems(
+        repo_root, sha=column["sha"], path=column["path"], tree=column["tree"]
+    )
+    assert problems == [], f"{label}: {problems}"
+    return column, census_inputs(repo_root / column["path"])
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("label", _ROUND_COLUMNS)
+def test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting(
+    label: str,
+) -> None:
+    """Every meeting's charges, charges on a reconcilable pair, witness meeting,
+    and at an ejection its target's pairs and the misjudged flag, equal the
+    committed route-check column's, naming seed, meeting and field."""
+
+    column, loaded = _round_column(label)
+    lab = lab_route_records(column)
+    assert len(lab) == len(column["meetings"]) > 100
+    assert route_check_disagreements(lab, census_route_records(loaded)) == []
+    folded = fold_set(loaded)
+    charged = folded.cells["ejections_charged_on_a_reconcilable_pair"]
+    witness = folded.cells["witness_meeting_ejections_charged_on_a_reconcilable_pair"]
+    # The counts the route-check replay calls M and W.
+    assert charged.numerator == sum(
+        1 for row in column["meetings"] if row.get("case", {}).get("misjudged")
+    )
+    assert witness.numerator == sum(
+        1
+        for row in column["meetings"]
+        if row["witness_meeting"] and row.get("case", {}).get("misjudged")
+    )
+
+
+@pytest.mark.slow
+def test_a_column_with_one_misjudged_flag_flipped_names_that_meeting() -> None:
+    """Planted: a copy of the committed r2 column with one meeting's flag flipped."""
+
+    column, loaded = _round_column("r2")
+    planted = json.loads(json.dumps(column))
+    row = next(row for row in planted["meetings"] if row.get("case"))
+    row["case"]["misjudged"] = not row["case"]["misjudged"]
+    seed, index = row["seed"], row["meeting"]
+    assert route_check_disagreements(
+        lab_route_records(planted), census_route_records(loaded)
+    ) == [
+        f"seed {seed} meeting {index}: misjudged is {not row['case']['misjudged']!r} "
+        f"in the census and {row['case']['misjudged']!r} in the route-check replay"
+    ]
+
+
+def _recharged(
+    loaded: CensusInputs,
+    set_dir: Path,
+    regroup: Callable[[MeetingFact], frozenset[int]],
+) -> CensusInputs:
+    """``loaded`` with every meeting's charge fact recomputed from its recorded
+    row, its living set and the regroup ticks ``regroup`` gives it."""
+
+    games: list[GameFacts] = []
+    for item in loaded.games:
+        rows = {
+            row.meeting_id: row
+            for row in read_all_entries(set_dir / f"replay-seed-{item.seed}.jsonl")
+            if isinstance(row, MeetingReplayEntry)
+        }
+        games.append(
+            replace(
+                item,
+                meetings=tuple(
+                    replace(
+                        fact,
+                        route_charges=census.route_charge_fact(
+                            rows[fact.meeting_id],
+                            living=fact.living,
+                            regroup_ticks=regroup(fact),
+                        ),
+                    )
+                    for fact in item.meetings
+                ),
+            )
+        )
+    return replace(loaded, games=tuple(games))
+
+
+@pytest.mark.slow
+def test_a_loader_given_no_regroup_ticks_breaks_the_round_2_agreement() -> None:
+    """Planted: the charge facts recomputed with no public regroup tick. With the
+    regroup ticks the loader keeps they reproduce the loader's facts."""
+
+    column, loaded = _round_column("r2")
+    set_dir = repo_root / column["path"]
+    lab = lab_route_records(column)
+    kept = _recharged(loaded, set_dir, lambda fact: fact.regroup_ticks)
+    assert census_route_records(kept) == census_route_records(loaded)
+    assert any(fact.regroup_ticks for item in loaded.games for fact in item.meetings)
+    broken = route_check_disagreements(
+        lab, census_route_records(_recharged(loaded, set_dir, lambda _: frozenset()))
+    )
+    assert broken
+    assert all(re.match(r"seed \d+ meeting \d+: \w+ is ", line) for line in broken)
+
+
+def charged_meeting(
+    meeting_id: str,
+    tick: int,
+    fact: census.RouteChargeFact | None,
+    *,
+    ejected: str | None = None,
+    trigger_kind: str = "emergency",
+    opener: str = "p-2",
+    ballots: Sequence[BallotFact] | None = None,
+) -> MeetingFact:
+    overrides: dict[str, Any] = (
+        ejecting(ejected) if ejected is not None else {"ballots": ()}
+    )
+    if ballots is not None:
+        overrides["ballots"] = tuple(ballots)
+    return meeting(
+        meeting_id=meeting_id,
+        tick=tick,
+        trigger_kind=trigger_kind,
+        opener=opener,
+        trigger_body=REPORTED_BODY.body_id if trigger_kind == "report" else None,
+        route_charges=fact,
+        **overrides,
+    )
+
+
+#: The corpse every planted report meeting reports.
+REPORTED_BODY: Final = body("body-p-4-10", 10)
+
+
+def _charges_game(*meetings: MeetingFact, **settings: SettingValue) -> GameFacts:
+    return game(
+        settings,
+        kills=(kill(10, killer="p-0", witnesses=("p-2",)),),
+        bodies=(REPORTED_BODY,),
+        meetings=meetings,
+    )
+
+
+ROUTE_CHARGE_CELLS: Final = (
+    "charges_on_a_reconcilable_pair",
+    "ejections_on_a_reconcilable_pair",
+    "ejections_charged_on_a_reconcilable_pair",
+    "witness_meeting_ejections_on_a_reconcilable_pair",
+    "witness_meeting_ejections_charged_on_a_reconcilable_pair",
+)
+
+
+def test_the_route_charge_cells_count_charges_ejections_and_witness_meetings() -> None:
+    """A witness's report ejecting on a pair, a button ejection with a pair but
+    no charge on it, and a meeting that ejected no one."""
+
+    fact = census.RouteChargeFact
+    folded = _charges_game(
+        charged_meeting(
+            "meeting-0",
+            12,
+            fact(3, 2, ejected_pairs=2, ejected_charged_on_pair=True),
+            ejected="p-0",
+            trigger_kind="report",
+            opener="p-2",
+        ),
+        charged_meeting(
+            "meeting-1",
+            30,
+            fact(1, 0, ejected_pairs=1, ejected_charged_on_pair=False),
+            ejected="p-1",
+        ),
+        charged_meeting("meeting-2", 40, fact(2, 1)),
+    )
+    assert {key: counts(key, folded) for key in ROUTE_CHARGE_CELLS} == {
+        "charges_on_a_reconcilable_pair": (3, 6, 0),
+        "ejections_on_a_reconcilable_pair": (2, 2, 0),
+        "ejections_charged_on_a_reconcilable_pair": (1, 2, 0),
+        "witness_meeting_ejections_on_a_reconcilable_pair": (1, 1, 0),
+        "witness_meeting_ejections_charged_on_a_reconcilable_pair": (1, 1, 0),
+    }
+    # The same report opened by a player who saw no kill is no witness meeting.
+    other = replace(
+        folded,
+        meetings=(replace(folded.meetings[0], opener="p-3"), *folded.meetings[1:]),
+    )
+    assert counts("witness_meeting_ejections_on_a_reconcilable_pair", other) == (
+        0,
+        0,
+        0,
+    )
+    # An ejection without a pair.
+    lone = _charges_game(
+        charged_meeting(
+            "meeting-0",
+            12,
+            fact(1, 0, ejected_pairs=0, ejected_charged_on_pair=False),
+            ejected="p-0",
+        )
+    )
+    assert counts("ejections_on_a_reconcilable_pair", lone) == (0, 1, 0)
+
+
+def test_a_meeting_without_its_charge_fact_is_not_evaluable() -> None:
+    folded = _charges_game(
+        charged_meeting("meeting-0", 12, None, ejected="p-0", trigger_kind="report"),
+        charged_meeting("meeting-1", 30, None),
+    )
+    assert {key: counts(key, folded) for key in ROUTE_CHARGE_CELLS} == {
+        "charges_on_a_reconcilable_pair": (0, 0, 2),
+        "ejections_on_a_reconcilable_pair": (0, 0, 1),
+        "ejections_charged_on_a_reconcilable_pair": (0, 0, 1),
+        "witness_meeting_ejections_on_a_reconcilable_pair": (0, 0, 1),
+        "witness_meeting_ejections_charged_on_a_reconcilable_pair": (0, 0, 1),
+    }
+
+
+@pytest.mark.parametrize(
+    ("fact", "ejected", "message"),
+    [
+        (
+            census.RouteChargeFact(1, 2),
+            None,
+            "more charges rest on a reconcilable pair than the table brought",
+        ),
+        (
+            census.RouteChargeFact(1, 0, ejected_pairs=1, ejected_charged_on_pair=True),
+            None,
+            "a meeting that ejected no one carries an ejection's pairs",
+        ),
+        (
+            census.RouteChargeFact(1, 1),
+            "p-0",
+            "an ejection's pairs are missing",
+        ),
+        (
+            census.RouteChargeFact(1, 1, ejected_pairs=0, ejected_charged_on_pair=True),
+            "p-0",
+            "its charge rests on a pair it does not have",
+        ),
+    ],
+)
+def test_an_incoherent_charge_fact_is_refused_naming_its_meeting(
+    fact: census.RouteChargeFact, ejected: str | None, message: str
+) -> None:
+    planted = _charges_game(charged_meeting("meeting-3", 12, fact, ejected=ejected))
+    with pytest.raises(ValueError, match=message) as refused:
+        fold_set(inputs(planted))
+    assert f"set {PLANTED}, seed {SEED}, meeting meeting-3: " in str(refused.value)
+
+
+def test_a_witness_meeting_is_a_report_opened_by_a_witness_since_the_last_one() -> None:
+    kills = (kill(10, killer="p-0", witnesses=("p-2",)),)
+
+    def witness(**overrides: Any) -> bool:
+        fact = charged_meeting(
+            "meeting-0",
+            overrides.pop("tick", 12),
+            None,
+            trigger_kind=overrides.pop("trigger_kind", "report"),
+            opener=overrides.pop("opener", "p-2"),
+        )
+        return census.is_witness_meeting(fact, kills=kills, **overrides)
+
+    assert witness(previous_tick=None)
+    assert witness(previous_tick=9)
+    assert not witness(previous_tick=10)
+    assert witness(previous_tick=None, tick=10)
+    assert not witness(previous_tick=None, tick=9)
+    assert not witness(previous_tick=None, trigger_kind="emergency")
+    assert not witness(previous_tick=None, opener="p-3")
+    # At a game's first meeting a kill at tick 0 is since the game began.
+    early = (kill(0, killer="p-0", witnesses=("p-2",)),)
+    first = charged_meeting("meeting-0", 2, None, trigger_kind="report")
+    assert census.is_witness_meeting(first, kills=early, previous_tick=None)
+
+
+_charge_facts = st.builds(
+    lambda charges, resting, pairs, charged: (
+        charges,
+        min(resting, charges),
+        pairs,
+        charged and pairs > 0,
+    ),
+    st.integers(0, 4),
+    st.integers(0, 4),
+    st.integers(0, 3),
+    st.booleans(),
+)
+
+
+@hypothesis_settings(deadline=None, max_examples=60)
+@given(
+    rows=st.lists(
+        st.tuples(
+            _charge_facts,
+            st.sampled_from(("p-0", "p-1", None)),
+            st.sampled_from(("report", "emergency")),
+            st.sampled_from(("p-2", "p-3")),
+        ),
+        min_size=1,
+        max_size=5,
+    ),
+    witnessed=st.lists(st.integers(1, 60), max_size=3),
+)
+def test_every_ejection_charged_on_a_pair_has_one_and_the_witness_counts_are_a_part(
+    rows: list[tuple[tuple[int, int, int, bool], str | None, str, str]],
+    witnessed: list[int],
+) -> None:
+    """Over generated meetings: every ejection charged on a pair has one, and the
+    witness-meeting counts are exactly the ejections at witness meetings, never
+    more than the whole. Perturbed, a witness count taken over every meeting
+    fails it."""
+
+    meetings = tuple(
+        charged_meeting(
+            f"meeting-{index}",
+            10 * (index + 1),
+            census.RouteChargeFact(
+                charges,
+                resting,
+                ejected_pairs=pairs if ejected is not None else None,
+                ejected_charged_on_pair=charged if ejected is not None else None,
+            ),
+            ejected=ejected,
+            trigger_kind=kind,
+            opener=opener,
+        )
+        for index, ((charges, resting, pairs, charged), ejected, kind, opener) in (
+            enumerate(rows)
+        )
+    )
+    planted = game(
+        kills=tuple(kill(tick, killer="p-1", witnesses=("p-2",)) for tick in witnessed),
+        bodies=(REPORTED_BODY,),
+        meetings=meetings,
+    )
+    folded = {key: counts(key, planted) for key in ROUTE_CHARGE_CELLS}
+    on_pair, charged_on_pair = (
+        folded["ejections_on_a_reconcilable_pair"],
+        folded["ejections_charged_on_a_reconcilable_pair"],
+    )
+    assert charged_on_pair[0] <= on_pair[0] <= on_pair[1] == charged_on_pair[1]
+    at_witness = [
+        fact
+        for index, fact in enumerate(meetings)
+        if fact.ejected is not None
+        and census.is_witness_meeting(
+            fact, kills=planted.kills, previous_tick=_previous_tick(planted, index)
+        )
+    ]
+    for whole, part in (
+        (
+            "ejections_on_a_reconcilable_pair",
+            "witness_meeting_ejections_on_a_reconcilable_pair",
+        ),
+        (
+            "ejections_charged_on_a_reconcilable_pair",
+            "witness_meeting_ejections_charged_on_a_reconcilable_pair",
+        ),
+    ):
+        assert folded[part][1] == len(at_witness)
+        assert folded[part][0] <= folded[whole][0]
+        assert folded[part][1] <= folded[whole][1]
+
+
+# --------------------------------------------------------------------------- #
+# The route field's conformance cell                                           #
+# --------------------------------------------------------------------------- #
+
+ROUTE_ON: Final = {"route_lines_version": 1}
+NEIGHBOURS: Final = MappingProxyType(
+    {room: MAP.room_neighbors(room) for room in sorted(MAP.rooms)}
+)
+
+
+def step(
+    from_room: str,
+    from_tick: int,
+    to_room: str,
+    to_tick: int,
+    doors: int,
+    reading: str = "walking_fits",
+    regroup_tick: int | None = None,
+) -> RouteStep:
+    """A step past the field's own validators, so the census's check is tested alone."""
+
+    return RouteStep.model_construct(
+        from_rooms=(from_room,),
+        from_tick=from_tick,
+        to_rooms=(to_room,),
+        to_tick=to_tick,
+        doors=doors,
+        reading=reading,
+        regroup_tick=regroup_tick,
+    )
+
+
+def line(subject: str, *steps: RouteStep) -> RouteLine:
+    return RouteLine.model_construct(subject=subject, steps=tuple(steps))
+
+
+def true_to_the_map(item: RouteStep, *regroups: int) -> bool:
+    return census.step_true_to_the_map(
+        item, neighbours=NEIGHBOURS, regroup_ticks=frozenset(regroups)
+    )
+
+
+def test_the_card_example_steps_are_true_to_the_map() -> None:
+    assert true_to_the_map(step("REACTOR", 4, "MEDBAY", 6, 5, "regroup_between", 5), 5)
+    assert true_to_the_map(step("MEDBAY", 6, "WEST_HALL", 7, 1))
+    # The first regroup tick inside the ticks is the one a crossing names.
+    assert true_to_the_map(
+        step("REACTOR", 4, "MEDBAY", 7, 5, "regroup_between", 5), 5, 6
+    )
+
+
+@pytest.mark.parametrize(
+    ("planted", "regroups"),
+    [
+        # A three-door pair read as a walk within two ticks.
+        (step("ADMIN", 3, "REACTOR", 5, 3), ()),
+        # A pair that neither walks nor crosses, under each reading.
+        (step("REACTOR", 4, "MEDBAY", 6, 5), ()),
+        (step("REACTOR", 4, "MEDBAY", 6, 5, "regroup_between", 5), ()),
+        # A wrong door count on a step whose reading is otherwise right.
+        (step("MEDBAY", 6, "WEST_HALL", 7, 2), ()),
+        # A crossing where a walk fits.
+        (step("MEDBAY", 6, "WEST_HALL", 8, 1, "regroup_between", 7), (7,)),
+        # A regroup tick that never happened, and one outside the ticks.
+        (step("REACTOR", 4, "MEDBAY", 6, 5, "regroup_between", 5), (6,)),
+        (step("REACTOR", 4, "MEDBAY", 6, 5, "regroup_between", 3), (3, 5)),
+        # The last regroup tick inside the ticks named in place of the first.
+        (step("REACTOR", 4, "MEDBAY", 7, 5, "regroup_between", 6), (5, 6)),
+        # A walk naming a regroup tick, and a step that is no change of room.
+        (step("MEDBAY", 6, "WEST_HALL", 7, 1, "walking_fits", 7), (7,)),
+        (step("MEDBAY", 6, "MEDBAY", 7, 0), ()),
+        # A room that is not on the map.
+        (step("MEDBAY", 6, "THE_HALLWAY", 7, 1), ()),
+    ],
+)
+def test_a_step_the_map_or_the_game_does_not_give_is_false_to_the_map(
+    planted: RouteStep, regroups: tuple[int, ...]
+) -> None:
+    assert census.census_doors(NEIGHBOURS, ("ADMIN",), ("REACTOR",)) == 3
+    assert not true_to_the_map(planted, *regroups)
+
+
+def test_the_census_door_search_is_the_maps_hop_count_on_every_room_pair() -> None:
+    """The census's own search agrees with the meeting layer's hop count on every
+    pair of rooms. Planted, one door removed from the copy breaks it."""
+
+    rooms = sorted(MAP.rooms)
+    assert set(rooms) == set(CANONICAL_ROOMS)
+
+    def mismatches(neighbours: Mapping[str, tuple[str, ...]]) -> list[tuple[str, str]]:
+        return [
+            (a, b)
+            for a in rooms
+            for b in rooms
+            if census.census_doors(neighbours, (a,), (b,))
+            != room_hops(frozenset({a}), frozenset({b}), max_hops=len(CANONICAL_ROOMS))
+        ]
+
+    assert mismatches(NEIGHBOURS) == []
+    first = rooms[0]
+    gone = NEIGHBOURS[first][0]
+    cut = {
+        room: tuple(n for n in near if {room, n} != {first, gone})
+        for room, near in NEIGHBOURS.items()
+    }
+    assert (first, gone) in mismatches(cut)
+
+
+@hypothesis_settings(deadline=None, max_examples=150)
+@given(
+    rooms=st.lists(
+        st.sampled_from(sorted(CANONICAL_ROOMS)), min_size=2, max_size=2, unique=True
+    ),
+    start=st.integers(0, 40),
+    gap=st.integers(0, 8),
+    regroups=st.frozensets(st.integers(0, 50), max_size=4),
+)
+def test_the_link_check_is_doors_within_the_ticks_or_the_first_regroup_crossed(
+    rooms: list[str], start: int, gap: int, regroups: frozenset[int]
+) -> None:
+    """Over random room pairs, gaps and regroup ticks: walking fits exactly when
+    the doors are at most the ticks between, otherwise the first regroup tick in
+    (earlier, later] is crossed, and with neither the step is a breach whatever
+    it reads. Perturbed, ``<`` for ``<=`` or the last regroup tick fails it."""
+
+    a, b = rooms
+    doors = room_hops(frozenset({a}), frozenset({b}), max_hops=len(CANONICAL_ROOMS))
+    assert doors is not None and doors >= 1
+    crossed = [tick for tick in sorted(regroups) if start < tick <= start + gap]
+    expected: tuple[str, int | None] | None = (
+        ("walking_fits", None)
+        if doors <= gap
+        else ("regroup_between", crossed[0])
+        if crossed
+        else None
+    )
+    assert (
+        census.census_reading(
+            doors, from_tick=start, to_tick=start + gap, regroup_ticks=regroups
+        )
+        == expected
+    )
+    for reading, regroup_tick in (
+        ("walking_fits", None),
+        *(("regroup_between", tick) for tick in crossed),
+    ):
+        planted = step(a, start, b, start + gap, doors, reading, regroup_tick)
+        assert true_to_the_map(planted, *regroups) == (
+            (reading, regroup_tick) == expected
+        )
+
+
+def stated(
+    **places: Iterable[tuple[int, str]],
+) -> Mapping[str, frozenset[tuple[int, frozenset[str]]]]:
+    return MappingProxyType(
+        {
+            player: frozenset((tick, frozenset({room})) for tick, room in spots)
+            for player, spots in places.items()
+        }
+    )
+
+
+WALK: Final = step("MEDBAY", 6, "WEST_HALL", 7, 1)
+CROSSING: Final = step("REACTOR", 4, "MEDBAY", 6, 5, "regroup_between", 5)
+STATED: Final = stated(
+    **{"p-0": ((6, "MEDBAY"), (7, "WEST_HALL")), "p-1": ((4, "REACTOR"), (6, "MEDBAY"))}
+)
+
+
+def route_ballot(
+    voter: str,
+    target: str,
+    *lines: RouteLine,
+    label: BallotGroundingLabel | None = None,
+) -> BallotFact:
+    return replace(ballot(voter, target, label=label), route_lines=tuple(lines))
+
+
+def routes_meeting(*ballots: BallotFact, **overrides: Any) -> MeetingFact:
+    fields: dict[str, Any] = {
+        "ballots": tuple(ballots),
+        "regroup_ticks": frozenset({5}),
+        "stated_places": STATED,
+    }
+    fields.update(overrides)
+    return meeting(**fields)
+
+
+ROUTE_LINE_CELLS: Final = (
+    "meetings_with_a_route_line",
+    "ballots_carrying_route_lines",
+    "route_lines_false_to_the_map",
+    "route_lines_off_the_table",
+)
+
+
+def test_the_route_lines_cells_count_ballots_lines_and_steps() -> None:
+    """Two ballots carrying lines (one with two), a ballot carrying none and one
+    with no recorded call; the distinct lines are counted once each."""
+
+    folded = game(
+        ROUTE_ON,
+        meetings=(
+            routes_meeting(
+                route_ballot(
+                    "p-2", SKIP_TARGET, line("p-0", WALK), line("p-1", CROSSING)
+                ),
+                route_ballot("p-3", SKIP_TARGET, line("p-0", WALK)),
+                route_ballot("p-4", SKIP_TARGET),
+                ballot("p-1", SKIP_TARGET),
+            ),
+            routes_meeting(meeting_id="meeting-1", tick=30),
+        ),
+    )
+    assert {key: counts(key, folded) for key in ROUTE_LINE_CELLS} == {
+        "meetings_with_a_route_line": (1, 2, 0),
+        "ballots_carrying_route_lines": (2, 3, 1),
+        "route_lines_false_to_the_map": (0, 3, 0),
+        "route_lines_off_the_table": (0, 3, 0),
+    }
+    assert table("route_lines_per_meeting", folded) == {
+        "0": 1,
+        "1": 0,
+        "2": 1,
+        "3 or more": 0,
+    }
+    assert table("route_steps_by_reading", folded) == {
+        "walking_fits": 1,
+        "regroup_between": 1,
+    }
+
+
+def test_three_or_more_players_with_a_line_share_a_row() -> None:
+    stated_three = stated(
+        **{
+            player: ((6, "MEDBAY"), (7, "WEST_HALL"))
+            for player in ("p-0", "p-1", "p-3")
+        }
+    )
+    folded = game(
+        ROUTE_ON,
+        meetings=(
+            routes_meeting(
+                route_ballot(
+                    "p-2",
+                    SKIP_TARGET,
+                    *(line(player, WALK) for player in ("p-0", "p-1", "p-3")),
+                ),
+                stated_places=stated_three,
+            ),
+        ),
+    )
+    assert table("route_lines_per_meeting", folded)["3 or more"] == 1
+    assert census.route_line_count_row(7) == "3 or more"
+    assert census.route_line_count_row(2) == "2"
+
+
+def _off_map(settings: Mapping[str, SettingValue]) -> GameFacts:
+    """A crossing whose regroup tick never happened."""
+
+    return game(
+        settings,
+        meetings=(
+            routes_meeting(
+                route_ballot("p-3", SKIP_TARGET, line("p-1", CROSSING)),
+                regroup_ticks=frozenset({9}),
+            ),
+        ),
+    )
+
+
+def _unstated_place(settings: Mapping[str, SettingValue]) -> GameFacts:
+    return game(
+        settings,
+        meetings=(
+            routes_meeting(
+                route_ballot(
+                    "p-3",
+                    SKIP_TARGET,
+                    line("p-0", step("MEDBAY", 6, "WEST_HALL", 8, 1)),
+                )
+            ),
+        ),
+    )
+
+
+def _second_line(settings: Mapping[str, SettingValue]) -> GameFacts:
+    return game(
+        settings,
+        meetings=(
+            routes_meeting(
+                route_ballot("p-3", SKIP_TARGET, line("p-0", WALK), line("p-0", WALK))
+            ),
+        ),
+    )
+
+
+def _the_voters_own_line(settings: Mapping[str, SettingValue]) -> GameFacts:
+    own = stated(**{"p-3": ((6, "MEDBAY"), (7, "WEST_HALL"))})
+    return game(
+        settings,
+        meetings=(
+            routes_meeting(
+                route_ballot("p-3", SKIP_TARGET, line("p-3", WALK)), stated_places=own
+            ),
+        ),
+    )
+
+
+def _a_dead_players_line(settings: Mapping[str, SettingValue]) -> GameFacts:
+    dead = stated(**{"p-0": ((6, "MEDBAY"), (7, "WEST_HALL"))})
+    return game(
+        settings,
+        meetings=(
+            routes_meeting(
+                route_ballot("p-3", SKIP_TARGET, line("p-0", WALK)),
+                stated_places=dead,
+                living=frozenset(ROLES) - {"p-0"},
+            ),
+        ),
+    )
+
+
+#: Every planted breach of the two route guards, with where it is named.
+ROUTE_GUARD_BREACHES: Final[
+    tuple[tuple[str, Callable[[Mapping[str, SettingValue]], GameFacts], str], ...]
+] = (
+    ("route_lines_false_to_the_map", _off_map, "meeting meeting-0, voter p-3"),
+    ("route_lines_off_the_table", _unstated_place, "meeting meeting-0, voter p-3"),
+    ("route_lines_off_the_table", _second_line, "meeting meeting-0, voter p-3"),
+    ("route_lines_off_the_table", _the_voters_own_line, "meeting meeting-0, voter p-3"),
+    ("route_lines_off_the_table", _a_dead_players_line, "meeting meeting-0, voter p-3"),
+)
+
+
+@pytest.mark.parametrize(
+    ("key", "build", "where"),
+    ROUTE_GUARD_BREACHES,
+    ids=[f"{row[0]}-{row[1].__name__}" for row in ROUTE_GUARD_BREACHES],
+)
+def test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter(
+    key: str, build: Callable[[Mapping[str, SettingValue]], GameFacts], where: str
+) -> None:
+    """With the route lines setting on, a breach raises naming the set, seed,
+    meeting and voter; without it the same carrier counts nothing (n/a)."""
+
+    with pytest.raises(GameplayCensusConformanceError) as raised:
+        fold_set(inputs(build(ROUTE_ON)))
+    message = str(raised.value)
+    assert CELLS[key].title in message
+    assert census.ROUTE_LINES.describe() in message
+    assert_breach_names_its_place(build(ROUTE_ON), key, where)
+    published = cell(key, build({}))
+    assert not published.in_scope
+    assert (published.numerator, published.denominator) == (0, 0)
+
+
+def test_a_line_is_on_the_table_only_for_a_living_candidate_at_stated_places() -> None:
+    candidates = frozenset({"p-0", "p-1"})
+    assert census.line_on_the_table(
+        line("p-0", WALK), candidates=candidates, stated=STATED
+    )
+    assert census.line_on_the_table(
+        line("p-1", CROSSING), candidates=candidates, stated=STATED
+    )
+    # A place the meeting stated for another player, and for no one.
+    assert not census.line_on_the_table(
+        line("p-1", WALK), candidates=candidates, stated=STATED
+    )
+    assert not census.line_on_the_table(
+        line("p-0", step("MEDBAY", 6, "WEST_HALL", 8, 1)),
+        candidates=candidates,
+        stated=STATED,
+    )
+    # Not a candidate.
+    assert not census.line_on_the_table(
+        line("p-0", WALK), candidates=frozenset({"p-1"}), stated=STATED
+    )
+
+
+def _reach(*ballots: BallotFact, charged: bool = True) -> tuple[int, int, int]:
+    fact = census.RouteChargeFact(
+        1, 1 if charged else 0, ejected_pairs=1, ejected_charged_on_pair=charged
+    )
+    # A second ejecting voter, shown no line, carries the tally.
+    planted = game(
+        ROUTE_ON,
+        meetings=(
+            routes_meeting(
+                route_ballot("p-2", "p-0"),
+                *ballots,
+                outcome="EJECTED",
+                ejected="p-0",
+                route_charges=fact,
+            ),
+        ),
+    )
+    return counts(
+        "ejections_charged_on_a_reconcilable_pair_shown_a_route_line", planted
+    )
+
+
+def test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter() -> None:
+    """Planted: a line shown only to a SKIP voter does not reach, nor does a line
+    about another candidate; a line about the ejected player on an EJECT ballot
+    does."""
+
+    ejecting_ballot = route_ballot("p-4", "p-0")
+    assert _reach(
+        ejecting_ballot, route_ballot("p-3", SKIP_TARGET, line("p-0", WALK))
+    ) == (
+        0,
+        1,
+        0,
+    )
+    assert _reach(route_ballot("p-4", "p-0", line("p-1", CROSSING))) == (0, 1, 0)
+    assert _reach(route_ballot("p-4", "p-0", line("p-0", WALK))) == (1, 1, 0)
+    # An ejection not charged on a pair is outside the cell.
+    assert _reach(route_ballot("p-4", "p-0", line("p-0", WALK)), charged=False) == (
+        0,
+        0,
+        0,
+    )
+    # An ejecting ballot with no recorded call cannot be read.
+    assert _reach(ballot("p-4", "p-0")) == (0, 0, 1)
+
+
+def test_every_route_line_cell_and_table_reads_n_a_without_the_setting() -> None:
+    """In an era without the route lines setting every such cell and table counts
+    nothing, a not-evaluable entry included, and so reads n/a, never 0."""
+
+    folded = section_from_tally(
+        fold_set(
+            inputs(
+                game(
+                    meetings=(
+                        routes_meeting(
+                            ballot("p-1", SKIP_TARGET), route_ballot("p-2", SKIP_TARGET)
+                        ),
+                    )
+                )
+            )
+        )
+    )
+    for key in (
+        *ROUTE_LINE_CELLS,
+        "ejections_charged_on_a_reconcilable_pair_shown_a_route_line",
+    ):
+        published = folded.cells[key]
+        assert not published.in_scope, key
+        assert (published.denominator, published.not_evaluable) == (0, 0), key
+    for key in ("route_lines_per_meeting", "route_steps_by_reading"):
+        assert not folded.tables[key].in_scope and folded.tables[key].counts == {}
+
+
+def test_the_route_rows_follow_their_types(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The readings are read from the route field's type and the line counts
+    from the cap: either moved, the rows follow."""
+
+    monkeypatch.setattr(
+        census,
+        "RouteReading",
+        typing.Literal["walking_fits", "regroup_between", "crawling"],
+    )
+    monkeypatch.setattr(census, "ROUTE_LINE_COUNT_CAP", 4)
+    folded = game(ROUTE_ON, meetings=(routes_meeting(),))
+    assert table("route_steps_by_reading", folded) == {
+        "walking_fits": 0,
+        "regroup_between": 0,
+        "crawling": 0,
+    }
+    assert table("route_lines_per_meeting", folded) == {
+        "0": 1,
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4 or more": 0,
+    }
+
+
+def test_the_route_lines_setting_is_read_by_its_predicate() -> None:
+    assert FIELD_CLASSIFICATION["route_lines_version"] == FieldUse(
+        predicates=("route_lines",)
+    )
+    assert PREDICATES["route_lines"] is census.ROUTE_LINES
+    assert census.ROUTE_LINES.conditions == (("route_lines_version", 1),)
+    assert census.ROUTE_LINES.holds({"route_lines_version": 1})
+    assert not census.ROUTE_LINES.holds({})
+    assert census._field_classification_view()["route_lines_version"] == (
+        "read by: route_lines"
+    )
+
+
+def test_the_phase_two_cells_and_tables_read_no_role() -> None:
+    """The charge cells carry no guard and no scope; the route line cells are
+    scoped, and two guarded, by the route lines setting alone."""
+
+    for key in ROUTE_CHARGE_CELLS:
+        assert CELLS[key].guard is None and CELLS[key].scope is None, key
+        assert CELLS[key].heading == census._ROUTES
+    for key in (
+        *ROUTE_LINE_CELLS,
+        "ejections_charged_on_a_reconcilable_pair_shown_a_route_line",
+    ):
+        assert CELLS[key].scope is census.ROUTE_LINES, key
+        assert CELLS[key].guard in (None, census.ROUTE_LINES), key
+        assert CELLS[key].heading == census._ROUTES
+    for key in ("route_lines_per_meeting", "route_steps_by_reading"):
+        assert TABLES[key].scope is census.ROUTE_LINES
+    assert {name for name, _ in census.ROUTE_LINES.conditions} == {
+        "route_lines_version"
+    }
+
+
+@hypothesis_settings(deadline=None, max_examples=25)
+@given(data=st.data())
+def test_permuting_the_roles_moves_no_route_count(data: st.DataObject) -> None:
+    """Role-blind numerators: on every committed game of the promoted set, any
+    permutation of the seeded roles leaves every charge cell as it was."""
+
+    games = census_inputs(SAMPLES_9P2I).games
+
+    def folded(items: Sequence[GameFacts]) -> dict[str, tuple[int, ...]]:
+        acc = census._Accumulator(label=PLANTED, values=MappingProxyType({}))
+        loaded = census_inputs(SAMPLES_9P2I)
+        for item in items:
+            census._fold_routes(item, loaded, acc)
+        return {key: tuple(acc.cells[key]) for key in ROUTE_CHARGE_CELLS}
+
+    before = folded(games)
+    permuted = []
+    for item in games:
+        players = sorted(item.roles)
+        shuffled = data.draw(st.permutations([item.roles[p] for p in players]))
+        permuted.append(
+            replace(
+                item, roles=MappingProxyType(dict(zip(players, shuffled, strict=True)))
+            )
+        )
+    assert folded(permuted) == before
+
+
+# --------------------------------------------------------------------------- #
+# The route field's lines, read off recorded ballots                           #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture(scope="module")
+def routes_on(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The route field's scripted game, recorded with the route lines setting."""
+
+    directory = tmp_path_factory.mktemp("routes-on")
+    record_routes_game(directory, route_lines=True)
+    return directory
+
+
+@pytest.fixture(scope="module")
+def routes_off(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The same script recorded without it."""
+
+    directory = tmp_path_factory.mktemp("routes-off")
+    record_routes_game(directory, route_lines=False)
+    return directory
+
+
+def test_the_scripted_route_lines_game_is_read_back_and_counted(
+    routes_on: Path,
+) -> None:
+    """The positive carrier: the field card's scripted game, recorded with the
+    route lines. Its first meeting serves one walk about the opener to every
+    ejecting voter; its second serves a walk and a crossing of the regroup."""
+
+    loaded = load_census_inputs(routes_on)
+    (played,) = loaded.games
+    assert census.ROUTE_LINES.holds(played.era.values)
+    served = [
+        line_
+        for fact in played.meetings
+        for item in fact.ballots
+        for line_ in item.route_lines or ()
+    ]
+    assert served and all(
+        census.step_true_to_the_map(
+            item, neighbours=loaded.neighbours, regroup_ticks=fact.regroup_ticks
+        )
+        for fact in played.meetings
+        for ballot_ in fact.ballots
+        for line_ in ballot_.route_lines or ()
+        for item in line_.steps
+    )
+    folded = section_from_tally(fold_set(loaded))
+    got = {
+        key: (folded.cells[key].numerator, folded.cells[key].denominator)
+        for key in (
+            *ROUTE_LINE_CELLS,
+            "ejections_charged_on_a_reconcilable_pair_shown_a_route_line",
+        )
+    }
+    assert got == {
+        "meetings_with_a_route_line": (2, 2),
+        "ballots_carrying_route_lines": (12, 13),
+        "route_lines_false_to_the_map": (0, 15),
+        "route_lines_off_the_table": (0, 15),
+        "ejections_charged_on_a_reconcilable_pair_shown_a_route_line": (1, 1),
+    }
+    assert folded.cells["route_lines_false_to_the_map"].by_construction == (
+        "route_lines_version = 1"
+    )
+    assert folded.tables["route_lines_per_meeting"].counts == {
+        "0": 0,
+        "1": 1,
+        "2": 1,
+        "3 or more": 0,
+    }
+    assert folded.tables["route_steps_by_reading"].counts == {
+        "walking_fits": 2,
+        "regroup_between": 1,
+    }
+
+
+def test_the_scripted_game_recorded_without_the_setting_reads_n_a(
+    routes_off: Path,
+) -> None:
+    loaded = load_census_inputs(routes_off)
+    assert all(
+        item.route_lines == ()
+        for fact in loaded.games[0].meetings
+        for item in fact.ballots
+    )
+    folded = section_from_tally(fold_set(loaded))
+    for key in ROUTE_LINE_CELLS:
+        assert not folded.cells[key].in_scope
+        assert folded.cells[key].denominator == 0
+
+
+def _restamped(source: Path, destination: Path, change: Callable[[str], str]) -> Path:
+    """A copy of ``source`` whose MANIFEST stamps ``change`` rewrites."""
+
+    shutil.copytree(source, destination)
+    manifest = destination / "MANIFEST.md"
+    text = manifest.read_text(encoding="utf-8")
+    changed = change(text)
+    assert changed != text
+    manifest.write_text(changed, encoding="utf-8")
+    return destination
+
+
+_ARM: Final = "+vote_ballot.qwen3_6_27b.v8.route_lines_v1"
+
+
+def test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises(
+    routes_on: Path, routes_off: Path, tmp_path: Path
+) -> None:
+    """Planted: the ON game's stamp with the route lines arm dropped, and the OFF
+    game's stamp crediting it."""
+
+    lacking = _restamped(
+        routes_on, tmp_path / "lacking", lambda text: text.replace(_ARM, "")
+    )
+    with pytest.raises(
+        GameplayCensusConformanceError,
+        match=r"seed 0: the ballot stamp lacks the route lines arm while the "
+        "recorded settings serve route lines",
+    ):
+        load_census_inputs(lacking)
+    crediting = _restamped(
+        routes_off,
+        tmp_path / "crediting",
+        lambda text: text.replace(
+            "vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1 ",
+            "vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1" + _ARM + " ",
+        ),
+    )
+    with pytest.raises(
+        GameplayCensusConformanceError,
+        match=r"seed 0: the ballot stamp credits the route lines arm while the "
+        "recorded settings do not serve route lines",
+    ):
+        load_census_inputs(crediting)
+
+
+def test_the_stamp_check_follows_the_arm_spines_derivation(
+    routes_on: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The arm's suffix and template are the spine's: with either moved, the ON
+    game's stamp no longer credits it, and a stamp in the moved form does."""
+
+    stamps = ("vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1+" + _ARM[1:],)
+    assert census.route_lines_stamped(stamps)
+    monkeypatch.setattr(
+        census, "experiment_arm_suffix", lambda name, value: f"routes_v{value}"
+    )
+    assert not census.route_lines_stamped(stamps)
+    assert census.route_lines_stamped(("vote_ballot.qwen3_6_27b.v8.routes_v1",))
+    with pytest.raises(
+        GameplayCensusConformanceError, match="lacks the route lines arm"
+    ):
+        load_census_inputs(routes_on)
+    moved = _restamped(
+        routes_on,
+        tmp_path / "moved",
+        lambda text: text.replace(_ARM, "+vote_ballot.qwen3_6_27b.v8.routes_v1"),
+    )
+    assert load_census_inputs(moved).games[0].meetings
+    monkeypatch.undo()
+    monkeypatch.setattr(
+        census,
+        "EXPERIMENT_ARM_TEMPLATES",
+        MappingProxyType({"route_lines_version": ("accusation_round",)}),
+    )
+    assert not census.route_lines_stamped(stamps)
+    assert census.route_lines_stamped(
+        ("accusation_round.qwen3_6_27b.v6.route_lines_v1",)
+    )
+
+
+def _served_entry(path: Path) -> tuple[MeetingReplayEntry, str]:
+    """The ON game's first meeting row and a voter whose ballot carries a block."""
+
+    row = next(
+        item for item in read_all_entries(path) if isinstance(item, MeetingReplayEntry)
+    )
+    voter = next(
+        call.agent_id
+        for call in row.llm_calls
+        if call.agent_id is not None and "\n<routes>\n" in call.prompt
+    )
+    assert voter is not None
+    return row, voter
+
+
+def _with_prompts(
+    row: MeetingReplayEntry, change: Callable[[str], str]
+) -> MeetingReplayEntry:
+    return row.model_copy(
+        update={
+            "llm_calls": tuple(
+                call.model_copy(update={"prompt": change(call.prompt)})
+                for call in row.llm_calls
+            )
+        }
+    )
+
+
+def test_a_route_block_the_fields_parser_refuses_raises_naming_the_voter(
+    routes_on: Path,
+) -> None:
+    row, voter = _served_entry(routes_on / "replay-seed-0.jsonl")
+    where = "set planted, seed 0, meeting m"
+    assert census.ballot_route_lines(row, voter, served=True, where=where)
+    planted = _with_prompts(
+        row, lambda text: text.replace("walking fits", "walking flies")
+    )
+    with pytest.raises(GameplayCensusConformanceError) as refused:
+        census.ballot_route_lines(planted, voter, served=True, where=where)
+    assert str(refused.value).startswith(
+        f"{where}, voter {voter}: the route lines block does not parse: "
+    )
+
+
+def test_a_route_block_in_a_game_that_does_not_serve_route_lines_raises(
+    routes_on: Path,
+) -> None:
+    row, voter = _served_entry(routes_on / "replay-seed-0.jsonl")
+    with pytest.raises(
+        GameplayCensusConformanceError,
+        match=f"meeting m, voter {voter}: a ballot carries route lines its game's "
+        "settings do not serve",
+    ):
+        census.ballot_route_lines(row, voter, served=False, where="meeting m")
+    assert (
+        census.ballot_route_lines(row, "p-99", served=False, where="meeting m") is None
+    )
+
+
+def test_the_census_reads_a_route_line_by_the_fields_own_pattern(
+    routes_on: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The line pattern is the field's, imported: a perturbed copy of it in the
+    field's module refuses the served block the census reads."""
+
+    row, voter = _served_entry(routes_on / "replay-seed-0.jsonl")
+    assert census.ballot_route_lines(row, voter, served=True, where="meeting m")
+    monkeypatch.setattr(
+        route_lines_module,
+        "ROUTE_LINE_PATTERN",
+        re.compile(
+            r"- `(?P<subject>[^`\s]+)`, places said at this table: (?P<steps>.+)\."
+        ),
+    )
+    with pytest.raises(GameplayCensusConformanceError, match="does not parse"):
+        census.ballot_route_lines(row, voter, served=True, where="meeting m")
+
+
+# --------------------------------------------------------------------------- #
+# The field's reach, derived from the census carrier through the field          #
+# --------------------------------------------------------------------------- #
+
+
+def _served_counterfactually(loaded: CensusInputs, set_dir: Path) -> CensusInputs:
+    """``loaded`` with every recorded ballot carrying the lines the route field
+    would have served it (built by the field's own builder from the meeting's
+    transcript, the voter's living candidates and the meeting's regroup ticks),
+    under the route lines setting."""
+
+    def on(key: EraKey) -> EraKey:
+        return replace(
+            key, settings=canonical_settings({**dict(key.settings), **ROUTE_ON})
+        )
+
+    games: list[GameFacts] = []
+    for item in loaded.games:
+        rows = {
+            row.meeting_id: row
+            for row in read_all_entries(set_dir / f"replay-seed-{item.seed}.jsonl")
+            if isinstance(row, MeetingReplayEntry)
+        }
+        meetings = []
+        for fact in item.meetings:
+            transcript = rows[fact.meeting_id].transcript
+            meetings.append(
+                replace(
+                    fact,
+                    ballots=tuple(
+                        replace(
+                            ballot_,
+                            route_lines=build_route_lines(
+                                transcript=transcript,
+                                candidate_targets=tuple(
+                                    sorted(fact.living - {ballot_.voter})
+                                ),
+                                regroup_ticks=fact.regroup_ticks,
+                            ),
+                        )
+                        for ballot_ in fact.ballots
+                    ),
+                )
+            )
+        games.append(replace(item, era=on(item.era), meetings=tuple(meetings)))
+    return replace(loaded, era=on(loaded.era), games=tuple(games))
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("label", _ROUND_COLUMNS)
+def test_the_fields_reach_is_derivable_from_the_census_through_the_field(
+    label: str,
+) -> None:
+    """The reach the route-lines replay publishes (r2: 31 of 40, and 7 of 7 at
+    witness meetings) is the census's reach cell over the carrier with each
+    ballot carrying the lines the field's own builder gives it; every one of
+    those lines passes the census's own check of the map and the table."""
+
+    column, loaded = _round_column(label)
+    published_column = next(
+        item
+        for item in json.loads(ROUTE_LINES_JSON.read_text(encoding="utf-8"))["columns"]
+        if item["label"] == label
+    )
+    assert published_column["route_check_parity"] is True
+    assert published_column["sha"] == column["sha"]
+    published = published_column["all"]
+    counterfactual = _served_counterfactually(loaded, repo_root / column["path"])
+    folded = fold_set(counterfactual)
+    reach = folded.cells["ejections_charged_on_a_reconcilable_pair_shown_a_route_line"]
+    assert (reach.numerator, reach.denominator) == (
+        published["field_reaches_M"],
+        published["M"],
+    )
+    witness_reach = 0
+    witness_cases = 0
+    for item in counterfactual.games:
+        for index, fact in enumerate(item.meetings):
+            charges = fact.route_charges
+            if (
+                fact.ejected is None
+                or charges is None
+                or not charges.ejected_charged_on_pair
+            ):
+                continue
+            if not census.is_witness_meeting(
+                fact, kills=item.kills, previous_tick=_previous_tick(item, index)
+            ):
+                continue
+            witness_cases += 1
+            witness_reach += any(
+                line_.subject == fact.ejected
+                for ballot_ in fact.ballots
+                if ballot_.target == fact.ejected
+                for line_ in ballot_.route_lines or ()
+            )
+    assert (witness_reach, witness_cases) == (
+        published["field_reaches_W"],
+        published["W"],
+    )
+    assert dict(folded.tables["route_steps_by_reading"]) == published["steps"]
+    assert folded.cells["route_lines_false_to_the_map"].numerator == 0
+    assert folded.cells["route_lines_off_the_table"].numerator == 0
