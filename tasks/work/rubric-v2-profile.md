@@ -124,6 +124,52 @@ dashboard renders its "No tournament report" card (`TournamentDashboard.tsx:1115
 Each item names its enforcing mechanism and the planted or perturbed case that turns its test red; each new test is
 seen red before the code it guards exists.
 
+- [x] Review correction: CI's Project checks failed at `53b9ffd3` because item 17's planted case read `76270d6c`'s
+  scorer with `git show`, which the shallow `actions/checkout` cannot answer. The case now rebuilds that scorer in
+  `tmp_path` from today's module and the deleted served-file write the test carries as text
+  (`_RETIRED_SERVED_FILE_WRITE` in `tests/api/test_sets.py`), so it reads no history; the rebuilt scorer still writes
+  the file and still fails the check (`test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check`), and its
+  code is AST-identical to `76270d6c`'s with docstrings stripped. Proved on a depth-1 clone of the head and in CI
+  (Results, round 1).
+- [x] Review correction: T1's "ejects someone else" clause is pinned. Removing two ungrounded ballots hands the tally
+  from `p-3` to `p-6`; decisive, read-as-SKIP and every-ungrounded-removed each trip
+  (`test_a_removal_that_hands_the_tally_to_another_player_trips_decisive`), and the two `is None` mutants are red.
+- [x] Review correction: the saturation count reads untripped games only, as the catalogue does. A 50-game era
+  where 37 untripped games and 1 tripped game carry a double kill is a shelf of 37, and no game carries it as a
+  moment (`test_a_tripped_member_does_not_saturate_a_candidate`); dropping the trip filter is red.
+- [x] Review correction: a self-accusation keeps no suspicion on a player. The player who drew ballots only accuses
+  themselves at the next meeting and suspicion moved holds (`test_a_self_accusation_keeps_no_suspicion_on_a_player`);
+  dropping the speaker filter is red.
+- [x] Review correction: the two loaded-source reads are pinned. A planted ending the recorded types gain leads the
+  leak rows (`test_the_leak_facts_follow_the_recorded_endings`), and an eighth grounding label stops
+  `read_pre_reveal` and `build_profile` (`test_an_eighth_grounding_label_stops_the_reading_and_the_profile`); each
+  literal swap is red.
+- [x] Review correction: the seven named raise-site arguments are pinned by full-message matches with values off
+  every default: seed 9 and 1 against 2 meetings (`test_the_projection_refuses_a_mismatched_scorecard`), seed 6, tick
+  5 and `body-p-1-5` (`test_a_kill_or_a_body_with_no_victim_raises`), and the set path
+  (`test_a_set_with_no_roster_names_no_seedset`); each constant argument is red.
+- [x] Review correction: item 1 and Results state the mypy plant at its strength. `BlindMeeting` holds no report, so
+  strict mypy refuses `meeting.report.roles`; a T2 handed a `GameReport` as a parameter passes mypy and is caught by
+  item 2's role property (`test_a_t2_reading_the_report_roles_fails_the_role_property`).
+- [x] Review correction: the item 17 planted case is neither skipped nor weakened. It runs on every checkout and keeps
+  both readings: today's scorer refuses `--set-dir` and writes nothing, the rebuilt pre-retirement scorer writes the
+  file and fails the same check.
+- [x] Review correction: the five location arguments are pinned. The copy's path in
+  `test_the_stamp_is_read_before_and_after_the_walk`, `tmp_path` in `test_a_set_with_no_roster_names_no_seedset`, set
+  `planted/9p2i` and seed 9 in the no-route and no-recorded-ending cases, and seed 9 in the ejection win with no
+  meeting (`test_an_ejection_win_counts_at_the_deciding_meeting`); each constant argument is red.
+- [x] Review correction: the publisher reads the impostor count and the registry it is given. A 9-player roster with
+  1 or 3 impostors is refused by name (`test_a_nine_player_set_of_another_impostor_count_is_refused`), and a registry
+  that omits the shown set gives it no era (`test_the_era_is_the_registrys`); both mutants are red.
+- [x] Review correction: the gate's environment is stated. Results round 1 quotes `bash scripts/check.sh`'s exit code
+  from this full-history worktree and the CI run of the pushed head (a shallow checkout) separately.
+- [x] Review correction: mutation row M3 now reads SURVIVED on the first run. `test_a_malformed_file_fails_loud`
+  matches the file path in both invalid-profile-file messages, and N5, T4 and B2, whose suites held the history
+  test, were re-run against their named killers alone; each is red (Results, round 1).
+- [x] Review correction: every listed location prefix is pinned in its existing test: the loader's two `{path}`
+  arguments and its absent-file path, the ten profile-module locations, and the publisher's stamp race, missing
+  roster and era id. Results round 1 carries the probe table.
+
 - [x] **1. The pure module and its role-stripped projection.** `eval/game_profile.py` (new) imports the carrier
   (`load_census_inputs`, `tally_outcome`, `grounding_labels`) and row 3's helpers read-only, and writes nothing.
   - `BlindGame`, with `BlindMeeting`, `BlindBallot` and `BlindKill`, frozen dataclasses built only by
@@ -139,8 +185,10 @@ seen red before the code it guards exists.
   - `RevealGame` adds roles, the end reason and the final task count. Only reveal shelves, reveal facets and the leak
     check read it.
   - Mechanism: strict mypy. Planted: a test runs mypy on a `tmp_path` copy whose slow-burn predicate reads
-    `game.roles` and requires the attribute error; a second copy whose T2 takes a `GameReport` and reads its `roles`
-    fails mypy the same way.
+    `game.roles` and requires the attribute error; a second copy whose T2 reads a report off its meeting
+    (`meeting.report.roles`) fails mypy the same way, since `BlindMeeting` holds no report. A T2 handed a `GameReport`
+    as a parameter passes mypy, because `GameReport` carries `roles`; item 2's role property catches that route
+    (`test_a_t2_reading_the_report_roles_fails_the_role_property`).
 - [x] **2. No pre-reveal byte reads a role or the ending.** Hypothesis properties over hand-built carriers and the
   committed one: permuting the seeded roles (counts kept) on the census carrier and on `load_set_inputs`'s
   `GameReport`s together, or swapping the end reason and winner for another recorded value on both, leaves every
@@ -286,8 +334,9 @@ seen red before the code it guards exists.
   that runs `rubric_score.main` with `--set-dir` on a `tmp_path` copy of the era's set, given synthetic facts stamped
   with that copy's recording fingerprint (the `_synthetic_facts` idiom of `tests/api/test_sets.py:341`, since the
   unwidened extractor refuses the era), and requires a non-zero exit and no `results-rubric-score.json` written.
-  Planted: the same run against `76270d6c`'s scorer, loaded from `git show` into `tmp_path`, writes the file and fails
-  the test.
+  Planted: the same run against `76270d6c`'s scorer, rebuilt in `tmp_path` from today's module and the deleted
+  served-file write the test carries as text (so it needs no git history; its code is `76270d6c`'s, docstrings
+  aside), writes the file and fails the test.
 - [x] **18. Nothing reaches an agent.** A new `.importlinter` forbidden contract keeps `agents`, `meetings`,
   `orchestrator`, `engine` and `training` from importing `eval.game_profile` or `scripts.publish_game_profile`;
   the bake-off entrant scan already bans every `eval.*` import. Mechanism: `uv run lint-imports`. Planted: one leg per
@@ -633,7 +682,7 @@ either moved to the profile with the same shape or was deleted with the mechanis
 | --- | --- | --- | --- |
 | `test_eval_rubric_is_per_set` (`tests/api/test_sets.py`) | both committed sets 404 on `/eval/rubric`; a scratch parent serves the scored set and 404s the other | `test_eval_game_profile_is_per_set` | 9p2i serves fresh with its seedset, 4p1i 404s; the scratch parent serves the profiled set fresh on its key and 404s the bare one |
 | `test_the_promoted_set_ships_no_rubric_and_keeps_its_key` (`test_sets.py`) | the loader raises; `_set_manifest_sha` agrees with the loader's key | `test_the_promoted_set_ships_its_profile_on_its_own_key` | the served file's MANIFEST key, fingerprint and era equal the loader's own derivations, and the loader serves it fresh |
-| (new) | | `test_version_one_writes_no_served_file_for_the_era`, `test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check` | item 17's run of `rubric_score.main --set-dir` exits non-zero and writes nothing; `76270d6c`'s scorer, from `git show`, writes the file and fails |
+| (new) | | `test_version_one_writes_no_served_file_for_the_era`, `test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check` | item 17's run of `rubric_score.main --set-dir` exits non-zero and writes nothing; `76270d6c`'s scorer, rebuilt without git history (round 1), writes the file and fails |
 | `test_rubric_endpoint_404_without_rubric_file` (`tests/api/test_view_model.py`) | `/eval/rubric` 404s with no file | `test_game_profile_endpoint_404_without_a_profile_file` | the same, on the new route |
 | `test_rubric_stamps_git_sha_from_8col_flags_manifest` | the key read from an 8-column manifest | `test_the_profile_stamp_reads_git_sha_from_an_8col_flags_manifest` | the same key, through the publisher's stamp and the loader |
 | `test_rubric_is_stale_prefix_logic`, and the fingerprint-shape cases | prefix, `None` and malformed cases of `_rubric_is_stale` | `test_provenance_is_stale_prefix_logic` and the same cases | every case kept, on the renamed `_provenance_is_stale` |
@@ -691,7 +740,9 @@ either moved to the profile with the same shape or was deleted with the mechanis
 **Planted proofs, red then green.** Each named test holds the planted case beside the real one, so the suite shows
 both readings.
 - Item 1: `test_strict_mypy_refuses_a_role_read_in_a_pre_reveal_reading` (a slow-burn copy reading `game.roles`, and a
-  T2 copy taking a `GameReport` and reading its `roles`, each fail strict mypy with the attribute error);
+  T2 copy reading `meeting.report.roles`, each fail strict mypy with the attribute error, since `BlindGame` holds no
+  roles and `BlindMeeting` no report; corrected in round 1: a T2 handed a `GameReport` as a parameter passes mypy and
+  is caught only by item 2's `test_a_t2_reading_the_report_roles_fails_the_role_property`);
   `test_a_scorecard_meeting_id_differing_from_the_carriers_raises`.
 - Item 2: `test_a_fold_reading_the_carrier_fails_both_properties`, `test_a_fold_reading_the_ending_fails_the_ending_property`,
   `test_a_t2_reading_the_report_roles_fails_the_role_property`.
@@ -735,8 +786,9 @@ both readings.
   e2e/bundle.spec.ts`) fails at `evidence-journey.ts:66` (no "The reporter saw it happen" shelf holding seed 19), and
   passes on the head's bundle.
 - Item 16: "a description carrying a threshold fails (planted)".
-- Item 17: `test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check` (`76270d6c`'s scorer, read with
-  `git show`, writes `results-rubric-score.json`) beside `test_version_one_writes_no_served_file_for_the_era`.
+- Item 17: `test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check` (`76270d6c`'s scorer, rebuilt in
+  `tmp_path` from today's module and the deleted served-file write since round 1, writes `results-rubric-score.json`)
+  beside `test_version_one_writes_no_served_file_for_the_era`.
 - Item 18: `test_import_linter_refuses_a_planted_import_of_the_game_profile`, one leg per source package, each
   naming the contract BROKEN.
 - Item 19: `test_a_bake_that_skips_the_trim_fails_the_shape`, `test_a_bake_passing_the_class_tables_through_fails_the_key_set`,
@@ -818,7 +870,7 @@ No survivor is named equivalent.
 | K5 | `eval/game_profile.py` | the ejected player's role replaced by a constant (a crewmate ejected) | killed | `test_the_leak_facts_are_each_recorded_ending_then_the_two_ejection_facts` |
 | M1 | `eval/game_profile.py` | the meeting index dropped from the reported-body join message | SURVIVED on the first run; killed at the head | `test_a_reported_body_joining_no_kill_raises` |
 | M2 | `scripts/publish_game_profile.py` | the set path dropped from the roster refusal | killed | `test_a_four_player_set_is_refused_by_name` |
-| M3 | `api/replay_loader.py` | the file path dropped from the malformed-file message | killed | `test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check` |
+| M3 | `api/replay_loader.py` | the file path dropped from the malformed-file message | SURVIVED on the first run (the kill recorded here came from the history test failing in a scratch copy with no git history, not from the mutant); killed in round 1 | `test_a_malformed_file_fails_loud` (round 1 probe A1) |
 | T1 | `eval/game_profile.py` | `off_target` dropped from `READING_LABELS` | killed | `test_one_line_two_readings` |
 | T2 | `eval/game_profile.py` | `(RUNAWAY, reads_the_ending)` dropped from the reveal shelves | killed | `test_the_committed_profile_matches_a_recomputation` |
 | T3 | `scripts/build_demo_bundle.py` | `(reveal, class_tables)` dropped from the unbaked keys | killed | `test_the_profile_is_trimmed_to_the_baked_seeds` |
@@ -859,4 +911,148 @@ directly from the script, not through a pipe: **exit 0**. Its steps: `ruff check
 567 files already formatted; `lint-imports` 5 contracts kept, 0 broken; `validate_task_docs.py` passed (390 phase
 tasks, 390 prompts, 102 work cards); `generate_prompts.py --check` "All 390 prompts are in sync."; `mypy .` no issues in 538 source files;
 `pytest -n auto --dist loadfile` 10,855 passed, 20 skipped, 3 xfailed in 347.5 s; frontend `npm run lint`, `npm run
-tsc:check`, `npm run test` (27 files, 808 tests passed) and `npm run build` clean.
+tsc:check`, `npm run test` (27 files, 808 tests passed) and `npm run build` clean. That exit code came from a
+full-history local worktree: CI's Project checks, on a shallow checkout, failed one test at that head and at
+`53b9ffd3` (the item 17 planted case read `76270d6c` with `git show`); round 1 below corrects it.
+
+### Review corrections, round 1 (2026-10-07)
+
+Built on `53b9ffd3`; `origin/main` was still `ef1a2a59` at the final fetch, so `main` needed no merge. Commits:
+`6fdfa78b` (the tests), this Results commit, then the commit recording the gate. No production line moved:
+`git diff --stat 53b9ffd3` lists this card and four test files only (`tests/eval/test_game_profile.py`,
+`tests/scripts/test_publish_game_profile.py`, `tests/api/test_game_profile_view.py`, `tests/api/test_sets.py`), so the
+served file, the page and every number above stand as they were measured; the reading and the bundle below are
+re-measured at this head.
+
+**The findings and their repair.** The thirteen verifier findings (correctness, integrity and documentation lenses)
+name eight defects.
+1. CI red at `53b9ffd3` (one finding in each lens). Run 37614414977, job 112769195055: 1 failed, 10,834 passed;
+   `test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check` ran `git show
+   76270d6c:experiments/lab/rubric_score.py`, which exits 128 on the shallow `actions/checkout`. The planted case now
+   rebuilds the pre-retirement scorer from today's module and `_RETIRED_SERVED_FILE_WRITE`, five pairs of (a line of
+   today's module, that line with the deleted code restored beside it) carried as text in `tests/api/test_sets.py`,
+   each anchor asserted to occur once. It is not skipped and not weakened: it runs on every checkout and keeps both
+   readings (today's scorer refuses `--set-dir` and writes nothing; the rebuilt one writes
+   `results-rubric-score.json` and fails the same check). The rebuild's code is `76270d6c`'s: an AST comparison with
+   every docstring stripped reads equal, and a `diff` against `git show 76270d6c:experiments/lab/rubric_score.py`
+   shows 13 hunks, every one a docstring or a comment (scratch `rebuild_diff.py`, `ast_equal.py`). Without history:
+   on a `git archive HEAD` export with no `.git` directory, `tests/api/test_sets.py` reads 62 passed. CI at the pushed
+   head: in the gate paragraph below.
+2. T1's "ejects someone else" clause was unpinned (V12, V13).
+   `test_a_removal_that_hands_the_tally_to_another_player_trips_decisive`: four ballots eject `p-3` over three for
+   `p-6`; with the `off_target` and `uncited` ballots removed the table ejects `p-6`, and decisive, read as SKIP and
+   every ungrounded ballot removed each trip.
+3. The saturation count in `read_pre_reveal` was unpinned on its tripped-game filter (V04).
+   `test_a_tripped_member_does_not_saturate_a_candidate`: 37 untripped games and one tripped game of 50 carry a
+   double kill; the catalogue says shelf, the shelf lists seeds 1 to 37, no game carries it as a moment, and the
+   reading's saturated list is empty.
+4. Suspicion moved's self-accusation filter was unpinned (V01). `test_a_self_accusation_keeps_no_suspicion_on_a_player`:
+   the player who drew a ballot only accuses themselves at the next meeting, and the shelf marks that meeting.
+5. Two loaded-source reads survived the literal swap (V19, V20). `test_the_leak_facts_follow_the_recorded_endings`:
+   a planted ending the recorded types gain, placed first, leads the leak rows with its game.
+   `test_an_eighth_grounding_label_stops_the_reading_and_the_profile`: a label the meeting layer gains stops
+   `read_pre_reveal` and `build_profile` with the unclassified error.
+6. Raise-site message arguments were unpinned (correctness V15 to V18 and V21 to V23; integrity V5, V6, V31, V32,
+   V34; the documentation lens's 15 sites). Each existing test now matches its full message, anchored, with values
+   off every default: seeds 4, 6, 9 and 12, meeting index 1, 1 against 2 meetings, seeds [9] against [] and [8],
+   tick 5 and `body-p-1-5`, set `planted/9p2i`, the copy's path, `tmp_path`, the era id and the loader's file path in
+   both invalid-profile-file messages. Strengthened in the same pass: the absent-file path, the candidate name and
+   only the members outside the era, the 2x2 tuple of the negative-count refusal, the value in `_decimal`'s refusal,
+   the shelf and chip names in the seed-order refusal, and `(10, None)` beside `(None, 14)` for the final task count.
+7. The publisher's roster impostor count (V10, K) and registry path set (V9, S) were unpinned.
+   `test_a_nine_player_set_of_another_impostor_count_is_refused` (9 players with 1 or 3 impostors, refused by name)
+   and, in `test_the_era_is_the_registrys`, a registry without the shown set gives it no era.
+8. Two documentation claims overstated. Item 1's second mypy plant is restated at its strength in the acceptance item
+   and the planted-proofs line: strict mypy refuses `meeting.report.roles` because `BlindMeeting` holds no report,
+   while a T2 handed a `GameReport` as a parameter passes mypy and only item 2's
+   `test_a_t2_reading_the_report_roles_fails_the_role_property` catches it. Mutation row M3 now reads SURVIVED on the
+   first run: its recorded kill came from the history test failing in a scratch copy with no history, not from the
+   mutant. Rows re-checked for the same cause: only M3 named that test; N5, T4 and B2, the other first-pass rows on
+   `api/replay_loader.py`, whose suites held it, were re-run against their named killers alone and each is red (probe
+   table); every other row's named killer reads no git history (the card's suites call git only in
+   `tests/test_firewall.py`, `git ls-files`, and `tests/scripts/test_refresh_samples.py`, `git status`, both of which a
+   shallow checkout answers).
+
+**The probe table.** One bounded pass of 38 mutants over the spans the findings name and the spans this round
+changed, from the eight listed classes only. Each mutant was applied alone in place, the targeted suite run with `-x`
+(`tests/eval/test_game_profile.py`, `tests/scripts/test_publish_game_profile.py`, or
+`tests/api/test_game_profile_view.py` with `tests/api/test_view_model.py`; N5, T4 and B2 against their named killer
+alone), and the file restored from its saved bytes and checked equal (scratch `mutate.py`; `git status` showed no
+production file changed after the pass). The killer is the first failing test. All 38 are killed; none survives and
+none is named equivalent. The first run is the verifiers' at `53b9ffd3`, where each of V01, V04, V09, V10, V12, V13,
+V19, V20 and the named message arguments passed every suite.
+
+| id | class | file | mutant | killed by |
+| --- | --- | --- | --- | --- |
+| V12 | N | `eval/game_profile.py` | the decisive tally `!= ejected` read as `is None` | `test_a_removal_that_hands_the_tally_to_another_player_trips_decisive` |
+| V13 | N | `eval/game_profile.py` | the read-as-SKIP tally `!= ejected` read as `is None` | `test_a_removal_that_hands_the_tally_to_another_player_trips_decisive` |
+| V04 | F | `eval/game_profile.py` | the tripped-game filter dropped from the saturated count (`read_pre_reveal`) | `test_a_tripped_member_does_not_saturate_a_candidate` |
+| V01 | F | `eval/game_profile.py` | the self-accusation filter dropped from the charged set (`_suspicion_moved`) | `test_a_self_accusation_keeps_no_suspicion_on_a_player` |
+| V19 | L | `eval/game_profile.py` | `game_endings()` in `era_facts` replaced by its six-ending literal | `test_the_leak_facts_follow_the_recorded_endings` |
+| V20 | L | `eval/game_profile.py` | `label_classes()` in `read_pre_reveal` replaced by `LABEL_CLASSES` | `test_an_eighth_grounding_label_stops_the_reading_and_the_profile` |
+| Ma | M | `eval/game_profile.py` | the scorecard's meeting count in the count refusal set to 0 | `test_the_projection_refuses_a_mismatched_scorecard` |
+| Mb | M | `eval/game_profile.py` | the carrier's meeting count in the count refusal set to 0 | `test_the_projection_refuses_a_mismatched_scorecard` |
+| Mc | M | `eval/game_profile.py` | the seed in the no-route refusal set to 0 | `test_the_projection_refuses_a_mismatched_scorecard` |
+| Md | M | `eval/game_profile.py` | the seed in the scorecard seed-twice refusal set to 0 | `test_the_projection_refuses_a_mismatched_scorecard` |
+| Me | M | `eval/game_profile.py` | the seed in the carrier seed-twice refusal set to 0 | `test_the_projection_refuses_a_mismatched_scorecard` |
+| Mf | M | `eval/game_profile.py` | the location in the kill-names-no-victim refusal set to a constant | `test_a_kill_or_a_body_with_no_victim_raises` |
+| Mg1 | M | `eval/game_profile.py` | the location in the body-names-no-victim refusal set to a constant | `test_a_kill_or_a_body_with_no_victim_raises` |
+| Mg2 | M | `eval/game_profile.py` | the body id in the body-names-no-victim refusal set to a constant | `test_a_kill_or_a_body_with_no_victim_raises` |
+| Mh | M | `eval/game_profile.py` | the scorecard's seeds in the seed-set refusal set to `[]` | `test_the_projection_refuses_a_mismatched_scorecard` |
+| Mi | M | `eval/game_profile.py` | the location in the carrier-holds-no-game refusal set to a constant | `test_the_reveal_projection_refuses_an_unknown_or_missing_ending` |
+| Mj | M | `eval/game_profile.py` | the location in the no-recorded-ending refusal set to a constant | `test_the_reveal_projection_refuses_an_unknown_or_missing_ending` |
+| Mk | M | `eval/game_profile.py` | the location in the no-final-task-count refusal set to a constant | `test_the_reveal_projection_refuses_an_unknown_or_missing_ending` |
+| Ml | M | `eval/game_profile.py` | the location in the unknown-ending refusal set to a constant | `test_the_reveal_projection_refuses_an_unknown_or_missing_ending` |
+| Mm | M | `eval/game_profile.py` | the candidate name in the members-outside-the-era refusal set to a constant | `test_members_outside_the_era_are_refused` |
+| Mn | M | `eval/game_profile.py` | the seed in the ejection-win-with-no-meeting refusal set to 0 | `test_an_ejection_win_counts_at_the_deciding_meeting` |
+| Mo | M | `eval/game_profile.py` | the meeting index in the projection's meeting location set to 0 | `test_a_scorecard_meeting_id_differing_from_the_carriers_raises` |
+| Mp | M | `eval/game_profile.py` | the meeting index in the ejecting `none_held` refusal set to 0 | `test_an_ejecting_none_held_ballot_raises_naming_all_four` |
+| Mq | M | `eval/game_profile.py` | the name in the seed-order refusal set to a constant | `test_members_out_of_seed_order_raise` |
+| Mr | M | `eval/game_profile.py` | the table in the negative-count refusal set to `(0, 0, 0, 0)` | `test_the_fisher_p_reproduces_the_design_memos_tables` |
+| Ms | M | `eval/game_profile.py` | the value in `_decimal`'s refusal set to a constant | `test_the_served_constants_are_the_modules` |
+| P1 | K | `scripts/publish_game_profile.py` | the roster's impostor read replaced by 2 (`require_profile_roster`) | `test_a_nine_player_set_of_another_impostor_count_is_refused[1]` |
+| P2 | S | `scripts/publish_game_profile.py` | the given registry's paths swapped for `COMMITTED_SETS`' (`era_id`) | `test_the_era_is_the_registrys` |
+| P3 | M | `scripts/publish_game_profile.py` | the set path in the roster refusal set to a constant | `test_a_nine_player_set_of_another_impostor_count_is_refused[3]` |
+| P4 | M | `scripts/publish_game_profile.py` | the set path in the no-roster refusal set to a constant | `test_a_set_with_no_roster_names_no_seedset` |
+| P5 | M | `scripts/publish_game_profile.py` | the set path in the walk-changed refusal set to a constant | `test_the_stamp_is_read_before_and_after_the_walk` |
+| P6 | M | `scripts/publish_game_profile.py` | the era id in the two-sets refusal set to a constant | `test_an_era_holding_two_sets_is_refused` |
+| A1 | M | `api/replay_loader.py` | the path in the not-an-object message set to a constant (row M3 re-run) | `test_a_malformed_file_fails_loud` |
+| A2 | M | `api/replay_loader.py` | the path in the loader's-to-set message set to a constant | `test_a_malformed_file_fails_loud` |
+| A3 | M | `api/replay_loader.py` | the path in the absent-file error set to a constant | `test_the_four_player_set_ships_no_profile` |
+| N5 | N | `api/replay_loader.py` | the absent-file test inverted (row N5 re-run, named killer alone) | `test_the_shown_set_serves_its_profile_fresh` |
+| T4 | T | `api/replay_loader.py` | `view_model_version` dropped from the refused keys (row T4 re-run, named killer alone) | `test_a_malformed_file_fails_loud` |
+| B2 | B | `api/replay_loader.py` | the stale and fresh branches swapped (row B2 re-run, named killer alone) | `test_the_shown_set_serves_its_profile_fresh` |
+
+**Verification at `6fdfa78b`** (production code identical to `53b9ffd3`; a scratch `validate.sh` ran each command and
+logged its exit code directly).
+- `env | grep -c '^AILIBI_'`: 0.
+- The card's first pytest line (eleven files, `-n 6 --dist loadfile`): 481 passed, 1 skipped (the pre-existing
+  `tests/api/test_view_model.py:399` skip), the seven new cases among them. `uv run pytest
+  tests/scripts/test_refresh_samples.py -n 4 --dist loadfile`: 167 passed, exit 0.
+- `uv run python scripts/publish_game_profile.py --check`, twice: exit 0 both ("... are consistent with the committed
+  recordings."). `--set-dir replays/samples/4p1i --json-stdout`: exit 1, "refused: replays/samples/4p1i holds a
+  4-player, 1-impostor roster; the game-shape profile reads 9-player, 2-impostor sets only".
+- `.venv/bin/python <memo dir>/rubric-v2-repro.py replays/samples/9p2i`: exit 0, the same reading as the served file
+  (count-only): every 0; decisive removed, read as SKIP and all ungrounded removed 1 each, (26, 2); any 2, (26, 2) and
+  (41, 0); manufactured 0 of 15 alibi-class flags; ejecting-ballot labels 282 `supported`, 2 `off_target`; endings 13
+  `CREWMATE_EJECT`, 13 `CREWMATE_TASKS`, 24 `IMPOSTOR_PARITY`, 46 games ejecting someone; the seven pre-reveal shelves
+  14, 7, 11, 6, 16, 16 and 19; caught venting (p under 0.001) and one line, two readings (0.050) leak; struck after
+  the regroup 40 of 50, a facet; seeds 19 and 14 as Publication quotes them.
+- `scripts/publish_gameplay_census.py --check`, `scripts/publish_process_scorecard.py --check`,
+  `scripts/gen_frontend_types.py --check`: exit 0 each. `uv run lint-imports`: 5 contracts kept, 0 broken.
+- `git diff --exit-code d41c9006 --` the two baseline-9 lab files: exit 0. `git diff --stat ef1a2a59 -- replays/`: the
+  one served file, 6,175 insertions.
+- `bash scripts/verify_samples.sh`: exit 0, "All 50 samples verified clean." for `replays/samples/4p1i`,
+  `replays/samples/9p2i` and `replays/candidates/stage-b-r1/9p2i`. `build_sample_report.py --sample-dir <set> --check`
+  for `replays/samples/9p2i`, `replays/samples/4p1i`, `replays/ml_corpus/9p2i`, `replays/ml_corpus/4p1i` and
+  `replays/candidates/stage-b-r1/9p2i`: exit 0 each.
+- `scripts/validate_task_docs.py`: exit 0 (390 phase tasks, 390 prompts, 102 work cards). `scripts/check_doc_facts.py`:
+  exit 0. Offline `scripts/verify_ml_evidence.py`: exit 0, 64 checks, 52 OK, 0 FAIL, 7 ABSENT (the evidence branch,
+  not restored here), 5 INFO. `uv run pytest -m campaign`: 337 passed, exit 0.
+- Strict mypy over the four changed test files: no issues; `ruff check` and `ruff format --check` clean on them.
+- Frontend: `npm run lint`, `npm run tsc:check` exit 0; `npm run test`: 27 files, 808 tests passed; `npm run e2e`
+  (serial, one worker): 15 passed, 3 skipped (the README media capture), exit 0, 1.5 min.
+
+**The gate, round 1.** `bash scripts/check.sh` runs once, whole, at the pushed head of this Results commit; its exit
+code (this full-history worktree) and CI's run of that head (a shallow checkout) are recorded in the commit that
+follows, which changes only this paragraph.
