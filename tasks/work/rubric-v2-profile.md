@@ -124,6 +124,30 @@ dashboard renders its "No tournament report" card (`TournamentDashboard.tsx:1115
 Each item names its enforcing mechanism and the planted or perturbed case that turns its test red; each new test is
 seen red before the code it guards exists.
 
+- [x] Review correction: the revealed pair's halves are pinned at the call site. With seed 8 the only game on the
+  wrong half and seed 7 the only one on the right, each opens once inside its own half's region and never inside the
+  other's ("lists each half's games under that half's own heading", `ReplayPicker.test.tsx`); the halves swapped where
+  `PairBlock` is called, and the two found sections swapped, each survived the suite at `7c89de83` and are red at the
+  head (round 2 probe rows RP1 and RP3).
+- [x] Review correction: the meetings-by-trigger facet is pinned. One report and one called meeting read "2
+  meetings · 1 reported, 1 called", one report and two called meetings "3 meetings · 1 reported, 2 called", with each
+  meeting's timeline title ("counts the meetings by what opened them", `HighlightCard.test.tsx`); the trigger read
+  replaced by a constant, the filter dropped and the called count set to 0 each survived at `7c89de83` and are red at
+  the head (rows HC1, HC4 and HC6).
+- [x] Review correction: the reported-body join's corpse count is pinned with every location value off its default.
+  Two corpses share the reported body's id at set `elsewhere`, seed 7, meeting index 1, and both readers that join a
+  body, the shelves and the facets, raise the full message ending "joins 2 corpses"
+  (`test_a_reported_body_joining_two_corpses_raises_at_both_readers`); the count set to 0 and the five location
+  arguments of the two call sites, which each survived at `7c89de83`, are red at the head (rows GP1 and GP11 to GP16).
+- [x] Review correction: the set-neutral check on the no-profile copy holds every rule it held before this card. The
+  "is scored" alternative and the "median N ticks" pattern are restored to `assertSetNeutral`, with the check on the
+  dashboard's absent copy naming no `9p2i`, which `b46c5c53` had also dropped; a planted line breaking each of the
+  check's eight rules fails it ("a set named as the profiled one or a per-set count fails the neutrality check
+  (planted)"), and each rule dropped alone lets its line through (round 2, the guard probe).
+- [x] Review correction: the Results grep for the retired version-1 names is restated as it reads at the head, four
+  absence pins (`tests/api/test_game_profile_view.py:293` among them) plus the seven lines of the inert pre-retirement
+  scorer text in `tests/api/test_sets.py`, and round 1's sentence no longer claims every number above stands (Results,
+  round 2).
 - [x] Review correction: CI's Project checks failed at `53b9ffd3` because item 17's planted case read `76270d6c`'s
   scorer with `git show`, which the shallow `actions/checkout` cannot answer. The case now rebuilds that scorer in
   `tmp_path` from today's module and the deleted served-file write the test carries as text
@@ -616,8 +640,13 @@ the direction addendum's section 7 (the wrong-but-believable class) and section 
   keys, the score buckets, `InterestingnessHistogram`, `RUBRIC_SPOKES`, the interestingness strings and `getRubric`.
   `git grep -nE 'regen_for_set|RubricView|RubricGameView|_trimmed_rubric|ScoreBadge|SubScoreBar|RUBRIC_SPOKES|InterestingnessHistogram|getRubric|_RUBRIC_FILENAME|RUBRIC_RESULTS_FILENAME|def rubric\(|eval/rubric'`
   finds, outside history (`agent_prompts/`, `audits/`, `design/`, `tasks/`, `experiments/lab/report-rubric-design.md`),
-  only the four absence pins (`frontend/src/api/client.test.ts:80`, `tests/api/test_game_profile_view.py:281`,
-  `tests/api/test_view_model.py:194`, `:1369`). Kept: `_set_manifest_sha`, the frozen parity pin,
+  as it reads at the head (restated in round 2): 11 lines in 4 files. Four are the absence pins
+  (`frontend/src/api/client.test.ts:80`, `tests/api/test_game_profile_view.py:293`, `tests/api/test_view_model.py:194`,
+  `:1369`). Seven are item 17's planted case in `tests/api/test_sets.py`, which round 1 added: five lines of
+  `_RETIRED_SERVED_FILE_WRITE` (567, 573, 595, 612, 632), the deleted served-file write carried as text, and the
+  test's docstring and assertion that name `regen_for_set` (654, 659). That text is inert: the test rebuilds the
+  pre-retirement scorer from it in `tmp_path` and no module imports it. At `a23b07ef` and `53b9ffd3` the grep found the
+  four pins alone, the second at `tests/api/test_game_profile_view.py:281`. Kept: `_set_manifest_sha`, the frozen parity pin,
   `eval/watchability.py`, the two baseline-9 lab files (`git diff --exit-code d41c9006 --` both exits 0) and
   `experiments/lab/rubric.md` with one dated line.
 - Docs: `docs/glossary.md` extends the game-shape profile entry and adds the shelves, the eyewitness chip, tripwire,
@@ -675,8 +704,11 @@ the static bundle does not build, so the shared journey cannot read it).
 14. A shelf header's count is the number of members it is served: the set-level size locally, the baked members
     only in the bundle.
 
-**Re-targeted tests: the old assertion, and the strength kept.** No assertion was loosened; each v1 assertion
-either moved to the profile with the same shape or was deleted with the mechanism it guarded (craft rule 3).
+**Re-targeted tests: the old assertion, and the strength kept.** No assertion is loosened at the head; each v1
+assertion either moved to the profile with the same shape or was deleted with the mechanism it guarded (craft rule 3).
+Corrected in round 2: until then the set-neutral check on the no-profile copy (`assertSetNeutral` in
+`ReplayPicker.test.tsx`) had lost, at `b46c5c53`, its "is scored" alternative, its "median N ticks" pattern and the
+check that the dashboard's absent copy names no `9p2i`; round 2 restores all three.
 
 | old test (file) | old assertion | now | strength kept |
 | --- | --- | --- | --- |
@@ -698,7 +730,7 @@ either moved to the profile with the same shape or was deleted with the mechanis
 | `test_bundle_suppresses_legacy_stale_rows` | a stale v1 file bakes no row | `test_bundle_bakes_no_member_of_a_stale_profile` | the same, on the profile |
 | the refresh skip-line pins (`tests/scripts/test_refresh_samples.py`) | the dry run prints the skip line; no rubric line | the profile line case, `test_the_old_skip_line_fails_the_profile_case`, `test_any_other_target_prints_no_profile_line`, the two era-rule cases | 9p2i prints exactly the profile line; every other target none; the old skip line and the old help sentence each fail |
 | the v1 fixtures in `tests/api/test_schemas.py` and `tests/api/test_leak.py` | a hand-built `RubricView` round-trips; the DTO inventory names `RubricView` and `RubricGameView` | the committed profile round-trips as `GameProfileView`; the inventory names the 23 new views | the round-trip runs on the served bytes, and the inventory's equality check covers every new view |
-| frontend: "rubric provenance in replay cards", "the rubric legend table", "highlight source freshness" | stale and absent rubric states; the spoke legend | "the no-profile and stale states", "the game-shape profile's copy", "the game-shape profile route" | stale and absent kept distinct and set-neutral; the copy has no threshold or score word; the client asks no v1 route and reads a version-5 replay |
+| frontend: "rubric provenance in replay cards", "the rubric legend table", "highlight source freshness" | stale and absent rubric states; the spoke legend | "the no-profile and stale states", "the game-shape profile's copy", "the game-shape profile route" | stale and absent kept distinct and set-neutral, the set-neutral check holding every rule it held at `ef1a2a59` (restored in round 2); the copy has no threshold or score word; the client asks no v1 route and reads a version-5 replay |
 
 **Verification** (at `00575283`, whose production code `dc023329` keeps, adding card tests only; `bash scripts/check.sh` is recorded in its own paragraph below).
 - `env | grep -c '^AILIBI_'`: 0.
@@ -921,8 +953,9 @@ Built on `53b9ffd3`; `origin/main` was still `ef1a2a59` at the final fetch, so `
 `6fdfa78b` (the tests), this Results commit, then the commit recording the gate. No production line moved:
 `git diff --stat 53b9ffd3` lists this card and four test files only (`tests/eval/test_game_profile.py`,
 `tests/scripts/test_publish_game_profile.py`, `tests/api/test_game_profile_view.py`, `tests/api/test_sets.py`), so the
-served file, the page and every number above stand as they were measured; the reading and the bundle below are
-re-measured at this head.
+served file, the page and every count the production code yields above stand as they were measured; the reading and
+the bundle below are re-measured at this head. The retired-names grep in the Implementation's "Retired" bullet is the
+exception: these four test files moved its hits, and round 2 restates it as it reads at the head.
 
 **The findings and their repair.** The thirteen verifier findings (correctness, integrity and documentation lenses)
 name eight defects.
@@ -959,6 +992,9 @@ name eight defects.
    both invalid-profile-file messages. Strengthened in the same pass: the absent-file path, the candidate name and
    only the members outside the era, the 2x2 tuple of the negative-count refusal, the value in `_decimal`'s refusal,
    the shelf and chip names in the seed-order refusal, and `(10, None)` beside `(None, 14)` for the final task count.
+   Corrected in round 2: not every raise site held values off its defaults. The reported-body join's test matched
+   0 corpses at seed 0 and meeting index 0 in set `planted`, so the count, the seed, the meeting index and the set
+   label of both call sites survived; it now also matches 2 corpses at seed 7 and meeting index 1 in set `elsewhere`.
 7. The publisher's roster impostor count (V10, K) and registry path set (V9, S) were unpinned.
    `test_a_nine_player_set_of_another_impostor_count_is_refused` (9 players with 1 or 3 impostors, refused by name)
    and, in `test_the_era_is_the_registrys`, a registry without the shown set gives it no era.
@@ -1072,3 +1108,128 @@ logged its exit code directly).
 - CI, a shallow `actions/checkout`: run 37624561446 at `caac7e91`, conclusion success. Project checks (job
   112802905173) 10,842 passed, 40 skipped, 3 xfailed in 1,286.8 s, with no failure (the item 17 planted case carries
   no skip, so it ran and passed); Frontend checks and Frontend e2e (Playwright) success.
+
+### Review corrections, round 2 (2026-10-07)
+
+Built on `7c89de83`; `origin/main` was still `ef1a2a59` at the final fetch, so `main` needed no merge. Commits:
+`db69c049` (the tests), this Results commit, then the commit recording the bundle and the gate. No production line
+moved: `git diff --stat 7c89de83 db69c049` lists three test files only (`tests/eval/test_game_profile.py`,
+`frontend/src/components/ReplayPicker.test.tsx`, `frontend/src/components/HighlightCard.test.tsx`), so the served
+file, the page and the shown set's reading are unchanged; the reading is re-run below.
+
+**The findings and their repair.** The five verifier findings (correctness and documentation lenses) name five
+defects.
+1. The revealed pair's halves taken swapped at the call site survived (S class): `PairBlock wrong={pick(right.seeds)}
+   right={pick(wrong.seeds)}` passed every unit test, whose fixture leaves the wrong half empty, and no e2e leg opens
+   Highlights revealed. "lists each half's games under that half's own heading" (`ReplayPicker.test.tsx`) builds a
+   profile whose wrong half holds seed 8 alone and whose right half holds seed 7 alone, renders it revealed, cuts the
+   markup at the two halves' headings and All games, and requires seed 8 to open once in the wrong half and never in
+   the right, and seed 7 the reverse; neither half says it is empty. The same swap made where the two sections are
+   found (row RP3) also survived and is red now.
+2. The meetings-by-trigger facet's kind read replaced by a constant survived (K class): every fixture meeting was a
+   report. "counts the meetings by what opened them" (`HighlightCard.test.tsx`) renders one report and one called
+   meeting ("2 meetings · 1 reported, 1 called") and one report with two called meetings ("3 meetings · 1 reported, 2
+   called"), each meeting's timeline title with them. The second fixture is the one an inverted comparison fails,
+   since one report and one called meeting read the same line either way. The filter dropped (HC4) and the called
+   count set to 0 (HC6) survived too and are red now.
+3. The corpse count in the first `_kill_of` refusal survived set to 0 (M class): its only planted case names 0
+   corpses. `test_a_reported_body_joining_two_corpses_raises_at_both_readers` gives the reported body a second corpse
+   under the same id, at seed 7 and meeting index 1, and requires the full message "set elsewhere, seed 7, meeting
+   index 1: the reported body body-p-1-5 joins 2 corpses" from both readers that join a body, `candidate_pointers`
+   and `_game_facets`. The probe found five more survivors there, the set, seed and meeting index arguments of the two
+   call sites (GP11 to GP16), all red now; round 1's item 6 is narrowed to say so.
+4. The set-neutral check on the no-profile copy had been weakened: `b46c5c53` dropped its "is scored" alternative,
+   its "median N ticks" pattern and the check that the dashboard's absent copy names no `9p2i`, all three added by
+   `2f2160d1`, while the Results said no assertion was loosened. All three are restored and pass at the head
+   (`ReplayPicker.tsx`'s absent state still claims the property). The check is hoisted to its describe block, and "a
+   set named as the profiled one or a per-set count fails the neutrality check (planted)" holds eight lines, each
+   breaking exactly one of its eight rules (`4p1i`, fixture, ships one, which ships, is scored, default 9p2i, N of N,
+   median N ticks); dropping any one rule alone lets its line through (the guard probe below). The re-targeted
+   tests' sentence and the frontend row are corrected.
+5. The Results grep for the retired version-1 names answered differently at the head: 11 lines in 4 files, not the
+   four pins. The Implementation's "Retired" bullet now reads as the grep does at the head, the four absence pins
+   (`tests/api/test_game_profile_view.py:293` among them) and seven lines of item 17's planted case in
+   `tests/api/test_sets.py`, which are inert text the test rebuilds the old scorer from. Round 1's sentence that every
+   number above stood is narrowed to the counts the production code yields, naming the grep as the exception. The
+   guarantee held throughout, so no code moved.
+
+**The probe table.** One bounded pass of 34 mutants over the three spans the findings name (`PairBlock` and its call
+site in `ReplayPicker.tsx`, the meeting line and the meeting marks in `HighlightCard.tsx`, `_kill_of` and its two
+call sites in `eval/game_profile.py`); this round changed no production span. Only the eight listed classes. Each
+mutant was applied alone in place, its suite run (Python: `tests/eval/test_game_profile.py`,
+`tests/scripts/test_publish_game_profile.py` and `tests/api/test_game_profile_view.py` with `-x -n 6`; viewer:
+`npx vitest run src/components src/lib src/api`), and the file restored from its saved bytes and checked equal
+(scratch `mutate.py`). It ran twice: against `7c89de83`'s three test files installed from copies, then against
+`db69c049`'s. The killer is the first failing test vitest or pytest reports. At the head all 34 are killed; none
+survives and none is named equivalent.
+
+| id | class | file | mutant | at `7c89de83` | at the head, killed by |
+| --- | --- | --- | --- | --- | --- |
+| GP1 | M | `eval/game_profile.py` | the corpse count in the first refusal set to 0 | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP2 | M | `eval/game_profile.py` | the kill count in the second refusal set to 0 | killed | `test_a_reported_body_joining_no_kill_raises` |
+| GP3 | M | `eval/game_profile.py` | the body id in the first refusal set to a constant | killed | `test_a_reported_body_joining_no_kill_raises` |
+| GP4 | M | `eval/game_profile.py` | the body id in the second refusal set to a constant | killed | `test_a_reported_body_joining_no_kill_raises` |
+| GP5 | M | `eval/game_profile.py` | the location in the first refusal set to a constant | killed | `test_a_reported_body_joining_no_kill_raises` |
+| GP6 | M | `eval/game_profile.py` | the location in the second refusal set to a constant | killed | `test_a_reported_body_joining_no_kill_raises` |
+| GP7 | N | `eval/game_profile.py` | the one-corpse test inverted | killed | `test_the_pre_reveal_facets` |
+| GP8 | N | `eval/game_profile.py` | the one-kill test inverted | killed | `test_the_pre_reveal_facets` |
+| GP9 | F | `eval/game_profile.py` | the body-id filter on the corpses dropped | killed | `test_a_same_tick_double_kill_joins_each_body_by_victim` |
+| GP10 | F | `eval/game_profile.py` | the victim filter on the kills dropped | killed | `test_the_pre_reveal_facets` |
+| GP11 | M | `eval/game_profile.py` | the seed in `candidate_pointers`' location set to 0 | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP12 | M | `eval/game_profile.py` | the meeting index at the shelves' call site set to 0 | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP13 | M | `eval/game_profile.py` | the seed at the facets' call site set to 0 | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP14 | M | `eval/game_profile.py` | the meeting index at the facets' call site set to 0 | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP15 | M | `eval/game_profile.py` | the set label at the facets' call site set to `planted` | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP16 | M | `eval/game_profile.py` | the set label in `candidate_pointers`' location set to `planted` | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| RP1 | S | `frontend/src/components/ReplayPicker.tsx` | the halves swapped where `PairBlock` is called (the finding) | SURVIVED | "lists each half's games under that half's own heading" |
+| RP2 | B | `frontend/src/components/ReplayPicker.tsx` | the two halves' blocks swapped in `PairBlock` | killed | "renders wrong beside right, an empty half saying so" |
+| RP3 | S | `frontend/src/components/ReplayPicker.tsx` | the wrong and right sections swapped where they are found | SURVIVED | "lists each half's games under that half's own heading" |
+| RP4 | F | `frontend/src/components/ReplayPicker.tsx` | the reveal-kind filter on the revealed sections dropped | killed | "renders no reveal-only shelf, name or count before the reveal" |
+| RP5 | F | `frontend/src/components/ReplayPicker.tsx` | the pair filter on the reveal-only shelves dropped | killed | "renders wrong beside right, an empty half saying so" |
+| RP6 | N | `frontend/src/components/ReplayPicker.tsx` | a half's empty test inverted | killed | "lists each half's games under that half's own heading" |
+| RP7 | N | `frontend/src/components/ReplayPicker.tsx` | the pair's presence test inverted | killed | "renders wrong beside right, an empty half saying so" |
+| RP8 | M | `frontend/src/components/ReplayPicker.tsx` | the wrong half's name argument set to the right half's | killed | "renders wrong beside right, an empty half saying so" |
+| HC1 | K | `frontend/src/components/HighlightCard.tsx` | the trigger read replaced by a constant that holds (the finding) | SURVIVED | "counts the meetings by what opened them" |
+| HC2 | K | `frontend/src/components/HighlightCard.tsx` | the trigger read replaced by the constant `emergency` | killed | "shows the shelves before the reveal, the chip and the facets, and no score" |
+| HC3 | N | `frontend/src/components/HighlightCard.tsx` | the report comparison inverted | killed | "shows the shelves before the reveal, the chip and the facets, and no score" |
+| HC4 | F | `frontend/src/components/HighlightCard.tsx` | the report filter on the meetings dropped | SURVIVED | "counts the meetings by what opened them" |
+| HC5 | M | `frontend/src/components/HighlightCard.tsx` | the reported count in the meeting line set to 0 | killed | "shows the shelves before the reveal, the chip and the facets, and no score" |
+| HC6 | M | `frontend/src/components/HighlightCard.tsx` | the called count in the meeting line set to 0 | SURVIVED | "counts the meetings by what opened them" |
+| HC7 | M | `frontend/src/components/HighlightCard.tsx` | the meeting count in the meeting line set to 0 | killed | "shows the shelves before the reveal, the chip and the facets, and no score" |
+| HC8 | B | `frontend/src/components/HighlightCard.tsx` | the no-meetings and meeting-line branches swapped | killed | "shows the shelves before the reveal, the chip and the facets, and no score" |
+| HC9 | M | `frontend/src/components/HighlightCard.tsx` | the meeting number in a mark's title set to 0 | killed | "counts the meetings by what opened them" |
+| HC10 | M | `frontend/src/components/HighlightCard.tsx` | the tick in a mark's title set to 0 | killed | "counts the meetings by what opened them" |
+
+**The guard probe.** The set-neutral check is a test helper, so it sits outside the mutation pass; each of its eight
+rules was dropped alone in place (scratch `guard_probe.py`, the file restored from its saved bytes and checked
+equal) and `npx vitest run src/components/ReplayPicker.test.tsx -t neutrality` run: all eight red.
+
+**Verification at `db69c049`** (production code identical to `7c89de83`; a scratch `validate.sh` ran each command and
+logged its exit code directly).
+- `env | grep -c '^AILIBI_'`: 0.
+- The card's first pytest line (eleven files, `-n 6 --dist loadfile`): 482 passed, 1 skipped (the pre-existing
+  `tests/api/test_view_model.py:399` skip), the new case among them. `uv run pytest
+  tests/scripts/test_refresh_samples.py -n 4 --dist loadfile`: 167 passed, exit 0.
+- `uv run python scripts/publish_game_profile.py --check`, twice: exit 0 both ("... are consistent with the committed
+  recordings."). `--set-dir replays/samples/4p1i --json-stdout`: exit 1, "refused: replays/samples/4p1i holds a
+  4-player, 1-impostor roster; the game-shape profile reads 9-player, 2-impostor sets only".
+- `.venv/bin/python <memo dir>/rubric-v2-repro.py replays/samples/9p2i`: exit 0, the reading round 1 quotes: every 0;
+  decisive removed, read as SKIP and all ungrounded removed 1 each, (26, 2); any 2, (26, 2) and (41, 0); manufactured
+  0 of 15 alibi-class flags; ejecting-ballot labels 282 `supported`, 2 `off_target`; endings 13 `CREWMATE_EJECT`, 13
+  `CREWMATE_TASKS`, 24 `IMPOSTOR_PARITY`, 46 games ejecting someone; the seven pre-reveal shelves 14, 7, 11, 6, 16,
+  16 and 19; caught venting (p under 0.001) and one line, two readings (0.050) leak; struck after the regroup 40 of
+  50, a facet.
+- `scripts/publish_gameplay_census.py --check`, `scripts/publish_process_scorecard.py --check`,
+  `scripts/gen_frontend_types.py --check`: exit 0 each. `uv run lint-imports`: 5 contracts kept, 0 broken.
+- `git diff --exit-code d41c9006 --` the two baseline-9 lab files: exit 0. `git diff --stat ef1a2a59 -- replays/`: the
+  one served file, 6,175 insertions.
+- `bash scripts/verify_samples.sh`: exit 0, "All 50 samples verified clean." for each of its three sets.
+  `build_sample_report.py --sample-dir <set> --check` for `replays/samples/9p2i`, `replays/samples/4p1i`,
+  `replays/ml_corpus/9p2i`, `replays/ml_corpus/4p1i` and `replays/candidates/stage-b-r1/9p2i`: exit 0 each.
+- `scripts/validate_task_docs.py`: exit 0 (390 phase tasks, 390 prompts, 102 work cards). `scripts/check_doc_facts.py`:
+  exit 0. Offline `scripts/verify_ml_evidence.py`: exit 0, 64 checks, 52 OK, 0 FAIL, 7 ABSENT (the evidence branch,
+  not restored here), 5 INFO. `uv run pytest -m campaign`: 337 passed, exit 0.
+- `uv run ruff check .`, `uv run ruff format --check .` and strict mypy over the changed Python test file: clean.
+- Frontend: `npm run lint`, `npm run tsc:check`, `npm run build` exit 0; `npm test`: 27 files, 811 tests passed (808
+  and the three new cases); `npm run e2e` (serial, one worker): 15 passed, 3 skipped (the README media capture), exit
+  0, 1.4 min.
