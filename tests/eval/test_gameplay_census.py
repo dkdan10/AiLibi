@@ -11268,7 +11268,9 @@ ROUTE_LINE_CELLS: Final = (
 
 def test_the_route_lines_cells_count_ballots_lines_and_steps() -> None:
     """Two ballots carrying lines (one with two), a ballot carrying none and one
-    with no recorded call; the distinct lines are counted once each."""
+    with no recorded call; the distinct lines are counted once each. The second
+    meeting's one ballot carries a recorded call with no line, so a meeting
+    holding ballots is no meeting with a route line."""
 
     folded = game(
         ROUTE_ON,
@@ -11281,12 +11283,15 @@ def test_the_route_lines_cells_count_ballots_lines_and_steps() -> None:
                 route_ballot("p-4", SKIP_TARGET),
                 ballot("p-1", SKIP_TARGET),
             ),
-            routes_meeting(meeting_id="meeting-1", tick=30),
+            routes_meeting(
+                route_ballot("p-2", SKIP_TARGET), meeting_id="meeting-1", tick=30
+            ),
         ),
     )
+    assert all(fact.ballots for fact in folded.meetings)
     assert {key: counts(key, folded) for key in ROUTE_LINE_CELLS} == {
         "meetings_with_a_route_line": (1, 2, 0),
-        "ballots_carrying_route_lines": (2, 3, 1),
+        "ballots_carrying_route_lines": (2, 4, 1),
         "route_lines_false_to_the_map": (0, 3, 0),
         "route_lines_off_the_table": (0, 3, 0),
     }
@@ -11967,6 +11972,18 @@ def test_the_fields_reach_is_derivable_from_the_census_through_the_field(
     assert dict(folded.tables["route_steps_by_reading"]) == published["steps"]
     assert folded.cells["route_lines_false_to_the_map"].numerator == 0
     assert folded.cells["route_lines_off_the_table"].numerator == 0
+    # The presence and ballot cells follow the replay's own per-meeting counts;
+    # one meeting in each round serves no line although its ballots were cast.
+    meetings = published_column["meetings"]
+    with_a_line = sum(item["lines"] > 0 for item in meetings)
+    assert with_a_line < len(meetings)
+    presence = folded.cells["meetings_with_a_route_line"]
+    assert (presence.numerator, presence.denominator) == (with_a_line, len(meetings))
+    carrying = folded.cells["ballots_carrying_route_lines"]
+    assert (carrying.numerator, carrying.denominator) == (
+        published["ballots_with_block"],
+        published["ballots"],
+    )
 
 
 def test_stated_places_are_the_route_kinds_only() -> None:
