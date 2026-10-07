@@ -70,6 +70,7 @@ Every recorded setting field, and how this census uses it:
 | `ballot_kill_row_version` | read by: own_kill_ballot_row |
 | `impostor_ballot_version` | not read: an instructed ballot framing; the tally does not enforce it, so no cell is forced by it |
 | `kill_cooldown_ticks` | read as a value by: the length of the grace window, and the value the kill cooldown cell checks every cooldown write against |
+| `route_lines_version` | not read: adds role-blind route lines to a ballot; no cell is forced by it |
 
 ## Eras
 

@@ -64,9 +64,11 @@ from meetings.schemas import (
 
 if TYPE_CHECKING:
     # Type-only: the ledger DTO lives with its builder in
-    # :mod:`meetings.corroboration`, and importing it at runtime would give this
-    # leaf a third dependency for an annotation nothing evaluates.
+    # :mod:`meetings.corroboration`, and the route line with its builder in
+    # :mod:`meetings.route_lines`; importing either at runtime would give this
+    # leaf a dependency for an annotation nothing evaluates.
     from meetings.corroboration import MeetingTestimonyLedger
+    from meetings.route_lines import RouteLine
 
 
 @dataclass(frozen=True)
@@ -490,16 +492,25 @@ class VotePromptRenderer(Protocol):
     variable, so their bytes are unchanged whatever the manager threads.
 
     ``voter_role``, ``ballot_kill_row_version`` and ``impostor_ballot_version``
-    are the two ballot arms' render inputs, threaded by the manager at every
-    ballot render: the voter's own role (``MeetingParticipant.role``) and the two
-    values of the manager's evidence profile, so the runner's recorded stamps
-    and the rendered body read one profile. Only the served ``qwen3_6_27b`` body
-    reads them, inside guarded blocks: ``ballot_kill_row_version`` rewords the
-    suspicion header's partial-summary sentence, and ``impostor_ballot_version``
-    serves an IMPOSTOR voter the strategic ballot wording, which is why the role
-    is threaded (a sole impostor carries no teammate list to tell it from a
-    crewmate). The defaults ``None`` render the previous bytes, and every other
-    prompt set references none of the three, so their bytes are unchanged.
+    are the render inputs of the kill-row and strategic-impostor ballot arms,
+    threaded by the manager at every ballot render: the voter's own role
+    (``MeetingParticipant.role``) and the two values of the manager's evidence
+    profile, so the runner's recorded stamps and the rendered body read one
+    profile. Only the served ``qwen3_6_27b`` body reads them, inside guarded
+    blocks: ``ballot_kill_row_version`` rewords the suspicion header's
+    partial-summary sentence, and ``impostor_ballot_version`` serves an IMPOSTOR
+    voter the strategic ballot wording, which is why the role is threaded (a
+    sole impostor carries no teammate list to tell it from a crewmate). The
+    defaults ``None`` render the previous bytes, and every other prompt set
+    references none of the three, so their bytes are unchanged.
+
+    ``route_lines`` and ``route_lines_version`` are the third ballot arm's render
+    inputs: the role-blind lines :func:`meetings.route_lines.build_route_lines`
+    builds for this voter's candidates, and the evidence profile's value. The
+    manager builds and threads the lines only while that value is set, so the
+    defaults ``()`` and ``None`` render the previous bytes; only the served
+    ``qwen3_6_27b`` body reads either, in one guarded ``<routes>`` block, and a
+    renderer handed lines with the version ``None`` raises.
     """
 
     def __call__(
@@ -522,6 +533,8 @@ class VotePromptRenderer(Protocol):
         voter_role: VoterRole | None = None,
         ballot_kill_row_version: Literal[1] | None = None,
         impostor_ballot_version: Literal[1] | None = None,
+        route_lines: tuple[RouteLine, ...] = (),
+        route_lines_version: Literal[1] | None = None,
     ) -> str: ...
 
 

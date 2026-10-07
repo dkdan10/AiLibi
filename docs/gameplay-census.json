@@ -1805,6 +1805,7 @@
     "public_account_version": "not read: changes what a meeting renders; no cell is forced by it",
     "redistribution_policy": "not read: decides who inherits a dead crewmate's tasks; no cell counts tasks",
     "report_body_handle_version": "read by: public_body_handle",
+    "route_lines_version": "not read: adds role-blind route lines to a ballot; no cell is forced by it",
     "sabotage_threshold": "not read: a sabotage win rule; no cell is forced by it",
     "self_report": "read by: no_impostor_self_report",
     "vent_entry_policy": "read by: own_fresh_kill_entry",

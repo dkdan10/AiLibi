@@ -1572,7 +1572,7 @@ def test_a_config_turning_no_registered_arm_on_keeps_the_mapping_by_identity(
     """The experiment-arm fold adds nothing unless a registered arm is ON.
 
     No config, the default config, and a config switching ON arms that register
-    no templates (the arm registry holds only the two ballot arms, which these
+    no templates (the arm registry holds only the three ballot arms, which these
     configs leave OFF) all serve the set's own mapping object, as the lever fold
     alone did.
     """
@@ -1593,22 +1593,35 @@ def test_a_config_turning_no_registered_arm_on_keeps_the_mapping_by_identity(
 
 
 # --------------------------------------------------------------------------- #
-# The two ballot arms: derived stamps, never a default                         #
+# The three ballot arms: derived stamps, never a default                       #
 # --------------------------------------------------------------------------- #
 
 _KILL_ROW_STAMP = "vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1"
 _IMPOSTOR_STAMP = "vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1"
+_ROUTE_LINES_STAMP = "vote_ballot.qwen3_6_27b.v8.route_lines_v1"
+_BALLOT_ARM_FIELDS: tuple[str, ...] = (
+    "ballot_kill_row_version",
+    "impostor_ballot_version",
+    "route_lines_version",
+)
 _BALLOT_ARM_CONFIGS: dict[str, RecordedExperimentConfig] = {
     "kill-row": RecordedExperimentConfig(ballot_kill_row_version=1),
     "impostor": RecordedExperimentConfig(impostor_ballot_version=1),
     "both": RecordedExperimentConfig(
         ballot_kill_row_version=1, impostor_ballot_version=1
     ),
+    "route-lines": RecordedExperimentConfig(route_lines_version=1),
+    # Round 3's ballot: the two adopted arms, then the route lines.
+    "round-3": RecordedExperimentConfig(
+        ballot_kill_row_version=1, impostor_ballot_version=1, route_lines_version=1
+    ),
 }
 _BALLOT_ARM_STAMPS: dict[str, str] = {
     "kill-row": _KILL_ROW_STAMP,
     "impostor": _IMPOSTOR_STAMP,
     "both": f"{_KILL_ROW_STAMP}+{_IMPOSTOR_STAMP}",
+    "route-lines": _ROUTE_LINES_STAMP,
+    "round-3": f"{_KILL_ROW_STAMP}+{_IMPOSTOR_STAMP}+{_ROUTE_LINES_STAMP}",
 }
 
 
@@ -1642,7 +1655,7 @@ def test_no_ballot_arm_stamp_equals_a_default_or_overlay_stamp() -> None:
     } | set(DEFAULT_PROMPT_VERSIONS.values())
     arm_stamps = set(_BALLOT_ARM_STAMPS.values())
     assert not arm_stamps & worn
-    assert len(arm_stamps) == 3
+    assert len(arm_stamps) == 5
 
 
 def test_the_ballot_arms_move_no_default_or_overlay_registry() -> None:
@@ -1683,11 +1696,11 @@ def test_the_ballot_arms_move_no_default_or_overlay_registry() -> None:
     }
 
 
-def test_the_ballot_header_keeps_the_v8_marker_and_names_both_arms() -> None:
+def test_the_ballot_header_keeps_the_v8_marker_and_names_each_arm() -> None:
     path = _PROMPTS_ROOT / "qwen3_6_27b" / "vote_ballot.j2"
     assert _marker_version(_template_header(path)) == "vote_ballot.qwen3_6_27b.v8"
     prose = path.read_text(encoding="utf-8").split("-#}", 1)[0]
-    for field in ("ballot_kill_row_version", "impostor_ballot_version"):
+    for field in _BALLOT_ARM_FIELDS:
         assert field in prose, field
 
 
@@ -1706,7 +1719,7 @@ def test_a_pin_that_omits_an_arm_the_manager_renders_fails_the_one_source_check(
 ) -> None:
     profile = {
         field: 1
-        for field in ("ballot_kill_row_version", "impostor_ballot_version")
+        for field in _BALLOT_ARM_FIELDS
         if getattr(_BALLOT_ARM_CONFIGS[arms], field) is not None
     }
     default = dict(PROMPT_VERSION_SETS["qwen3_6_27b"])

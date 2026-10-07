@@ -119,6 +119,7 @@ from __future__ import annotations
 
 import asyncio
 import difflib
+import hashlib
 import shutil
 import sys
 from collections import Counter
@@ -167,6 +168,7 @@ from meetings.manager import (
 )
 from meetings.evidence_profile import MeetingEvidenceProfile, profile_from_config
 from meetings.render_contract import ReporterContext
+from meetings.route_lines import build_route_lines
 from meetings.schemas import MeetingResult, MeetingTranscript, VoteBallot
 from meetings.transcript import MeetingTriggerKind
 from observation.service import ObservationService
@@ -2607,3 +2609,95 @@ def test_the_kill_row_gate_forced_on_fails_the_golden_at_the_kill_holders(
         if not prompt.reproduced
     }
     assert failing == _KILL_HOLDER_MEETINGS
+
+
+# --------------------------------------------------------------------------- #
+# The route lines' OFF gate is not vacuous                                     #
+# --------------------------------------------------------------------------- #
+
+#: MEASURED at the route-lines card: per committed sample set, the ballots whose
+#: transcript states, for one of the voter's candidates, a change of room the
+#: station's doors or the public regroup reconcile, as their count and the sha256
+#: of their sorted ``set:seed:meeting id:voter`` keys. Both sets recorded the
+#: route lines OFF, so these are the only ballots the gate moves, and the
+#: golden's OFF leg bites at exactly them. Pinned as digests so a failure prints
+#: no prompt.
+_ROUTE_LINE_BALLOTS: Final[Mapping[str, tuple[int, str]]] = MappingProxyType(
+    {
+        "9p2i": (
+            665,
+            "154f15d21ce9aee3ee642ff71503ba6e4df8ff843b3a8a9f9ab6f66e21718b19",
+        ),
+        "4p1i": (
+            86,
+            "3e284684ff82c63ffe1f0bb06fd1b71858989bfe1d5ef2fc7eef340bde2e6d6e",
+        ),
+    }
+)
+
+
+def _reconciled_ballots(set_dir: Path) -> set[tuple[str, int, str, str]]:
+    """The recorded ballots whose voter's candidates hold a route line, from the bytes.
+
+    Every living participant casts a ballot, so a meeting's voters are its
+    participants, each voter's candidates the others, and its regroup ticks the
+    recording's own (:func:`orchestrator.replay.derive_regroup_ticks`).
+    """
+
+    found: set[tuple[str, int, str, str]] = set()
+    for path in _seed_paths(set_dir):
+        entries = read_all_entries(path)
+        recorded = recorded_experiment_config(entries)
+        meetings = [e for e in entries if isinstance(e, MeetingReplayEntry)]
+        for index, entry in enumerate(meetings):
+            regroup = derive_regroup_ticks(recorded, [m.tick for m in meetings[:index]])
+            voters = sorted({ballot.voter for ballot in entry.ballots})
+            for voter in voters:
+                if build_route_lines(
+                    transcript=entry.transcript,
+                    candidate_targets=tuple(v for v in voters if v != voter),
+                    regroup_ticks=regroup,
+                ):
+                    found.add(
+                        (set_dir.name, _seed_from_path(path), entry.meeting_id, voter)
+                    )
+    return found
+
+
+def _ballot_digest(keys: Iterable[tuple[str, int, str, str]]) -> tuple[int, str]:
+    lines = sorted(
+        f"{name}:{seed}:{meeting}:{voter}" for name, seed, meeting, voter in keys
+    )
+    return len(lines), hashlib.sha256("\n".join(lines).encode()).hexdigest()
+
+
+def test_the_route_lines_forced_on_fail_the_golden_at_the_reconciled_ballots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: the builder forced ON and its version set to 1 inside the manager.
+
+    With the field OFF the committed ballots re-render byte-identically (the
+    golden above). Forcing the manager's own profile to the field moves exactly
+    the ballots whose voter's candidates hold a route line, and nothing else, so
+    the OFF gate is what keeps them identical and it is not vacuous.
+    """
+
+    import meetings.manager as manager_module
+
+    real_init = manager_module.MeetingManager.__init__
+
+    def _forced(self: MeetingManager, *args: Any, **kwargs: Any) -> None:
+        real_init(self, *args, **kwargs)
+        self._evidence_profile = self._evidence_profile.model_copy(
+            update={"route_lines_version": 1}
+        )
+
+    monkeypatch.setattr(manager_module.MeetingManager, "__init__", _forced)
+    for set_dir in _SAMPLE_SETS:
+        failing = {
+            (set_dir.name, prompt.seed, prompt.meeting_id, str(prompt.agent_id))
+            for prompt in walk_directory(set_dir).prompts
+            if not prompt.reproduced
+        }
+        assert failing == _reconciled_ballots(set_dir)
+        assert _ballot_digest(failing) == _ROUTE_LINE_BALLOTS[set_dir.name]

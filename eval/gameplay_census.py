@@ -531,6 +531,9 @@ FIELD_CLASSIFICATION: Final[Mapping[str, FieldUse]] = MappingProxyType(
                 "cell checks every cooldown write against"
             )
         ),
+        "route_lines_version": _not_read(
+            "adds role-blind route lines to a ballot; no cell is forced by it"
+        ),
     }
 )
 

@@ -524,19 +524,24 @@ def _lever_arm_versions(set_name: str, lever_key: str) -> Mapping[str, str]:
 # stamp is ``_lever_arm_versions``' form with a suffix derived from the field
 # and value (:func:`experiment_arm_suffix`), never a hand-written string.
 #
-# The two ballot arms re-body ``vote_ballot`` alone, with guarded blocks in the
+# The three ballot arms re-body ``vote_ballot`` alone, with guarded blocks in the
 # same ``vote_ballot.j2`` whose header marker stays ``vote_ballot.qwen3_6_27b.v8``:
 # the witnessed-kill row (``ballot_kill_row_version``) rewords the suspicion
 # header's partial-summary sentence and the manager builds the ``own_kill`` rows,
-# and the strategic impostor ballot (``impostor_ballot_version``) serves an
-# impostor voter its persona, team block and citation paragraph. So their
-# stamps read ``vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1`` and
-# ``vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1``, joined by ``+`` when both
-# are ON; the default registry above does not move.
+# the strategic impostor ballot (``impostor_ballot_version``) serves an impostor
+# voter its persona, team block and citation paragraph, and the route lines
+# (``route_lines_version``) add the ``<routes>`` block the manager builds
+# (``meetings.route_lines``). So their stamps read
+# ``vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1``,
+# ``vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1`` and
+# ``vote_ballot.qwen3_6_27b.v8.route_lines_v1``, joined by ``+`` in field
+# declaration order when more than one is ON; the default registry above does
+# not move.
 EXPERIMENT_ARM_TEMPLATES: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
     {
         "ballot_kill_row_version": ("vote_ballot",),
         "impostor_ballot_version": ("vote_ballot",),
+        "route_lines_version": ("vote_ballot",),
     }
 )
 

@@ -66,6 +66,8 @@ class RecordedExperimentConfig(BaseModel):
     # The kill cooldown an impostor restarts at, at round start, after each
     # kill and at each regroup; ``None`` is the map's own value.
     kill_cooldown_ticks: int | None = None
+    # The ballot's role-blind route lines (``meetings.route_lines``).
+    route_lines_version: Literal[1] | None = None
 
     @field_validator(
         "format_version",
@@ -78,6 +80,7 @@ class RecordedExperimentConfig(BaseModel):
         "report_body_handle_version",
         "ballot_kill_row_version",
         "impostor_ballot_version",
+        "route_lines_version",
         mode="before",
     )
     @classmethod
@@ -235,6 +238,7 @@ FIELD_LAYER: Final[Mapping[str, ConfigLayer]] = MappingProxyType(
         "ballot_kill_row_version": "meeting",
         "impostor_ballot_version": "meeting",
         "kill_cooldown_ticks": "engine",
+        "route_lines_version": "meeting",
     }
 )
 
@@ -246,6 +250,7 @@ OMITTED_AT_DEFAULT: Final[tuple[str, ...]] = (
     "ballot_kill_row_version",
     "impostor_ballot_version",
     "kill_cooldown_ticks",
+    "route_lines_version",
 )
 
 #: Every field and value that existed before the Stage-B wave. A walk profile's

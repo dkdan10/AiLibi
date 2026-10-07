@@ -132,7 +132,67 @@ Each item names its enforcing mechanism and a planted or perturbed proof. Each n
 at the base for the stated reason; Results quotes that run. Tests over committed bytes compare digests or booleans,
 so a failure prints no prompt or transcript text.
 
-- [ ] **The field: declared last, validated, omitted at default, format 1.** Mechanism: the model, its validator and
+- [x] Review correction: **the instrument's served-mode outputs are pinned** (round 3, correctness verifier).
+  Proof: `tests/experiments/test_route_lines_replay.py::test_a_served_ballot_counts_its_whole_block` reads one
+  served ballot through `read_ballot` with `served=True` and holds its block characters equal to the served
+  prompt's length less that prompt without its block, and to the served length less the OFF render's, above
+  zero; `test_an_r3_columns_block_cost_and_report_are_read_as_served` holds every served ballot of the scripted
+  r3 column to the same rule, the column's block characters to their sum and above zero, its already-served
+  input tokens above zero and its projected total equal to its recorded total, and its report to the served
+  sentence, the as-served reach row and the already-served token row, with a planted payload that sets the
+  served reach apart from the rebuilt. The served branch's `without_route_block` dropped (V35, row Q01) or the
+  report's served flag a `None` test (V46, row Q09) each turns them red.
+- [x] Review correction: **the parity check's length guard is pinned** (round 3, correctness verifier). Proof:
+  `test_a_route_check_column_of_another_length_is_refused_by_name[one record long]` and `[one record short]` run
+  the CLI on r2's seed 2 against a committed route-check column holding its one record twice, or none, and
+  expect exit 1, the `RouteLinesReplayError` message whole on stderr and no output written; the guard a `None`
+  test (V30, row Q20) turns both red, a bare `ValueError` from `zip(strict=True)` escaping `main`.
+- [x] Review correction: **the step's whole-number check holds every tick and door field, and its once-each
+  check a repeated room** (round 2, correctness verifier). Proof: `test_the_typed_check_refuses[a boolean
+  to_tick]`, `[a float to_tick]`, `[a boolean door count]`, `[a float door count]`, `[a boolean regroup tick]`,
+  `[a float regroup tick]` and `[a duplicated room]`, each expecting its stated reason;
+  `test_each_whole_number_and_once_each_case_reads_with_its_fix[*]` (5) accepts each with its one defect mended;
+  `test_the_typed_check_accepts_each_sorted_room_set_and_refuses_every_other_order`, a property over every two-
+  and three-room set of the nine rooms besides ADMIN, each a walk from ADMIN (120 sorted sets accepted, 456
+  other orders refused). `to_tick`, `doors` or
+  `regroup_tick` dropped from the validator's fields, or `set()` or `sorted()` dropped from the room check, each
+  turns its case red.
+- [x] Review correction: **the instrument's served reach counts only served lines about the ejected, from its
+  EJECT voters** (round 2, correctness verifier). Proof:
+  `tests/experiments/test_route_lines_replay.py::test_served_reach_counts_only_served_lines_about_the_ejected_from_its_voters`
+  reads served-mode cases through `read_field_meeting` (an EJECT voter's served line about another player only,
+  beside a skipping voter's line about the ejected; a served block apart from the rebuilt lines) and holds the
+  served counts over four cases at 2 of M 3 and 1 of W 2; the subject filter, either served count's filter, or
+  the voters, block or cases it reads swapped, each turns it red.
+- [x] Review correction: **the instrument's two set guards are pinned** (round 2, integrity verifier). Proof:
+  `test_a_census_whose_seeds_differ_from_the_set_is_refused` (r2's 50-game census beside a set holding seed 2)
+  and `test_a_set_whose_games_record_the_field_both_ways_is_refused` (the scripted ON game beside r2's OFF game,
+  each game's reading stubbed) each expect `RouteLinesReplayError` and its whole message; either guard replaced
+  by a `None` test, or its message by a constant, turns its case red.
+- [x] Review correction: **the block is read only where the template writes it** (round 1, docs verifier; Codex
+  P2 on PR #501). `route_block_span` reads nothing above the transcript's last closing line and finds the block
+  only after a blank line two lines below the map card's only closing line; any other delimiter line below the
+  transcript raises. Proof: `test_an_open_line_spoken_beside_a_served_block_is_not_read[*]` (A),
+  `test_an_unclosed_open_line_spoken_in_an_off_ballot_is_not_read[*]` (B) and
+  `test_a_whole_block_spoken_in_a_ballot_that_served_none_is_not_read[*]` (C), each over free text, a claim's
+  reason, an alibi's evidence and the memory, with and without a spoken transcript closing line, all 24 red at
+  `740699b6`; `test_a_delimiter_line_below_the_transcript_off_its_place_raises[*]` (10 shapes),
+  `test_a_ballot_rendered_without_the_map_card_has_no_place_for_the_block` and
+  `test_the_fence_stops_at_the_transcript`, the reader's stated limit.
+- [x] Review correction: **the room check follows the room table** (round 1, integrity verifier). Proof:
+  `test_the_room_check_follows_the_room_table` drops WEST_HALL from `meetings.route_lines.CANONICAL_ROOMS` and
+  expects the station-rooms refusal for ADMIN at tick 5 to WEST_HALL at tick 6; the room read replaced by the
+  literal ten rooms turns it red.
+- [x] Review correction: **the instrument's census-against-walk guards are pinned** (round 1, correctness
+  verifier). Proof: `tests/experiments/test_route_lines_replay.py::test_a_census_the_walk_disagrees_with_is_refused_by_name[*]`
+  calls `read_game` on r2 seed 2 with a census one meeting short, one meeting long, a moved tick and a moved
+  meeting id, each expecting `RouteLinesReplayError` and its whole message; each guard replaced by a `None` test
+  turns its case red.
+- [x] Review correction: **the typed check's case count is 20** (round 1, docs verifier). Proof:
+  `uv run pytest --collect-only -q tests/meetings/test_route_lines.py` collected 20
+  `test_the_typed_check_refuses` ids through `685a4396`; round 2 adds seven, so it collects 27, and Results and
+  the PR body say so.
+- [x] **The field: declared last, validated, omitted at default, format 1.** Mechanism: the model, its validator and
   serializer. `route_lines_version: Literal[1] | None = None` follows `kill_cooldown_ticks`, joins
   `_literal_versions_are_integers`, `FIELD_LAYER` (`meeting`) and `OMITTED_AT_DEFAULT`, and stays out of
   `_PRE_WAVE_VALUES`. Proof, in a new `tests/meetings/test_route_lines_arm.py`: 0, 2, `True`, `1.0` and `"1"` raise;
@@ -141,27 +201,27 @@ so a failure prints no prompt or transcript text.
   and without the key it equals that file byte for byte. Perturbed: the field dropped from `OMITTED_AT_DEFAULT`
   fails `test_every_committed_recorded_payload_reserializes_byte_for_byte` at the first archive row and a new test
   that re-serializes every committed `experiment-config.json` under `replays/`.
-- [ ] **The profile, config-only, and its refusals.** Mechanism: `MeetingEvidenceProfile` gains the field;
+- [x] **The profile, config-only, and its refusals.** Mechanism: `MeetingEvidenceProfile` gains the field;
   `CONFIG_ONLY_PROFILE_FIELDS` gains it; the account refusal covers it; a new validator refuses it beside
   `evidence_reasoning_version == 2` (two walking readers with different timing rules on one page). Proof: no
   environment sets it (the existing Hypothesis case, with `AILIBI_ROUTE_LINES` and `AILIBI_ROUTE_LINES_VERSION`
   added to its names); the both-ways `HeadlessGame` check holds for it by parametrization; each refusal raises
   naming the field; the runner refuses it beside each legacy overlay and for a set whose vote body has no live
   guard. Planted: each refusal deleted turns exactly its test red.
-- [ ] **The stamp, derived and served from one source.** Mechanism: `EXPERIMENT_ARM_TEMPLATES` gains
+- [x] **The stamp, derived and served from one source.** Mechanism: `EXPERIMENT_ARM_TEMPLATES` gains
   `"route_lines_version": ("vote_ballot",)`. Proof: the suffix is `route_lines_v1`; `prompt_versions_for_set`
   serves `vote_ballot.qwen3_6_27b.v8.route_lines_v1` only for a config carrying the field; for round 3's config it
   serves the composite of three arms in declaration order, the two adopted stamps of Evidence then that one; it
   returns the default registries by identity otherwise; no arm stamp equals a default or overlay stamp
   (`tests/agents/test_bespoke_prompt_sets.py`, `_BALLOT_ARM_STAMPS` gains the cases). Perturbed: a hand-written
   suffix fails the derivation test; a pin omitting the arm while the profile renders it is refused.
-- [ ] **One home for the stated places and the reconcile rule.** Mechanism: `Placement`, `PlacementKind`, its sort
+- [x] **One home for the stated places and the reconcile rule.** Mechanism: `Placement`, `PlacementKind`, its sort
   key, the alibi-stay reader, `spoken_placements`, `placements_of`, `reconcilable` and its spot protocol move from
   `experiments/lab/route_check_replay.py` into a new `meetings/route_lines.py`, bodies byte for byte, and the lab
   imports them back and keeps no copy. Proof: `python -m experiments.lab.route_check_replay --check` reproduces the
   committed JSON and report byte for byte, and `tests/experiments/test_route_check_replay.py` passes unchanged.
   Planted: an `ast` test fails if a module besides `meetings/route_lines.py` defines either of the two functions.
-- [ ] **The builder is pure and role-blind.** Mechanism: `build_route_lines(*, transcript, candidate_targets,
+- [x] **The builder is pure and role-blind.** Mechanism: `build_route_lines(*, transcript, candidate_targets,
   regroup_ticks) -> tuple[RouteLine, ...]` in `meetings/route_lines.py`, importing only `meetings.*`, the standard
   library and pydantic. It takes each candidate's placements of `ROUTE_PLACEMENT_KINDS` (pinned equal to the lab's
   `C_INPUT_KINDS`), deduplicates them by tick and rooms, orders them by tick and rooms, and keeps as a step each
@@ -173,7 +233,7 @@ so a failure prints no prompt or transcript text.
   (`settings(deadline=None)`, the map loaded) over scripted transcripts shows every voter's line for a shared
   candidate identical, and any permutation of roles leaving every block byte-identical. Perturbed: a role read
   planted into the builder breaks that property.
-- [ ] **The planted cases.** Mechanism: the builder and the rendered block, read back. Each case scripts a meeting
+- [x] **The planted cases.** Mechanism: the builder and the rendered block, read back. Each case scripts a meeting
   and asserts the parsed step:
   - WEST_HALL at tick 5, ADMIN at tick 6: one door, `walking_fits`;
   - ADMIN at tick 5, CAFETERIA at tick 7: two doors, `walking_fits`, while `_walkable_transits` links nothing;
@@ -186,7 +246,7 @@ so a failure prints no prompt or transcript text.
   - the voter, a dead player and a candidate with one room have no line.
   Neutered, each red on its own case: `max_hops=1`; the regroup branch removed; the walk-first order swapped; vent
   sightings admitted; the relevance gate applied; a non-reconcilable pair kept as a step.
-- [ ] **A typed check refuses a line that would name a suspect, assert presence or claim a false link.**
+- [x] **A typed check refuses a line that would name a suspect, assert presence or claim a false link.**
   Mechanism: `RouteStep` and `RouteLine` are frozen, `extra="forbid"` models with no free-text field; a step's rooms
   must be canonical and disjoint, its door count must equal `room_hops`, its reading is
   `Literal["walking_fits", "regroup_between"]` and must follow from doors, ticks and its regroup tick (a walk when
@@ -198,7 +258,7 @@ so a failure prints no prompt or transcript text.
   (impostor, crewmate, suspect, guilty, innocent, lying, honest, true, confirmed, was in, were in, impossible). A property (`settings(deadline=None)`) holds every rendered step's doors and reading equal to a
   breadth-first search over `engine.world.load_canonical_map()` in the test; one door flipped in a scratch copy of
   the neighbour table, the sourced constant's planted source change, turns that property red.
-- [ ] **The block renders only ON, only in the ballot, and parses back.** Mechanism: one guarded block,
+- [x] **The block renders only ON, only in the ballot, and parses back.** Mechanism: one guarded block,
   `{% if route_lines_version is defined and route_lines_version and route_lines %}`, between `{% endif %}` of the
   map card (`vote_ballot.j2:285`) and `{% if evidence_rows %}` (`:287`), opening `ROUTE_BLOCK_OPEN` (`<routes>`)
   and closing `ROUTE_BLOCK_CLOSE`. Its fixed text is a header saying the lines read the places this table stated
@@ -214,17 +274,17 @@ so a failure prints no prompt or transcript text.
   OFF render byte for byte for crew and impostor voters (a property, `_crew_byte_problems`' precedent); no other
   template of any set references `route_lines`; a dead guard is refused by `require_guarded_bodies`. Planted: a
   template copy that rewords a line parses to nothing and fails the round trip.
-- [ ] **Every reader of a ballot reads an ON ballot as before.** Mechanism: placement before `<evidence>`, no
+- [x] **Every reader of a ballot reads an ON ballot as before.** Mechanism: placement before `<evidence>`, no
   `## ` heading inside the block. Proof: on scripted ON ballots `_parse_suspicion_graph`, the rendered-maximum
   parse, the railroad tripwire and `served_own_kill_rows` return exactly what they return on the same ballots OFF.
   Planted: the block moved under the suspicion header fails the suspicion parse test.
-- [ ] **The manager threads it to every ballot and to nothing else.** Mechanism: the ballot path calls the builder
+- [x] **The manager threads it to every ballot and to nothing else.** Mechanism: the ballot path calls the builder
   only when its profile's value is not `None`, over the final transcript, the voter's candidate targets and the
   run's regroup ticks, and passes `route_lines` and `route_lines_version` to the vote renderer;
   `VotePromptRenderer` and `vote_ballot_prompt` take both with defaults `()` and `None`. Proof: a recording stub
   captures both keywords at every ballot of a scripted ON meeting and at no report or statement render.
   Perturbed: the manager passing `()` fails the scripted ON golden below.
-- [ ] **Fake and scripted rehearsals, on and off.** Mechanism: `HeadlessGame` with no environment, on round 2's
+- [x] **Fake and scripted rehearsals, on and off.** Mechanism: `HeadlessGame` with no environment, on round 2's
   declared config and on it plus the field. A fake turn states no place (the fake answers every list field empty,
   `llm/fake_provider.py:177-185`), so the fake games prove the field inert: at a seed named in Results they hold equal
   state hashes and events, rows that differ only in the config key and the `vote_ballot` stamp, and identical prompts
@@ -235,17 +295,17 @@ so a failure prints no prompt or transcript text.
   `outcome_verified` and the golden's `walk_directory` reproduces every prompt of all four games. Perturbed: the
   scripted ON game walked with the field dropped from its profile fails the golden at every ballot that carries the
   block.
-- [ ] **The golden's planted OFF leg.** Mechanism: the OFF gate. Proof: forcing the builder ON and the version to 1
+- [x] **The golden's planted OFF leg.** Mechanism: the OFF gate. Proof: forcing the builder ON and the version to 1
   inside `meetings.manager` fails the golden at exactly the committed sample ballots whose transcript states, for
   a candidate, a change of room that walking or the regroup reconciles, a set measured here and pinned like
   `_KILL_HOLDER_MEETINGS`, and at no other.
-- [ ] **Readers thread or refuse.** Mechanism: `READABLE_SETTINGS` gains the field; the six instruments and the
+- [x] **Readers thread or refuse.** Mechanism: `READABLE_SETTINGS` gains the field; the six instruments and the
   golden read an ON recording through the walk; `FIELD_CLASSIFICATION` gains one not-read entry ("adds role-blind
   route lines to a ballot; no cell is forced by it"), which the census card later replaces. Proof: each instrument
   completes on the scripted ON recording; with the field removed from `READABLE_SETTINGS` each refuses naming it;
   the pin test expects the new set; the census classification test is green and the regenerated pages differ by
   that one row.
-- [ ] **The mirrors and pages state it.** Mechanism: `ExperimentConfigView` gains the field with the same type and
+- [x] **The mirrors and pages state it.** Mechanism: `ExperimentConfigView` gains the field with the same type and
   default; `scripts/gen_frontend_types.py` lists it optional; `frontend/src/types/api.ts` is regenerated;
   `tests/api/test_leak.py` allows the key; `_WAVE_FIELDS` gains it; `docs/experiment-arms.md` gains its row (meeting
   layer, this card), its place in the omitted-at-default list and the config-only and stamp paragraphs;
@@ -253,7 +313,7 @@ so a failure prints no prompt or transcript text.
   (`orchestrator/game.py:527`, `meetings/manager.py:2392`, `meetings/render_contract.py:493`, `loader.py:1112`,
   `eval/recorded_settings.py:8` and `:36`, `eval/watchability.py:1595`, the template header). Proof: the
   view-mirror test; the page check bites the row deleted; `npm --prefix frontend run tsc:check`.
-- [ ] **The pre-spend measurement, against (c).** Mechanism: a new `experiments/lab/route_lines_replay.py`, count
+- [x] **The pre-spend measurement, against (c).** Mechanism: a new `experiments/lab/route_lines_replay.py`, count
   only, over the route-check harness's columns (s9, r1, r2, each read alone, r2 governing) and its walk, writing
   `report-route-lines-replay.md` and `results-route-lines-replay.json` with `--check`. A renderer wrapper renders
   each recorded ballot twice, as recorded and with the field ON. It reports per column: M, W and (c)'s reach,
@@ -267,19 +327,19 @@ so a failure prints no prompt or transcript text.
   its block equals the recorded prompt; the outputs carry no rendered line or turn text (the harness's scan, with
   every rendered line added); planted, a (c) parity mismatch raises and a rendered line in an output is refused.
   The reach is reported as measured and gates no item; the pair rule is fixed before the run, never tuned to it.
-- [ ] **The record card's r3 column.** Mechanism: both instruments accept the label `r3`, declaring
+- [x] **The record card's r3 column.** Mechanism: both instruments accept the label `r3`, declaring
   `replays/candidates/stage-b-r3/experiment-config.json`; on r3 the field instrument reads the served blocks.
   Proof: on a scratch set of scripted ON games, both run at a throwaway commit and the field's served reach equals
   its re-rendered reach; the committed outputs, which hold no r3 column, reproduce byte for byte. Planted: an r3
   set recorded under another config is refused, naming the column.
-- [ ] **Nothing committed moves; the bundle diff is exactly the view key.** Mechanism: the `None` default and the
+- [x] **Nothing committed moves; the bundle diff is exactly the view key.** Mechanism: the `None` default and the
   omitted key. Proof at the branch head, in a bare shell: `verify_samples.sh` and `build_sample_report.py --check`
   for `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i` and `candidates/stage-b-r1/9p2i`; the
   golden over every committed set; `publish_process_scorecard.py --check`; the census `--check` after
   regeneration; `uv run pytest -m campaign`; `verify_ml_evidence.py` offline. `build_demo_bundle.py` at the merge
   base and the head: `diff -r` shows only `"route_lines_version":null` added to each served config view.
   Planted: the field's default set to 1 turns the committed-payload test and the golden red.
-- [ ] **One bounded mutation pass.** Mechanism: a single pass over every production line this card adds or
+- [x] **One bounded mutation pass.** Mechanism: a single pass over every production line this card adds or
   changes, using only the eight operator classes F filter, S swap, N comparison, C constant, M message, T tuple
   member, B branch swap and L loaded source to literal. Each mutant runs alone against the touched suites and
   Results lists it; a survivor is killed by a new test or named equivalent with its reason. Results also carries a
@@ -506,8 +566,715 @@ component changes; the bundle diff is the publication proof), and `check.sh` run
 
 ## Results
 
-Not started. The implementer records: the commits; the sections relied on (this card, `docs/architecture.md`
-"Enforced boundaries" and "Determinism and the substrate ladder", `docs/experiment-arms.md`, decision memo 0.3, the
-route-check Reading, baselines memo D2); the decisions above; the served wording; each planted failure by test id;
-the instrument's per-column table and token projection; the bundle diff; the mutation and neuter tables; and every
-validation command with its exit code.
+Implemented on `work/route-lines-field` from `2275bdba`, with `main` merged in at `83806ab0`. Commits:
+`6014c883` (the field), `93e8cfb8` (the offline instrument and its outputs), `0a8ad54b` (the merge of
+`main`), `be712049` (sharper planted cases), `5b3a7d8d` (the read-off test), `215cebbd` (the page-check
+case), and the docs commits that carry this Results section and the full gate's exit code. Nothing was
+recorded and no provider was called.
+
+**Sections relied on.** This card; `docs/architecture.md` "Enforced boundaries" (the builder imports only
+`meetings.*`, the stdlib and pydantic; `agents/` reaches `meetings.route_lines` and never the engine or the
+manager; `uv run lint-imports` green) and "Determinism and the substrate ladder" (the line is a pure function
+of recorded bytes; every committed set re-renders byte-identically); `docs/experiment-arms.md`; decision memo
+0.3 items 2, 4 and 5 (omit at default, derived stamps, config-only fields), 8.2 item 2 and 8.5; the
+route-check card's Reading (`tasks/work/route-check-replay.md`); baselines memo D2 option (a), as the memo's
+8.2 item 2 quotes it.
+
+**Decisions.** The card's seven, as built:
+1. `route_lines_version: Literal[1] | None = None`, declared last, meeting layer, format 1, omitted at default;
+   the profile refuses it beside `evidence_reasoning_version = 2` (two walking readers with different timing
+   rules on one ballot) and beside either account profile.
+2. The lines are a ballot render input the manager builds beside the evidence rows, not memory rows: the memory
+   holds the store as of the meeting's open and is budget-shed, which is what cost (b) its cases.
+3. Spoken placements only (no speaker's own record), no relevance gate, consecutive changes of room, and no line
+   for a candidate without one. Measured against (c) below.
+4. The placement reader and `reconcilable` live in `meetings/route_lines.py`; the lab imports them back and keeps
+   no copy (an `ast` test holds it).
+5. No cap on lines or steps.
+6. No tactical lab arm.
+7. Two readings only: a consecutive change of room that neither walks nor crosses the regroup is left out, never
+   rendered as an impossible move.
+
+The orchestrator's rulings of 2026-10-06, each applied:
+1. At most one line per living candidate with a stated change of room; steps read `walking_fits` or
+   `regroup_between` only; the header says a player with no line is not judged by the block.
+2. The pre-spend reach was measured before anything else was built (a scratch count over the committed r2
+   cases, then the instrument): 31 of 40 and 7 of 7, above 29 and 7, so the build went on and the placement
+   universe was not widened.
+3. Fake games serve no line: the fake rehearsal proves inertness; the scripted rehearsal proves presence.
+4. `RouteStep` and `RouteLine` are frozen, `extra="forbid"`, hold no free text and refuse a step whose door
+   count or reading the map does not give; planted cases below.
+5. Determinism: the prompt-byte golden re-renders every scripted ON ballot, and a property holds every block
+   byte-identical under any permutation of roles.
+6. Publication: the field is OFF on every committed set; the bundle diff, built in one checkout, is exactly one
+   null `route_lines_version` key per served config view (below). The merge is the owner's.
+7. The three baseline-9 sets, the shown set and the r1 candidate verify and rebuild byte-identically; the
+   committed-payload test proves the default omits the key; the readers read it or refuse it.
+
+**The served wording.** The block opens `<routes>` after the map card and closes `</routes>` before
+`<evidence>`. Its fixed header: "Each line below takes the places this table stated for one player, in tick
+order, and reads each change of room against the station's doors. A line lists only the changes of room the
+doors allow within the ticks between, or that the public regroup falls between, which walking cannot decide; a
+change of room that neither allows is left out. A player with no line is not judged by this block. A line
+weighs no statement: a place said here reads the same whether or not the account behind it is accurate, and the
+line says nothing about anyone's role." A line, as the card's example renders (a planted case the check
+accepts, `test_the_example_line_is_accepted_and_served_as_the_card_words_it`): "- `p-3`, places stated at this
+table: REACTOR at tick 4 to MEDBAY at tick 6, 5 doors apart, the public regroup at tick 5 falls between,
+walking cannot decide it; MEDBAY at tick 6 to WEST_HALL at tick 7, 1 door apart, walking fits." "route line" is
+defined in `docs/glossary.md`.
+
+**The stamp.** `vote_ballot.qwen3_6_27b.v8.route_lines_v1`, derived (`experiment_arm_suffix`); round 3's config
+(round 2's declared file plus the field) folds `vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1+vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1+vote_ballot.qwen3_6_27b.v8.route_lines_v1`.
+The header marker stays `vote_ballot.qwen3_6_27b.v8`; no registry moves.
+
+**Tests written first.** Run against an export of `2275bdba` with the three new test files and the helper
+copied in, the three modules fail at collection for the stated reason: `ModuleNotFoundError: No module named
+'meetings.route_lines'` (twice) and `No module named 'experiments.lab.route_lines_replay'`.
+
+**Planted and perturbed failures, each red at its own case** (test ids, all in the committed suites):
+- Omission dropped from `OMITTED_AT_DEFAULT`: `test_without_its_omission_the_committed_payloads_and_files_fail`
+  (the first archive row and both committed `experiment-config.json` files mismatch).
+- The default planted at 1: `test_every_committed_payload_reads_the_field_off` (every committed payload,
+  config file and replay set must read the field OFF), the view mirror test and the golden on all three walked
+  sets go red. The byte test `test_every_committed_recorded_payload_reserializes_byte_for_byte` stays green
+  under that plant, because the omission keys on the default; the read-off test was added for it.
+- The route-lines row deleted from the contract page, or its value: `test_the_page_check_bites_the_route_lines_row`.
+- Hand-written stamp: `test_a_hand_written_route_lines_stamp_fails_the_derivation_test`; pin omitting the arm:
+  `test_a_pin_that_omits_an_arm_the_manager_renders_fails_the_one_source_check[route-lines]` and `[round-3]`.
+- The lifted rule defined twice: `test_only_the_route_lines_module_defines_the_reader_and_the_rule`.
+- Foreign imports: `test_the_module_imports_only_meetings_pydantic_and_the_stdlib`.
+- A role read planted into the builder: `test_a_role_read_planted_into_the_builder_breaks_the_role_blind_property`.
+- One door flipped in a copy of the neighbour table:
+  `test_one_door_flipped_in_a_copy_of_the_table_turns_the_map_property_red`; the room table shrunk:
+  `test_the_door_bound_follows_the_room_table`.
+- Each planted word in the fixed text: `test_the_wording_scan_fails_on_each_planted_word[*]` (12 cases).
+- A reworded template copy: `test_a_template_copy_that_rewords_a_line_fails_the_round_trip`; a dead guard:
+  `test_a_dead_guard_is_refused`; lines without their version: `test_lines_handed_over_without_their_version_are_refused`.
+- The block moved under the suspicion header: `test_the_block_moved_under_the_suspicion_header_fails_the_suspicion_parse_test`.
+- The scripted ON game walked with the field dropped from its profile:
+  `test_the_scripted_on_game_walked_without_the_field_fails_at_every_block`; the manager passing `()`:
+  `test_the_manager_passing_no_lines_fails_the_scripted_on_golden`.
+- The golden's OFF leg forced ON inside `meetings.manager`:
+  `test_the_route_lines_forced_on_fail_the_golden_at_the_reconciled_ballots` fails at exactly the sample ballots
+  whose voter's candidates hold a route line, recomputed from the bytes and pinned as (count, sha256 of the
+  sorted `set:seed:meeting:voter` keys): 9p2i 665 ballots, 4p1i 86, no turn prompt.
+- The field out of `READABLE_SETTINGS`: `test_each_instrument_refuses_it_once_the_field_leaves_its_reads[*]` (7)
+  and `test_the_golden_refuses_it_once_the_field_leaves_its_reads`.
+- A (c) parity mismatch: `test_a_parity_mismatch_raises`; a column pinned to other bytes:
+  `test_a_column_the_route_check_replay_pins_to_other_bytes_raises`; a rendered line in an output:
+  `test_a_rendered_line_in_an_output_is_refused`; an ON render moving more than its block or serving other
+  lines: `test_an_on_render_that_moves_more_than_its_block_raises`, `test_an_on_render_whose_block_holds_other_lines_raises`;
+  an r3 set recorded under another config: `test_an_r3_set_recorded_under_another_config_is_refused_naming_the_column`.
+- A moved state hash in the fake rehearsal: inside `test_the_fake_rehearsal_is_inert`.
+- The typed check: `test_the_typed_check_refuses[*]` (27 cases since review round 2, among them a `suspect`
+  key, `walking_fits` for REACTOR to MEDBAY in two ticks, `regroup_between` with no regroup tick inside,
+  `regroup_between` where a walk fits, a wrong door count and `walking_does_not_fit`).
+- The six neutered builder rules the card names, each red on its own case (mutation table): `max_hops=1`
+  (M14's class; `test_the_door_bound_follows_the_room_table`), the regroup branch (M15,
+  `test_a_change_across_the_public_regroup_names_the_regroup_tick`), walk-first swapped (M06/M12), vent
+  sightings admitted (M01, `test_a_vent_sighting_places_nobody`), the relevance gate applied
+  (`test_a_spawn_window_sighting_places_its_subject`), a non-reconcilable pair kept (neuter X29).
+
+**The pre-spend measurement** (`uv run python -m experiments.lab.route_lines_replay --check` reproduces
+`experiments/lab/results-route-lines-replay.json` and `report-route-lines-replay.md`; each column's route-check
+records were recomputed and equal the committed route-check JSON meeting by meeting). Count only; r2 governs;
+reaching is showing a line, not changing a vote, and no model ran.
+
+| column | M | W | (c) over M | field over M | (c) over W | field over W | every pair over M | field's charge-touching | unreached: kind / consecutive / residual |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| s9 | 50 | 0 | 32 | 33 | 0 | 0 | 34 | 28 | 17 / 0 / 0 |
+| r1 | 29 | 0 | 20 | 22 | 0 | 0 | 23 | 20 | 6 / 1 / 0 |
+| r2 | 40 | 7 | 29 | 31 | 7 | 7 | 32 | 29 | 9 / 0 / 0 |
+
+On r2 the field reaches every case (c) reaches and two more (no relevance gate), and 21 of 21 misjudged innocent
+ejections and 5 of 5 ejected witnesses, by ejection class as description; its 9 unreached cases all rest on a
+vent sighting, which the field does not read. On r1 the field misses one misjudged innocent case (c) reaches:
+its reconcilable pair is not a consecutive change of room (the every-pair leg reaches it).
+
+| r2 | value |
+| --- | --- |
+| ballots / carrying the block | 691 / 665 |
+| lines (one per player and meeting) / served over all ballots | 439 / 2,415 |
+| steps: walking fits / regroup between | 1,343 / 25 |
+| consecutive changes left out (neither walk nor regroup) | 51 |
+| block characters per ballot / per ballot carrying it | 1,469.2 / 1,526.7 |
+| input tokens: recorded / ballot calls / projected added / projected total | 9,187,880 / 5,681,204 / 331,015 / 9,518,895 |
+
+The projected total sits under the 15,750,000 hard stop and the 17,500,000 ceiling (s9 projects +313,309, r1
++348,993). This is a planning figure on round-2 bytes, not a prediction of the model.
+
+**Rehearsals.** Fake (seed 0, round 2's declared config and the same plus the field, recorded in a bare shell):
+every row equal apart from the config key and the `vote_ballot` stamp, so equal state hashes, events and
+prompts, and no block served (`test_the_fake_rehearsal_is_inert`). Scripted (`tests/_helpers/scripted_routes.py`,
+seed 0): ON serves both readings, the opener's ADMIN to REACTOR change in one tick serves no step, and the one
+ejection (the opener, at the first meeting) rests on the walk's second sighting; each ON ballot minus its block
+equals its OFF twin and the tally (targets, confidences, outcome, ejected, post-meeting hash) is the same. All
+four games report `outcome_verified` through `ReplayLoader` and re-render every prompt through the golden's
+`walk_directory`. The seven instruments (kill-craft, the two funnels, solvability, win-condition, evidence
+honesty, the watchability referee) complete on the scripted ON recording, and every ballot reader
+(`_parse_suspicion_graph`, `_parse_valid_targets`, the rendered maximum, the railroad tripwire's read,
+`served_own_kill_rows`) reads each ON ballot as its OFF twin.
+
+**The bundle diff** (`uv run python scripts/build_demo_bundle.py --out <scratch>/bundle-base` with the
+checkout at the merge base `83806ab0`, then the same with `--out <scratch>/bundle-head` at `5b3a7d8d`, one
+checkout, exit 0 both): 109 files each, the same file set; `diff -rq` lists four files, all in the 9p2i set
+(`data/9p2i/eval/summary.json`, `data/9p2i/replays.json`, `data/9p2i/replays/headless-seed-14.json`,
+`data/9p2i/replays/headless-seed-19.json`), and each differs only by an added `"route_lines_version": null`
+key in a served config view (five keys in all; removing them gives the base bytes). The 4p1i set and the
+frontend assets are unchanged. No behaviour ships, but the public payload moves, so **the merge is the
+owner's**.
+
+**Mutation pass** (one bounded pass at `0a8ad54b`, the eight classes only, each mutant alone against its
+targeted suite, restored from a copy; scratch harness, count only): 39 mutants, 39 killed, no survivor, none
+named equivalent. That pass held no row for four lines the round-1 verifiers then probed with listed classes, and
+each survived there: the instrument's three census-against-walk guards in `read_game` and the step's room read.
+Their rows (R01, R02, R05, R09) are added at the foot of the table, red on the planted cases round 1 added; the
+whole round-1 pass is in the review subsection below.
+
+| id | class | site | first red test |
+| --- | --- | --- | --- |
+| M01 | F | `_route_spots` kind filter dropped | `test_a_vent_sighting_places_nobody` |
+| M02 | T | `alibi_stay` dropped from the kinds | `test_every_route_kind_places_its_player` |
+| M03 | T | `company` dropped from the kinds | `test_every_route_kind_places_its_player` |
+| M04 | S | consecutive pairs swapped for every pair | `test_every_route_kind_places_its_player` (3 red) |
+| M05 | N | `how is None` inverted | `test_one_door_in_one_tick_walks` |
+| M06 | B | step reading branches swapped | `test_two_rooms_at_one_tick_are_no_step_and_a_walk_across_a_regroup_walks` |
+| M07 | C | step `from_tick` a constant | `test_every_route_kind_places_its_player` |
+| M08 | C | step `from_rooms` a constant | `test_a_compound_label_renders_both_rooms` |
+| M09 | M | non-candidate refusal message a constant | `test_a_line_about_a_non_candidate_or_a_second_line_is_refused` |
+| M10 | F | non-candidate refusal dropped | same |
+| M11 | N | door comparison a None test | `test_the_typed_check_refuses[a wrong door count]` |
+| M12 | N | walk comparison inverted | `test_two_rooms_at_one_tick_are_no_step_and_a_walk_across_a_regroup_walks` |
+| M13 | C | validator's room read a constant | `test_one_door_in_one_tick_walks` |
+| M14 | L | the door bound read as the literal 10 | `test_the_door_bound_follows_the_room_table` |
+| M15 | C | regroup tick a constant | `test_a_change_across_the_public_regroup_names_the_regroup_tick` |
+| M16 | F | parse's one-line-per-candidate check dropped | `test_a_malformed_line_inside_the_block_raises` |
+| M17 | B | parse reading branches swapped | `test_the_example_line_is_accepted_and_served_as_the_card_words_it` |
+| M19 | T | field dropped from the account refusal | `test_the_profile_refuses_it_beside_an_account_profile[public_account_version]` |
+| M20 | N | evidence-v2 refusal's None test inverted | `test_the_profile_refuses_it_beside_version_two_evidence` |
+| M21 | M | evidence-v2 refusal message a constant | same |
+| M22 | T | field dropped from `CONFIG_ONLY_PROFILE_FIELDS` | `test_the_profile_carries_it_from_the_config_alone` |
+| M23 | T | field dropped from the profile's integer check | `test_the_profile_refuses_a_value_other_than_one_or_none[True]` |
+| M24 | T | field dropped from the config's integer check | `test_a_value_other_than_one_or_none_is_refused[True]` |
+| M25 | T | field dropped from `OMITTED_AT_DEFAULT` | `test_none_dumps_no_key_and_is_the_default` (3 red) |
+| M26 | C | `FIELD_LAYER` layer a constant | `test_the_wave_fields_and_the_derived_rows_sit_in_their_layers` |
+| M27 | T | arm registry entry dropped | `test_the_stamp_is_derived_and_served_only_for_a_config_carrying_it` |
+| M28 | N | manager gate inverted | `test_the_manager_threads_the_lines_to_every_ballot_and_to_nothing_else` |
+| M29 | C | manager regroup ticks a constant | same |
+| M30 | M | manager version argument a constant | same |
+| M31 | S | manager candidates swapped for every participant | same |
+| M32 | N | loader refusal's None test inverted | `test_two_rooms_at_one_tick_are_no_step_and_a_walk_across_a_regroup_walks` |
+| M33 | M | loader lines argument a constant | same |
+| M34 | B | template reading branches swapped | `test_the_example_line_is_accepted_and_served_as_the_card_words_it` |
+| M35 | F | `and route_lines` dropped from the guard | `test_the_same_change_without_a_regroup_is_no_step_and_leaves_no_line` |
+| M36 | C | door noun a constant | `test_the_example_line_is_accepted_and_served_as_the_card_words_it` |
+| M37 | T | field dropped from `READABLE_SETTINGS` | `test_every_instrument_reads_the_readable_settings_whole` |
+| M38 | N | instrument's served comparison inverted | `test_a_served_block_other_than_its_rebuilt_lines_raises` |
+| M39 | F | instrument's subject filter dropped | `test_the_committed_r2_column_recomputes_from_the_checkouts_bytes` |
+| M40 | B | unreached-reason branches swapped | `test_an_unreached_case_names_its_reason` |
+| R01 | N | `read_game`'s no-such-meeting guard a `None` test (review round 1) | `test_a_census_the_walk_disagrees_with_is_refused_by_name[one meeting short]` |
+| R02 | N | `read_game`'s meeting-id and tick guard a `None` test (review round 1) | `test_a_census_the_walk_disagrees_with_is_refused_by_name[a moved tick]`, `[a moved meeting id]` |
+| R05 | N | `read_game`'s meeting-count guard a `None` test (review round 1) | `test_a_census_the_walk_disagrees_with_is_refused_by_name[one meeting long]` |
+| R09 | L | `RouteStep`'s room read replaced by the literal ten rooms (review round 1) | `test_the_room_check_follows_the_room_table` |
+
+Which probes first came back green: none in the pass itself. Three would have, by the planning analysis done
+before the pass, and got a planted case before it ran: M14 (the door bound was an import-time constant, so no
+source change could reach it; it became `_max_doors()`, read when asked, with
+`test_the_door_bound_follows_the_room_table`), M23 (no profile-level integer test) and M40 (r2 holds no
+consecutive case, so the committed recompute could not tell the reasons apart).
+
+**Per-line neuter table** (each line or check neutered alone, restored from a copy). Lines the mutants above
+already neuter are not repeated.
+
+| id | line neutered | red |
+| --- | --- | --- |
+| X01 | the census `FIELD_CLASSIFICATION` entry | `tests/eval/test_gameplay_census.py::test_the_census_declares_its_own_layers_every_one_it_classifies` |
+| X02 | `ExperimentConfigView.route_lines_version` | `test_an_older_payload_without_the_wave_keys_reads_as_defaults` |
+| X03 | the generator's optional listing | `tests/api/test_view_model.py::test_generated_frontend_types_are_committed` |
+| X04 | loader passes the version to the template | `test_the_example_line_is_accepted_and_served_as_the_card_words_it` |
+| X05 | manager passes the lines | `test_the_manager_threads_the_lines_to_every_ballot_and_to_nothing_else` |
+| X06 / X07 | the r3 declared path / `"r3"` in `COLUMN_LABELS` | `test_an_r3_column_is_read_from_its_served_blocks_by_both_instruments` |
+| X08 / X09 / X10 | the instrument's strip, parse-back and recorded-OFF checks | `test_an_on_render_that_moves_more_than_its_block_raises`, `test_an_on_render_whose_block_holds_other_lines_raises`, `test_a_ballot_recorded_off_but_rendered_with_lines_raises` |
+| X11 / X12 | the parity source and per-record checks | `test_a_column_the_route_check_replay_pins_to_other_bytes_raises`, `test_a_parity_mismatch_raises` |
+| X13 / X14 | one render per participant; one line per player | `test_a_meeting_needs_one_ballot_per_participant_and_one_line_per_player` |
+| X15-X21 | `RouteLine` subject, non-empty and tick-order checks; `RouteStep` disjoint, sorted, canonical and whole-number checks | `test_the_typed_check_refuses[...]`, one case each; since review round 2 the whole-number check has one per tick and door field and the once-each check one for a repeated room (round-2 rows K01-K06) |
+| X22-X26, X30, X31 | parse's header order, door noun, one block, closed block, blank line, non-empty block, line form | `test_a_malformed_line_inside_the_block_raises`, `test_a_template_copy_that_rewords_a_line_fails_the_round_trip` |
+| X27 / X28 | the builder's input refusals | `test_the_builder_refuses_invalid_input` |
+| X29 | a candidate with no step still given a line | `test_one_door_in_one_tick_walks` |
+| X33 | the template's line prefix | `test_the_example_line_is_accepted_and_served_as_the_card_words_it` |
+| X34 / X35 | the config and profile field declarations | collection of `tests/meetings/test_route_lines_arm.py` fails |
+| X36 | `VotePromptRenderer`'s two keywords | strict mypy: `meetings/manager.py:2374: Unexpected keyword argument "route_lines_version"` |
+| X37 | the lab's explicit re-export | strict mypy: `tests/experiments/test_route_check_replay.py:1997: ... does not explicitly export attribute "reconcilable"` |
+| X32 | `or doors is None` in `_route_step` | equivalent: `reconcilable` returns `None` whenever the doors are `None`; the clause narrows the type for mypy |
+| X38-X40 | `read_game`'s three census-against-walk guards (review round 1; neutered by R01, R02 and R05) | `test_a_census_the_walk_disagrees_with_is_refused_by_name[...]`, one case each |
+| X41 | `RouteStep`'s room check (review round 1) | `test_the_room_check_follows_the_room_table`, `test_the_typed_check_refuses[a room off the map]` |
+
+Before the neuter pass, reading each check against its case showed three cases that also failed another check
+(the lone off-map room had no doors; the boolean and negative tick cases broke the reading rule) and one check
+no input could reach alone (forward ticks: a step whose ticks run back satisfies neither reading), so the cases
+were sharpened and the check deleted. The pass then left one check green, X18 (the disjoint-rooms check, whose
+overlap case also miscounted its doors); its case was sharpened and X18 re-ran red. Both are in `be712049`.
+
+**Validation** (every command in a shell with no `AILIBI_*` export, at `be712049` unless noted; exit codes
+captured directly):
+
+| command | exit | result |
+| --- | --- | --- |
+| `uv sync --frozen` | 0 | 46 packages |
+| the card's targeted pytest list, `-n 6` | 0 | 1,507 passed |
+| `uv run lint-imports` | 0 | 4 contracts kept, 0 broken |
+| `uv run python -m experiments.lab.route_check_replay --check` | 0 | reproduced (42.6 s) |
+| `uv run python -m experiments.lab.route_lines_replay --check` | 0 | reproduced (43.6 s) |
+| `bash scripts/verify_samples.sh` for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, the same five sets | 0 each | each report consistent with its replays |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py` then `--check` | 0 | consistent; `git diff --stat` 2 files, 2 insertions: the one classification row in `docs/gameplay-census.md` and `.json` |
+| `uv run python scripts/gen_frontend_types.py --check` | 0 | `frontend/src/types/api.ts` gains one optional key |
+| `npm --prefix frontend run tsc:check` | 0 | |
+| `uv run python scripts/check_doc_facts.py` | 0 | doc facts, front door, ML program and budgets verified |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 phase tasks, 390 prompts, 101 work cards |
+| `uv run python scripts/generate_prompts.py --check` | 0 | |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | 63 checks: 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign` | 0 | 337 passed |
+| the default tier, `uv run pytest -n auto --dist loadfile`, on the tree committed as `6014c883` and `93e8cfb8` less the door-bound change and four later tests | 0 | 10,421 passed, 20 skipped, 3 xfailed |
+| the field's default planted at 1 (scratch, restored) | red as planted | the read-off test, the view mirror test and the golden on all three walked sets go red; the byte test stays green, since the omission keys on the default and the bytes still round-trip |
+
+`bash scripts/check.sh`, the full gate, ran once at `0bac2050` (the head carrying this Results section; the
+commit recording this line changes this card only), in a shell with no `AILIBI_*` export, its exit code
+captured directly: **exit 0**. Ruff check and format clean (559 files), import-linter 4 contracts kept,
+`validate_task_docs` and `generate_prompts --check` clean, strict mypy clean over 530 source files, the default
+tier 10,433 passed, 20 skipped and 3 xfailed, and the frontend lint, typecheck, 695 unit tests in 26 files and
+build all passed.
+
+**Limitations that stay.** Reaching is showing a line, not changing a vote; fake games prove mechanics, not
+reasoning. A lie stated at the table yields a line as plain as the truth. Vent-sighting pairs stay unreached by
+design (9 of r2's 40). The consecutive rule gives up one r1 case the every-pair leg reaches. The token
+projection is a share of recorded prompt characters, not a tokenizer count. A model could quote a line's door
+count in its rationale; the ballot's rationale rule already forbids bookkeeping figures, and the census card
+counts what the block serves. The block reader fences off the memory and the transcript, not the spoken room
+labels the template quotes below the transcript; the review subsection states what it does with them.
+
+**Deviations, each named.**
+- `tests/experiments/test_route_check_replay.py`, where the card allowed imports only: the hop-bound test now
+  patches `meetings.route_lines.CANONICAL_ROOMS` (the rule's new home) and the unknown-label examples use `r4`
+  (`r3` is now a known label), one import added; no assertion weakened.
+- Five renderer test doubles gained the two defaulted keywords (`tests/agents/test_beliefs.py`,
+  `tests/meetings/_manager_helpers.py`, `tests/meetings/test_corroboration.py`,
+  `tests/orchestrator/test_meeting_integration.py`, `tests/orchestrator/test_replay_meetings.py`), the card's
+  permitted follow-through.
+- The lab re-exports the lifted public names (`Placement as Placement`, and so on), which strict mypy needs for
+  the lab's tests; it defines none of them.
+- The golden's forced-ON pin is a count and a sha256 per set rather than a literal tuple (751 ballots), so a
+  failure prints no prompt; the test also recomputes the set from the bytes.
+- The card's Status line and the `tasks/README.md` inventory sentence are left to the orchestrator (memo 8.5).
+- The Playwright journey was not run: no viewer component changes (the card's Validation note); `check.sh`
+  ran the frontend lint, typecheck, unit tests and build.
+- `eval/vote_correctness.py:45` still says round 2's config carries two ballot arms: it describes that recorded
+  config, which is true.
+
+### Review corrections, round 1 (2026-10-06)
+
+Four blocking findings from the round-1 verifiers at `740699b6`, one of them Codex's P2 on PR #501. Fix commit
+`732cda8d`: `meetings/route_lines.py` (the block reader and its docstrings), `tests/meetings/test_route_lines.py`
+and `tests/experiments/test_route_lines_replay.py`; the commits after it change only this card. Every command
+below ran at `732cda8d` in a shell with no `AILIBI_*` export, unless it names another head.
+
+**What changed.**
+- **The block is read only where the template writes it (docs verifier; Codex P2 on PR #501).** Reply to Codex:
+  valid, and fixed the way it proposes, by the block's fixed place below the map card. `route_block_span` read
+  every line of the prompt, and the ballot renders free text, claim reasons, alibi evidence and room labels raw,
+  so a spoken line equal to `<routes>` made an ON ballot raise (A), an OFF ballot with the line unclosed raise
+  (B), and a ballot that served no block read a spoken whole block as served (C); a scratch repro through the
+  real `qwen3_6_27b` vote renderer gave exactly those three at `740699b6`. The reader now reads nothing above
+  the transcript's last closing line; below it, a prompt with no delimiter line carries no block, and otherwise
+  the block must open after a blank line two lines below the map card's only closing line and close after it.
+  Every other delimiter line below the transcript raises: a second open or close, a close with no open, an open
+  anywhere else, a second map closing line, a close above the open. The blank-line check that
+  `without_route_block` made moved into the reader, which now refuses that shape itself. Planted: A, B and C,
+  each over the four model-authored channels (a turn's free text, an accusation's reason, an alibi's evidence,
+  the memory), each with and without a spoken transcript closing line above the delimiter, 24 cases, every one
+  red against the reader of `740699b6` (the old `meetings/route_lines.py` written over a copy and restored);
+  the ten refused shapes in `test_a_delimiter_line_below_the_transcript_off_its_place_raises`; the no-map-card
+  ballot; and the stated limit below. Every pre-existing reader test passes unchanged, its messages included.
+- **The limit, stated at the strength the reader delivers.** The fence covers everything above the
+  transcript's close. Below it the template quotes spoken room labels in contradiction sentences and evidence
+  rows: a delimiter line inside one raises, as does a map closing line on a ballot that carries the block,
+  while a transcript closing line quoted below the block moves the fence past it, so the block reads as absent
+  (`test_the_fence_stops_at_the_transcript` pins that limit). The guarantee is for a ballot that renders the map
+  card, as every ballot of the served set does (the bound vote renderer passes `CANONICAL_MAP_CARD`); rendered
+  without it, a served block has no place and raises. The docstrings of `route_block_span` and
+  `parse_route_lines` say the same. No committed recording holds a spoken string with a line break: over the five
+  committed sets, 4,431 turns carry 71,677 strings in their observations and claims and none holds one, nor does
+  any turn's free text (the command below, count only).
+- **The room check follows the room table (integrity verifier).** `test_the_room_check_follows_the_room_table`
+  monkeypatches `meetings.route_lines.CANONICAL_ROOMS` without WEST_HALL and expects the station-rooms refusal
+  for ADMIN at tick 5 to WEST_HALL at tick 6, which the unpatched table accepts with one door; it is the
+  source-change case for the room read, as `test_the_door_bound_follows_the_room_table` is for `_max_doors`.
+- **The instrument's census-against-walk guards (correctness verifier).**
+  `test_a_census_the_walk_disagrees_with_is_refused_by_name` calls `rlr.read_game` on r2 seed 2 (one meeting)
+  with a census one meeting short, one meeting long, a moved tick and a moved meeting id, and expects
+  `RouteLinesReplayError` with its whole message, as `test_route_check_replay.py` does for the route-check
+  copies of these guards.
+- **20, not 21 (docs verifier).** `uv run pytest --collect-only -q tests/meetings/test_route_lines.py` collected
+  20 `test_the_typed_check_refuses` ids at every commit of this branch through `685a4396` (27 since round 2);
+  the Results line and the PR body then said 20. The other collected counts this Results states were
+  re-collected at `732cda8d`: the wording scan 12, the instruments' refusal 7.
+
+**Consumers.** The lab instrument reads the block through the same three functions in both modes, and both
+`--check` runs reproduce their committed outputs byte for byte, so no committed output, count or artifact row
+moves. The census card's contract (`parse_route_lines`, `ROUTE_BLOCK_OPEN`, `ROUTE_BLOCK_CLOSE`, imported and
+never copied) is unchanged; the reader it imports now reads only the template's block.
+
+**Mutation pass, round 1** (the spans this round changes and the spans the findings name; the eight listed
+classes only; each mutant applied alone to a copy-restored file and run against its targeted suite,
+`tests/meetings/test_route_lines.py` for the module and `tests/experiments/test_route_lines_replay.py` for the
+instrument; scratch harness, count only): 32 mutants, 32 killed, none named equivalent.
+
+| id | class | site | a red test |
+| --- | --- | --- | --- |
+| R01 | N | `read_game`: `index >= len(game.meetings)` a `None` test | `test_a_census_the_walk_disagrees_with_is_refused_by_name[one meeting short]` |
+| R02 | N | `read_game`: the meeting-id and tick comparison a `None` test | `[a moved meeting id]`, `[a moved tick]` |
+| R03 | N | `read_game`: the tick half alone a `None` test | `[a moved tick]` |
+| R04 | N | `read_game`: the meeting-id half alone a `None` test | `[a moved meeting id]` |
+| R05 | N | `read_game`: `len(meetings) != len(game.meetings)` a `None` test | `[one meeting long]` |
+| R06-R08 | M | the three guards' messages a constant | the case of each guard |
+| R09 | L | `RouteStep`'s room read the literal ten rooms | `test_the_room_check_follows_the_room_table` |
+| R10 | M | the room refusal's message a constant | same |
+| R11 | F | the fence dropped (every line read) | `test_an_open_line_spoken_beside_a_served_block_is_not_read[reason-plain]` |
+| R12 | S | the last transcript close swapped for the first | `test_an_open_line_spoken_beside_a_served_block_is_not_read[reason-with-a-close]` |
+| R13 | N | `not fences` a `None` test | `test_a_malformed_line_inside_the_block_raises` |
+| R14 / R15 | N | each half of `not opens and not closes` a `None` test | `test_an_unclosed_open_line_spoken_in_an_off_ballot_is_not_read[...]` |
+| R16 / R17 | N | each half of the at-most-once comparison a `None` test | `test_a_delimiter_line_below_the_transcript_off_its_place_raises[a second open]`, `[a second close]` |
+| R18 | N | `not opens` a `None` test | `[a close with no open]` |
+| R19 | N | the blank-line comparison a `None` test | `test_a_malformed_line_inside_the_block_raises` |
+| R20 | N | the map-card comparison a `None` test | `[a map close quoted below the block]` |
+| R21 | S | the map-card check reads the last map close for the list of them | `[a map close quoted above the map card]` |
+| R22 / R23 | N | each half of the close check a `None` test | `test_a_malformed_line_inside_the_block_raises`, `[a close above the open]` |
+| R24 | S | the opens read off the close delimiter | `test_the_example_line_is_accepted_and_served_as_the_card_words_it` |
+| R25-R29 | M | each of the reader's five messages a constant | the case naming that message |
+| R30 | B | at-most-once and never-opens branches swapped | `[two closes with no open]` |
+| R31 | B | blank-line and map-card branches swapped | `[no blank line and no map card above]` |
+| R32 | B | map-card and close branches swapped | `[no map card above and no close]` |
+
+Which probes first came back green: R21, R31 and R32 survived the first run of this pass; the planted shapes
+`a map close quoted above the map card`, `no blank line and no map card above` and `no map card above and no
+close` were added and each re-ran red. R01, R02, R05 and R09 are the round-1 verifiers' survivors (V31, V34,
+V35 and the room read), red now on the new cases.
+
+**Neuter, round 1** (each line or check of the rewritten reader neutered alone, restored from a copy):
+
+| id | line neutered | red |
+| --- | --- | --- |
+| Y01 | no transcript close returns `None` | `test_a_malformed_line_inside_the_block_raises` |
+| Y02 | no delimiter below the transcript returns `None` | `test_an_unclosed_open_line_spoken_in_an_off_ballot_is_not_read[free_text-with-a-close]` |
+| Y03 | the at-most-once check | `test_a_malformed_line_inside_the_block_raises` |
+| Y04 | the never-opens check | `[a close with no open]` |
+| Y05 | the blank-line check | `test_a_malformed_line_inside_the_block_raises` |
+| Y06 | the map-card check | `[an open a line too low]` |
+| Y07 | the never-closed check | `test_a_malformed_line_inside_the_block_raises` |
+| Y08 | the closes read off the open delimiter | `test_two_rooms_at_one_tick_are_no_step_and_a_walk_across_a_regroup_walks` |
+| Y09 / Y10 | the transcript or the map closing line changed | `test_an_open_line_spoken_beside_a_served_block_is_not_read[free_text-plain]`, `test_the_example_line_is_accepted_and_served_as_the_card_words_it` |
+| Y11 | `without_route_block` keeping the blank line | `test_an_open_line_spoken_beside_a_served_block_is_not_read[free_text-plain]` |
+| Y12 | `RouteStep`'s room check | `test_the_room_check_follows_the_room_table`, `test_the_typed_check_refuses[a room off the map]` |
+
+The earlier neuter rows X22 to X26 named the reader of `740699b6`; its one-block, closed-block and blank-line
+checks are the reader's Y03, Y07 and Y05 now.
+
+**The line-break count** (count only; prints set, turns, strings, strings with a line break, free texts with one):
+
+```
+uv run python -c '
+from pathlib import Path
+from orchestrator.replay import MeetingReplayEntry, read_all_entries
+def strings(v):
+    if isinstance(v, str): return [v]
+    if isinstance(v, dict): v = list(v.values())
+    return [s for w in v for s in strings(w)] if isinstance(v, (list, tuple)) else []
+for name in ("samples/9p2i", "samples/4p1i", "ml_corpus/9p2i", "ml_corpus/4p1i", "candidates/stage-b-r1/9p2i"):
+    turns = [t for p in sorted(Path("replays", name).glob("replay-seed-*.jsonl")) for e in read_all_entries(p) if isinstance(e, MeetingReplayEntry) for t in e.transcript.turns]
+    said = [s for t in turns for s in strings([o.model_dump() for o in t.observations] + [c.model_dump() for c in t.claims])]
+    print(name, len(turns), len(said), sum("\n" in s for s in said), sum("\n" in t.free_text for t in turns))
+'
+```
+
+It prints `samples/9p2i 808 13885 0 0`, `samples/4p1i 117 1460 0 0`, `ml_corpus/9p2i 2539 40295 0 0`,
+`ml_corpus/4p1i 129 1464 0 0` and `candidates/stage-b-r1/9p2i 838 14573 0 0`.
+
+**Validation, round 1** (at `732cda8d`; exit codes captured directly):
+
+| command | exit | result |
+| --- | --- | --- |
+| the card's targeted pytest list, `-n 6` | 0 | 1,550 passed |
+| the 36 new reader tests against the reader of `740699b6` (written over a copy, restored) | 1 | 34 red: all 24 of A, B and C, 8 of the 10 shapes, the no-map-card ballot and the stated limit; the two shapes the old reader already refused (a second open, a close above the open) pass at both |
+| `uv run lint-imports` | 0 | contracts kept |
+| `uv run python -m experiments.lab.route_check_replay --check` | 0 | reproduced |
+| `uv run python -m experiments.lab.route_lines_replay --check` | 0 | reproduced: no committed output moves |
+| `bash scripts/verify_samples.sh` for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, the same five sets | 0 each | consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent |
+| `uv run python scripts/gen_frontend_types.py --check` | 0 | consistent |
+| `uv run python scripts/check_doc_facts.py` | 0 | verified |
+| `uv run python scripts/validate_task_docs.py` | 0 | clean |
+| `uv run python scripts/generate_prompts.py --check` | 0 | clean (no template changed) |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | 63 checks: 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign` | 0 | 337 passed |
+
+No frontend file, template, recording, audit, fixture or media byte changed, so the frontend unit and e2e legs
+outside `check.sh`, the prompt regeneration and the `docs/artifacts.md` rows are not touched.
+
+**Publication.** Unchanged by this round: the reader is not on the bundle's build path, and the bundle diff
+rebuilt in one checkout (`83806ab0` then `732cda8d`, 109 files on each side, the same file set) is again
+exactly five null `route_lines_version` keys in the same four 9p2i files (`data/9p2i/eval/summary.json` one,
+`data/9p2i/replays.json` two, `headless-seed-14.json` and `headless-seed-19.json` one each); removing them gives
+the base bytes. **The merge stays the owner's.**
+
+`bash scripts/check.sh`, the full gate for this round, ran once at `b68023e8` (the head carrying this
+subsection; the commit recording this line changes this card only), in a shell with no `AILIBI_*` export, its
+exit code captured directly: **exit 0**. Ruff check and format clean (559 files), import-linter 4 contracts kept,
+`validate_task_docs` and `generate_prompts --check` clean, strict mypy clean over 530 source files, the default
+tier 10,474 passed, 20 skipped and 3 xfailed, and the frontend lint, typecheck, 695 unit tests in 26 files and
+build all passed.
+
+### Review corrections, round 2 (2026-10-06)
+
+Three blocking findings from the round-2 verifiers at `685a4396`, two from the correctness verifier and one from
+the integrity verifier. Fix commit `5bbb6459`: `tests/meetings/test_route_lines.py` and
+`tests/experiments/test_route_lines_replay.py` only; the commits after it change only this card. No production
+line, committed output, recording, audit, fixture or media byte changes, so no count this card states and no
+`docs/artifacts.md` row moves, and the bundle is untouched. Every command below ran at `5bbb6459` in a shell
+with no `AILIBI_*` export, unless it names another head.
+
+**What changed.**
+- **The step's whole-number and once-each checks (correctness verifier).** Valid. The refusals held a boolean
+  `from_tick` and a negative tick only, so `to_tick`, `doors` or `regroup_tick` dropped from the validator's
+  fields, or `set()` dropped from `tuple(sorted(set(rooms)))`, left every targeted suite green, and the steps
+  then accepted `True` or `6.0` for those fields and a repeated room. Seven refusals were added, each of which
+  would otherwise read as the same step with its whole number or its room once: a boolean and a float `to_tick`,
+  door count and regroup tick (the boolean regroup tick on a REACTOR at tick 0 to MEDBAY at tick 2 step), and
+  WEST_HALL twice. The refusals that name a reason (these seven, the boolean and negative ticks, the unsorted
+  and empty room lists) now expect it. A control,
+  `test_each_whole_number_and_once_each_case_reads_with_its_fix[*]`, accepts each with its one defect mended, so
+  each refusal is that check's. Probing `sorted()` dropped from the same expression (K06) showed it rests on
+  string hashing: a set's own order is sometimes its sorted order, and it survived the first run. A property
+  over a generated family, every two- and three-room set of the nine rooms besides ADMIN, each a walk from
+  ADMIN, accepts each sorted set and refuses its every other order for its order (120 accepted, 456 refused);
+  it kills K06 alone at `PYTHONHASHSEED` 0 to 5 and in three runs at random seeds. Row X15-X21's "one case
+  each" now holds per field.
+- **The instrument's served reach (correctness verifier).** Valid. The scripted r3 set has no case where the
+  served and the rebuilt reach can differ, so the subject filter on the served lines in `read_field_meeting`
+  and the `reaches_served` filter of both served counts in `_case_counts` could be dropped with the r3 test
+  green. `test_served_reach_counts_only_served_lines_about_the_ejected_from_its_voters` reads served-mode cases
+  through `read_field_meeting` with `served=True`. `p-1` alone votes `p-3` out; `p-1`'s served block holds a line
+  about `p-2` only and `p-2`, who skipped, holds one about `p-3`, so `reaches_served` is False. A served block
+  apart from the rebuilt lines (a state `read_ballot` refuses before this reading, planted here) gives a rebuilt
+  reach and no served one, and rendered mode reads no served block (`None`). Over four cases, that unreached one
+  and three reached ones (at a witness meeting, at another meeting, and not misjudged), the served counts are 2
+  of M 3 and 1 of W 2. The r3 equality, at the strength the code gives it: `read_ballot` raises unless a served
+  block is the lines its inputs build (`test_a_served_block_other_than_its_rebuilt_lines_raises`), so on every
+  case a run completes the served and the rebuilt reach agree; the new case pins how the served count reads.
+- **The read_set guards (integrity verifier).** Valid, and killed rather than named equivalent: `run_columns`
+  builds the census from the same set directory, but `read_set` is the instrument's own reader and refuses on
+  its own terms. `test_a_census_whose_seeds_differ_from_the_set_is_refused` hands it r2's 50-game census beside
+  a set holding seed 2 alone (under the mutant the one game is read silently).
+  `test_a_set_whose_games_record_the_field_both_ways_is_refused` records the scripted ON game beside a copy of
+  r2's seed 2, which recorded the field OFF, reads both modes off the bytes and stubs each game's reading (the
+  mode check is the one under test; the scripted game has no census row there). Each expects
+  `RouteLinesReplayError` with its whole message.
+
+**Mutation pass, round 2** (the spans the findings name and the expressions beside them in the same check; the
+eight listed classes only; each mutant applied alone to a copy-restored file and run against its targeted
+suite, `tests/meetings/test_route_lines.py` for the module and `tests/experiments/test_route_lines_replay.py`
+for the instrument; scratch harness, count only): 27 mutants, 27 killed, none named equivalent. The column "at
+`685a4396`" re-ran the findings' spans against those two suites as they stood at that head (its files written
+over the new ones, then the new ones restored from copies).
+
+| id | class | site | at `685a4396` | a red test now |
+| --- | --- | --- | --- | --- |
+| K01 | T | `to_tick` dropped from the whole-number fields | survived | `test_the_typed_check_refuses[a boolean to_tick]` |
+| K02 | T | `doors` dropped from them | survived | `[a boolean door count]` |
+| K03 | T | `regroup_tick` dropped from them | survived | `[a boolean regroup tick]` |
+| K04 | T | `from_tick` dropped from them | not re-run | `[a boolean tick]` |
+| K05 | F | `set()` dropped from the room check | survived | `[a duplicated room]` |
+| K06 | F | `sorted()` dropped from the room check | survived | `test_the_typed_check_accepts_each_sorted_room_set_and_refuses_every_other_order` |
+| K07 | N | `value is not None` inverted | not re-run | `test_one_door_in_one_tick_walks` |
+| K08 | N | the int-type test a `None` test | not re-run | `[a boolean tick]` |
+| K09 | N | `value < 0` a `None` test | not re-run | `[a negative tick]` |
+| K10 | N | `not rooms` a `None` test | not re-run | `[no room]` |
+| K11 | N | the sorted comparison a `None` test | not re-run | `[unsorted rooms]` |
+| K12 | M | the once-each message a constant | not re-run | `[unsorted rooms]` |
+| K13 | M | the whole-number message a constant | not re-run | `[a boolean tick]` |
+| K20 | F | the served lines' subject filter dropped | survived | `test_served_reach_counts_only_served_lines_about_the_ejected_from_its_voters` |
+| K21 | S | the served reach reads the rebuilt lines for the served block | survived | same |
+| K22 | S | the served reach reads every voter for the EJECT voters | survived | same |
+| K23 | B | the served reach's mode branches swapped | killed | same |
+| K24 | N | `served_about is not None` inverted | killed | same |
+| K25 | F | the M served count's filter dropped | survived | same |
+| K26 | F | the W served count's filter dropped | survived | same |
+| K27 | S | the M served count over every case for the misjudged | survived | same |
+| K28 | S | the W served count over the misjudged for the witness cases | killed | same |
+| K29 | N | the served counts' `if served` a `None` test | killed | same |
+| K30 | N | `read_set`'s seeds comparison a `None` test | survived | `test_a_census_whose_seeds_differ_from_the_set_is_refused` |
+| K31 | N | `read_set`'s modes comparison a `None` test | survived | `test_a_set_whose_games_record_the_field_both_ways_is_refused` |
+| K32 | M | the seeds refusal's message a constant | survived | `test_a_census_whose_seeds_differ_from_the_set_is_refused` |
+| K33 | M | the modes refusal's message a constant | survived | `test_a_set_whose_games_record_the_field_both_ways_is_refused` |
+
+Which probes first came back green: at `685a4396`, the verifiers' nine (K01, K02, K03, K05, K20, K25, K26, K30,
+K31) and six more on the same spans (K06, K21, K22, K27, K32, K33). After the new cases, K06 alone survived its
+first run (hash-dependent, as above); the property was added and K06 re-ran red. At `685a4396` K06 is killed by
+`test_a_compound_label_renders_both_rooms` only under some hash seeds. No production line changed, so the neuter
+tables gain no row; the per-field strength of row X15-X21 is K01 to K06.
+
+**Validation, round 2** (at `5bbb6459`; exit codes captured directly):
+
+| command | exit | result |
+| --- | --- | --- |
+| the card's targeted pytest list, `-n 6` | 0 | 1,566 passed (round 1's 1,550 and the 16 new tests) |
+| `uv run pytest --collect-only -q tests/meetings/test_route_lines.py` | 0 | 27 `test_the_typed_check_refuses` ids, 5 control ids |
+| `uv run lint-imports` | 0 | 4 contracts kept, 0 broken |
+| `uv run python -m experiments.lab.route_check_replay --check` | 0 | reproduced |
+| `uv run python -m experiments.lab.route_lines_replay --check` | 0 | reproduced: no committed output moves |
+| `bash scripts/verify_samples.sh` for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, the same five sets | 0 each | consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent |
+| `uv run python scripts/gen_frontend_types.py --check` | 0 | consistent |
+| `uv run python scripts/check_doc_facts.py` | 0 | verified |
+| `uv run python scripts/validate_task_docs.py` (at the head carrying this subsection) | 0 | clean |
+| `uv run python scripts/generate_prompts.py --check` | 0 | all 390 prompts in sync (no template changed) |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | 63 checks: 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign` | 0 | 337 passed |
+
+No frontend file, template, recording, audit, fixture or media byte changed, so the frontend unit and e2e legs
+outside `check.sh`, the prompt regeneration and the `docs/artifacts.md` rows are not touched.
+
+**Publication.** Unchanged by this round: `git diff --stat 685a4396 5bbb6459` lists the two test files only, so
+nothing on the bundle's build path moved, and round 1's bundle diff (`83806ab0` then `732cda8d`, one checkout:
+exactly five null `route_lines_version` keys in four 9p2i files) stands. **The merge stays the owner's.**
+
+`bash scripts/check.sh`, the full gate for this round, ran at `a67f61c4` (the head carrying this subsection;
+the commit recording this paragraph changes this card only), in a shell with no `AILIBI_*` export, its exit code
+captured directly. Its first run exited **127** at the frontend leg, `sh: eslint: command not found`, because
+this fresh worktree held no `frontend/node_modules`; every Python leg had passed (the default tier 10,490
+passed, 20 skipped, 3 xfailed). After `npm ci` in `frontend` (the lockfile's install; no tracked file changed)
+it ran again, whole, at the same head: **exit 0**. Ruff check and format clean (559 files), import-linter 4
+contracts kept, `validate_task_docs` and `generate_prompts --check` clean, strict mypy clean over 530 source
+files, the default tier 10,490 passed, 20 skipped and 3 xfailed (round 1's 10,474 and the 16 new tests), and the
+frontend lint, typecheck, 695 unit tests in 26 files and build all passed.
+
+### Review corrections, round 3 (2026-10-07)
+
+Two blocking findings from the round-3 correctness verifier at `407cb34b`, both in
+`experiments/lab/route_lines_replay.py`; the integrity and docs lenses passed at that head. Fix commit
+`1c5fb252`: `tests/experiments/test_route_lines_replay.py` only; the commits after it change only this card. No
+production line, committed output, recording, audit, fixture or media byte changes, so no count this card states
+and no `docs/artifacts.md` row moves, and the bundle is untouched. Every command below ran at `1c5fb252` in a
+shell with no `AILIBI_*` export, unless it names another head.
+
+**What changed.**
+- **The instrument's served-mode outputs (V35, V46).** Valid. The scripted r3 test read the served column's
+  reach and steps but not what its block costs or how the report states it, so `off_prompt =
+  without_route_block(on_prompt)` in `read_ballot`'s served branch written as `off_prompt = on_prompt` (every
+  served ballot's block characters 0, so an r3 column would publish its block characters and its
+  already-served tokens as 0), or `_column_section`'s served flag made a `None` test (the report states the
+  rendered reading and drops the as-served reach row), left the suite green.
+  `test_a_served_ballot_counts_its_whole_block` reads one served ballot through `read_ballot` with
+  `served=True` and holds its block characters equal to the served prompt's length less that prompt without
+  its block, and to the served length less the OFF render's, above zero.
+  `test_an_r3_columns_block_cost_and_report_are_read_as_served` runs the CLI on the scripted r3 set with
+  `read_ballot` wrapped to keep each reading, and holds every served ballot to the same rule, the column's
+  block characters to their sum and above zero, its already-served input tokens above zero and its projected
+  total equal to its recorded total (a column that served the block adds nothing to it), and its report to the
+  served sentence, the as-served reach row and the already-served token row, the rendered sentence and the
+  projected-added row absent. The scripted set's served and rebuilt reach agree, as `read_ballot` requires, so
+  a planted copy of the payload sets the served reach apart (one fewer over M, one more over W) and the
+  as-served row is shown to read the served counts and the rebuilt row its own.
+- **The parity length guard (V30).** Valid. No case handed `require_parity` a committed column of another
+  length, so `len(recomputed) != len(recorded)` made a `None` test left the suite green, and a run then ended in
+  the bare `ValueError` of `zip(strict=True)`, which `main` does not catch, not in the named refusal.
+  `test_a_route_check_column_of_another_length_is_refused_by_name[one record long]` and `[one record short]`
+  run the CLI on r2's seed 2 (one meeting) against a route-check JSON pinning the same bytes with that
+  meeting's committed record twice, or none, and expect exit 1, stderr exactly `route-lines replay: column r2:
+  the route-check replay records 2 meetings and the walk read 1` (0 for the short case), and no output written.
+
+**Mutation pass, round 3** (the spans the findings name: `read_ballot`'s served branch, the served flags of
+`read_game`, `column_counts` and `_column_section` with the projection, sentence and rows they select, and
+`require_parity` with the refusal `main` prints; the eight listed classes only; each mutant applied alone to a
+copy-restored module and run against `tests/experiments/test_route_lines_replay.py` with `-x`; scratch
+harness, count only): 29 mutants, 29 killed, none named equivalent. The column "at `407cb34b`" re-ran every
+mutant against that suite as it stood at that head (its file written over the new one, then the new one
+restored from a copy): 16 killed, 13 survived. Q01, Q09 and Q20 also ran without `-x`; each red test they turn
+is listed.
+
+| id | class | site | at `407cb34b` | a red test now |
+| --- | --- | --- | --- | --- |
+| Q01 | F | `read_ballot`'s served OFF prompt with `without_route_block` dropped (V35) | survived | `test_a_served_ballot_counts_its_whole_block`, `test_an_r3_columns_block_cost_and_report_are_read_as_served` |
+| Q02 | N | the served comparison `served_lines != lines` a `None` test | killed | `test_a_served_block_other_than_its_rebuilt_lines_raises` |
+| Q03 | M | the served refusal's message a constant | killed | same |
+| Q04 | B | the served and rendered branches swapped | killed | `test_a_run_holds_parity_and_its_check_reproduces` |
+| Q05 | S | the block characters read off the recorded prompt for the OFF prompt | survived | `test_a_served_ballot_counts_its_whole_block` |
+| Q06 | N | `read_game`'s served flag a `None` test | killed | `test_an_r3_column_is_read_from_its_served_blocks_by_both_instruments` |
+| Q07 | N | `column_counts`'s served flag a `None` test | killed | same |
+| Q08 | B | the projection's served and rendered branches swapped | killed | `test_an_r3_columns_block_cost_and_report_are_read_as_served` |
+| Q09 | N | `_column_section`'s served flag a `None` test (V46) | survived | `test_an_r3_columns_block_cost_and_report_are_read_as_served` |
+| Q10 | N | the same flag inverted | killed | `test_a_run_holds_parity_and_its_check_reproduces` |
+| Q11 | B | the served and rendered sentences swapped | killed | `test_an_r3_columns_block_cost_and_report_are_read_as_served` |
+| Q12 | M | the served sentence a constant | survived | same |
+| Q13 | B | the as-served row's `if served` inverted | killed | `test_a_run_holds_parity_and_its_check_reproduces` |
+| Q14 | M | the as-served row's label a constant | survived | `test_an_r3_columns_block_cost_and_report_are_read_as_served` |
+| Q15 | S | the as-served row reads the rebuilt reach over M | survived | same |
+| Q16 | S | the as-served row reads the rebuilt reach over W | survived | same |
+| Q17 | B | the token row's two labels swapped | killed | same |
+| Q18 | M | the already-served label a constant | survived | same |
+| Q19 | S | the token row reads the recorded ballot tokens for the added ones | killed | same |
+| Q20 | N | `require_parity`'s length comparison a `None` test (V30) | survived | `test_a_route_check_column_of_another_length_is_refused_by_name[one record long]`, `[one record short]` |
+| Q21 | N | the same comparison inverted | killed | `test_a_run_holds_parity_and_its_check_reproduces` |
+| Q22 | M | the length refusal's message a constant | survived | `test_a_route_check_column_of_another_length_is_refused_by_name[one record long]` |
+| Q23 | M | its recorded count a constant (0) | survived | same |
+| Q24 | M | its walk count a constant (0) | survived | same |
+| Q25 | S | its recorded count read off the walk's records | survived | same |
+| Q26 | N | `committed is None` inverted | killed | `test_a_run_holds_parity_and_its_check_reproduces` |
+| Q27 | N | the pinned-bytes comparison a `None` test | killed | `test_a_column_the_route_check_replay_pins_to_other_bytes_raises` |
+| Q28 | N | the per-record comparison a `None` test | killed | `test_a_parity_mismatch_raises` |
+| Q29 | T | `RouteLinesReplayError` dropped from the types `main` catches | killed | same |
+
+Which probes first came back green: at `407cb34b`, the verifier's three (Q01 is V35, Q09 is V46, Q20 is V30)
+and ten more on the same spans (Q05, Q12, Q14, Q15, Q16, Q18 and Q22 to Q25). After the new cases none survived
+its first run. Q15 and Q16 cannot be told apart on the scripted set alone, whose served and rebuilt reach agree;
+the planted payload is what kills them. No production line changed, so the neuter tables gain no row.
+
+**Validation, round 3** (at `1c5fb252`; exit codes captured directly):
+
+| command | exit | result |
+| --- | --- | --- |
+| the card's targeted pytest list, `-n 6` | 0 | 1,570 passed (round 2's 1,566 and the 4 new tests) |
+| `uv run lint-imports` | 0 | 4 contracts kept, 0 broken |
+| `uv run python -m experiments.lab.route_check_replay --check` | 0 | reproduced |
+| `uv run python -m experiments.lab.route_lines_replay --check` | 0 | reproduced: no committed output moves |
+| `bash scripts/verify_samples.sh` for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --sample-dir replays/<set> --check`, the same five sets | 0 each | consistent |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent |
+| `uv run python scripts/publish_gameplay_census.py`, then `--check` | 0, 0 | regenerated with no diff; consistent |
+| `uv run python scripts/gen_frontend_types.py --check` | 0 | consistent |
+| `npm --prefix frontend run tsc:check` | 0 | clean |
+| `uv run python scripts/check_doc_facts.py` | 0 | verified |
+| `uv run python scripts/validate_task_docs.py` (at the head carrying this subsection) | 0 | clean |
+| `uv run python scripts/generate_prompts.py --check` | 0 | all 390 prompts in sync (no template changed) |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | 63 checks: 51 OK, 0 FAIL, 7 ABSENT, 5 INFO |
+| `uv run pytest -m campaign` | 0 | 337 passed |
+
+No frontend file, template, recording, audit, fixture or media byte changed, so the frontend unit and e2e legs
+outside `check.sh`, the prompt regeneration and the `docs/artifacts.md` rows are not touched.
+
+**Publication.** Unchanged by this round: `git diff --stat 407cb34b 1c5fb252` lists the one test file only, so
+nothing on the bundle's build path moved, and round 1's bundle diff (`83806ab0` then `732cda8d`, one checkout:
+exactly five null `route_lines_version` keys in four 9p2i files) stands. `origin/main` is still `83806ab0`, so
+no merge of `main` was needed. **The merge stays the owner's.**
+
+`bash scripts/check.sh`, the full gate for this round, ran once at `fe27894c` (the head carrying this
+subsection; the commit recording this paragraph changes this card only), in a shell with no `AILIBI_*` export,
+`frontend/node_modules` installed by `npm ci` from the lockfile beforehand (no tracked file changed), its exit
+code captured directly: **exit 0**. Ruff check and format clean (559 files), import-linter 4 contracts kept,
+`validate_task_docs` and `generate_prompts --check` clean, strict mypy clean over 530 source files, the default
+tier 10,494 passed, 20 skipped and 3 xfailed (round 2's 10,490 and the 4 new tests), and the frontend lint,
+typecheck, 695 unit tests in 26 files and build all passed.

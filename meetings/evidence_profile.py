@@ -69,6 +69,7 @@ def bounded_rebuttal_enabled(env: Mapping[str, str] | None = None) -> bool:
 CONFIG_ONLY_PROFILE_FIELDS: Final[tuple[str, ...]] = (
     "ballot_kill_row_version",
     "impostor_ballot_version",
+    "route_lines_version",
 )
 
 
@@ -83,6 +84,7 @@ class MeetingEvidenceProfile(BaseModel):
     attributed_testimony_version: Literal[1] | None = None
     ballot_kill_row_version: Literal[1] | None = None
     impostor_ballot_version: Literal[1] | None = None
+    route_lines_version: Literal[1] | None = None
 
     @field_validator(
         "evidence_reasoning_version",
@@ -91,6 +93,7 @@ class MeetingEvidenceProfile(BaseModel):
         "attributed_testimony_version",
         "ballot_kill_row_version",
         "impostor_ballot_version",
+        "route_lines_version",
         mode="before",
     )
     @classmethod
@@ -101,16 +104,21 @@ class MeetingEvidenceProfile(BaseModel):
 
     @model_validator(mode="after")
     def _ballot_arms_refuse_the_account_profiles(self) -> MeetingEvidenceProfile:
-        """Refuse either ballot arm beside either account profile.
+        """Refuse any ballot arm beside either account profile.
 
         The account profiles serve their own ``*_accounts.j2`` ballot body, which
-        carries neither ballot arm's blocks, so the pair would record an arm the
+        carries none of the ballot arms' blocks (the kill row, the strategic
+        impostor ballot and the route lines), so the pair would record an arm the
         voter never read.
         """
 
         ballot_arms = [
             field
-            for field in ("ballot_kill_row_version", "impostor_ballot_version")
+            for field in (
+                "ballot_kill_row_version",
+                "impostor_ballot_version",
+                "route_lines_version",
+            )
             if getattr(self, field) is not None
         ]
         account_profiles = [
@@ -123,6 +131,27 @@ class MeetingEvidenceProfile(BaseModel):
                 f"the ballot experiment {ballot_arms} cannot run with the account "
                 f"profile {account_profiles}: the account profiles serve a ballot "
                 "of their own that carries none of the ballot experiment's wording"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _route_lines_refuse_version_two_evidence(self) -> MeetingEvidenceProfile:
+        """Refuse the route lines beside version-2 evidence.
+
+        Version-2 evidence renders travel-check lines of its own into the memory
+        block, read with the observation phase rules; the route lines read the
+        table's stated places by whole ticks. Two walking readers with different
+        timing rules on one ballot could answer one change of room two ways.
+        """
+
+        if (
+            self.route_lines_version is not None
+            and self.evidence_reasoning_version == 2
+        ):
+            raise ValueError(
+                "route_lines_version cannot run with evidence_reasoning_version 2: "
+                "both read walking between stated places, under different timing "
+                "rules, onto one ballot"
             )
         return self
 

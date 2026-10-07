@@ -317,6 +317,7 @@ class _Generator:
                     ("ExperimentConfigView", "ballot_kill_row_version"),
                     ("ExperimentConfigView", "impostor_ballot_version"),
                     ("ExperimentConfigView", "kill_cooldown_ticks"),
+                    ("ExperimentConfigView", "route_lines_version"),
                     # An alibi is a ROUTE, and ``AlibiClaimView`` serves the
                     # ONE surface each claim arrived on: a recorded one-room
                     # envelope keeps its three flat keys and carries no

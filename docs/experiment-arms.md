@@ -19,8 +19,8 @@ ON beside a declared profile. The owner's rulings and the wave's design are in
 `FIELD_LAYER` classifies every config field by the consumer that reads it:
 `format` (the recording format), `engine` (the engine tick), `orchestrator`
 (the game's own wiring), `tactical` (the per-tick policies) or `meeting` (the
-meeting evidence profile). The wave's eight fields and the kill cooldown the
-balance round added, defaults first:
+meeting evidence profile). The wave's eight fields, the kill cooldown the
+balance round added and the route lines round 3 adds, defaults first:
 
 | Field | Values | Layer | Card that builds it |
 | --- | --- | --- | --- |
@@ -33,6 +33,7 @@ balance round added, defaults first:
 | `ballot_kill_row_version` | none, `1` | meeting | [ballot](../tasks/work/ballot-kill-row-and-impostor-strategy.md) |
 | `impostor_ballot_version` | none, `1` | meeting | [ballot](../tasks/work/ballot-kill-row-and-impostor-strategy.md) |
 | `kill_cooldown_ticks` | none (the map's value), an integer of at least 1 | engine | [kill cooldown](../tasks/work/kill-cooldown-arm.md) |
+| `route_lines_version` | none, `1` | meeting | [route lines](../tasks/work/route-lines-field.md) |
 
 The meeting layer is exactly `MeetingEvidenceProfile`'s fields, and the
 tactical layer is exactly `TacticalExperimentOptions`' fields apart from the
@@ -42,8 +43,9 @@ derived `meeting_positions_preserved`; tests in
 ## What a missing key means
 
 `vent_witness_rule`, `vent_entry_policy`, `report_body_handle_version`,
-`ballot_kill_row_version`, `impostor_ballot_version` and `kill_cooldown_ticks`
-are omitted from the serialized config while they hold their default, under every
+`ballot_kill_row_version`, `impostor_ballot_version`, `kill_cooldown_ticks` and
+`route_lines_version` are omitted from the serialized config while they hold
+their default, under every
 `format_version` (`OMITTED_AT_DEFAULT`, applied by the config's serializer). So
 no committed payload gains a key and the wave's config serializes with
 `format_version` 1. A missing key means the historical default, now and after
@@ -86,32 +88,42 @@ layer until its owner reviews what its consumer reads.
 
 ## Config-only ballot fields
 
-The two ballot fields have no environment switch: `EXPERIMENT_ENV_NAMES` keeps
-its four names and `.env.example` does not change. A declared config reaches
-the meeting runner through `profile_from_config` and
+The three ballot fields have no environment switch: `EXPERIMENT_ENV_NAMES`
+keeps its four names and `.env.example` does not change. A declared config
+reaches the meeting runner through `profile_from_config` and
 `build_default_meeting_runner(profile=...)`, which refuses an environment that
 also exports any of the four switches ON. `HeadlessGame` requires a default
-meeting runner's two ballot fields to equal the recorded config's, both ways.
+meeting runner's three ballot fields to equal the recorded config's, both ways.
 
 A meeting arm that re-bodies a template registers it in
 `EXPERIMENT_ARM_TEMPLATES`, and
 `prompt_versions_for_set(..., experiment_config=...)` serves its stamp only for
 a config that carries the arm. The stamp suffix is derived from the field,
-never chosen: drop `_version` and append `_v<value>`. Both ballot fields
+never chosen: drop `_version` and append `_v<value>`. The three ballot fields
 re-body `vote_ballot` alone, with guarded blocks in the same `vote_ballot.j2`
 whose header marker stays `vote_ballot.qwen3_6_27b.v8`, so their stamps read
-`vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1` and
-`vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1`, joined by `+` when both are ON.
+`vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1`,
+`vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1` and
+`vote_ballot.qwen3_6_27b.v8.route_lines_v1`, joined by `+` in that order when
+more than one is ON.
 
 `ballot_kill_row_version` gives a voter one first-hand `own_kill` evidence row
 for each kill it watched a non-teammate make, and never a public flag, a ledger
 row or a belief input. `impostor_ballot_version` serves an impostor voter a
 ballot framed as a move for its side, bounded by an instructed citation rule the
-tally does not enforce. A runner refuses either arm beside any of the four
-legacy meeting overlays, for a prompt set whose vote body carries no block for
-it, and under an explicit version pin that does not credit exactly the arms its
-profile renders; the meeting profile refuses either arm beside an account
-profile.
+tally does not enforce. `route_lines_version` adds one `<routes>` block
+between the map card and the evidence block: for each living candidate whose
+places stated at the table change room in a way the doors or the public regroup
+allow, one role-blind line lists each such change with its door count and
+either "walking fits" or the regroup tick that falls between
+([`meetings/route_lines.py`](../meetings/route_lines.py)). A change of room that
+neither allows is left out, a candidate with none has no line, and the line
+names, ranks and recommends no one. A runner refuses any of the three arms
+beside any of the four legacy meeting overlays, for a prompt set whose vote body
+carries no block for it, and under an explicit version pin that does not credit
+exactly the arms its profile renders; the meeting profile refuses any of them
+beside an account profile, and the route lines beside
+`evidence_reasoning_version = 2`.
 
 ## Frozen values
 
