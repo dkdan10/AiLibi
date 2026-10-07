@@ -124,7 +124,7 @@ dashboard renders its "No tournament report" card (`TournamentDashboard.tsx:1115
 Each item names its enforcing mechanism and the planted or perturbed case that turns its test red; each new test is
 seen red before the code it guards exists.
 
-- [ ] **1. The pure module and its role-stripped projection.** `eval/game_profile.py` (new) imports the carrier
+- [x] **1. The pure module and its role-stripped projection.** `eval/game_profile.py` (new) imports the carrier
   (`load_census_inputs`, `tally_outcome`, `grounding_labels`) and row 3's helpers read-only, and writes nothing.
   - `BlindGame`, with `BlindMeeting`, `BlindBallot` and `BlindKill`, frozen dataclasses built only by
     `blind_projection`, is the sole input of every pre-reveal shelf, facet, chip and tripwire, T2 and the regroup wave
@@ -141,14 +141,14 @@ seen red before the code it guards exists.
   - Mechanism: strict mypy. Planted: a test runs mypy on a `tmp_path` copy whose slow-burn predicate reads
     `game.roles` and requires the attribute error; a second copy whose T2 takes a `GameReport` and reads its `roles`
     fails mypy the same way.
-- [ ] **2. No pre-reveal byte reads a role or the ending.** Hypothesis properties over hand-built carriers and the
+- [x] **2. No pre-reveal byte reads a role or the ending.** Hypothesis properties over hand-built carriers and the
   committed one: permuting the seeded roles (counts kept) on the census carrier and on `load_set_inputs`'s
   `GameReport`s together, or swapping the end reason and winner for another recorded value on both, leaves every
   pre-reveal membership, pre-reveal facet, chip and tripwire byte-identical. Planted: a fold whose predicate closes over
   the full carrier and reads a role fails both properties; a T2 that also requires `GameReport.roles` to name the
   ejected player a crewmate fails the role property on a hand-built carrier whose manufactured flag names the ejected
   player.
-- [ ] **3. T1, decisive.** An ejection trips when, its ejecting ballots labelled `off_target`, `uncited` or
+- [x] **3. T1, decisive.** An ejection trips when, its ejecting ballots labelled `off_target`, `uncited` or
   `invalid_citation` removed, `tally_outcome` at the meeting's recorded floor ejects no one or someone else.
   `supported` and `flag_only` are held; `not_assessed` stays as recorded. A ballot with no label raises, naming set,
   seed, meeting and voter. An ejecting ballot labelled `none_held` is a case the ruled T1 does not classify: the
@@ -163,13 +163,13 @@ seen red before the code it guards exists.
     leaves a tie) trips decisive; a `not_assessed` ejecting ballot kept; the floor perturbed changes a planted tally;
     a carrier on which removal and read-as-SKIP differ shows the removed reading governs; an ejecting `none_held`
     ballot raises the conformance error with all four names.
-- [ ] **4. T2, a manufactured contradiction.** An ejection trips when its `BlindMeeting`'s manufactured subjects
+- [x] **4. T2, a manufactured contradiction.** An ejection trips when its `BlindMeeting`'s manufactured subjects
   (item 1: alibi-class flags that row 3's `_flag_is_manufactured` classes as manufactured over `load_set_inputs`'s
   route) name the ejected player. T2 reads only `BlindGame`; the join and its raise live in `blind_projection`. The page
   says it is nearly blind (row 3 evaluates 1 of the shown set's 15 alibi-class flags). Planted: a manufactured flag
   naming the ejected player trips; one naming another player, or an unevaluable flag, does not; a scorecard meeting id
   that differs from the carrier's raises in the projection.
-- [ ] **5. The pre-reveal shelves**, defined as the memo's Part 2.3 states and `rubric-v2-repro.py` implements (where
+- [x] **5. The pre-reveal shelves**, defined as the memo's Part 2.3 states and `rubric-v2-repro.py` implements (where
   the two differ in words the script governs, and Results names the difference): the reporter saw it happen, double
   kill, slow burn, two kills after one regroup, a close call, suspicion moved (ballots and accusations only, never the
   scalar), a third round. The witness test joins the trigger body to its kill by victim. Mechanism: one positive and
@@ -177,7 +177,7 @@ seen red before the code it guards exists.
   boundary case (19 quiet ticks; a wave kill one tick past the window; a margin of two; two meetings; a reporter
   outside the witness list; same-tick double kills of two victims joined to the right body; a player who drew ballots
   and then died is not suspicion moving away).
-- [ ] **6. Reveal shelves and facets.** Reveal shelves: caught venting and one line, two readings (by the leak rule),
+- [x] **6. Reveal shelves and facets.** Reveal shelves: caught venting and one line, two readings (by the leak rule),
   one-vote ejection, nobody voted out, down to the wire, runaway, decided at a meeting, and decided without proof:
   right and wrong on what it held, always emitted as one pair. Pre-reveal facets: length in ticks, meetings by
   trigger, the kill timeline with regroup marks and the wave, reports with corpse age, bodies never found. Reveal
@@ -192,7 +192,7 @@ seen red before the code it guards exists.
     games, seed 19 at meeting index 2. Planted: a positive carrier (the holder's ballot cites the row) and a negative
     one (the holder's ballot cites another observation id, or the row's citation id is `None`); the chip's meeting
     index is under item 14's pointer test.
-- [ ] **7. The leak rule.** Each candidate pre-reveal shelf (the seven, caught venting, one line two readings, struck
+- [x] **7. The leak rule.** Each candidate pre-reveal shelf (the seven, caught venting, one line two readings, struck
   after the regroup) is tested by a two-sided Fisher exact test against each recorded ending, any ejection and a
   crewmate ejected. Each 2x2 table spans every game of the era, a tripped game counted as a non-member of every shelf,
   as `rubric-v2-repro.py:243-255` computes; any p below `LEAK_P_LEVEL` makes the candidate reveal-only for that era.
@@ -204,10 +204,10 @@ seen red before the code it guards exists.
   game, a 6-game candidate with 2 members carrying a fact and that fact on 2 of the 44 non-members, one of them the
   tripped game: the all-games table (2, 4, 2, 42) gives p 0.0655 and the candidate stays pre-reveal, while a fold
   that drops the tripped game reads (2, 4, 1, 42), p 0.0361, moves it behind the reveal and fails the test.
-- [ ] **8. The saturation rule.** A candidate holding more than `SATURATION_SHARE` of the era's games is served as a
+- [x] **8. The saturation rule.** A candidate holding more than `SATURATION_SHARE` of the era's games is served as a
   facet, never a shelf, and recorded so. Planted: 38 of 50 is a facet, 37 of 50 a shelf; saturation applies before
   the leak rule.
-- [ ] **9. Constants.** The design constants are `Final` and frozen by this card: slow burn 20 ticks, wave slack 4,
+- [x] **9. Constants.** The design constants are `Final` and frozen by this card: slow burn 20 ticks, wave slack 4,
   close-call margin 1, third round 3 meetings, down-to-the-wire start 3, runaway half, `LEAK_P_LEVEL` 0.05,
   `SATURATION_SHARE` 3/4; a change needs profile version 3. The served file and the page render them from the module.
   - Mechanism for the freeze (`Final` stops only reassignment, so a source edit would pass): a pin test holds each of
@@ -222,14 +222,14 @@ seen red before the code it guards exists.
     `CensusInputs.kill_cooldown_ticks` (5 moves a planted kill out); the era from `eval.eras` (a registry naming
     another id changes the stamp); the glossary's leak and saturation entries (a test holds their numbers to the
     module).
-- [ ] **10. The served file refuses a number to climb.** `GameProfile` (pydantic, frozen, `extra="forbid"`) has a
+- [x] **10. The served file refuses a number to climb.** `GameProfile` (pydantic, frozen, `extra="forbid"`) has a
   pre-reveal half (shelves in fixed order, each member a seed with its meeting indexes or kill ticks; per-game facets
   and meeting chips; tripwires; All games) and a reveal half (reveal shelves, facets, the class tables). Mechanism and
   planted cases: a
   file carrying `score`, `rank` or a per-game total is refused at load; a key-name scan over both models refuses
   `score`, `rank`, `total`, `points`, `weight`, `best` and `top`; a member list out of seed order raises; a token test
   finds no `winner`, `reason`, `IMPOSTOR` or `CREWMATE` in the pre-reveal half (planted: an ending facet moved there).
-- [ ] **11. The publisher, the page and the drift check.** `scripts/publish_game_profile.py` writes the served file
+- [x] **11. The publisher, the page and the drift check.** `scripts/publish_game_profile.py` writes the served file
   for each set in `PROFILE_SETS` (9p2i only) and `docs/game-profile.md`; `--check` recomputes both and exits 1 naming
   the drifted file, reporting an absent file before computing; `--set-dir DIR --json-stdout` prints a 9-player set's
   profile (a candidate round, a baseline-9 export) and writes nothing; a set of another roster (4p1i) is refused by
@@ -238,14 +238,14 @@ seen red before the code it guards exists.
   T2's near-blindness, the class tables, the chip-count lean, that facets the viewer already shows carry some ending
   information, and that no pre-registration, step rule, gate or objective reads the profile. Mechanism: a pytest drift
   test; planted: one edited membership turns `--check` red; a page naming a bar or a ratio of two rates fails.
-- [ ] **12. The refresh step and its text are true.** For `replays/samples/9p2i` under its era config the step runs
+- [x] **12. The refresh step and its text are true.** For `replays/samples/9p2i` under its era config the step runs
   the publisher and the dry run says it "would regenerate" the profile; any other target prints no profile line. The
   skip clause goes. The `--experiment-config` help and the `declared_args` comment state the era rule: a committed set
   records only its own era's declared config, or bare when its era declares none; a candidate round or a scratch
   directory takes any config. Mechanism: dry-run and `--help` cases in `tests/scripts/test_refresh_samples.py` (run
   `--dist loadfile`); `_REFRESH_OUTPUT_NAMES` names the profile. Planted: the old skip line and the old help sentence
   each fail their case.
-- [ ] **13. The API.** `GameProfileView` and its member views replace `RubricView`/`RubricGameView`, mirroring
+- [x] **13. The API.** `GameProfileView` and its member views replace `RubricView`/`RubricGameView`, mirroring
   `GameProfile` field for field; `VIEW_MODEL_VERSION` goes to "6" with one comment line; `ReplayLoader.game_profile`
   serves the file, raises `FileNotFoundError` when absent (the route answers 404) and serves `stale: true` with no
   members on a MANIFEST, seedset or fingerprint mismatch; `/eval/game-profile` replaces `/eval/rubric`. The generator
@@ -253,12 +253,12 @@ seen red before the code it guards exists.
   Mechanism: `tests/api/test_game_profile_view.py` (new) and the re-targeted `test_sets.py`, `test_view_model.py`,
   `test_schemas.py` and `test_leak.py`; `gen_frontend_types.py --check`. Planted: a field added to one model only fails
   the mirror test; each stale source suppresses members; 9p2i serves, 4p1i 404s.
-- [ ] **14. Every pointer is true of the served replay.** For every member of the committed profile and every meeting
+- [x] **14. Every pointer is true of the served replay.** For every member of the committed profile and every meeting
   chip, each meeting index names a meeting the served `ReplayView` holds with the same id, and each kill tick a tick
   where it shows a kill, in the `api/public_results.py:98` `_check_case` idiom. Planted: a member pointing one meeting
   past the last fails, naming seed and shelf; an eyewitness chip moved one meeting past the last fails, naming seed
   and chip.
-- [ ] **15. The viewer.** The Highlights tab ("Browse by moment") renders the pre-reveal shelves in the file's order,
+- [x] **15. The viewer.** The Highlights tab ("Browse by moment") renders the pre-reveal shelves in the file's order,
   each with its games in seed order as cards with chips (the eyewitness chip on the meeting it marks) and a facet
   timeline, then All games in seed order. With the
   reveal toggle on, the reveal shelves and reveal facets join; off, none of their names, members or counts render and
@@ -271,13 +271,13 @@ seen red before the code it guards exists.
   shows shelves, 4p1i its set-neutral no-profile state). Planted: a reel sorted by shelf count, a reveal chip
   rendered unrevealed, a wrong shelf rendered alone and a tripped game on a shelf each fail; the journey's 9p2i leg
   fails on the base bundle.
-- [ ] **16. Copy and terms.** Every new string lives in `SPECTATOR_COPY`, in plain words with no task or audit id, no
+- [x] **16. Copy and terms.** Every new string lives in `SPECTATOR_COPY`, in plain words with no task or audit id, no
   unexplained term and no threshold arithmetic; the copy walk (`dialectHits`) covers it and the component sources.
   The wrong shelf reads, in substance, "the voters cited lines they held and it pointed the wrong way; a wrong call on
   believable evidence is part of the game", beside "the table was right". `docs/glossary.md` extends its game-shape
   profile entry and adds the shelf names, the eyewitness chip, tripwire, decided without proof, wrong on what it held,
   and the leak and saturation rules. Planted: a description carrying "20 ticks" fails the copy test.
-- [ ] **17. Version 1 retires for the era.** Deleted: `regen_for_set`, the `--set-dir` branch and their tests;
+- [x] **17. Version 1 retires for the era.** Deleted: `regen_for_set`, the `--set-dir` branch and their tests;
   `rubric()`, the route, both DTOs, `_trimmed_rubric`; the score badge, spokes, buckets, histogram, `RUBRIC_SPOKES`
   and the interestingness strings. Kept as history: `experiments/lab/rubric.md` with one dated line (retired for
   `stage-b-r2` on the ruling's date, superseded by this profile), the two baseline-9 lab files (byte-identical to
@@ -288,11 +288,11 @@ seen red before the code it guards exists.
   unwidened extractor refuses the era), and requires a non-zero exit and no `results-rubric-score.json` written.
   Planted: the same run against `76270d6c`'s scorer, loaded from `git show` into `tmp_path`, writes the file and fails
   the test.
-- [ ] **18. Nothing reaches an agent.** A new `.importlinter` forbidden contract keeps `agents`, `meetings`,
+- [x] **18. Nothing reaches an agent.** A new `.importlinter` forbidden contract keeps `agents`, `meetings`,
   `orchestrator`, `engine` and `training` from importing `eval.game_profile` or `scripts.publish_game_profile`;
   the bake-off entrant scan already bans every `eval.*` import. Mechanism: `uv run lint-imports`. Planted: one leg per
   source package in `tests/test_firewall.py`'s copied tree, each naming the contract BROKEN.
-- [ ] **19. The bundle.** `_trimmed_rubric` becomes a trimmed profile; 9p2i bakes `data/9p2i/eval/game-profile.json`,
+- [x] **19. The bundle.** `_trimmed_rubric` becomes a trimmed profile; 9p2i bakes `data/9p2i/eval/game-profile.json`,
   4p1i bakes none. The baked file keeps exactly these set-level keys, as provenance and catalogue only:
   `rubric_version`, the era id, the MANIFEST key, `source_fingerprint`, the seedset, `stale`, the design constants, and
   the shelf, chip and facet catalogue (each name, its half and its class, with no size, no 2x2 table and no p). Every
@@ -304,7 +304,7 @@ seen red before the code it guards exists.
   Mechanism: `tests/scripts/test_build_demo_bundle.py` and the re-targeted stale controls, with a key-set test that
   holds the baked file's keys to that list. Planted: a bake that skips the trim fails; a bake that passes the class
   tables or a shelf size through fails the key-set test; a stale profile bakes no member.
-- [ ] **20. The registry follows the bytes.** In `docs/artifacts.md`, re-derived last after the final merge of `main`:
+- [x] **20. The registry follows the bytes.** In `docs/artifacts.md`, re-derived last after the final merge of `main`:
   the `replays/samples/` row (107 files to 108 at authoring; its size re-measured) and one new row for
   `docs/game-profile.md`, scoped in `scripts/verify_ml_evidence.py`'s two tables. Mechanism:
   `test_every_counted_registry_row_matches_the_index` and offline `scripts/verify_ml_evidence.py`. Planted: a stale
@@ -502,4 +502,355 @@ eyewitness chip is not leak-tested, since the leak rule covers shelves.
 
 ## Results
 
-Not started.
+### Implementation (2026-10-07)
+
+Built on `work/rubric-v2-profile` from `main` at `ef1a2a59` (the census card merged at `9caac0cf`, so the carrier holds
+`KillFact.victim`, `BodyFact.victim`, `GameFacts.end_reason`, `final_tasks_completed` and `final_tasks_total`).
+`origin/main` had not moved at the final fetch, so no merge of `main` was needed and the registry rows below are derived
+on that base. Commits, in order: `a556a4ec` (the module, the publisher, the served file, the page, the contract),
+`af275235` (the API, the bundle, the refresh step, the v1 retirement), `b46c5c53` (the viewer), `9033423e` (the
+bundle's copy), then `f665249c`, `fb8af924`, `e4313207`, `4acaf286`, `00575283` and `dc023329` (what the neuter and
+mutation passes asked for: tests, the viewer's request reads moved into pure functions, three strings moved into the
+copy table), then the Results commits.
+
+**Sections this rests on.** `docs/architecture.md` "Layering": `eval/game_profile.py` is an `eval/` reader of the
+census carrier (`load_census_inputs`, `grounding_labels`, `game_endings`) and of row 3's helpers (`load_set_inputs`,
+`_self_alibi_truths`, `_flag_is_manufactured`, `ALIBI_FLAG_KINDS`), read-only; the publisher is a script; the API
+reads only the served JSON, through `GameProfileView`, and imports nothing from `eval.game_profile` (the mirror test
+holds the two models together). "Enforced boundaries": `uv run lint-imports` keeps 5 contracts, 0 broken, the new one
+`nothing_the_game_runs_reads_the_game_profile` among them; nothing under `agents/`, `meetings/`, `orchestrator/`,
+`engine/` or `training/` changes. "Determinism and the substrate ladder": no recorded byte, stamp, prompt, detector
+or lever moves (`git diff --stat main -- replays/` lists the one served file; `bash scripts/verify_samples.sh`
+verifies all 50 samples of each committed set clean). The design memo's Part 2 (P1-P7, 2.2 tripwires, 2.3 shelves and
+facets, 2.4 the two rules, 2.9 record impact, 2.10 publication) and its Part 4 items 1-5 as the ruling takes them;
+the direction addendum's section 7 (the wrong-but-believable class) and section 8 row 9.
+
+**What was built.**
+- `eval/game_profile.py`. `blind_projection` builds `BlindSet` / `BlindGame` / `BlindMeeting` / `BlindBallot` /
+  `BlindTurn` / `BlindOwnKillRow` / `BlindKill` / `BlindBody` (frozen dataclasses) from the carrier and the
+  scorecard, joining meetings by id and computing each meeting's manufactured subjects through row 3's helpers; the
+  `GameReport`s never leave the function. `reveal_projection` adds `RevealGame` (roles, end reason, final task count,
+  sabotage starts). Readings: `meeting_readings` / `game_readings` / `tripped` (T1 in its five readings and T2),
+  `candidate_pointers` (the seven pre-reveal candidates, caught venting, one line two readings, struck after the
+  regroup), `eyewitness_meetings` (the chip), `reveal_pointers` and `distance` (the reveal shelves and the symmetric
+  distance), `fisher_two_sided` (exact, in `Fraction`s), `is_saturated`, `classify_candidate` (saturation, then the
+  leak rule over `era_facts`), `read_pre_reveal` (everything the pre-reveal half serves, from `BlindSet` alone) and
+  `build_profile` / `serialize_profile`. The served model `GameProfile` (pydantic, frozen, `extra="forbid"`) has a
+  pre-reveal half (shelves, the chip, tripwires, per-game facets, All games) and a reveal half (reveal shelves, the
+  pair, reveal facets, class tables). Constants are `Final` and stamped `rubric_version` 2.
+- `scripts/publish_game_profile.py` writes `replays/samples/9p2i/results-game-profile.json` (124,334 bytes) and
+  `docs/game-profile.md`; `--check`, `--set-dir DIR --json-stdout`, the roster refusal (`ProfileRefused`), the stamp
+  read before and after the walk (`read_stamp`: the loader's `_manifest_git_sha` and `_expected_seedset` and
+  `recording_fingerprint`), and the era from `eval.eras` (an era holding two profiled sets is refused).
+- API: 23 views in `api/schemas.py` mirroring the served model, `VIEW_MODEL_VERSION` "6" with one comment line,
+  `ReplayLoader.game_profile` (absent raises `FileNotFoundError`; a non-object or a file carrying `stale` or a
+  view-model key is refused; a MANIFEST, seedset or fingerprint mismatch serves `stale: true` with every member,
+  entry, facet and table withheld by `_withheld_profile`), `/eval/game-profile`; `_rubric_is_stale` is renamed
+  `_provenance_is_stale`, which `game_profile` now reads. Generated: `frontend/src/types/api.ts` and
+  `frontend/src/types/api.fidelity.ts` (the generator writes both).
+- Bundle: `_trimmed_profile` keeps the provenance keys, the constants and the catalogue, cuts every member list,
+  tripwire entry and per-game facet to the baked seeds, and deletes the class tables and the two alibi-flag counts
+  (`_UNBAKED_PROFILE_KEYS`). A shelf's size, a tripwire's count and the pair's counts are lengths of member lists,
+  so no set-level size ships; a stale profile bakes no member.
+- Refresh: for `replays/samples/9p2i` under its era config the step runs the publisher; the dry run prints
+  "[dry-run] game-shape profile: would regenerate replays/samples/9p2i/results-game-profile.json and
+  docs/game-profile.md from the refreshed replays (scripts/publish_game_profile.py; $0, no provider)"; every other
+  target prints no profile line. The skip clause is gone; the `--experiment-config` help and the `declared_args`
+  comment state the era rule.
+- Viewer: the Highlights tab is "Browse by moment" (`ReplayPicker.tsx`: `reelSections`, `ShelfSection`, `PairBlock`,
+  `MomentReel`; `HighlightCard.tsx`: `CardProfile`, the chips, the facet lines, the timeline, the reveal facet
+  lines; `ReplayFilters.tsx`: the winner filter and "someone was voted out"; `TournamentDashboard.tsx`:
+  `MomentsPanel` with shelf sizes and facet counts per value; `GuidedTour.tsx`: the first game in seed order).
+- Retired (craft rule 3): `regen_for_set`, `--set-dir`, `RUBRIC_RESULTS_FILENAME` and the fingerprint import in
+  `experiments/lab/rubric_score.py`; `_RUBRIC_FILENAME`, `ReplayLoader.rubric`, `/eval/rubric`, `RubricView`,
+  `RubricGameView`, `_trimmed_rubric`; `ScoreBadge`, `SubScoreBar`, the score and win-shape filters and their URL
+  keys, the score buckets, `InterestingnessHistogram`, `RUBRIC_SPOKES`, the interestingness strings and `getRubric`.
+  `git grep -nE 'regen_for_set|RubricView|RubricGameView|_trimmed_rubric|ScoreBadge|SubScoreBar|RUBRIC_SPOKES|InterestingnessHistogram|getRubric|_RUBRIC_FILENAME|RUBRIC_RESULTS_FILENAME|def rubric\(|eval/rubric'`
+  finds, outside history (`agent_prompts/`, `audits/`, `design/`, `tasks/`, `experiments/lab/report-rubric-design.md`),
+  only the four absence pins (`frontend/src/api/client.test.ts:80`, `tests/api/test_game_profile_view.py:281`,
+  `tests/api/test_view_model.py:194`, `:1369`). Kept: `_set_manifest_sha`, the frozen parity pin,
+  `eval/watchability.py`, the two baseline-9 lab files (`git diff --exit-code d41c9006 --` both exits 0) and
+  `experiments/lab/rubric.md` with one dated line.
+- Docs: `docs/glossary.md` extends the game-shape profile entry and adds the shelves, the eyewitness chip, tripwire,
+  decided without proof, wrong on what it held, the leak rule and the saturation rule; `docs/deployment.md` one
+  sentence; `docs/artifacts.md` the two rows; `scripts/verify_ml_evidence.py` the new row's two scope entries.
+
+**Follow-through outside Expected scope.** `frontend/src/types/api.fidelity.ts` (written by the same generator run as
+`api.ts`); `tests/scripts/test_verify_ml_evidence.py` (its probe list names the new registry row, two lines);
+`frontend/e2e/evidence.spec.ts` (one live-only case opening the dashboard's diagnostic report, whose moments panel
+the static bundle does not build, so the shared journey cannot read it).
+
+**Decisions.**
+1. Orchestrator ruling (1): T1's governing quantifier is decisive (the ejecting ballots labelled `off_target`,
+   `uncited` or `invalid_citation` removed, `tally_outcome` at the recorded floor ejects no one or someone else),
+   published beside every, any and the two other decisive readings. An ejecting ballot labelled `none_held` raises
+   `GameProfileConformanceError` as an unclassified case naming set, seed, meeting index and voter
+   (`test_an_ejecting_none_held_ballot_raises_naming_all_four`); a `none_held` SKIP is read as recorded. The shown
+   set carries none, so the publisher runs; open point 5 stays the owner's.
+2. Orchestrator ruling (2): "wrong on what it held" ships locally beside its right twin, always as one pair, an
+   empty half saying "No game listed here lands on this half."; in the bundle no baked game is on the wrong half, so
+   the pair renders the right half (14, 19) beside that line.
+3. Orchestrator ruling (3): the leak rule's 2x2 tables span every game of the era, a tripped game counted as a
+   non-member of every candidate, and the classes are recomputed per era by the publisher
+   (`test_the_leak_universe_counts_a_tripped_game_as_a_non_member`,
+   `test_a_universe_dropping_the_tripped_game_moves_the_shelf_and_fails`).
+4. Orchestrator ruling (4): no score, rank, total, histogram or mean is served or rendered; the shelf-count lean is
+   on the generated page only, marked never served (`test_no_field_of_the_profile_names_a_score`,
+   `test_no_key_of_the_served_view_names_a_score`, the copy test "names no score, rank or order anywhere a viewer
+   reads the profile").
+5. Orchestrator ruling (5): version 1 retires as the card lists; the geomean parity pin and `_set_manifest_sha` stay
+   (open point 1).
+6. Orchestrator ruling (6): the merge is the owner's publication decision; the pull request quotes the shown-set
+   reading, the copy that goes live, the baked file key by key and the bundle diff file by file.
+7. Orchestrator ruling (7): this card lands before the round-3 frozen head F, so the round reads none of it.
+8. Where the memo's words and `rubric-v2-repro.py` differ, the script governs and the page states the script's
+   reading: "one line, two readings" counts two ballots labelled `supported`, `none_held` or `off_target` that cite
+   the same turn and name different targets (the memo: "reach different decisions"); "suspicion moved" counts a
+   player who drew EJECT ballots (the memo: "drew ballots"). The memo's shelf sizes are the script's output, which the module
+   reproduces.
+9. Sabotage starts are read from the carrier's frames (the first tick a sabotage is active), so a sabotage started
+   on a game's final tick is never in play: 43 starts against the script's 46, which reads the start events (seeds
+   6, 42 and 44 each start one on the final tick). It is a reveal facet, no shelf, tripwire or class reads it, and
+   the page says so.
+10. "Struck after the regroup" is a facet by the saturation rule (40 of 50): the kill timeline marks each wave kill
+    and the kills facet counts them; its class row stays in the reveal half's class tables.
+11. The leak facts are each ending the era records (here `CREWMATE_TASKS`, `CREWMATE_EJECT`, `IMPOSTOR_PARITY`),
+    then "some meeting ejected someone" and "a crewmate was ejected", as `rubric-v2-repro.py` reads them.
+12. The tripwire labels, shown before the reveal as ruled (open point 2), are "Kept off the shelves: at meeting
+    {meeting} a player was voted out on ballots that cited nothing the voters held about them, and without those
+    ballots the meeting would have gone another way." and the manufactured-contradiction twin. The served names are
+    `decided_by_a_vote_that_held_nothing` and `decided_on_a_manufactured_contradiction`.
+13. A shelf that lists no game renders nothing (`ShelfSection`), so the bundle, which lists only seeds 14 and 19,
+    never claims a set-level emptiness; All games says "Every game listed here, in seed order, including any a
+    tripwire keeps off the shelves." for the same reason.
+14. A shelf header's count is the number of members it is served: the set-level size locally, the baked members
+    only in the bundle.
+
+**Re-targeted tests: the old assertion, and the strength kept.** No assertion was loosened; each v1 assertion
+either moved to the profile with the same shape or was deleted with the mechanism it guarded (craft rule 3).
+
+| old test (file) | old assertion | now | strength kept |
+| --- | --- | --- | --- |
+| `test_eval_rubric_is_per_set` (`tests/api/test_sets.py`) | both committed sets 404 on `/eval/rubric`; a scratch parent serves the scored set and 404s the other | `test_eval_game_profile_is_per_set` | 9p2i serves fresh with its seedset, 4p1i 404s; the scratch parent serves the profiled set fresh on its key and 404s the bare one |
+| `test_the_promoted_set_ships_no_rubric_and_keeps_its_key` (`test_sets.py`) | the loader raises; `_set_manifest_sha` agrees with the loader's key | `test_the_promoted_set_ships_its_profile_on_its_own_key` | the served file's MANIFEST key, fingerprint and era equal the loader's own derivations, and the loader serves it fresh |
+| (new) | | `test_version_one_writes_no_served_file_for_the_era`, `test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check` | item 17's run of `rubric_score.main --set-dir` exits non-zero and writes nothing; `76270d6c`'s scorer, from `git show`, writes the file and fails |
+| `test_rubric_endpoint_404_without_rubric_file` (`tests/api/test_view_model.py`) | `/eval/rubric` 404s with no file | `test_game_profile_endpoint_404_without_a_profile_file` | the same, on the new route |
+| `test_rubric_stamps_git_sha_from_8col_flags_manifest` | the key read from an 8-column manifest | `test_the_profile_stamp_reads_git_sha_from_an_8col_flags_manifest` | the same key, through the publisher's stamp and the loader |
+| `test_rubric_is_stale_prefix_logic`, and the fingerprint-shape cases | prefix, `None` and malformed cases of `_rubric_is_stale` | `test_provenance_is_stale_prefix_logic` and the same cases | every case kept, on the renamed `_provenance_is_stale` |
+| `test_rubric_regen_producer_and_staleness` | `regen_for_set` writes a fresh file; another key reads stale | `test_the_profile_reads_fresh_on_its_key_and_stale_on_another` | fresh on its key with its games; stale on another, every member withheld |
+| `test_rubric_regen_defaults_to_set_manifest_sha` | the producer stamps the set's key | `test_the_publisher_stamps_the_sets_manifest_key` | the publisher's stamp, read back fresh by the loader |
+| `test_rubric_rejects_present_but_malformed_file` | a malformed file raises naming the field | `test_a_present_but_malformed_profile_fails_loud` | a missing field and a non-object each raise |
+| `test_rubric_set_mismatch_is_stale` | a set mismatch reads stale despite a matching key | `test_a_profile_of_another_set_reads_stale` | the same |
+| `test_rubric_is_trimmed_to_the_baked_seeds` (`tests/scripts/test_build_demo_bundle.py`) | per-game rows cut to the baked seed | `test_the_profile_is_trimmed_to_the_baked_seeds` plus the key-set helper | every member list, chip, entry and facet cut, and the baked keys held to item 19's list |
+| `test_the_committed_sets_bake_no_rubric` | no committed set bakes a rubric | `test_the_featured_bake_ships_seeds_19_and_14_only`, `test_the_four_player_set_bakes_no_profile` | 9p2i bakes seeds 14 and 19 only, no tripwire entry, the wrong half empty; 4p1i bakes none and 404s |
+| `test_an_unscored_set_bakes_no_rubric` | an unscored set bakes none | `test_a_stale_profile_bakes_no_member`, `test_a_bake_that_skips_the_trim_fails_the_shape`, `test_a_bake_passing_the_class_tables_through_fails_the_key_set` | a stale profile bakes no member; both planted bakes fail |
+| `test_fresh_source_is_published_and_baked` (`tests/scripts/test_public_recording_provenance.py`) | a fresh v1 file serves and bakes its rows | the same name, on the profile | 50 games served, the bake holds exactly the baked seed |
+| `test_changed_inputs_suppress_scores_and_cannot_be_restamped` | changed bytes withhold scores; `regen_for_set` refuses to re-stamp | `test_changed_inputs_withhold_members_and_the_stamp_follows_the_bytes`, `test_a_missing_stamp_fails_loud` | changed bytes withhold every member and bake none; the profile is recomputed from bytes, so a new stamp follows them, and a file without its stamp raises |
+| `test_bundle_suppresses_legacy_stale_rows` | a stale v1 file bakes no row | `test_bundle_bakes_no_member_of_a_stale_profile` | the same, on the profile |
+| the refresh skip-line pins (`tests/scripts/test_refresh_samples.py`) | the dry run prints the skip line; no rubric line | the profile line case, `test_the_old_skip_line_fails_the_profile_case`, `test_any_other_target_prints_no_profile_line`, the two era-rule cases | 9p2i prints exactly the profile line; every other target none; the old skip line and the old help sentence each fail |
+| the v1 fixtures in `tests/api/test_schemas.py` and `tests/api/test_leak.py` | a hand-built `RubricView` round-trips; the DTO inventory names `RubricView` and `RubricGameView` | the committed profile round-trips as `GameProfileView`; the inventory names the 23 new views | the round-trip runs on the served bytes, and the inventory's equality check covers every new view |
+| frontend: "rubric provenance in replay cards", "the rubric legend table", "highlight source freshness" | stale and absent rubric states; the spoke legend | "the no-profile and stale states", "the game-shape profile's copy", "the game-shape profile route" | stale and absent kept distinct and set-neutral; the copy has no threshold or score word; the client asks no v1 route and reads a version-5 replay |
+
+**Verification** (at `00575283`, whose production code `dc023329` keeps, adding card tests only; `bash scripts/check.sh` is recorded in its own paragraph below).
+- `env | grep -c '^AILIBI_'`: 0.
+- `uv run pytest tests/eval/test_game_profile.py tests/scripts/test_publish_game_profile.py tests/api/test_game_profile_view.py tests/api/test_sets.py tests/api/test_view_model.py tests/api/test_schemas.py tests/api/test_leak.py tests/scripts/test_build_demo_bundle.py tests/scripts/test_public_recording_provenance.py tests/test_firewall.py tests/eval/test_watchability.py -n 6 --dist loadfile`:
+  474 passed, 1 skipped (the pre-existing `tests/api/test_view_model.py:399` skip: the set holds no fabricated
+  emergency opening), exit 0.
+- `uv run pytest tests/scripts/test_refresh_samples.py -n 4 --dist loadfile`: 167 passed, exit 0.
+- `uv run python scripts/publish_game_profile.py --check`, twice: exit 0 both times ("... are consistent with the
+  committed recordings."), `git status --short` empty after.
+- `uv run python scripts/publish_game_profile.py --set-dir replays/samples/4p1i --json-stdout`: exit 1, "refused:
+  replays/samples/4p1i holds a 4-player, 1-impostor roster; the game-shape profile reads 9-player, 2-impostor sets
+  only".
+- `.venv/bin/python <memo dir>/rubric-v2-repro.py replays/samples/9p2i`: exit 0, its text output byte-identical to
+  an earlier run on this branch; a count-only comparison of the module's profile with the script's JSON output agrees on all
+  six tripwire readings, all 16 shelves and their pointers, every class and p, the chip (15 meetings in 14 games), T2's
+  15 flags with 1 evaluable, the per-game shelf counts (0:12, 1:11, 2:11, 3:7, 4:6, 5:1, 6:1) and the wave (70 of 195
+  kills); one difference, sabotage starts 43 against 46 (decision 9).
+- `uv run python scripts/publish_gameplay_census.py --check`, `uv run python scripts/publish_process_scorecard.py
+  --check`, `uv run python scripts/gen_frontend_types.py --check`: exit 0 each.
+- `uv run lint-imports`: 5 contracts kept, 0 broken.
+- `git diff --exit-code d41c9006 -- experiments/lab/results-rubric-score.json experiments/lab/results-rubric-geomean.json`:
+  exit 0. `git diff --stat main -- replays/`: one file, `replays/samples/9p2i/results-game-profile.json`, 6,175
+  insertions.
+- `bash scripts/verify_samples.sh`: exit 0, all 50 samples verified clean in each of the three sets it walks.
+- `uv run python scripts/build_sample_report.py --sample-dir <set> --check` for `replays/samples/9p2i`, `4p1i`,
+  `replays/ml_corpus/9p2i`, `4p1i`: exit 0 each.
+- `uv run python scripts/validate_task_docs.py`: exit 0 (390 historical phase tasks, 390 prompts, 102 work cards).
+  `uv run python scripts/check_doc_facts.py`: exit 0. `uv run python scripts/verify_ml_evidence.py` (offline): exit 0,
+  64 checks, 52 OK, 0 FAIL, 7 ABSENT (the evidence branch, not restored on this checkout), 5 INFO.
+- Frontend: `npx tsc --noEmit -p .` and `npx eslint src e2e` clean; `npx vitest run src`: 27 files, 808 tests passed (at `dc023329`);
+  `npm run e2e`: 15 passed, 3 skipped (the README media capture, skipped by default), exit 0, 1.4 min.
+- Bundles: `uv run python scripts/build_demo_bundle.py --out <scratch>/bundle-base` at `ef1a2a59` and `--out
+  <scratch>/bundle-head` at `00575283`, then `diff -rq` and a JSON diff of every common file: 71 JSON files to 72;
+  added `data/9p2i/eval/game-profile.json` (6,232 bytes, seeds 14 and 19); changed exactly the five replay views
+  (`data/9p2i/replays/headless-seed-19.json`, `-14.json`, `data/4p1i/replays/headless-seed-2.json`, `-11.json`,
+  `-29.json`), each in `viewModelVersion` only, "5" to "6"; the other 66 JSON files byte-identical; no
+  `data/4p1i/eval/game-profile.json`; `index.html` and the hashed assets differ (the new viewer).
+
+**Planted proofs, red then green.** Each named test holds the planted case beside the real one, so the suite shows
+both readings.
+- Item 1: `test_strict_mypy_refuses_a_role_read_in_a_pre_reveal_reading` (a slow-burn copy reading `game.roles`, and a
+  T2 copy taking a `GameReport` and reading its `roles`, each fail strict mypy with the attribute error);
+  `test_a_scorecard_meeting_id_differing_from_the_carriers_raises`.
+- Item 2: `test_a_fold_reading_the_carrier_fails_both_properties`, `test_a_fold_reading_the_ending_fails_the_ending_property`,
+  `test_a_t2_reading_the_report_roles_fails_the_role_property`.
+- Item 3: `test_the_seed_41_shape_trips_any_but_not_decisive`, `test_the_seed_26_shape_trips_decisive`,
+  `test_a_not_assessed_ejecting_ballot_is_kept_as_recorded`, `test_the_recorded_floor_decides_the_planted_tally`,
+  `test_removal_governs_where_reading_as_skip_differs`, `test_an_ejecting_none_held_ballot_raises_naming_all_four`.
+- Item 4: `test_a_manufactured_flag_naming_the_ejected_player_trips`,
+  `test_a_flag_naming_another_player_or_one_row_3_cannot_answer_does_not_trip`, and the join raise above.
+- Item 5: per shelf, `test_slow_burn_needs_twenty_quiet_ticks` (19 quiet ticks),
+  `test_two_kills_after_one_regroup_and_a_kill_one_tick_past_the_wave`, `test_a_close_call_is_a_margin_of_one` (a
+  margin of two), `test_a_third_round_needs_three_meetings` (two meetings), `test_the_reporter_saw_it_happen` (a
+  reporter outside the witness list), `test_a_same_tick_double_kill_joins_each_body_by_victim`,
+  `test_suspicion_moved_away_from_a_living_player_but_not_from_the_dead`, `test_only_a_report_meeting_counts_as_a_reporter_or_a_report`.
+- Item 6: `test_a_task_win_reads_the_symmetric_distance_from_its_living_count`,
+  `test_the_pair_is_always_emitted_with_an_empty_half`, `test_the_eyewitness_chip_marks_a_holder_citing_its_own_kill_row`
+  (the holder citing another id, and a `None` citation, do not mark).
+- Item 7: `test_a_candidate_matching_one_ending_exactly_leaks`, `test_a_one_sided_p_fails_the_brute_force_property`,
+  `test_a_universe_dropping_the_tripped_game_moves_the_shelf_and_fails` ((2, 4, 2, 42) p 0.0655 stays; (2, 4, 1, 42) p
+  0.0361 moves).
+- Item 8: `test_thirty_eight_of_fifty_is_a_facet_and_thirty_seven_a_shelf`, `test_saturation_applies_before_the_leak_rule`.
+- Item 9: `test_a_moved_constant_fails_the_pin_until_its_version_moves` (slow burn 19 fails naming the constant, and
+  passes only once the copy says version 3 and the table has that row); the sourced constants:
+  `test_an_eighth_grounding_label_raises_unclassified`, `test_the_endings_follow_the_recorded_types`,
+  `test_the_alibi_kinds_are_row_3s`, `test_the_wave_follows_the_recorded_kill_cooldown`, `test_the_era_is_the_registrys`,
+  `test_the_glossary_states_the_modules_leak_and_saturation_numbers`.
+- Item 10: `test_a_file_carrying_a_score_rank_or_total_is_refused_at_load`, `test_the_key_scan_refuses_a_planted_total`,
+  `test_members_out_of_seed_order_raise`, `test_an_ending_facet_moved_before_the_reveal_fails_the_token_test`.
+- Item 11: `test_one_edited_membership_turns_check_red`, `test_an_edited_page_turns_check_red`,
+  `test_check_reports_an_absent_file_before_computing`, `test_a_page_naming_a_bar_or_a_ratio_fails_the_scan`,
+  `test_the_stamp_is_read_before_and_after_the_walk`, `test_a_four_player_set_is_refused_by_name`.
+- Item 12: `test_the_old_skip_line_fails_the_profile_case`, and the two era-rule cases with the old help sentence
+  and the old comment.
+- Item 13: `test_a_field_added_to_one_model_only_fails_the_mirror`, `test_each_stale_source_withholds_every_member`,
+  `test_the_route_serves_9p2i_and_404s_on_4p1i`.
+- Item 14: `test_a_member_pointing_past_the_last_meeting_fails_naming_seed_and_shelf` (and a kill tick moved one tick),
+  `test_an_eyewitness_chip_past_the_last_meeting_fails_naming_seed_and_chip`.
+- Item 15: "a reel sorted by how many shelves a game holds fails the order check (planted)", "shows them once
+  revealed, so the unrevealed check can fail (planted)", "a wrong half listed alone fails the pair check (planted)",
+  the tripped game planted onto a shelf in "keeps a tripped game off every shelf and labelled under All games"; the
+  journey's 9p2i leg run against the base bundle (`AILIBI_DEMO_BUNDLE_DIR=<scratch>/bundle-base npx playwright test
+  e2e/bundle.spec.ts`) fails at `evidence-journey.ts:66` (no "The reporter saw it happen" shelf holding seed 19), and
+  passes on the head's bundle.
+- Item 16: "a description carrying a threshold fails (planted)".
+- Item 17: `test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check` (`76270d6c`'s scorer, read with
+  `git show`, writes `results-rubric-score.json`) beside `test_version_one_writes_no_served_file_for_the_era`.
+- Item 18: `test_import_linter_refuses_a_planted_import_of_the_game_profile`, one leg per source package, each
+  naming the contract BROKEN.
+- Item 19: `test_a_bake_that_skips_the_trim_fails_the_shape`, `test_a_bake_passing_the_class_tables_through_fails_the_key_set`,
+  `test_a_stale_profile_bakes_no_member`.
+- Item 20: with `docs/artifacts.md`'s `replays/samples/` row left at its old 107 files, offline
+  `scripts/verify_ml_evidence.py` exits 1: "[FAIL] in-tree family inventory ... replays/samples/: docs/artifacts.md
+  promises 107 files, the index tracks 108"; at the head it exits 0.
+
+**The neuter table** (item 21). Every statement, module-level tuple or dict row and call keyword argument of the
+Python lines this card adds (whole new files; the added spans of the others) was neutered alone in a scratch copy of
+the tree (a statement to `pass`, a row or argument deleted), its suite run, and the file restored from the in-memory
+original; every TypeScript line the diff adds was deleted alone, then `tsc --noEmit` and `vitest run src` ran. A
+target is red when the suite fails (for TypeScript, "compile" means `tsc` refused the neutered file). The harness is
+scratch (`neuter.py`, `ts_neuter.py`), so the per-line rows are summarized here by file, with every survivor by line.
+
+| file | targets | red on the first run | survivors and their resolution |
+| --- | --- | --- | --- |
+| `eval/game_profile.py` | 812 (519 statements, 253 arguments, 40 rows) | 789 | 15 `frozen=` arguments (14 dataclasses and the pydantic base config): killed by `test_every_projection_and_reading_is_frozen`. `if len(kills) != 1:` and its raise in `_kill_of`: killed by the strengthened `test_a_reported_body_joining_no_kill_raises`. The `if ejected is None: return frozenset()` guard in `meeting_readings`: redundant (a meeting that ejects no one has no ejecting ballot, so every reading is already empty), deleted in `fb8af924`. `strict=True` in `game_readings`' zip: equivalent, since `per_meeting` is built from `game.meetings` one for one. 3 skipped (`READING_LABELS` on one line): each member dropped by hand, all red (`test_one_line_two_readings`, `test_a_label_the_meeting_layer_dropped_is_refused`, mutant T1). |
+| `scripts/publish_game_profile.py` | 196 | 193 | 3 skipped one-line rows (`PROFILE_SETS`, the two `PROFILE_ROSTER` members): dropped by hand, all red (`test_the_committed_profile_matches_a_recomputation`, `test_set_dir_prints_a_profile_and_writes_nothing`). |
+| `api/replay_loader.py` (added spans) | 21 | 21 | none |
+| `api/routes/eval.py` (added spans) | 2 | 2 | none |
+| `api/schemas.py` (added spans) | 88 | 88 | none |
+| `scripts/build_demo_bundle.py` (added spans) | 28 | 26 | `separators=` in the trimmed profile's `json.dumps`: killed by the compact-form check added to `test_the_featured_bake_ships_seeds_19_and_14_only`. `mode="json"` in its `model_dump`: equivalent, since every field of the view is a JSON-native type, so both dumps serialize to the same bytes. |
+| `scripts/gen_frontend_types.py` (added spans) | 1 | 1 | none |
+| `experiments/lab/rubric_score.py` (added spans; the rest are docstrings) | 1 | 1 | none |
+| `scripts/verify_ml_evidence.py` (the two scope rows) | 2 | 2 | none |
+| TypeScript, 7 files (`client.ts` 5, `GuidedTour.tsx` 2, `HighlightCard.tsx` 156, `ReplayFilters.tsx` 14, `ReplayPicker.tsx` 247, `TournamentDashboard.tsx` 107, `copy.ts` 146) | 677 | 615 (577 compile, 38 test) | 62 survived; 55 are red at the head, 7 named equivalent below. |
+
+The 62 TypeScript survivors. Killed by tests added after `e4313207`: the timeline's role, label and
+mark positions, the timeline's mount, the chip on a game with no shelf (`HighlightCard.tsx`); the ejection checkbox's
+type, state, disabled flag, change handler and words (`ReplayFilters.tsx`); the ejection filter's guard, a shelf's
+seed sort, the reveal-only shelves in the reel, each shelf's description and cards, the pair's heading, note and
+cards, the revealed half's heading and note, All games' note, the load, stale, empty and region words
+(`ReplayPicker.tsx`); the stale caveat and both column headings (`TournamentDashboard.tsx`); four ending words
+(`copy.ts`, also held to `game_endings()` from Python). The container lines (the picker's profile request and status,
+the dashboard's request) moved into pure functions the unit suite reads (`settledProfile`, `browserState`,
+`momentsState`). Neutered against the live e2e spec (`npx playwright test e2e/evidence.spec.ts` in a scratch copy),
+the effects' writes of a settled request and the moments panel's mount each failed it, while the two loading resets
+did not; they were then removed by deriving loading from the request a result answers (`activeProfile`,
+`activeMoments`, unit-tested), and the two writes that replaced them were neutered against the e2e spec again and
+failed it. A re-run over the survivors and every line changed since (150 targets) left 11 (its
+text match also took in three pre-existing `disabled={disabled}` lines of `ReplayFilters.tsx` outside this card's
+diff, not counted). Four of the 11 were class-name lines carrying a visual encoding (the chip's base classes, the
+timeline track, the kill mark's base classes, the tripwire label's box); tests of those encodings (a reveal-only chip
+dashed, a chip before the reveal solid, a wave kill hollow, the tripwire label in a dashed box) now hold them and each
+neuter goes red. The 7 left are named equivalent:
+- six React `key` props (`HighlightCard.tsx` four, `ReplayPicker.tsx` two): identity hints that change no markup;
+- one line inside a JSX comment (`ReplayPicker.tsx`, the absent state's set-neutral note): a comment.
+
+**The mutation pass** (item 21): one bounded pass of 37 mutants, every one of the eight classes (F 5, S 4, N 6, K 5,
+M 3, T 4, B 4, L 6), each applied alone in a scratch copy and run against the touched suites (`mutate.py`; the
+Python suites with `-x`, the frontend with `vitest run src/components src/lib src/api`). 35 were killed on the first
+run. K1 survived (no planted game held an emergency meeting naming a body) and is killed at the head by
+`test_only_a_report_meeting_counts_as_a_reporter_or_a_report` (`e4313207`); M1 survived on a copy synced before the
+join test was strengthened in `fb8af924` and is killed at the head by `test_a_reported_body_joining_no_kill_raises`.
+No survivor is named equivalent.
+
+| id | file | mutant | result | killed by |
+| --- | --- | --- | --- | --- |
+| F1 | `eval/game_profile.py` | the SKIP filter on the EJECT tally (`_eject_votes`) | killed | `test_the_committed_profile_matches_a_recomputation` |
+| F2 | `eval/game_profile.py` | the vent-flag filter in decided without proof | killed | `test_decided_without_proof_splits_right_and_wrong_by_the_ejected_role` |
+| F3 | `eval/game_profile.py` | the tripped-game filter on the eligible games | killed | `test_the_committed_profile_matches_a_recomputation` |
+| F4 | `scripts/build_demo_bundle.py` | the baked-seed filter on a shelf's members (`_trimmed_profile`) | killed | `test_the_profile_is_trimmed_to_the_baked_seeds` |
+| F5 | `frontend/src/components/ReplayPicker.tsx` | the tripped-game filter on a reel list (`reelSections`) | killed | the vitest suite (`src/components`, `src/lib`, `src/api`) |
+| S1 | `eval/game_profile.py` | the living count read from the last meeting (`distance`) | killed | `test_the_committed_profile_matches_a_recomputation` |
+| S2 | `eval/game_profile.py` | the current meeting's turns for the previous meeting's (`_suspicion_moved`) | killed | `test_suspicion_moved_away_from_a_living_player_but_not_from_the_dead` |
+| S3 | `frontend/src/components/ReplayPicker.tsx` | the pre-reveal shelves for the reveal shelves (`cardProfiles`) | killed | the vitest suite (`src/components`, `src/lib`, `src/api`) |
+| S4 | `scripts/publish_game_profile.py` | the set's files with and without the served file (`recording_inputs`) | killed | `test_the_recording_inputs_are_every_set_file_but_the_served_one` |
+| N1 | `eval/game_profile.py` | the unclassified-label test inverted (`meeting_readings`) | killed | `test_the_seed_26_shape_trips_decisive` |
+| N2 | `eval/game_profile.py` | the decisive tally comparison inverted | killed | `test_the_seed_26_shape_trips_decisive` |
+| N3 | `eval/game_profile.py` | the missing-ending test inverted (`reveal_projection`) | killed | `test_the_reveal_game_adds_the_roles_the_ending_and_the_task_count` |
+| N4 | `eval/game_profile.py` | the missing-victim test inverted (`blind_projection`) | killed | `test_the_reporter_saw_it_happen` |
+| N5 | `api/replay_loader.py` | the absent-file test inverted (`ReplayLoader.game_profile`) | killed | `test_the_shown_set_serves_its_profile_fresh` |
+| N6 | `frontend/src/components/ReplayPicker.tsx` | the winner filter comparison inverted (`matchesFilters`) | killed | the vitest suite (`src/components`, `src/lib`, `src/api`) |
+| K1 | `eval/game_profile.py` | the report-trigger read replaced by a constant (reporter shelf) | SURVIVED on the first run; killed at the head | `test_only_a_report_meeting_counts_as_a_reporter_or_a_report` |
+| K2 | `eval/game_profile.py` | the ejected player's role read replaced by a constant (the pair) | killed | `test_decided_without_proof_splits_right_and_wrong_by_the_ejected_role` |
+| K3 | `eval/game_profile.py` | the kill tick replaced by 0 in a report's corpse age | killed | `test_the_pre_reveal_facets` |
+| K4 | `eval/game_profile.py` | the kill tick replaced by 0 in the kill facet | killed | `test_the_pre_reveal_facets` |
+| K5 | `eval/game_profile.py` | the ejected player's role replaced by a constant (a crewmate ejected) | killed | `test_the_leak_facts_are_each_recorded_ending_then_the_two_ejection_facts` |
+| M1 | `eval/game_profile.py` | the meeting index dropped from the reported-body join message | SURVIVED on the first run; killed at the head | `test_a_reported_body_joining_no_kill_raises` |
+| M2 | `scripts/publish_game_profile.py` | the set path dropped from the roster refusal | killed | `test_a_four_player_set_is_refused_by_name` |
+| M3 | `api/replay_loader.py` | the file path dropped from the malformed-file message | killed | `test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check` |
+| T1 | `eval/game_profile.py` | `off_target` dropped from `READING_LABELS` | killed | `test_one_line_two_readings` |
+| T2 | `eval/game_profile.py` | `(RUNAWAY, reads_the_ending)` dropped from the reveal shelves | killed | `test_the_committed_profile_matches_a_recomputation` |
+| T3 | `scripts/build_demo_bundle.py` | `(reveal, class_tables)` dropped from the unbaked keys | killed | `test_the_profile_is_trimmed_to_the_baked_seeds` |
+| T4 | `api/replay_loader.py` | `view_model_version` dropped from the refused file keys | killed | `test_a_malformed_file_fails_loud` |
+| B1 | `eval/game_profile.py` | saturation and the leak rule swapped | killed | `test_saturation_applies_before_the_leak_rule` |
+| B2 | `api/replay_loader.py` | the stale and fresh branches swapped (`game_profile`) | killed | `test_the_shown_set_serves_its_profile_fresh` |
+| B3 | `frontend/src/components/ReplayPicker.tsx` | the pair's wrong and right halves swapped (`reelSections`) | killed | the vitest suite (`src/components`, `src/lib`, `src/api`) |
+| B4 | `frontend/src/components/HighlightCard.tsx` | the right and wrong ejection annotations swapped | killed | the vitest suite (`src/components`, `src/lib`, `src/api`) |
+| L1 | `eval/game_profile.py` | `grounding_labels()` replaced by its literal | killed | `test_an_eighth_grounding_label_raises_unclassified` |
+| L2 | `eval/game_profile.py` | `game_endings()` replaced by its literal | killed | `test_the_endings_follow_the_recorded_types` |
+| L3 | `eval/game_profile.py` | the recorded kill cooldown replaced by 6 | killed | `test_the_wave_follows_the_recorded_kill_cooldown` |
+| L4 | `eval/game_profile.py` | `ALIBI_FLAG_KINDS` replaced by its literal | killed | `test_the_alibi_kinds_are_row_3s` |
+| L5 | `scripts/publish_game_profile.py` | the MANIFEST reader replaced by the shown set's key | killed | `test_the_profile_stamp_reads_git_sha_from_an_8col_flags_manifest` |
+| L6 | `scripts/publish_game_profile.py` | the registry argument dropped from `era_id` | killed | `test_the_era_is_the_registrys` |
+
+**Limitations.**
+- One 50-game recording, and no interval is claimed for any count or class.
+- The leak classes swing between eras: one line, two readings sits on the boundary (p = 0.0498, open point 3), and
+  dropping the tripped game from the tables would move two kills after one regroup (0.0655 to 0.0681), one line two
+  readings (0.0498 to 0.0473) and struck after the regroup (0.0766 to 0.0256), as the Evidence states.
+- The constants were chosen with these numbers in view, and the 0.05 level is not corrected for its 50 tests on this
+  set; the rule only hides more.
+- The facets the viewer already shows before the reveal (length, meetings) carry some ending information; the page
+  says so.
+- `none_held` is the voter's own statement, and an ejecting `none_held` ballot is refused until the owner says how T1
+  reads it (open point 5).
+- T2 is nearly blind: row 3 evaluates 1 of the shown set's 15 alibi-class flags.
+- "Wrong on what it held" is direction section 7's wrong-but-believable class without that section's test that the
+  cited line is true; the census measures that, and the profile does not read it.
+- The eyewitness chip is not leak-tested, since the leak rule covers shelves.
+- Sabotage starts count from the frames, so a sabotage started on a game's final tick is not in play (decision 9).
+- Task documents that cite `/eval/rubric` or the v1 views in the present tense (`tasks/work/rubric-genuine-class-selfcheck.md`,
+  `tasks/work/rubric-extractor-era.md`) are other cards' and history; this card does not write them.
+
+**The house gate.** `bash scripts/check.sh` runs once, whole, at the pushed head that carries these Results; its exit code and counts are recorded in the commit after it, with item 21.
