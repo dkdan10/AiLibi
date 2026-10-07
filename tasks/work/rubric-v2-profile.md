@@ -129,8 +129,8 @@ seen red before the code it guards exists.
   `tmp_path` from today's module and the deleted served-file write the test carries as text
   (`_RETIRED_SERVED_FILE_WRITE` in `tests/api/test_sets.py`), so it reads no history; the rebuilt scorer still writes
   the file and still fails the check (`test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check`), and its
-  code is AST-identical to `76270d6c`'s with docstrings stripped. Proved on a depth-1 clone of the head and in CI
-  (Results, round 1).
+  code is AST-identical to `76270d6c`'s with docstrings stripped. Proved on a `git archive` export of the head with
+  no `.git` directory and in CI's shallow checkout, run 37624561446 (Results, round 1).
 - [x] Review correction: T1's "ejects someone else" clause is pinned. Removing two ungrounded ballots hands the tally
   from `p-3` to `p-6`; decisive, read-as-SKIP and every-ungrounded-removed each trip
   (`test_a_removal_that_hands_the_tally_to_another_player_trips_decisive`), and the two `is None` mutants are red.
@@ -1053,6 +1053,22 @@ logged its exit code directly).
 - Frontend: `npm run lint`, `npm run tsc:check` exit 0; `npm run test`: 27 files, 808 tests passed; `npm run e2e`
   (serial, one worker): 15 passed, 3 skipped (the README media capture), exit 0, 1.5 min.
 
-**The gate, round 1.** `bash scripts/check.sh` runs once, whole, at the pushed head of this Results commit; its exit
-code (this full-history worktree) and CI's run of that head (a shallow checkout) are recorded in the commit that
-follows, which changes only this paragraph.
+**The gate, round 1.** Two environments, quoted separately.
+- Local, this full-history worktree: `bash scripts/check.sh` ran once, at the pushed head `caac7e91` (the commit
+  recording this changes only this paragraph and the first Review correction item's proof sentence, which now names
+  the history-free export and the CI run), its exit code read from the background run's own report, not through
+  a pipe: **exit 1**. Every step before pytest passed: `ruff check .` all passed; `ruff format --check .` 567 files
+  already formatted; `lint-imports` 5 contracts kept, 0 broken; `validate_task_docs.py` passed (390, 390, 102);
+  `generate_prompts.py --check` all 390 in sync; `mypy .` no issues in 538 source files. `pytest -n auto --dist
+  loadfile`: 1 failed, 10,861 passed, 20 skipped, 3 xfailed in 351.7 s. The one failure is
+  `tests/orchestrator/test_run_limits.py::test_wall_deadline_cancels_meeting_and_retains_success`, whose assertion
+  needs a 0.25-second wall deadline to land inside a meeting in a loaded xdist worker (`assert 0 == 2`: the deadline
+  passed before the first model call); earlier cards record it as load-sensitive
+  (`tasks/work/followup-review-dispositions.md`, `tasks/work/fresh-deduction-instrument.md`). Run alone at the same
+  head it passed five times in five, and this round changes no file it reads (four test files of other suites and
+  this card). `set -e` then stopped the script before its frontend leg, which ran on its own instead: `npm run lint`,
+  `npm run tsc:check` and `npm run test` (808 passed) at `6fdfa78b`, and `npm run build` at `caac7e91` inside the
+  head bundle's build, each exit 0. The whole gate was not re-run, by the run-once rule.
+- CI, a shallow `actions/checkout`: run 37624561446 at `caac7e91`, conclusion success. Project checks (job
+  112802905173) 10,842 passed, 40 skipped, 3 xfailed in 1,286.8 s, with no failure (the item 17 planted case carries
+  no skip, so it ran and passed); Frontend checks and Frontend e2e (Playwright) success.
