@@ -128,6 +128,7 @@ from meetings.public_accounts import (
 )
 from observation.public_map import PublicMapView
 from meetings.rebuttal import select_bounded_rebuttal
+from meetings.route_lines import build_route_lines
 from meetings.render_contract import (
     BodyDiscoveryRecord,
     EvidenceRow,
@@ -2356,6 +2357,20 @@ class MeetingManager:
             regroup_ticks=regroup_ticks,
             ballot_kill_row_version=self._evidence_profile.ballot_kill_row_version,
         )
+        # The route lines, built only while the evidence profile sets their
+        # version: a pure function of the final transcript, this voter's
+        # candidates and the run's public regroup ticks, the same for every
+        # voter who may vote for a player (``meetings.route_lines``).
+        route_lines_version = self._evidence_profile.route_lines_version
+        route_lines = (
+            build_route_lines(
+                transcript=transcript,
+                candidate_targets=candidate_targets,
+                regroup_ticks=regroup_ticks,
+            )
+            if route_lines_version is not None
+            else ()
+        )
         prompt = self._vote_prompt(
             voter_id=participant.agent_id,
             rendered_memory=rendered_memory,
@@ -2389,14 +2404,17 @@ class MeetingManager:
             # keeps every other prompt set byte-identical; only the served v8
             # body references the variable.
             evidence_rows=evidence_rows,
-            # The two ballot arms' render inputs: the voter's own role, so a
+            # The three ballot arms' render inputs: the voter's own role, so a
             # sole impostor (who carries no teammate list) is told apart from a
-            # crewmate, and the two values of the SAME evidence profile the
-            # runner's recorded stamps fold from. Only the served body reads
-            # them, in guarded blocks; ``None`` renders the previous bytes.
+            # crewmate, the values of the SAME evidence profile the runner's
+            # recorded stamps fold from, and the route lines built above. Only
+            # the served body reads them, in guarded blocks; ``None`` and ``()``
+            # render the previous bytes.
             voter_role=participant.role,
             ballot_kill_row_version=self._evidence_profile.ballot_kill_row_version,
             impostor_ballot_version=self._evidence_profile.impostor_ballot_version,
+            route_lines=route_lines,
+            route_lines_version=route_lines_version,
         )
         # The in-prompt §4.6 verdict max, recomputed bit-for-bit from the SAME
         # graph + candidate set the template rendered (max suspicion over the

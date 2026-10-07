@@ -35,6 +35,7 @@ from hypothesis import strategies as st
 import experiments.lab.route_check_replay as rcr
 import meetings.corroboration as corroboration
 import meetings.manager as manager_module
+import meetings.route_lines as route_lines_module
 from agents.memory.episodic import EpisodicEvent
 from agents.memory.evidence_context import (
     ingest_public_meeting_roster,
@@ -515,8 +516,8 @@ def test_an_unknown_label_is_refused(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     repo, sha = _column_repo(tmp_path)
-    assert _run(repo, tmp_path, f"r3={sha}:replays/samples/9p2i") == 1
-    assert "column label 'r3'" in capsys.readouterr().err
+    assert _run(repo, tmp_path, f"r4={sha}:replays/samples/9p2i") == 1
+    assert "column label 'r4'" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -1577,7 +1578,7 @@ def test_the_hop_search_is_bounded_by_the_room_count(
         MeetingTranscript(turns=_pair_transcript(("ADMIN", 14), ("CAFETERIA", 17)))
     )
     assert rcr.reconcilable(first, second, regroup_ticks=frozenset()) == "walk"
-    monkeypatch.setattr(rcr, "CANONICAL_ROOMS", frozenset({"ADMIN"}))
+    monkeypatch.setattr(route_lines_module, "CANONICAL_ROOMS", frozenset({"ADMIN"}))
     assert rcr.reconcilable(first, second, regroup_ticks=frozenset()) is None
 
 
@@ -2749,12 +2750,12 @@ def test_an_unknown_recorded_label_is_refused_by_name(
 ) -> None:
     repo, out, _ = one_game_run
     payload = json.loads((out / "results.json").read_text())
-    payload["columns"][0]["label"] = "r3"
+    payload["columns"][0]["label"] = "r4"
     copy = tmp_path / "results.json"
     copy.write_text(rcr.serialize(payload))
     assert _check(repo, out, copy) == 1
     assert capsys.readouterr().err == (
-        "route-check replay: column 'r3' is not a known column\n"
+        "route-check replay: column 'r4' is not a known column\n"
     )
 
 

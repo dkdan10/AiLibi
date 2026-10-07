@@ -233,6 +233,234 @@ nobody, so the impostors win almost every 9p2i game in every arm.
   `stage_b_full`, against 3 of 24 at baseline. The regroup ends those stays
   without an exit.
 
+### Development: the crew idle-policy cross and whereabouts coverage, 2026-10-06
+
+These rows cross what a finished crewmate does with its spare time under the
+rules of the shown 9-player set. A crewmate is finished when it owns no
+unfinished task. Every arm here runs the four Stage-B fields that act during a
+fake game's play, at kill cooldown 6 unless named otherwise.
+
+- **Hub wait** (`stage_b_full_kill_cooldown_6`, `crew_idle_policy = hub_wait`,
+  the default). A finished crewmate waits at the meeting hub.
+- **Patrol** (`stage_b_full_kill_cooldown_6_patrol`). A finished crewmate walks
+  toward the room it has gone longest without visiting, the nearest first on a
+  tie.
+- **Accompany** (`stage_b_full_kill_cooldown_6_accompany`). A finished crewmate
+  heads for a room where it saw someone in the last two ticks, the latest
+  sighting first, unless it visited that room in the last four ticks; otherwise
+  it patrols.
+- In all three, a finished crewmate still answers a new task, a body it can
+  see, a kill it sees, a sabotage that blocks tasks and an available emergency
+  button, exactly as before. The two alternatives are the hand-written ones the
+  rows above measured under the older rules; nothing about them changed.
+- **`stage_b_full`** is the same rules at the map's own kill cooldown, 4 ticks.
+  It is the other column of the two cooldown rows read below.
+
+The counts are defined as follows.
+
+- **Whereabouts coverage.** After every play tick, in the state the tick
+  leaves, every living player is a subject. A subject is covered when it is not
+  inside a vent and at least one other living player, also not inside a vent,
+  stands in the same room. This is the engine's rule for who witnesses a kill,
+  applied to every player after every tick. It reads where players are, whether
+  they are alive and whether they are inside a vent. It reads no role, no seat
+  and no sight radius, so it is the same for every role: sharing a room is the
+  sight every player has in every visibility mode, and an impostor's wider
+  sight is deliberately not used. It counts positions, not what anyone noticed,
+  remembered or said. It bounds one thing: what crewmates see as the tick ends.
+  On this map a crewmate sees only its own room, whatever the sabotage, so
+  every player a crewmate sees in the state the tick leaves is covered, and an
+  uncovered subject is one no crewmate sees then. It does not bound what
+  impostors see. An impostor also sees the rooms next to its own unless the
+  lights are sabotaged, and it still sees from inside a vent, so it can see a
+  player the cell leaves uncovered. Nor does it bound what anyone holds. A
+  player keeps what it saw on earlier ticks and hears what others say, and a
+  crewmate that sees a player leave its room is told which room that player
+  went to, even when the player stands there alone. It is the role-blind
+  replacement for the step where the one committed training objective measures
+  crew coverage. That objective's
+  `patrol_coverage` term pays a crewmate for sharing a room with a player who
+  is an impostor, which reads a role. `training/README.md` section 7 records
+  that any reopening of the training work redefines that term without reading
+  roles before any search; this cell is the measured candidate, and nothing
+  here adopts it.
+- **At kill ticks** sums the same over the play ticks with at least one kill,
+  each tick counted once however many kills it holds. Each killer is one of
+  those subjects, covered when anyone stood with it as the tick ended. That is
+  company at the end of the tick, not an onlooker at the kill. The engine
+  applies a tick's actions in order, so a player who walks in after the kill
+  on the same tick covers the killer without having seen the kill, and a
+  witness who walks out after the kill can leave the killer uncovered.
+  Crew-witnessed kills and the two walk-in counts below read the moment of the
+  kill, from the witnesses the engine recorded. **At play ticks** sums it over
+  every play tick.
+- **Crew-witnessed kills** counts kills a crewmate saw, as the engine recorded
+  the kill's witnesses.
+- **Walked in** counts, over all kills, the crewmate witnesses who moved into
+  the kill's room from another room on the tick of the kill, out of all
+  crewmate witnesses. The engine applies a tick's moves and kills in order and
+  reads a kill's witnesses when the kill applies, so such a witness arrived
+  before the kill. **Kills with a walk-in** counts kills with at least one.
+- **Hub waits** counts waits a finished crewmate made at the meeting hub.
+- **Task wins** and **parity wins** are read from each game's result: the crew
+  finished every task, or the impostors reached parity.
+- **Covered share per game** is one game's covered subjects over its subjects
+  at kill ticks, shown as the minimum, median and maximum over the games with a
+  kill tick.
+- **Paired seeds** compare each alternative with hub wait on the same seed:
+  among the seeds where both games have a kill tick, how many show the
+  alternative's covered share higher, equal or lower; then the same over every
+  play tick and every seed. Paired games share a seed and diverge after their
+  first differing decision.
+
+Inputs: the wider development split, seeds 1000-1099 on both rosters, which
+begins with the eight development seeds above. The held-out split was not run.
+Each game runs under the lab's limits (96 ticks, 256 calls, 1,000,000 input and
+100,000 output tokens, 30 seconds and $0). The rows are
+`stage-b-idle-policy-development.json`. Its runtime fingerprint is
+`d901fcb0f2c67316a4f6bd77a331daf0c2a41e62d8d7dadbc417c9f295d2909e` and its git
+head is `342056181b9551de457a18c4d56917f3e676c175`. All 800 games completed, and
+none aborted or hit a limit; the most any game used was 71 ticks, 52 calls and
+220,212 input tokens. The fake provider made 14,190 calls, reporting 52,639,727
+input and 815,925 output tokens, at $0. The run took 110 seconds on this machine.
+Reproduce into an unused path:
+
+```sh
+uv run python -m experiments.tactical_gameplay --split development_wide --arms stage_b_full stage_b_full_kill_cooldown_6 stage_b_full_kill_cooldown_6_patrol stage_b_full_kill_cooldown_6_accompany --output /tmp/stage-b-idle-policy-development.json
+```
+
+The first eight seeds of every arm equal a `--split development` run of the
+same four arms, row for row. One cooldown-6 game on 9p2i ends in a sabotage
+win, so its task and parity wins add up to 99.
+
+#### 4p1i, 100 games per arm
+
+| Arm | Task wins | Parity wins | Tasks done | Kills | Crew-witnessed kills | Walked in | Kills with a walk-in | Meetings | Hub waits |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `stage_b_full` | 32 | 68 | 222/300 | 162 | 0 | 0/0 | 0 | 82 | 559 |
+| `stage_b_full_kill_cooldown_6` | 71 | 29 | 275/300 | 105 | 1 | 1/1 | 1 | 55 | 751 |
+| `stage_b_full_kill_cooldown_6_patrol` | 76 | 24 | 276/300 | 93 | 5 | 5/5 | 5 | 54 | 0 |
+| `stage_b_full_kill_cooldown_6_accompany` | 75 | 25 | 275/300 | 94 | 5 | 5/5 | 5 | 54 | 0 |
+
+| Arm | Coverage at kill ticks | Coverage at play ticks | Games without a kill tick | Covered share per game, min / median / max |
+| --- | ---: | ---: | ---: | ---: |
+| `stage_b_full` | 28/418 (6.7%) | 1569/5045 (31.1%) | 6 | 0.000 / 0.000 / 0.667 |
+| `stage_b_full_kill_cooldown_6` | 30/286 (10.5%) | 1888/5230 (36.1%) | 24 | 0.000 / 0.000 / 0.667 |
+| `stage_b_full_kill_cooldown_6_patrol` | 42/255 (16.5%) | 1997/5235 (38.1%) | 31 | 0.000 / 0.000 / 0.800 |
+| `stage_b_full_kill_cooldown_6_accompany` | 42/257 (16.3%) | 1996/5234 (38.1%) | 31 | 0.000 / 0.000 / 0.800 |
+
+| Alternative, against hub wait | Seeds with a kill tick in both | Kill ticks higher / equal / lower | Seeds | Play ticks higher / equal / lower |
+| --- | ---: | ---: | ---: | ---: |
+| `stage_b_full_kill_cooldown_6_patrol` | 66 | 13 / 48 / 5 | 100 | 54 / 11 / 35 |
+| `stage_b_full_kill_cooldown_6_accompany` | 66 | 13 / 48 / 5 | 100 | 52 / 11 / 37 |
+
+#### 9p2i, 100 games per arm
+
+| Arm | Task wins | Parity wins | Tasks done | Kills | Crew-witnessed kills | Walked in | Kills with a walk-in | Meetings | Hub waits |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `stage_b_full` | 4 | 96 | 1020/1399 | 497 | 17 | 20/20 | 17 | 228 | 2714 |
+| `stage_b_full_kill_cooldown_6` | 27 | 72 | 1253/1400 | 457 | 32 | 45/45 | 32 | 254 | 4840 |
+| `stage_b_full_kill_cooldown_6_patrol` | 31 | 69 | 1256/1399 | 445 | 45 | 54/54 | 45 | 262 | 0 |
+| `stage_b_full_kill_cooldown_6_accompany` | 34 | 66 | 1277/1399 | 444 | 47 | 53/53 | 47 | 260 | 0 |
+
+| Arm | Coverage at kill ticks | Coverage at play ticks | Games without a kill tick | Covered share per game, min / median / max |
+| --- | ---: | ---: | ---: | ---: |
+| `stage_b_full` | 1479/2862 (51.7%) | 14143/22414 (63.1%) | 0 | 0.083 / 0.533 / 0.846 |
+| `stage_b_full_kill_cooldown_6` | 1650/2713 (60.8%) | 20361/30401 (67.0%) | 0 | 0.200 / 0.600 / 0.900 |
+| `stage_b_full_kill_cooldown_6_patrol` | 1353/2624 (51.6%) | 17095/28247 (60.5%) | 0 | 0.227 / 0.511 / 0.767 |
+| `stage_b_full_kill_cooldown_6_accompany` | 1397/2613 (53.5%) | 17467/28474 (61.3%) | 0 | 0.200 / 0.533 / 0.818 |
+
+| Alternative, against hub wait | Seeds with a kill tick in both | Kill ticks higher / equal / lower | Seeds | Play ticks higher / equal / lower |
+| --- | ---: | ---: | ---: | ---: |
+| `stage_b_full_kill_cooldown_6_patrol` | 100 | 17 / 6 / 77 | 100 | 7 / 0 / 93 |
+| `stage_b_full_kill_cooldown_6_accompany` | 100 | 22 / 8 / 70 | 100 | 10 / 0 / 90 |
+
+The readings below are count-only, from 100 fake games per arm and roster. A
+fake meeting ejects nobody, so the race, the kills and the coverage are
+play-layer mechanics, not model play and not balance. The coverage figures are
+reported, never a bar or a reward. Kills and meetings are read beside them,
+as floors and never as rewards, because a crew that clumps together can raise
+coverage while cutting kills and meetings.
+
+- **Coverage, hub wait / patrol / accompany.** On 9p2i, at kill ticks, 60.8%,
+  51.6% and 53.5% of subjects are covered, and over every play tick 67.0%,
+  60.5% and 61.3%. On 4p1i, at kill ticks, 10.5%, 16.5% and 16.3%, and over
+  every play tick 36.1%, 38.1% and 38.1%.
+- **Paired seeds.** On 9p2i, patrol's covered share at kill ticks is below hub
+  wait's on 77 of the 100 seeds (above on 17, equal on 6), and accompany's on
+  70 (above on 22, equal on 8). Over every play tick they are below on 93 and
+  90 of 100. On 4p1i, of the 66 seeds where both games have a kill tick, both
+  alternatives are above hub wait on 13, equal on 48 and below on 5; over every
+  play tick patrol is above on 54 of 100 (accompany 52), equal on 11 and below
+  on 35 (37).
+- **The best arm's uncovered remainder.** On 9p2i the best of the three at kill
+  ticks is hub wait itself: 1,063 of its 2,713 subjects (39.2%) are uncovered.
+  On 4p1i it is patrol: 213 of 255 (83.5%). That remainder is an upper bound on
+  what any idle policy, hand-written or learned, could still cover in this cell
+  under these rules. Whether a learned policy could cover any of it is not
+  measured.
+- **What the cross shows.** On the 9-player roster neither hand-written
+  alternative raises whereabouts coverage. Waiting at the hub keeps more
+  players in company than walking about does, at kill ticks and over the whole
+  game. On the 4-player roster both raise it at kill ticks, from 10.5% to 16.5%
+  and 16.3%, but 48 of the 66 paired seeds read equal. Walking about does put more
+  crewmates where kills happen: on 9p2i crew-witnessed kills rise from 32 of
+  457 to 45 of 445 (patrol) and 47 of 444 (accompany). Beside that, kills fall
+  slightly (457 to 445 and 444) and meetings rise slightly (254 to 262 and
+  260). Hub waits fall from 4,840 to 0. **This reading decides nothing about
+  ML**; the hold on ML stands whatever it reads.
+- **The two cooldown rows, as mechanics.** At the map's own cooldown of 4 ticks
+  (`stage_b_full`) a crewmate saw 17 of 497 kills on 9p2i; at 6 ticks it saw
+  32 of 457. In both, every crewmate witness walked into the kill's room on the
+  kill tick (20 of 20 and 45 of 45), and every crew-witnessed kill had such a
+  witness. On 4p1i it is 0 of 162 against 1 of 105. These are fake games, and a
+  fake meeting ejects nobody, so the rise in the recorded hosted games, from 4
+  of 227 kills a crewmate saw in the first Stage-B candidate round to 14 of 195
+  in the shown 9-player set, is neither confirmed nor explained here.
+
+Every count comes from the recordings the lab walked, with every tick and
+meeting hash verified. This check reproduces every cell of the six tables
+above from the JSON, in the order shown:
+
+```python
+import json
+from collections import Counter
+from pathlib import Path
+
+data = json.loads(
+    Path("audits/tactical-gameplay/stage-b-idle-policy-development.json").read_text()
+)
+arms = ("stage_b_full", "stage_b_full_kill_cooldown_6",
+        "stage_b_full_kill_cooldown_6_patrol", "stage_b_full_kill_cooldown_6_accompany")
+cell = lambda a, b: f"{a}/{b} ({100 * a / b:.1f}%)"
+for roster in ("4p1i", "9p2i"):
+    print(roster)
+    for arm in arms:
+        games = data["arms"][arm]["sets"][roster]
+        c, wins = Counter(), Counter(game["reason"] for game in games)
+        for game in games:
+            c.update(game["counts"])
+        print(f"| `{arm}` | {wins['CREWMATE_TASKS']} | {wins['IMPOSTOR_PARITY']} "
+              f"| {c['terminal_tasks_completed']}/{c['terminal_tasks_total']} "
+              f"| {c['event:Killed']} | {c['kills_crew_witnessed']} "
+              f"| {c['crew_kill_witnesses_walked_in']}/{c['crew_kill_witnesses']} "
+              f"| {c['kills_with_walk_in_crew_witness']} | {c['meetings']} "
+              f"| {c['finished_crew_applied_waits_at_hub']} |")
+    for arm in arms:
+        s = data["whereabouts_coverage"][arm][roster]
+        shares = [s[f"kill_tick_share_{k}"] for k in ("minimum", "median", "maximum")]
+        print(f"| `{arm}` "
+              f"| {cell(s['whereabouts_covered_at_kill_ticks'], s['whereabouts_subjects_at_kill_ticks'])} "
+              f"| {cell(s['whereabouts_covered_at_play_ticks'], s['whereabouts_subjects_at_play_ticks'])} "
+              f"| {s['games_without_a_kill_tick']} | {' / '.join(f'{v:.3f}' for v in shares)} |")
+    for arm in arms[2:]:
+        p = data["idle_policy_pairs"][arm][roster]
+        print(f"| `{arm}` | {p['seeds_with_a_kill_tick_in_both']} "
+              f"| {p['kill_tick_share_higher']} / {p['kill_tick_share_equal']} / {p['kill_tick_share_lower']} "
+              f"| {p['seeds']} "
+              f"| {p['play_tick_share_higher']} / {p['play_tick_share_equal']} / {p['play_tick_share_lower']} |")
+```
+
 ### Held-out: 4p1i, 16 games per arm
 
 | Arm | Waits | Reversals | Exposure | Allocations | Reactor starts | Task wins | Calls |

@@ -135,11 +135,12 @@
    someone. One prose sentence in the bullet, no third word to write, and the
    skeleton still prefills null.
 
-   Two experiment arms (ballot_kill_row_version, impostor_ballot_version), each
-   default-OFF and set only by a recording's declared experiment config, render
-   guarded blocks in THIS body under the same v8 marker above; a ballot rendered
-   with either arm is stamped vote_ballot.qwen3_6_27b.v8.<arm>_v1 by the runner
-   (both arms join with "+"), never with the plain v8 stamp. With both OFF every
+   Three experiment arms (ballot_kill_row_version, impostor_ballot_version,
+   route_lines_version), each default-OFF and set only by a recording's declared
+   experiment config, render guarded blocks in THIS body under the same v8 marker
+   above; a ballot rendered with any of them is stamped
+   vote_ballot.qwen3_6_27b.v8.<arm>_v1 by the runner (arms ON together join with
+   "+" in that order), never with the plain v8 stamp. With all three OFF every
    byte below is the v8 body.
 
    * ballot_kill_row_version: the manager adds one first-hand own_kill row per
@@ -159,6 +160,16 @@
      so a vote that ignores it is recorded and tallied like any other. The
      confidence sentences, the nine-key contract and decision_basis are the
      v8 text. Every crew ballot is byte-identical to OFF.
+   * route_lines_version: one <routes> block between <map> and <evidence>,
+     rendered only when the manager built a line (meetings.route_lines). For each
+     candidate whose places stated at this table change room in a way the doors
+     or the public regroup allow, one line lists each such change in tick order:
+     the doors between the rooms and either "walking fits" or the regroup tick
+     that falls between. A change of room that neither allows is left out, a
+     candidate with no such change has no line, and the block names no one as a
+     suspect, weighs no statement and says nothing about roles. It is the same
+     for every voter role, and every ballot minus the block is byte-identical to
+     OFF.
 
    Inputs (loader kwargs only): voter_id, rendered_memory, transcript,
    contradiction_flags, suspicion_graph, candidate_targets (optional),
@@ -170,8 +181,9 @@
    map_card (rendered since v4 — Task 20.31), testimony_ledger (optional, Task
    21.19 lever — default None keeps the surface off), evidence_rows (rendered
    since v8 — ruling D5; default () keeps the block off), voter_role,
-   ballot_kill_row_version and impostor_ballot_version (the two experiment arms
-   above; default None keeps both off).
+   ballot_kill_row_version, impostor_ballot_version, route_lines_version and
+   route_lines (the three experiment arms above; default None and () keep all
+   three off).
 -#}
 <persona>
 You are {{ voter_id }}, voting at an AiLibi meeting: {{ impostors.phrase }} {{ impostors.verb_kill }} crewmates; the crew wins by voting {{ impostors.eject_all }}, {{ impostors.subject }} by surviving until they equal or outnumber the crew. {% if impostor_ballot_version is defined and impostor_ballot_version and voter_role == "IMPOSTOR" %}You are {{ impostors.one_of_them }}. The discussion is over — cast one ejection ballot. It is a move for your side, not a statement of who {{ impostors.subject }} {{ impostors.verb_be }}: name one crewmate to eject, or SKIP, whichever you judge better for your side. The outcome is a deterministic tally over every ballot.{% else %}The discussion is over — cast one ejection ballot: name the one player you believe is {{ impostors.one_of_them }}, or SKIP if the evidence is too thin. The outcome is a deterministic tally over every ballot, so vote the conclusion you actually reach.{% endif +%}
@@ -282,6 +294,15 @@ Price your confidence the way this table already calibrates a case: 1.0 only for
 {{ map_card }}
 Two accounts that name rooms one door apart at nearby ticks can BOTH be honest — that is one tick of walking, and a conflict over such a pair is thin. Two accounts that name far-apart rooms at the same tick cannot.
 </map>
+{% endif %}
+{% if route_lines_version is defined and route_lines_version and route_lines %}
+
+<routes>
+Each line below takes the places this table stated for one player, in tick order, and reads each change of room against the station's doors. A line lists only the changes of room the doors allow within the ticks between, or that the public regroup falls between, which walking cannot decide; a change of room that neither allows is left out. A player with no line is not judged by this block. A line weighs no statement: a place said here reads the same whether or not the account behind it is accurate, and the line says nothing about anyone's role.
+{% for line in route_lines %}
+- `{{ line.subject }}`, places stated at this table: {% for step in line.steps %}{{ step.from_rooms | join("/") }} at tick {{ step.from_tick }} to {{ step.to_rooms | join("/") }} at tick {{ step.to_tick }}, {{ step.doors }} {% if step.doors == 1 %}door{% else %}doors{% endif %} apart, {% if step.reading == "walking_fits" %}walking fits{% else %}the public regroup at tick {{ step.regroup_tick }} falls between, walking cannot decide it{% endif %}{% if loop.last %}.{% else %}; {% endif %}{% endfor +%}
+{% endfor %}
+</routes>
 {% endif %}
 
 {% if evidence_rows %}

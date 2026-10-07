@@ -303,7 +303,10 @@ def _crew_terms(rollout: EpisodeRollout) -> dict[str, float]:
     # IS an impostor; a crewmate sharing a room with a player who IS an impostor,
     # ``training.rollout._crew_shadows_impostor``), so neither is a neutral
     # crew-conduct term. Their values and weights are unchanged while ML work is
-    # held (owner ruling of 2026-09-24).
+    # held (owner ruling of 2026-09-24). Any reopening re-prices both role-blind
+    # before any search, under a new ``FITNESS_OBJECTIVE_ID``, and re-registers
+    # the conviction GO verdict with them (``training/README.md`` section 7,
+    # which supersedes the 2026-07-09 ratification of this engine-truth proxy).
     #
     # correctly-routed reports: count only meetings a crewmate ROUTED via a body
     # report that ejected an impostor — never an emergency or an impostor-triggered

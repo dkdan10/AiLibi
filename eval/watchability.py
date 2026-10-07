@@ -1593,12 +1593,13 @@ def _raise_integrity_breach(violation: WalkViolation) -> NoReturn:
 #: * tactical (``vent_exit_policy``, ``vent_entry_policy``): they reach the walk
 #:   only as the recorded actions it replays; the referee re-runs no policy.
 #: * meeting (``bounded_rebuttal_version``, ``ballot_kill_row_version``,
-#:   ``impostor_ballot_version``): the referee reads the recorded meeting rows,
-#:   ballots, flags and transcript as recorded. A rebuttal is one more recorded
-#:   turn, read like any turn; the kill row adds an own-evidence row to a vote
-#:   prompt and the impostor ballot reframes an impostor's vote prompt, and the
-#:   suspicion-graph parse reads only the rendered suspicion block, which both
-#:   arms leave in place.
+#:   ``impostor_ballot_version``, ``route_lines_version``): the referee reads the
+#:   recorded meeting rows, ballots, flags and transcript as recorded. A rebuttal
+#:   is one more recorded turn, read like any turn; the kill row adds an
+#:   own-evidence row to a vote prompt, the impostor ballot reframes an
+#:   impostor's vote prompt and the route lines add a ``<routes>`` block before
+#:   the evidence block, and the suspicion-graph parse reads only the rendered
+#:   suspicion block, which all three arms leave in place.
 #:
 #: Every other recorded setting stays refused (:func:`refuse_unread_referee_settings`).
 REFEREE_READS: Final[frozenset[str]] = READABLE_SETTINGS

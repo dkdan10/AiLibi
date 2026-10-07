@@ -207,6 +207,8 @@ _VERSION_PLAN: dict[str, ConfigLayer] = {
     "impostor_ballot_version": "meeting",
     # The balance round's dial (decision memo section 7).
     "kill_cooldown_ticks": "engine",
+    # Round 3's route lines (decision memo section 8.2 item 2).
+    "route_lines_version": "meeting",
 }
 
 
@@ -313,7 +315,7 @@ def test_the_omitted_fields_are_exactly_the_fields_the_wave_added() -> None:
         experiment_config._PRE_WAVE_VALUES
     )
     assert set(OMITTED_AT_DEFAULT) == added
-    assert len(OMITTED_AT_DEFAULT) == 6
+    assert len(OMITTED_AT_DEFAULT) == 7
 
 
 @pytest.mark.parametrize(
@@ -424,7 +426,7 @@ def test_evidence_version_two_with_the_reset_still_validates() -> None:
 
 def test_no_lab_candidate_combines_either_reset_pair() -> None:
     candidates = candidate_configs()
-    assert len(candidates) == 19
+    assert len(candidates) == 21
     combined = [
         name
         for name, config in candidates.items()

@@ -60,7 +60,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, Literal, Protocol, TypeAlias, cast, get_args
+from typing import Final, Literal, TypeAlias, cast, get_args
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _SCRIPTS_DIR: Final[Path] = _REPO_ROOT / "scripts"
@@ -102,29 +102,32 @@ from meetings.corroboration import (  # noqa: E402
     build_testimony_ledger,
 )
 from meetings.manager import _candidate_targets  # noqa: E402
+
+# The placement reader and the reconcile rule live in the meeting layer; the
+# public names are re-exported for this replay's readers and tests.
+from meetings.route_lines import (  # noqa: E402
+    Placement as Placement,
+    PlacementKind as PlacementKind,
+    _alibi_stay_placements,
+    _placement_key,
+    placements_of as placements_of,
+    reconcilable as reconcilable,
+    spoken_placements as spoken_placements,
+)
 from meetings.schemas import (  # noqa: E402
-    AlibiClaim,
     ContradictionRef,
     MeetingTranscript,
-    MeetingTurn,
     MoveWitnessRecord,
     PlayerId,
     SawMoveObservation,
-    SawPlayerObservation,
-    SawVentObservation,
     SightingRecord,
     VoteBallot,
-    WhereaboutsClaim,
 )
 from meetings.transcript import (  # noqa: E402
-    CANONICAL_ROOMS,
     MeetingTriggerKind,
     StatedPlacement,
-    _turn_claim_id,
-    _turn_whereabouts_id,
     canonical_rooms,
     is_relevant_sighting,
-    maximal_stays,
     reconstruct_stated_paths,
     room_hops,
     triggering_body_rooms,
@@ -150,9 +153,6 @@ SCHEMA_VERSION: Final[int] = 1
 DEFAULT_JSON: Final[Path] = Path("experiments/lab/results-route-check-replay.json")
 DEFAULT_REPORT: Final[Path] = Path("experiments/lab/report-route-check-replay.md")
 
-PlacementKind: TypeAlias = Literal[
-    "saw_player", "company", "saw_move", "whereabouts", "alibi_stay", "saw_vent"
-]
 MeetingKind: TypeAlias = Literal["report_vent_proof", "report_no_vent_proof", "button"]
 ALeg: TypeAlias = Literal["a", "a_transcript_only", "a_no_movement", "a_no_regroup"]
 DisputeLeg: TypeAlias = Literal[
@@ -260,24 +260,30 @@ class RouteCheckReplayError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
-#: The three columns, in the order the report sets them out: s9 is baseline 9,
+#: The four columns, in the order the report sets them out: s9 is baseline 9,
 #: the 9-player set shown before the promotion; r1 is candidate round 1, the
 #: eight Stage-B rules; r2 is candidate round 2, the same rules with a six-tick
-#: kill cooldown.
-COLUMN_LABELS: Final[tuple[str, ...]] = ("s9", "r1", "r2")
+#: kill cooldown; r3 is candidate round 3, recorded by its own card under the
+#: config file it declares, which adds the route lines.
+COLUMN_LABELS: Final[tuple[str, ...]] = ("s9", "r1", "r2", "r3")
 
 #: The config file candidate round 1 recorded under.
 R1_CONFIG_PATH: Final[str] = "replays/candidates/stage-b-r1/experiment-config.json"
+
+#: The config file candidate round 3 records under.
+R3_CONFIG_PATH: Final[str] = "replays/candidates/stage-b-r3/experiment-config.json"
 
 
 def declared_config_path(label: str) -> str | None:
     """The experiment config a column's rows must have recorded, or ``None``.
 
     r2 declares its era's config, read from the era registry when asked; r1
-    declares the round's own file; s9 was recorded with every experimental
-    switch off. The path is read at the column's own commit.
+    and r3 declare their round's own file; s9 was recorded with every
+    experimental switch off. The path is read at the column's own commit.
     """
 
+    if label == "r3":
+        return R3_CONFIG_PATH
     if label == "r2":
         return STAGE_B_R2.declared_config
     if label == "r1":
@@ -426,160 +432,8 @@ def require_declared_settings(
 
 
 # ---------------------------------------------------------------------------
-# The universe of spoken placements
+# The universe of spoken placements, read by ``meetings.route_lines``
 # ---------------------------------------------------------------------------
-
-
-class _Spot(Protocol):
-    @property
-    def tick(self) -> int: ...
-
-    @property
-    def rooms(self) -> frozenset[str]: ...
-
-
-@dataclass(frozen=True)
-class Placement:
-    """One typed placement of ``player`` spoken at the meeting, ungated."""
-
-    player: PlayerId
-    tick: int
-    rooms: frozenset[str]
-    kind: PlacementKind
-    event_id: str
-    turn_id: str
-
-
-def _placement_key(spot: Placement) -> tuple[int, tuple[str, ...], str, str]:
-    return (spot.tick, tuple(sorted(spot.rooms)), spot.event_id, spot.kind)
-
-
-def _alibi_stay_placements(turn: MeetingTurn) -> Iterator[Placement]:
-    """Each maximal stay of each alibi route, at its first and last tick."""
-
-    for index, claim in enumerate(turn.claims):
-        if not isinstance(claim, AlibiClaim):
-            continue
-        event_id = _turn_claim_id(turn=turn, index=index)
-        for stay in maximal_stays(claim.route):
-            rooms = canonical_rooms(stay.room)
-            if not rooms:
-                continue
-            for tick in sorted({stay.from_tick, stay.to_tick}):
-                yield Placement(
-                    claim.subject, tick, rooms, "alibi_stay", event_id, turn.turn_id
-                )
-
-
-def spoken_placements(transcript: MeetingTranscript) -> tuple[Placement, ...]:
-    """Every typed placement spoken at the meeting, for every player it places.
-
-    Sightings place their subject and their company, a movement sighting its
-    destination, a whereabouts its speaker, an alibi route its subject (one
-    placement at each end of each stay), a vent sighting its subject. Nothing is
-    gated; a label with no canonical room places nobody.
-    """
-
-    found: set[Placement] = set()
-    for turn in transcript.turns:
-        for index, observation in enumerate(turn.observations):
-            event_id = turn_observation_id(turn=turn, index=index)
-            if isinstance(observation, SawPlayerObservation):
-                rooms = canonical_rooms(observation.room)
-                if not rooms:
-                    continue
-                found.add(
-                    Placement(
-                        observation.subject,
-                        observation.tick,
-                        rooms,
-                        "saw_player",
-                        event_id,
-                        turn.turn_id,
-                    )
-                )
-                for companion in observation.co_present:
-                    if companion != observation.subject:
-                        found.add(
-                            Placement(
-                                companion,
-                                observation.tick,
-                                rooms,
-                                "company",
-                                event_id,
-                                turn.turn_id,
-                            )
-                        )
-            elif isinstance(observation, SawMoveObservation):
-                rooms = canonical_rooms(observation.to_room)
-                if rooms:
-                    found.add(
-                        Placement(
-                            observation.subject,
-                            observation.tick,
-                            rooms,
-                            "saw_move",
-                            event_id,
-                            turn.turn_id,
-                        )
-                    )
-            elif isinstance(observation, WhereaboutsClaim):
-                rooms = canonical_rooms(observation.room)
-                if rooms:
-                    found.add(
-                        Placement(
-                            turn.speaker,
-                            observation.tick,
-                            rooms,
-                            "whereabouts",
-                            _turn_whereabouts_id(turn=turn, index=index),
-                            turn.turn_id,
-                        )
-                    )
-            elif isinstance(observation, SawVentObservation):
-                rooms = canonical_rooms(observation.room)
-                if rooms:
-                    found.add(
-                        Placement(
-                            observation.subject,
-                            observation.tick,
-                            rooms,
-                            "saw_vent",
-                            event_id,
-                            turn.turn_id,
-                        )
-                    )
-        found.update(_alibi_stay_placements(turn))
-    return tuple(sorted(found, key=_placement_key))
-
-
-def placements_of(
-    placements: Iterable[Placement], player: PlayerId
-) -> tuple[Placement, ...]:
-    return tuple(spot for spot in placements if spot.player == player)
-
-
-def reconcilable(
-    earlier: _Spot, later: _Spot, *, regroup_ticks: frozenset[int]
-) -> Literal["walk", "regroup"] | None:
-    """How a pair in two different rooms is reconciled, or ``None``.
-
-    ``earlier`` must not be later than ``later``. The rooms must be disjoint
-    canonical sets. A walk reconciles when ``1 <= hops <= elapsed`` over the
-    whole canonical map (the hop search bounded by the room count); otherwise the
-    public regroup reconciles a pair whose interval holds one of its ticks.
-    """
-
-    if earlier.tick > later.tick:
-        raise ValueError("a pair is ordered by tick")
-    hops = room_hops(earlier.rooms, later.rooms, max_hops=len(CANONICAL_ROOMS))
-    if hops is None or hops == 0:
-        return None
-    if hops <= later.tick - earlier.tick:
-        return "walk"
-    if any(earlier.tick < tick <= later.tick for tick in regroup_ticks):
-        return "regroup"
-    return None
 
 
 def ordered_pairs(spots: Sequence[Placement]) -> Iterator[tuple[Placement, Placement]]:
@@ -2915,7 +2769,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="append",
         default=[],
         metavar="LABEL=COMMIT:PATH",
-        help="one column: s9, r1 or r2, a commit, and a set path (repeatable)",
+        help="one column: s9, r1, r2 or r3, a commit, and a set path (repeatable)",
     )
     parser.add_argument("--out-json", type=Path, default=None)
     parser.add_argument("--out-report", type=Path, default=None)
