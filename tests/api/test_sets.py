@@ -12,16 +12,19 @@ Covers the three guarantees the set selector + per-set serving rest on:
   a 404.
 
 Task 19.9 adds the curated-default pins: ``DEFAULT_SET`` is the 9p2i spectator set
-(not the 4p1i fixture), the rubric's provenance key agrees between producer and
-loader on the committed mixed-provenance manifest, and every hand-curated featured
-seed exists in the set it names.
+(not the 4p1i fixture), the game-shape profile's stamp agrees with the loader's
+own provenance key on the committed manifest, and every hand-curated featured
+seed exists in the set it names. Version 1 of the rubric writes no served file.
 """
 
 from __future__ import annotations
 
 import importlib
+import importlib.util
+import json
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -37,18 +40,18 @@ from api.replay_loader import (
     SetLoaderRegistry,
     _manifest_git_sha,
     _manifest_seed_shas,
-    _rubric_is_stale,
+    _provenance_is_stale,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_PROFILE_FILENAME = "results-game-profile.json"
 _PARENT = _REPO_ROOT / "replays" / "samples"
 _COMMITTED_4P1I = _PARENT / "4p1i"
 # A small, fast committed 4p1i seed used to stamp fake set subdirs in tmp dirs.
 _FAST_SEED = 0
 
-# The rubric regen producer is a top-level lab module (experiments/lab is not on
-# mypy_path); import it dynamically so mypy does not try to resolve it by name —
-# the same pattern tests/api/test_view_model.py uses.
+# The retired version-1 scorer is a top-level lab module (experiments/lab is not
+# on mypy_path); import it dynamically so mypy does not try to resolve it by name.
 _LAB_DIR = _REPO_ROOT / "experiments" / "lab"
 if str(_LAB_DIR) not in sys.path:
     sys.path.insert(0, str(_LAB_DIR))
@@ -325,25 +328,59 @@ def test_replays_is_set_parametrized(monkeypatch: pytest.MonkeyPatch) -> None:
     assert default.json() == nine.json()
 
 
-def test_eval_rubric_is_per_set(
+def _stamped_profile(set_dir: Path) -> None:
+    """The committed profile, re-stamped for ``set_dir``'s own bytes."""
+
+    from orchestrator.recording_fingerprint import recording_fingerprint
+
+    served = json.loads(
+        (_PARENT / "9p2i" / _PROFILE_FILENAME).read_text(encoding="utf-8")
+    )
+    (set_dir / "roster.json").write_text(
+        json.dumps({"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2}),
+        encoding="utf-8",
+    )
+    (set_dir / "MANIFEST.md").write_text(
+        "| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd | winner |\n"
+        "|---|---|---|---|---|---|---|\n"
+        f"| {_FAST_SEED} | m | v | 2026-10-01 | 1e48c40 | 0.0 | CREWMATES |\n",
+        encoding="utf-8",
+    )
+    (set_dir / _PROFILE_FILENAME).write_text(
+        json.dumps(
+            {
+                **served,
+                "manifest_key": "1e48c40",
+                "source_fingerprint": recording_fingerprint(set_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_eval_game_profile_is_per_set(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # No committed set ships a rubric since 2026-10-02: the gameplay-facts
-    # extractor does not read the shown 9p2i set's era, and 4p1i never shipped
-    # one. Both serve the empty state (404).
+    # The shown 9p2i set ships the game-shape profile; 4p1i ships none and serves
+    # the empty state (404).
     with _client(_PARENT, monkeypatch) as client:
-        for name in ("9p2i", "4p1i"):
-            assert client.get("/eval/rubric", params={"set": name}).status_code == 404
-    # Per set: a scratch parent where only one set carries a rubric serves it
+        nine = client.get("/eval/game-profile", params={"set": "9p2i"})
+        four = client.get("/eval/game-profile", params={"set": "4p1i"})
+    assert nine.status_code == 200
+    assert nine.json()["seedset"] == "9p2i"
+    assert nine.json()["stale"] is False
+    assert four.status_code == 404
+    # Per set: a scratch parent where only one set carries a profile serves it
     # there and the empty state beside it.
-    scored = _stamp_set(tmp_path, "scored")
-    _stamp_set(tmp_path, "unscored")
-    _rubric_score.regen_for_set(_synthetic_facts(scored), scored, git_head="1e48c40")
+    profiled = _stamp_set(tmp_path, "profiled")
+    _stamp_set(tmp_path, "bare")
+    _stamped_profile(profiled)
     with _client(tmp_path, monkeypatch) as client:
-        served = client.get("/eval/rubric", params={"set": "scored"})
-        empty = client.get("/eval/rubric", params={"set": "unscored"})
+        served = client.get("/eval/game-profile", params={"set": "profiled"})
+        empty = client.get("/eval/game-profile", params={"set": "bare"})
     assert served.status_code == 200
-    assert served.json()["seedset"] == "scored"
+    assert served.json()["stale"] is False
+    assert served.json()["manifest_key"] == "1e48c40"
     assert empty.status_code == 404
 
 
@@ -391,22 +428,16 @@ def test_unknown_set_is_404_on_replays(monkeypatch: pytest.MonkeyPatch) -> None:
         assert client.get("/replays", params={"set": "../9p2i"}).status_code == 404
 
 
-# ── the committed rubric's provenance key + the curated featured list ────────
+# ── the committed profile's provenance key + the curated featured list ───────
 #
-# Task 19.9. The 9p2i manifest carries THREE distinct recording shas, so the old
-# scalar key resolved to None on BOTH sides and the picker's staleness banner was
-# unconditionally, falsely "stale" — no re-score could clear it. The key is now a
-# SET FINGERPRINT over the sorted per-seed shas, produced by
-# ``experiments.lab.rubric_score._set_manifest_sha`` and recomputed by
-# ``api.replay_loader._manifest_git_sha`` from the same bytes.
+# Task 19.9. The 9p2i manifest once carried THREE distinct recording shas, so a
+# scalar key resolved to None and every derived file read falsely stale. The key
+# is a SET FINGERPRINT over the sorted per-seed shas when a set is mixed,
+# recomputed by ``api.replay_loader._manifest_git_sha`` from the manifest's bytes.
 #
-# The committed rubric was regenerated at HEAD with ($0, offline, no provider):
-#   PYTHONPATH=. uv run python audits/workflows/extract_gameplay_facts.py \
-#     >/dev/null \
-#     && uv run python experiments/lab/rubric_score.py \
-#       "${TMPDIR:-/tmp}/ailibi-gameplay-facts-9p2i.json" \
-#       --set-dir replays/samples/9p2i
-# (the same pair scripts/refresh_samples.sh runs after a re-record).
+# The committed profile is regenerated with ($0, offline, no provider):
+#   uv run python scripts/publish_game_profile.py
+# (the step scripts/refresh_samples.sh runs after a re-record of the set).
 
 
 def test_committed_manifests_key_on_their_single_recording_sha() -> None:
@@ -451,21 +482,98 @@ def test_a_mixed_provenance_manifest_still_keys_on_a_multi_fingerprint(
     assert mixed is not None and mixed.startswith("multi:")
 
 
-def test_the_promoted_set_ships_no_rubric_and_keeps_its_key() -> None:
-    # The served 9p2i set holds candidate round 2's bytes since 2026-10-02, and
-    # the gameplay-facts extractor refuses that era, so the set ships no rubric:
-    # the loader raises, the eval route serves the empty state, and the viewer
-    # renders its no-rubric copy. The provenance key the next rubric will be
-    # checked against still agrees between producer and loader on these bytes.
-    # Was the probe pin on the baseline-9 rubric: fresh, five per-game floors
-    # (seeds 6, 12, 13, 38, 39), median 50.7, top score 83.5.
+def test_the_promoted_set_ships_its_profile_on_its_own_key() -> None:
+    # The served 9p2i set holds candidate round 2's bytes since 2026-10-02 and
+    # ships the game-shape profile, stamped with the key the loader derives from
+    # the set's own MANIFEST and the fingerprint of its recordings, so the loader
+    # serves it fresh. No version-1 served file is shipped beside it. Was the
+    # producer-loader agreement on the version-1 key (``_set_manifest_sha``).
+    from orchestrator.recording_fingerprint import recording_fingerprint
+
     set_dir = _PARENT / "9p2i"
     assert not (set_dir / "results-rubric-score.json").exists()
-    with pytest.raises(FileNotFoundError):
-        SetLoaderRegistry(_PARENT).get("9p2i").rubric()
+    served = json.loads((set_dir / _PROFILE_FILENAME).read_text(encoding="utf-8"))
     manifest_sha = _manifest_git_sha(set_dir)
     assert manifest_sha == "43b5ee45"
-    assert _rubric_score._set_manifest_sha(set_dir) == manifest_sha
+    assert served["manifest_key"] == manifest_sha
+    assert served["source_fingerprint"] == recording_fingerprint(set_dir)
+    assert served["era"] == "stage-b-r2"
+    assert SetLoaderRegistry(_PARENT).get("9p2i").game_profile().stale is False
+
+
+def _scorer_writes_no_served_file(
+    scorer: Any, set_dir: Path, workdir: Path, monkeypatch: pytest.MonkeyPatch
+) -> bool:
+    """Run ``scorer.main`` with ``--set-dir`` and report that it refused cleanly.
+
+    The scoring tables are stubbed: the question is only whether any code path
+    still writes a version-1 served file beside the recordings.
+    """
+
+    (workdir / "experiments" / "lab").mkdir(parents=True, exist_ok=True)
+    facts_path = workdir / "facts.json"
+    facts_path.write_text(json.dumps(_synthetic_facts(set_dir)), encoding="utf-8")
+    monkeypatch.chdir(workdir)
+    monkeypatch.setattr(scorer, "score", lambda facts: [("R1", "planted", "planted")])
+    monkeypatch.setattr(
+        scorer,
+        "geomean_validation",
+        lambda facts: {
+            "mean_score": 0,
+            "median_score": 0,
+            "validation": {
+                "ranking_contested_above_stopwatch": {
+                    "all_eject_decided_above_all_stopwatch": True
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["rubric_score.py", str(facts_path), "--set-dir", str(set_dir)]
+    )
+    try:
+        code = scorer.main()
+    except SystemExit as refused:
+        code = refused.code
+    return (
+        code not in (0, None) and not (set_dir / "results-rubric-score.json").exists()
+    )
+
+
+def test_version_one_writes_no_served_file_for_the_era(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    copy = tmp_path / "set" / "9p2i"
+    shutil.copytree(_PARENT / "9p2i", copy)
+    assert _scorer_writes_no_served_file(
+        _rubric_score, copy, tmp_path / "work", monkeypatch
+    )
+    assert not any((tmp_path / "work" / "experiments" / "lab").iterdir())
+
+
+def test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: the scorer as it stood at ``76270d6c``, read from git."""
+
+    source = subprocess.run(
+        ["git", "show", "76270d6c:experiments/lab/rubric_score.py"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    path = tmp_path / "rubric_score_76270d6c.py"
+    path.write_text(source, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec is not None and spec.loader is not None
+    old = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, path.stem, old)
+    spec.loader.exec_module(old)
+    copy = tmp_path / "set" / "9p2i"
+    shutil.copytree(_PARENT / "9p2i", copy)
+    assert not _scorer_writes_no_served_file(old, copy, tmp_path / "work", monkeypatch)
+    assert (copy / "results-rubric-score.json").exists()
 
 
 def test_featured_labels_are_spoiler_free() -> None:
@@ -537,7 +645,7 @@ def test_set_fingerprints_compare_by_exact_equality() -> None:
     # provenance. Malformed on either side → stale (the fail-safe direction).
     real = _manifest_git_sha(_PARENT / "9p2i")
     assert real is not None
-    assert _rubric_is_stale(real, real) is False
+    assert _provenance_is_stale(real, real) is False
 
     # The malformed variants are built from a SYNTHETIC well-formed fingerprint,
     # not from whatever the committed set happens to carry. Deriving them from
@@ -546,7 +654,7 @@ def test_set_fingerprints_compare_by_exact_equality() -> None:
     # truncating it to 11 characters returned the string itself and the
     # "truncated digest" case compared a value against itself.
     fingerprint = "multi:0123456789ab"
-    assert _rubric_is_stale(fingerprint, fingerprint) is False
+    assert _provenance_is_stale(fingerprint, fingerprint) is False
     for malformed in (
         "multi:",  # prefix only
         fingerprint[: len("multi:") + 5],  # truncated digest
@@ -554,19 +662,19 @@ def test_set_fingerprints_compare_by_exact_equality() -> None:
         fingerprint + "ab",  # over-long
         "multi:zzzzzzzzzzzz",  # non-hex
     ):
-        assert _rubric_is_stale(malformed, fingerprint) is True, malformed
-        assert _rubric_is_stale(fingerprint, malformed) is True, malformed
+        assert _provenance_is_stale(malformed, fingerprint) is True, malformed
+        assert _provenance_is_stale(fingerprint, malformed) is True, malformed
         # ...and malformed against the real committed key, in both directions.
-        assert _rubric_is_stale(malformed, real) is True, malformed
-        assert _rubric_is_stale(real, malformed) is True, malformed
+        assert _provenance_is_stale(malformed, real) is True, malformed
+        assert _provenance_is_stale(real, malformed) is True, malformed
     # A different well-formed fingerprint is stale too (the point of the key).
-    assert _rubric_is_stale("multi:000000000000", fingerprint) is True
-    assert _rubric_is_stale("multi:000000000000", real) is True
+    assert _provenance_is_stale("multi:000000000000", fingerprint) is True
+    assert _provenance_is_stale("multi:000000000000", real) is True
     # A bare git sha keeps the prefix comparison: the manifest stores a SHORT sha
     # and a rubric may carry the full HEAD.
-    assert _rubric_is_stale("1e48c40deadbeef", "1e48c40") is False
+    assert _provenance_is_stale("1e48c40deadbeef", "1e48c40") is False
     # ...and a sha never matches a fingerprint in either direction.
-    assert _rubric_is_stale("1e48c40", real) is True
+    assert _provenance_is_stale("1e48c40", real) is True
 
 
 def _assert_opens_on_role_proof(

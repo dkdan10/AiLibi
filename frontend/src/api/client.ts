@@ -21,7 +21,7 @@ import type {
   PublicResultsView,
   ReplayMetadataView,
   ReplayView,
-  RubricView,
+  GameProfileView,
   TickView,
   TournamentEvalReport,
 } from "../types/api";
@@ -104,10 +104,12 @@ export class ViewModelVersionError extends Error {
 /**
  * Version 5 makes an alibi a route: a route claim serves `route` and no
  * `room`/`from_tick`/`to_tick`, so a build expecting version 4 must reject it.
- * Versions 2/3/4 remain readable HERE — every alibi an older server serves
- * carries the flat triple, which this build still renders — and the
- * sabotage-alarm-only audio guard still applies to all. Other or non-string
- * stamps fail; endpoints that never had a stamp still work.
+ * Version 6 replaces the interestingness rubric's route with the game-shape
+ * profile's and leaves every replay payload as version 5 shaped it, so a
+ * version-5 replay still reads. Versions 2/3/4 remain readable HERE — every
+ * alibi an older server serves carries the flat triple, which this build still
+ * renders — and the sabotage-alarm-only audio guard still applies to all. Other
+ * or non-string stamps fail; endpoints that never had a stamp still work.
  */
 function assertViewModelVersion(data: unknown, url: string): void {
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
@@ -121,7 +123,8 @@ function assertViewModelVersion(data: unknown, url: string): void {
     received === VIEW_MODEL_VERSION ||
     received === "2" ||
     received === "3" ||
-    received === "4"
+    received === "4" ||
+    received === "5"
   ) {
     return;
   }
@@ -212,8 +215,9 @@ export function pathSegment(value: string): string {
 // backend serves all recorded sets in one run; the `set` query param selects which
 // (`<parent>/<set>/`), defaulting server-side to the CURATED 9p2i set (Task 19.9 —
 // flipped from the flat 4p1i fixture) so a call that omits it still resolves, now
-// onto the set that has meetings and a rubric. `set` is threaded through
-// `/replays`, `/replays/{game_id}/*`, `/eval/rubric`, and `/eval/tournament-report`.
+// onto the set that has meetings and a game-shape profile. `set` is threaded
+// through `/replays`, `/replays/{game_id}/*`, `/eval/game-profile`, and
+// `/eval/tournament-report`.
 // The server default is resolved from what is on disk, so `GET /sets`.default is
 // the authority — never hard-code a set name as "the default" on this side.
 function withSet(path: string, set?: string): string {
@@ -363,16 +367,12 @@ export function getTournamentReport(
   return getJson<TournamentEvalReport>(apiUrl("/eval/tournament-report", set));
 }
 
-// The per-set interestingness rubric served by the eval surface (Task 12.2,
-// DESIGN.md §3.1, §7). The rubric is per served set and staleness-guarded; a set
-// with no co-located `results-rubric-score.json` — every committed set since
-// 2026-10-02, the default 9p2i included — yields a 404, surfaced as `ApiError`
-// with `status === 404` so the
-// Highlights reel can render its first-class "no rubric" empty state rather than
-// an error. The score itself is an internal pacing/structure heuristic, not a
-// human rating: render it labelled, and never as a watchability ranking.
-export async function getRubric(set?: string): Promise<RubricView> {
-  const rubric = await getJson<RubricView>(apiUrl("/eval/rubric", set));
-  // Older bundles can retain obsolete rows alongside their stale flag.
-  return rubric.stale ? { ...rubric, per_game: [] } : rubric;
+// The per-set game-shape profile served by the eval surface: shelves of
+// moments in a fixed order, each listing its games by seed, with facets per
+// game and no score or rank. A set that ships no profile (the four-player set)
+// answers 404, surfaced as `ApiError` with `status === 404` so the Highlights
+// tab renders its set-neutral no-profile state rather than an error. A stale
+// profile arrives with every member already withheld by the server.
+export function getGameProfile(set?: string): Promise<GameProfileView> {
+  return getJson<GameProfileView>(apiUrl("/eval/game-profile", set));
 }

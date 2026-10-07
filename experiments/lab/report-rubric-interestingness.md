@@ -63,7 +63,9 @@ The per-game `r1_decisive` / `r2_deception` / `r3_arcs` / `r7_legible` keys are 
   is the honest deduction-driven floor for the baseline-2 comparison.
 
 Run: `PYTHONPATH=. uv run python audits/workflows/extract_gameplay_facts.py && uv run python
-experiments/lab/rubric_score.py "${TMPDIR:-/tmp}/ailibi-gameplay-facts-9p2i.json" --set-dir
-replays/samples/9p2i`. Output lands in `results-rubric-score.json` (+ the served per-set copy, stamped
-with the set's MANIFEST sha) and `results-rubric-geomean.json` (lab-local D1–D4 detail). (The flat 4p1i
-set is short-by-design — few meetings — so 9p2i is the interestingness-relevant set.)
+experiments/lab/rubric_score.py "${TMPDIR:-/tmp}/ailibi-gameplay-facts-9p2i.json"`, over a set the
+extractor reads (the baseline-9 bytes; it refuses the `stage-b-r2` era). Output lands in
+`results-rubric-score.json` and `results-rubric-geomean.json` (lab-local D1–D4 detail); no served copy
+is written, since version 1 is retired for the shown era and the served surface is the game-shape
+profile. (The flat 4p1i set is short-by-design — few meetings — so 9p2i is the interestingness-relevant
+set.)

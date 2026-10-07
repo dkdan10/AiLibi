@@ -24,8 +24,8 @@ not a cut-down copy of it.
 
 **What is baked, and what is not.** Only the hand-curated FEATURED games —
 read straight out of ``frontend/src/components/ReplayPicker.tsx`` so the demo can
-never drift from the editorial list — plus the picker metadata and the rubric rows
-those games need. Deliberately absent: ``tournament-eval-report.json.gz`` (the
+never drift from the editorial list — plus the picker metadata and the game-shape
+profile entries of those games. Deliberately absent: ``tournament-eval-report.json.gz`` (the
 9p2i one is 32,952,472 bytes uncompressed, about 33 MB, and 2,790,383 bytes
 gzipped; the ML corpus one is 107,690,098 bytes uncompressed — that is the
 corpus, not a demo), the per-tick endpoint
@@ -77,6 +77,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -84,7 +85,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from api.public_results import build_public_results  # noqa: E402
 from api.replay_loader import DEFAULT_SET, ReplayLoader  # noqa: E402
-from api.schemas import RubricView  # noqa: E402
+from api.schemas import GameProfileView, ShelfView  # noqa: E402
 
 _FRONTEND_DIR = _REPO_ROOT / "frontend"
 _PICKER_TSX = _FRONTEND_DIR / "src" / "components" / "ReplayPicker.tsx"
@@ -288,26 +289,95 @@ class _Writer:
         self.bytes_written += len(data)
 
 
-def _trimmed_rubric(rubric: RubricView, seeds: frozenset[int]) -> str:
-    """The set's rubric with ``per_game`` cut down to the baked seeds.
+#: The baked profile's set-level tables and counts: none ships. A shelf's size,
+#: a tripwire's count and the pair's counts are the lengths of member lists,
+#: which the bake cuts to the baked seeds.
+_UNBAKED_PROFILE_KEYS: Final[tuple[tuple[str, ...], ...]] = (
+    ("reveal", "class_tables"),
+    ("pre_reveal", "tripwires", "alibi_flags"),
+    ("pre_reveal", "tripwires", "alibi_flags_evaluable"),
+)
 
-    The Highlights reel builds its cards FROM ``per_game`` (ReplayPicker's
-    ``buildCards``), so shipping the full 50-row rubric in a 4-game bundle would
-    render 46 cards that 404 on click. Every other field — the seedset, the
-    provenance shas, the staleness verdict — is passed through untouched: the
-    bundle subsets the corpus, it does not restate its provenance.
+
+def _trimmed_profile(profile: GameProfileView, baked: frozenset[int]) -> str:
+    """The set's game-shape profile cut down to the baked seeds.
+
+    Every member list on both halves (the shelves, the chip, All games, the
+    tripwire entries, the reveal shelves and both halves of the pair) and every
+    per-game facet keeps the baked seeds only, and the set-level class tables
+    and flag counts are cut entirely: the bundle ships the provenance, the
+    constants, the catalogue and the baked games' own entries, and no set-level
+    size. A stale profile bakes no member, whatever members it carries.
     """
 
-    trimmed = rubric.model_copy(
+    seeds = frozenset() if profile.stale else baked
+
+    def shelf(view: ShelfView) -> ShelfView:
+        return view.model_copy(
+            update={
+                "members": tuple(
+                    member for member in view.members if member.seed in seeds
+                )
+            }
+        )
+
+    pre = profile.pre_reveal
+    reveal = profile.reveal
+    pair = reveal.decided_without_proof
+    trimmed = profile.model_copy(
         update={
-            "per_game": (
-                ()
-                if rubric.stale
-                else tuple(g for g in rubric.per_game if g.seed in seeds)
-            )
+            "pre_reveal": pre.model_copy(
+                update={
+                    "shelves": tuple(shelf(view) for view in pre.shelves),
+                    "chips": tuple(
+                        chip.model_copy(
+                            update={
+                                "members": tuple(
+                                    member
+                                    for member in chip.members
+                                    if member.seed in seeds
+                                )
+                            }
+                        )
+                        for chip in pre.chips
+                    ),
+                    "games": tuple(game for game in pre.games if game.seed in seeds),
+                    "tripwires": pre.tripwires.model_copy(
+                        update={
+                            "readings": tuple(
+                                reading.model_copy(
+                                    update={
+                                        "entries": tuple(
+                                            entry
+                                            for entry in reading.entries
+                                            if entry.seed in seeds
+                                        )
+                                    }
+                                )
+                                for reading in pre.tripwires.readings
+                            )
+                        }
+                    ),
+                }
+            ),
+            "reveal": reveal.model_copy(
+                update={
+                    "shelves": tuple(shelf(view) for view in reveal.shelves),
+                    "decided_without_proof": pair.model_copy(
+                        update={"right": shelf(pair.right), "wrong": shelf(pair.wrong)}
+                    ),
+                    "games": tuple(game for game in reveal.games if game.seed in seeds),
+                }
+            ),
         }
     )
-    return trimmed.model_dump_json(by_alias=True)
+    payload = trimmed.model_dump(mode="json", by_alias=True)
+    for path in _UNBAKED_PROFILE_KEYS:
+        parent = payload
+        for key in path[:-1]:
+            parent = parent[key]
+        del parent[path[-1]]
+    return json.dumps(payload, separators=(",", ":"))
 
 
 def _bake_set(
@@ -401,16 +471,16 @@ def _bake_set(
                 )
 
     try:
-        rubric = loader.rubric()
+        profile = loader.game_profile()
     except FileNotFoundError:
-        # An unscored set (4p1i, the fast fixture). The live API 404s; the bundle
-        # simply has no file, and the reel renders its "no rubric" empty state.
+        # A set with no profile (4p1i, the fast fixture). The live API 404s; the
+        # bundle simply has no file, and the reel renders its no-profile state.
         pass
     else:
         writer.write(
-            f"{prefix}/eval/rubric.json",
-            _trimmed_rubric(rubric, frozenset(seeds)),
-            source=f"{set_name}/rubric",
+            f"{prefix}/eval/game-profile.json",
+            _trimmed_profile(profile, frozenset(seeds)),
+            source=f"{set_name}/game-profile",
         )
     return tuple(game_ids)
 

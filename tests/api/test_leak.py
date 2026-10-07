@@ -139,9 +139,30 @@ EXPECTED_DTOS: Final[frozenset[str]] = frozenset(
         "GameFinale",
         "EvalCostSummaryView",
         "ReplayAccountingView",
-        # Phase-12 per-set rubric surface (DESIGN.md §3.1, §7):
-        "RubricGameView",
-        "RubricView",
+        # The game-shape profile (rubric version 2), served per set:
+        "CatalogueEntryView",
+        "ChipMemberView",
+        "ChipView",
+        "ClassRowView",
+        "ClassTableView",
+        "DistanceFacetView",
+        "EjectionFacetView",
+        "GameFacetsView",
+        "GameProfileView",
+        "KillFacetView",
+        "MeetingFacetView",
+        "PairView",
+        "PreRevealHalfView",
+        "ProfileConstantsView",
+        "ReportFacetView",
+        "RevealFacetsView",
+        "RevealHalfView",
+        "ShelfMemberView",
+        "ShelfView",
+        "TripLabelView",
+        "TripwireEntryView",
+        "TripwireReadingView",
+        "TripwiresView",
     }
 )
 

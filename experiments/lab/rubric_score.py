@@ -15,6 +15,10 @@ pass/fail). Items needing data the facts JSON does not yet carry (e.g. do_task
 by role — added by 10.16's action ingest) print NEEDS-10.16 rather than a wrong
 number.
 
+It writes lab artifacts only. Version 1 is retired for the ``stage-b-r2`` era
+and kept as baseline-9 history: no code path here writes a served file, and the
+served surface is the game-shape profile (``scripts/publish_game_profile.py``).
+
 Usage:
     uv run python experiments/lab/rubric_score.py FACTS_JSON
 """
@@ -35,18 +39,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from orchestrator.recording_fingerprint import recording_fingerprint  # noqa: E402
-
-# Filename the per-set rubric is co-located under, inside a served replay set
-# dir, so ``api.replay_loader.ReplayLoader.rubric`` can serve it (Task 12.2;
-# DESIGN.md §3.1, §7). Kept identical to ``api.replay_loader._RUBRIC_FILENAME``.
-RUBRIC_RESULTS_FILENAME = "results-rubric-score.json"
-
 # Filename for the geomean interestingness validation artifact (Task 13.15) — the
 # held-out referee's D1-D4 breakdown + the report-rubric-design.md §6 validation,
-# mirroring ``results-rubric-score.json``. It is a LAB-LOCAL record, NOT served by
-# the DTO: it carries the D1-D4 detail the ``extra="forbid"`` ``RubricGameView``
-# (``api/schemas.py``) would reject, so it lives outside the served per_game rows.
+# beside ``results-rubric-score.json``. Both are LAB-LOCAL records, never served.
 GEOMEAN_RESULTS_FILENAME = "results-rubric-geomean.json"
 
 # --- Geomean interestingness composition (Task 13.15; report-rubric-design.md §3) ---
@@ -322,10 +317,9 @@ def _active_deflection_counts(g: dict[str, Any]) -> tuple[int, int, bool]:
     This is a facts-resident derivation rather than an import of
     ``compute_effective_deflection`` itself because that function takes
     reconstructed ``GameReport`` objects, while this scorer reads only the facts
-    JSON (and the committed ``regen_for_set(_facts(), tmp_path)`` contract ships
-    no report on disk; ``refresh_samples.sh`` also runs this module as a script
-    file with no repo root on ``sys.path``, so a module-level ``eval`` import
-    would break the canonical regen). It is validated to reproduce that
+    JSON (a synthetic facts fixture ships no report on disk, and this module runs
+    as a script file with no repo root on ``sys.path``, so a module-level
+    ``eval`` import would break it). It is validated to reproduce that
     function's aggregate EXACTLY on the committed 9p2i set (active 34,
     effective 10, skip-saved 24), so the two cannot drift on what
     ACTIVE-DEFLECTED means.
@@ -718,7 +712,7 @@ def _facts_integrity_ok(facts: dict[str, Any]) -> bool:
     LOUD rather than certifying integrity by default — the floor depends on these
     checks to detect a state-hash / leak breach, so a missing surface is not
     "clean" (AGENTS.md "no silent fallbacks"; mirrors
-    :func:`_accumulator_trajectory_index`). Only the regen-plumbing fixture (NO
+    :func:`_accumulator_trajectory_index`). Only a synthetic facts fixture (NO
     aggregates block, i.e. no real games to score) reads OK on absence. A
     present-but-malformed value also FAILS LOUD.
     """
@@ -963,7 +957,7 @@ def _accumulator_trajectory_index(
     malformed (a stale / partial extractor run), this FAILS LOUD rather than
     silently zeroing the 20%-weight R3 axis on a fresh-stamped artifact
     (AGENTS.md "no silent fallbacks"). A facts dict carrying NO ``aggregates``
-    block at all (the regen-plumbing fixture, which scores no real R3) yields an
+    block at all (a synthetic facts fixture, which scores no real R3) yields an
     empty index — there is simply no arc source to index.
     """
 
@@ -1008,7 +1002,7 @@ def _require_meeting_inputs(facts: dict[str, Any]) -> None:
       input). Absent on an ejection meeting raises — it would silently undercount
       the swing.
 
-    A facts dict with NO ``aggregates`` block (the regen-plumbing fixture, no real
+    A facts dict with NO ``aggregates`` block (a synthetic facts fixture, no real
     meeting to score) is skipped.
     """
     if facts.get("aggregates") is None:
@@ -1097,10 +1091,9 @@ def _geomean_breakdown(
 ) -> dict[str, Any]:
     """A per-game D1-D4 record for the geomean validation artifact (NOT DTO-served).
 
-    Merges the DTO per_game row (r1-r7 + the geomean ``score``) with the full
-    D1-D4 breakdown the ``extra="forbid"`` :class:`RubricGameView` would reject, so
-    ``results-rubric-geomean.json`` can carry the contest dimensions + their
-    sub-terms for the §6 validation while the served ``results-rubric-score.json``
+    Merges the per_game row (r1-r7 + the geomean ``score``) with the full D1-D4
+    breakdown, so ``results-rubric-geomean.json`` can carry the contest dimensions
+    + their sub-terms for the §6 validation while ``results-rubric-score.json``
     keeps its exact key set.
     """
     base = _game_interestingness(g, traj_by_key, integrity_ok=integrity_ok)
@@ -1309,11 +1302,10 @@ def _set_fingerprint(rows: Iterable[tuple[str, str]]) -> str:
 def _set_manifest_sha(set_dir: Path) -> str | None:
     """A set's PROVENANCE KEY: its single recording sha, or a set fingerprint.
 
-    Mirrors ``api.replay_loader._manifest_git_sha``: the rubric stamps the
-    version of the replay SET it was scored from (read here, cwd-independent via
-    the absolute ``set_dir``), so the loader's freshness comparison is
-    "do the served replays still match what the rubric was scored against",
-    NOT "what code commit happened to run the scorer".
+    Mirrors ``api.replay_loader._manifest_git_sha``: the lab artifacts stamp the
+    version of the replay SET they were scored from (read here, cwd-independent
+    via the absolute ``set_dir``), NOT the code commit that ran the scorer. The
+    frozen geomean parity pin (``tests/eval/test_watchability.py``) reads it.
 
     A uniformly-recorded set stamps its one distinct short sha. A PIECEMEAL-
     refreshed set — the committed 9p2i carries three distinct recording shas —
@@ -1334,64 +1326,11 @@ def _set_manifest_sha(set_dir: Path) -> str | None:
     return _set_fingerprint(rows)
 
 
-def regen_for_set(
-    facts: dict[str, Any], set_dir: Path, *, git_head: str | None = None
-) -> Path:
-    """Re-run the scorer and co-locate ``results-rubric-score.json`` into a set.
-
-    The per-set rubric PRODUCER (Task 12.2; DESIGN.md §3.1, §7). Scores ``facts``
-    (the gameplay-facts extractor's output) into the served interestingness
-    surface and writes it into ``set_dir`` so ``/eval/rubric`` can serve it.
-
-    ``facts.source_fingerprint`` must match the current replay, roster, and
-    manifest bytes. Facts extracted before a source change cannot be relabelled
-    current merely by copying the new manifest's commit identifier. Missing
-    fingerprints require re-extraction. The manifest provenance key remains in
-    ``git_head`` for compatible display, alongside the new raw source stamp.
-
-    Writes the served score rows and their source/provenance stamps;
-    the human-readable R1–R7 ``rows`` table stays the lab-local artifact
-    :func:`main` writes. Wired into the refresh / re-record path
-    (``scripts/refresh_samples.sh``) so the happy path stays fresh rather than
-    only banner-guarded when stale.
-    """
-
-    source_fingerprint = facts.get("source_fingerprint")
-    if source_fingerprint != recording_fingerprint(set_dir):
-        raise ValueError(
-            "facts do not identify the current recording bytes; re-extract them "
-            "before publishing highlight scores"
-        )
-    head = (
-        git_head
-        if git_head is not None
-        else (_set_manifest_sha(set_dir) or facts.get("git_head"))
-    )
-    out = {
-        "seedset": facts.get("seedset"),
-        "git_head": head,
-        "source_fingerprint": source_fingerprint,
-        "interestingness": interestingness(facts),
-    }
-    dest = Path(set_dir) / RUBRIC_RESULTS_FILENAME
-    dest.write_text(json.dumps(out, indent=2))
-    return dest
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Score rubric R1-R7 over a facts JSON."
     )
     parser.add_argument("facts_json", help="gameplay-facts extractor output")
-    parser.add_argument(
-        "--set-dir",
-        default=None,
-        help=(
-            "also co-locate results-rubric-score.json into this served replay "
-            "set dir, stamped with git HEAD (the per-set regen producer for "
-            "/eval/rubric)"
-        ),
-    )
     args = parser.parse_args()
     facts = json.loads(Path(args.facts_json).read_text())
     label = facts.get("seedset", "?")
@@ -1429,18 +1368,10 @@ def main() -> int:
         )
 
     # Stamp the SET manifest's provenance key (the replay version scored), NOT the
-    # scoring HEAD (audit RUB-CAL-5): the pre-repair lab-local write stamped
-    # ``facts['git_head']`` (a docs-descendant scoring commit), so the
-    # loader's freshness guard would have read the lab artifact as scored at a
-    # different version than the served copy. Resolve the set dir from
-    # ``--set-dir`` or the facts JSON's own ``sample_dir`` and read the same
-    # key the served copy carries, mirroring :func:`regen_for_set`.
+    # scoring HEAD (audit RUB-CAL-5), read from the facts JSON's own
+    # ``sample_dir``.
     sample_dir = facts.get("sample_dir")
-    set_dir = (
-        Path(args.set_dir)
-        if args.set_dir is not None
-        else (Path(sample_dir) if sample_dir else None)
-    )
+    set_dir = Path(sample_dir) if sample_dir else None
     lab_head = (
         _set_manifest_sha(set_dir) if set_dir is not None else None
     ) or facts.get("git_head")
@@ -1474,10 +1405,6 @@ def main() -> int:
         f"all eject-decided above all stopwatch: "
         f"{rank['all_eject_decided_above_all_stopwatch']})"
     )
-
-    if args.set_dir is not None:
-        dest = regen_for_set(facts, Path(args.set_dir))
-        print(f"co-located per-set rubric (git_head stamped): {dest}")
     return 0
 
 

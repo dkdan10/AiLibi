@@ -38,8 +38,7 @@ _SAMPLES = _REPO_ROOT / "replays" / "samples"
 _CLIENT_TS = _REPO_ROOT / "frontend" / "src" / "api" / "client.ts"
 
 # One 9p2i game with meetings in it (so the meeting + memory mirrors are
-# non-empty). No committed set ships a rubric since 2026-10-02, so the rubric
-# path is exercised on a scratch set carrying a synthetic one.
+# non-empty); the shown set ships the game-shape profile, trimmed to it.
 _ONE_9P2I = (bdb.FeaturedGame(set_name="9p2i", seed=2),)
 
 
@@ -275,105 +274,172 @@ def test_baked_bytes_are_the_bytes_the_live_api_serves(
     assert _read(agent) == live_memory.json()
 
 
-def _synthetic_rubric_facts(set_dir: Path, seeds: tuple[int, ...]) -> dict[str, object]:
-    """Gameplay facts scoring ``seeds`` of ``set_dir``, keyed to its recordings."""
+#: The baked profile's keys, half by half: provenance and catalogue, and the
+#: member lists cut to the baked seeds. No class table, size or count ships.
+_BAKED_PROFILE_KEYS: dict[str, set[str]] = {
+    "": {
+        "viewModelVersion",
+        "rubric_version",
+        "era",
+        "manifest_key",
+        "source_fingerprint",
+        "seedset",
+        "stale",
+        "constants",
+        "catalogue",
+        "pre_reveal",
+        "reveal",
+    },
+    "pre_reveal": {"shelves", "chips", "games", "tripwires"},
+    "pre_reveal.tripwires": {"readings"},
+    "reveal": {"shelves", "decided_without_proof", "games"},
+}
 
-    from orchestrator.recording_fingerprint import recording_fingerprint
+#: Each catalogue entry names a shelf, chip, facet or tripwire and nothing else.
+_CATALOGUE_KEYS = {"name", "half", "kind", "classification"}
 
-    return {
-        "source_fingerprint": recording_fingerprint(set_dir),
-        "seedset": set_dir.name,
-        "git_head": "ignored-rest-stamped",
-        "games": [
-            {
-                "seed": seed,
-                "reason": "CREWMATE_EJECT",
-                "roles": {"p-1": "IMPOSTOR", "p-2": "CREWMATE"},
-                "deaths": [],
-                "meetings": [
-                    {
-                        "ejected_player_id": "p-1",
-                        "ejected_role": "IMPOSTOR",
-                        "n_contradictions": 1,
-                        "accusations": [{"speaker": "p-2", "accused": "p-1"}],
-                        "contradictions_by_subject": {},
-                    }
-                ],
-            }
-            for seed in seeds
-        ],
+
+def baked_profile_problems(baked: dict[str, object], seeds: set[int]) -> list[str]:
+    """Why a baked profile is not the trimmed shape: a stray key, or a member
+    of a game the bundle does not bake."""
+
+    problems: list[str] = []
+    for path, expected in _BAKED_PROFILE_KEYS.items():
+        node: object = baked
+        for key in path.split(".") if path else ():
+            assert isinstance(node, dict)
+            node = node[key]
+        assert isinstance(node, dict)
+        if set(node) != expected:
+            problems.append(f"{path or 'top'} keys {sorted(set(node) ^ expected)}")
+    catalogue = baked["catalogue"]
+    assert isinstance(catalogue, list)
+    problems.extend(
+        f"catalogue entry {entry.get('name')} keys {sorted(set(entry) ^ _CATALOGUE_KEYS)}"
+        for entry in catalogue
+        if set(entry) != _CATALOGUE_KEYS
+    )
+    pre = baked["pre_reveal"]
+    reveal = baked["reveal"]
+    assert isinstance(pre, dict) and isinstance(reveal, dict)
+    pair = reveal["decided_without_proof"]
+    lists = {
+        **{f"shelf {s['name']}": s["members"] for s in pre["shelves"]},
+        **{f"chip {c['name']}": c["members"] for c in pre["chips"]},
+        "all games": pre["games"],
+        **{f"tripwire {r['name']}": r["entries"] for r in pre["tripwires"]["readings"]},
+        **{f"reveal shelf {s['name']}": s["members"] for s in reveal["shelves"]},
+        "the right half": pair["right"]["members"],
+        "the wrong half": pair["wrong"]["members"],
+        "reveal facets": reveal["games"],
     }
+    problems.extend(
+        f"{where} holds seed {item['seed']}"
+        for where, items in lists.items()
+        for item in items
+        if item["seed"] not in seeds
+    )
+    return problems
 
 
-def test_rubric_is_trimmed_to_the_baked_seeds(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_the_profile_is_trimmed_to_the_baked_seeds(
+    tmp_path: Path, api: TestClient
 ) -> None:
-    """Everything but ``per_game`` passes through; ``per_game`` is subsetted.
+    """Every member list keeps the baked seed; provenance passes through."""
 
-    No committed set ships a rubric since the promotion of candidate round 2
-    (2026-10-02): the gameplay-facts extractor does not read the shown 9p2i
-    set's era. So the bake path runs on a scratch samples directory holding two
-    of that set's games, its manifest and roster, and a synthetic rubric
-    stamped with the manifest's own key (fresh): the bake keeps exactly the
-    baked seed's row out of the scored two. The stale branch, which suppresses
-    every row, is covered by the source-bound controls in
-    test_public_recording_provenance.py.
-    """
-
-    import importlib
-    import shutil
-    import sys
-
-    lab = _REPO_ROOT / "experiments" / "lab"
-    if str(lab) not in sys.path:
-        sys.path.insert(0, str(lab))
-    rubric_score = importlib.import_module("rubric_score")
-
-    samples = tmp_path / "samples"
-    scratch = samples / "9p2i"
-    scratch.mkdir(parents=True)
-    source = _SAMPLES / "9p2i"
-    for name in (
-        "roster.json",
-        "MANIFEST.md",
-        "replay-seed-2.jsonl",
-        "replay-seed-3.jsonl",
-    ):
-        shutil.copyfile(source / name, scratch / name)
-    rubric_score.regen_for_set(_synthetic_rubric_facts(scratch, (2, 3)), scratch)
-
-    out = tmp_path / "out"
-    bdb.bake_data(out, games=_ONE_9P2I, samples_dir=samples)
-    baked = _read(out / "data" / "9p2i" / "eval" / "rubric.json")
-    with monkeypatch.context() as patch:
-        patch.setenv(ENV_REPLAY_DIR, str(samples))
-        live = TestClient(create_app()).get("/eval/rubric", params={"set": "9p2i"})
+    bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
+    baked = _read(tmp_path / "data" / "9p2i" / "eval" / "game-profile.json")
+    live = api.get("/eval/game-profile", params={"set": "9p2i"})
     assert live.status_code == 200
     served = live.json()
-
     assert isinstance(baked, dict)
-    assert baked["stale"] is False
-    assert [row["seed"] for row in served["per_game"]] == [2, 3]
-    assert [row["seed"] for row in baked["per_game"]] == [2]
-    assert baked["per_game"] == [row for row in served["per_game"] if row["seed"] == 2]
-    for field in ("seedset", "git_head", "manifest_sha", "stale", "viewModelVersion"):
+    assert baked_profile_problems(baked, {2}) == []
+    for field in (
+        "viewModelVersion",
+        "rubric_version",
+        "era",
+        "manifest_key",
+        "source_fingerprint",
+        "seedset",
+        "stale",
+        "constants",
+        "catalogue",
+    ):
         assert baked[field] == served[field], field
+    assert baked["stale"] is False
+    assert baked["pre_reveal"]["games"] == [
+        game for game in served["pre_reveal"]["games"] if game["seed"] == 2
+    ]
+    assert baked["reveal"]["games"] == [
+        game for game in served["reveal"]["games"] if game["seed"] == 2
+    ]
+    for baked_shelf, served_shelf in zip(
+        baked["pre_reveal"]["shelves"], served["pre_reveal"]["shelves"], strict=True
+    ):
+        assert baked_shelf["members"] == [
+            member for member in served_shelf["members"] if member["seed"] == 2
+        ]
+    assert served["reveal"]["class_tables"]
+    assert served["pre_reveal"]["tripwires"]["alibi_flags"] == 15
 
 
-def test_the_committed_sets_bake_no_rubric(tmp_path: Path, api: TestClient) -> None:
-    """No committed set ships one, so neither baked set carries a rubric file."""
-
-    bdb.bake_data(
-        tmp_path,
-        games=(*_ONE_9P2I, bdb.FeaturedGame(set_name="4p1i", seed=29)),
-        samples_dir=_SAMPLES,
+def test_the_featured_bake_ships_seeds_19_and_14_only(tmp_path: Path) -> None:
+    games = tuple(
+        game for game in bdb.parse_featured_games() if game.set_name == "9p2i"
     )
-    for name in ("9p2i", "4p1i"):
-        assert not (tmp_path / "data" / name / "eval" / "rubric.json").exists(), name
-        assert api.get("/eval/rubric", params={"set": name}).status_code == 404
+    assert sorted(game.seed for game in games) == [14, 19]
+    bdb.bake_data(tmp_path, games=games, samples_dir=_SAMPLES)
+    baked = _read(tmp_path / "data" / "9p2i" / "eval" / "game-profile.json")
+    assert isinstance(baked, dict)
+    assert baked_profile_problems(baked, {14, 19}) == []
+    readings = baked["pre_reveal"]["tripwires"]["readings"]
+    assert all(reading["entries"] == [] for reading in readings)
+    pair = baked["reveal"]["decided_without_proof"]
+    assert [m["seed"] for m in pair["right"]["members"]] == [14, 19]
+    assert pair["wrong"]["members"] == []
 
 
-def test_an_unscored_set_bakes_no_rubric(tmp_path: Path) -> None:
+def test_a_bake_that_skips_the_trim_fails_the_shape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: the whole served profile baked untrimmed."""
+
+    monkeypatch.setattr(
+        bdb,
+        "_trimmed_profile",
+        lambda profile, seeds: profile.model_dump_json(by_alias=True),
+    )
+    bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
+    baked = _read(tmp_path / "data" / "9p2i" / "eval" / "game-profile.json")
+    assert isinstance(baked, dict)
+    problems = baked_profile_problems(baked, {2})
+    assert "reveal keys ['class_tables']" in problems
+    assert (
+        "pre_reveal.tripwires keys ['alibi_flags', 'alibi_flags_evaluable']" in problems
+    )
+    assert any(problem.startswith("all games holds seed") for problem in problems)
+
+
+def test_a_bake_passing_the_class_tables_through_fails_the_key_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: the trim keeps the class tables, so every shelf size ships."""
+
+    monkeypatch.setattr(
+        bdb,
+        "_UNBAKED_PROFILE_KEYS",
+        (
+            ("pre_reveal", "tripwires", "alibi_flags"),
+            ("pre_reveal", "tripwires", "alibi_flags_evaluable"),
+        ),
+    )
+    bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
+    baked = _read(tmp_path / "data" / "9p2i" / "eval" / "game-profile.json")
+    assert isinstance(baked, dict)
+    assert baked_profile_problems(baked, {2}) == ["reveal keys ['class_tables']"]
+
+
+def test_the_four_player_set_bakes_no_profile(tmp_path: Path, api: TestClient) -> None:
     """4p1i ships none, so the bundle has no file and the reel 404s — as live."""
 
     bdb.bake_data(
@@ -381,7 +447,28 @@ def test_an_unscored_set_bakes_no_rubric(tmp_path: Path) -> None:
         games=(bdb.FeaturedGame(set_name="4p1i", seed=29),),
         samples_dir=_SAMPLES,
     )
+    assert not (tmp_path / "data" / "4p1i" / "eval" / "game-profile.json").exists()
+    assert api.get("/eval/game-profile", params={"set": "4p1i"}).status_code == 404
     assert not (tmp_path / "data" / "4p1i" / "eval" / "rubric.json").exists()
+
+
+def test_a_stale_profile_bakes_no_member(tmp_path: Path) -> None:
+    import shutil
+
+    samples = tmp_path / "samples"
+    shutil.copytree(_SAMPLES / "9p2i", samples / "9p2i")
+    served = samples / "9p2i" / "results-game-profile.json"
+    payload = json.loads(served.read_text(encoding="utf-8"))
+    served.write_text(
+        json.dumps({**payload, "manifest_key": "deadbee"}), encoding="utf-8"
+    )
+    out = tmp_path / "out"
+    bdb.bake_data(out, games=_ONE_9P2I, samples_dir=samples)
+    baked = _read(out / "data" / "9p2i" / "eval" / "game-profile.json")
+    assert isinstance(baked, dict)
+    assert baked["stale"] is True
+    assert baked_profile_problems(baked, set()) == []
+    assert baked["pre_reveal"]["games"] == []
 
 
 def test_rebaking_removes_the_previous_data_tree(tmp_path: Path) -> None:
