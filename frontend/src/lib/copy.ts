@@ -535,13 +535,12 @@ export const SPECTATOR_COPY = Object.freeze({
     heading: "Browse by moment",
     allGames: "All games",
     allGamesNote:
-      "Every game in seed order, including any kept off the shelves by a tripwire.",
+      "Every game listed here, in seed order, including any a tripwire keeps off the shelves.",
     revealHeading: "After the reveal",
     revealNote:
       "These shelves read how the game ended, whether a meeting voted someone out, or a player's role, so they stay hidden until you reveal outcomes.",
     countOne: "{count} game",
     countMany: "{count} games",
-    emptyShelf: "No game in this set sits on this shelf.",
     absentTitle: "No game-shape profile for this set",
     absentBody:
       "The served set ({set}) ships no game-shape profile, so its games sit on no shelf. Browse Replays to inspect this set without one.",
@@ -636,10 +635,9 @@ export const SPECTATOR_COPY = Object.freeze({
     pair: Object.freeze({
       heading: "Decided without proof",
       note: "Ejections whose voters rested on lines they held, with no vent sighting. The two halves always show together.",
-      emptyHalf: "No game in this set lands on this half.",
+      emptyHalf: "No game listed here lands on this half.",
     }),
     chip: Object.freeze({
-      title: "An eyewitness voted on it",
       atMeeting: "An eyewitness voted on it at meeting {meeting}",
       description:
         "A player who saw the kill cited it on their own ballot at this meeting.",

@@ -164,7 +164,9 @@ describe("Browse by moment", () => {
       html.indexOf(shelfTitle("double_kill")),
     );
     expect(html.indexOf(shelfTitle("double_kill"))).toBeLessThan(html.indexOf(PROFILE_COPY.allGames));
-    expect(html).toContain(PROFILE_COPY.emptyShelf);
+    // A shelf that lists no game here renders nothing, so it states no count
+    // that would be false of the whole set in a build that bakes a few games.
+    expect(html).not.toContain(`aria-label="${shelfTitle("a_third_round")}"`);
     expect(html.replace(PICKER_COPY.highlightsIntro, "")).not.toMatch(
       /score|ordered by|ranked by/i,
     );

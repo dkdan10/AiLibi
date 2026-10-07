@@ -112,9 +112,18 @@ function WinnerTag({
   );
 }
 
-function Chip({ text, revealOnly }: { text: string; revealOnly?: boolean }) {
+function Chip({
+  text,
+  revealOnly,
+  title,
+}: {
+  text: string;
+  revealOnly?: boolean;
+  title?: string;
+}) {
   return (
     <li
+      title={title}
       className={
         "rounded-pill border-2 px-2 py-0.5 font-mono text-3xs font-medium text-ink-900 " +
         (revealOnly ? "border-dashed border-ink-500 bg-paper-1" : "border-ink-900 bg-paper-2")
@@ -151,7 +160,23 @@ function FacetLine({ facets }: { facets: GameFacetsView }) {
         }),
     count(PROFILE_COPY.facets.bodiesNeverFound, facets.bodies_never_found),
   ];
-  return <p className="font-mono text-xs text-ink-700">{parts.join(" · ")}</p>;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p className="font-mono text-xs text-ink-700">{parts.join(" · ")}</p>
+      {facets.reports.length > 0 && (
+        <ul className="font-mono text-3xs text-ink-500">
+          {facets.reports.map((report) => (
+            <li key={report.meeting}>
+              {fmt(PROFILE_COPY.facets.report, {
+                meeting: String(report.meeting + 1),
+                age: String(report.corpse_age),
+              })}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 // A tick-by-tick strip: a mark per kill (a wave kill hollow) and per meeting.
@@ -312,6 +337,7 @@ export function HighlightCard({ data, onOpen, reveal }: HighlightCardProps) {
                 <Chip
                   key={`eye-${meeting}`}
                   text={fmt(PROFILE_COPY.chip.atMeeting, { meeting: String(meeting + 1) })}
+                  title={PROFILE_COPY.chip.description}
                 />
               ))}
               {reveal &&

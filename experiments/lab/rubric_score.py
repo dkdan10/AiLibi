@@ -843,9 +843,9 @@ def _game_interestingness(
     lands independently of R7 and does not collapse to 0 on the committed R7=0 set.
 
     per_game KEEPS its ``r1``-``r7`` keys (the geomean replaces ONLY the ``score``
-    value, so the ``extra="forbid"`` ``RubricGameView`` does not break); the D1-D4
-    breakdown is emitted in :func:`geomean_validation` /
-    ``results-rubric-geomean.json``, never in this DTO-served row. The score is
+    value, so the lab file keeps its key set); the D1-D4 breakdown is emitted in
+    :func:`geomean_validation` / ``results-rubric-geomean.json``, never in this
+    row. The score is
     deliberately INDEPENDENT of who won the binary game — the lab proved the win
     split is "purchasable wholesale" — and the §6 Pearson check confirms it does
     not reward winning. R5 (win-shape diversity) is a set-level property,

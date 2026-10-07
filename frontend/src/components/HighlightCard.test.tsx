@@ -116,6 +116,8 @@ describe("a card's shelves and facets", () => {
     expect(html).toContain("3 meetings · 3 reported, 0 called");
     expect(html).toContain("4 kills · 1 soon after a regroup");
     expect(html).toContain("1 bodies never found");
+    expect(html).toContain("Meeting 1: the body was found 3 ticks after the kill");
+    expect(html).toContain(`title="${PROFILE_COPY.chip.description}"`);
     expect(html).toContain('aria-label="Open replay seed 19"');
     expect(html).not.toMatch(/score|\/100|rank/i);
   });

@@ -356,7 +356,9 @@ function CardGrid({
   );
 }
 
-/** One shelf: its title, what it means, how many games it lists, and the games. */
+/** One shelf: its title, what it means, how many games it lists, and the games.
+ *  A shelf that lists no game here (none in the set, none baked into this
+ *  build, or none left by the filters) renders nothing. */
 function ShelfSection({
   name,
   cards,
@@ -369,17 +371,16 @@ function ShelfSection({
   reveal: boolean;
 }) {
   const words = (PROFILE_COPY.shelves as Readonly<Record<string, { description: string }>>)[name];
+  if (cards.length === 0) {
+    return null;
+  }
   return (
     <section aria-label={shelfTitle(name)} className="flex flex-col gap-2">
       <SectionLabel as="h3">
         {shelfTitle(name)} · {countText(cards.length)}
       </SectionLabel>
       <p className="text-sm text-ink-700">{words?.description}</p>
-      {cards.length === 0 ? (
-        <p className="font-mono text-xs text-ink-500">{PROFILE_COPY.emptyShelf}</p>
-      ) : (
-        <CardGrid cards={cards} onOpen={onOpen} reveal={reveal} />
-      )}
+      <CardGrid cards={cards} onOpen={onOpen} reveal={reveal} />
     </section>
   );
 }
