@@ -410,3 +410,25 @@ def test_an_eyewitness_chip_past_the_last_meeting_fails_naming_seed_and_chip(
     assert pointer_failures(planted, meeting_ids, replays) == [
         f"seed 19, chip {gp.EYEWITNESS_CHIP}: meeting index {len(meeting_ids[19])}"
     ]
+
+
+def _copy_endings(source: str) -> tuple[str, ...]:
+    """The ending keys the viewer's copy gives words to."""
+
+    block = source.split("endings: Object.freeze({", 1)[1].split("})", 1)[0]
+    return tuple(
+        line.strip().split(":", 1)[0]
+        for line in block.splitlines()
+        if line.strip() and not line.strip().startswith("//")
+    )
+
+
+def test_the_viewer_has_words_for_every_recorded_ending() -> None:
+    from eval.gameplay_census import game_endings
+
+    source = (repo_root / "frontend" / "src" / "lib" / "copy.ts").read_text(
+        encoding="utf-8"
+    )
+    assert sorted(_copy_endings(source)) == sorted(game_endings())
+    planted = source.replace('        IMPOSTOR_SABOTAGE: "a sabotage ran out",\n', "")
+    assert sorted(_copy_endings(planted)) != sorted(game_endings())

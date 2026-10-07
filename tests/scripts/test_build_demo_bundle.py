@@ -389,8 +389,11 @@ def test_the_featured_bake_ships_seeds_19_and_14_only(tmp_path: Path) -> None:
     )
     assert sorted(game.seed for game in games) == [14, 19]
     bdb.bake_data(tmp_path, games=games, samples_dir=_SAMPLES)
-    baked = _read(tmp_path / "data" / "9p2i" / "eval" / "game-profile.json")
+    path = tmp_path / "data" / "9p2i" / "eval" / "game-profile.json"
+    baked = _read(path)
     assert isinstance(baked, dict)
+    # Written compact, as the bundle writes its pydantic views.
+    assert path.read_text(encoding="utf-8") == json.dumps(baked, separators=(",", ":"))
     assert baked_profile_problems(baked, {14, 19}) == []
     readings = baked["pre_reveal"]["tripwires"]["readings"]
     assert all(reading["entries"] == [] for reading in readings)
