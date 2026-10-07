@@ -44,6 +44,7 @@ from eval.gameplay_census import (
     MeetingFact,
     OwnKillRowFact,
     TurnFact,
+    game_endings,
     grounding_labels,
     tally_outcome,
 )
@@ -538,32 +539,65 @@ def test_strict_mypy_refuses_a_role_read_in_a_pre_reveal_reading(
 
 
 def test_a_scorecard_meeting_id_differing_from_the_carriers_raises() -> None:
-    fact = game(meetings=(meeting(0, tick=10),))
+    """The mismatch sits on seed 4's second meeting, so no default value names it."""
+
+    fact = game(4, meetings=(meeting(0, tick=10, seed=4), meeting(1, tick=20, seed=4)))
     inputs = carrier(fact)
-    moved = report_of(fact.meetings[0]).model_copy(update={"meeting_id": "elsewhere"})
+    moved = report_of(fact.meetings[1]).model_copy(update={"meeting_id": "elsewhere"})
     with pytest.raises(
         gp.GameProfileConformanceError,
-        match=r"set planted/9p2i, seed 0, meeting index 0: the scorecard's meeting "
-        r"elsewhere is not the carrier's g0:meeting-0",
+        match=r"^set planted/9p2i, seed 4, meeting index 1: the scorecard's meeting "
+        r"elsewhere is not the carrier's g4:meeting-1$",
     ):
-        blind_set(inputs, scorecard(inputs, reports={"g0:meeting-0": moved}))
+        blind_set(inputs, scorecard(inputs, reports={"g4:meeting-1": moved}))
 
 
 def test_the_projection_refuses_a_mismatched_scorecard() -> None:
-    inputs = carrier(game(meetings=(meeting(0, tick=10),)))
+    """Each refusal names the set, the seed and every count it compared.
+
+    Seed 9 and a two-meeting carrier keep each named value off every default,
+    so a message argument replaced by a constant fails its match.
+    """
+
+    inputs = carrier(
+        game(9, meetings=(meeting(0, tick=10, seed=9), meeting(1, tick=20, seed=9)))
+    )
     sc = scorecard(inputs)
-    with pytest.raises(gp.GameProfileConformanceError, match="holds seeds"):
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i: the carrier holds seeds \[9\] and the scorecard "
+        r"inputs \[\]$",
+    ):
         blind_set(inputs, dataclasses.replace(sc, games=()))
-    with pytest.raises(gp.GameProfileConformanceError, match="holds no route"):
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i: the carrier holds seeds \[9\] and the scorecard "
+        r"inputs \[8\]$",
+    ):
+        blind_set(inputs, scorecard(carrier(game(8))))
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i, seed 9: the scorecard holds no route$",
+    ):
         blind_set(inputs, dataclasses.replace(sc, routes={}))
-    shorter = sc.games[0].model_copy(update={"meetings": ()})
-    with pytest.raises(gp.GameProfileConformanceError, match="holds 0 meetings"):
+    shorter = sc.games[0].model_copy(update={"meetings": sc.games[0].meetings[:1]})
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i, seed 9: the scorecard holds 1 meetings and the "
+        r"carrier 2$",
+    ):
         blind_set(inputs, dataclasses.replace(sc, games=(shorter,)))
     twice = dataclasses.replace(sc, games=(sc.games[0], sc.games[0]))
-    with pytest.raises(gp.GameProfileConformanceError, match="seed 0 twice"):
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i: the scorecard inputs hold seed 9 twice$",
+    ):
         gp.blind_projection(inputs, twice)
     doubled = dataclasses.replace(inputs, games=(inputs.games[0], inputs.games[0]))
-    with pytest.raises(gp.GameProfileConformanceError, match="seed 0 twice"):
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i: the carrier holds seed 9 twice$",
+    ):
         gp.blind_projection(doubled, sc)
 
 
@@ -581,27 +615,51 @@ def test_a_ballot_with_no_label_raises_naming_set_seed_meeting_and_voter() -> No
 
 
 def test_a_kill_or_a_body_with_no_victim_raises() -> None:
+    """Each refusal names the set, the seed and the kill tick or body id."""
+
     nameless = dataclasses.replace(kill(5, "p-1"), victim=None)
-    inputs = carrier(dataclasses.replace(game(), kills=(nameless,)))
-    with pytest.raises(gp.GameProfileConformanceError, match="tick 5 names no victim"):
+    inputs = carrier(dataclasses.replace(game(6), kills=(nameless,)))
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i, seed 6: the kill at tick 5 names no victim$",
+    ):
         blind_set(inputs)
-    fact = game(kills=(kill(5, "p-1"),))
+    fact = game(6, kills=(kill(5, "p-1"),))
     bodiless = dataclasses.replace(
         fact, bodies=(dataclasses.replace(fact.bodies[0], victim=None),)
     )
-    with pytest.raises(gp.GameProfileConformanceError, match="names no victim"):
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i, seed 6: the body body-p-1-5 names no victim$",
+    ):
         blind_set(carrier(bodiless))
 
 
 def test_the_reveal_projection_refuses_an_unknown_or_missing_ending() -> None:
-    with pytest.raises(gp.GameProfileConformanceError, match="'IMPOSTOR_TIMEOUT'"):
-        revealed(carrier(game(end_reason="IMPOSTOR_TIMEOUT")))
-    with pytest.raises(gp.GameProfileConformanceError, match="no recorded ending"):
-        revealed(carrier(game(end_reason=None)))
-    with pytest.raises(gp.GameProfileConformanceError, match="no final task count"):
-        revealed(carrier(game(tasks=(None, 14))))
-    inputs = carrier(game())
-    with pytest.raises(gp.GameProfileConformanceError, match="holds no game"):
+    """Each refusal names the set and the seed (9, off every default)."""
+
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i, seed 9: the recorded ending 'IMPOSTOR_TIMEOUT' is "
+        r"not one the engine or the runner records$",
+    ):
+        revealed(carrier(game(9, end_reason="IMPOSTOR_TIMEOUT")))
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i, seed 9: no recorded ending$",
+    ):
+        revealed(carrier(game(9, end_reason=None)))
+    for tasks in ((None, 14), (10, None)):
+        with pytest.raises(
+            gp.GameProfileConformanceError,
+            match=r"^set planted/9p2i, seed 9: no final task count$",
+        ):
+            revealed(carrier(game(9, tasks=tasks)))
+    inputs = carrier(game(9))
+    with pytest.raises(
+        gp.GameProfileConformanceError,
+        match=r"^set planted/9p2i, seed 9: the carrier holds no game$",
+    ):
         gp.reveal_projection(dataclasses.replace(inputs, games=()), blind_set(inputs))
 
 
@@ -615,6 +673,30 @@ def test_the_endings_follow_the_recorded_types(monkeypatch: pytest.MonkeyPatch) 
     )
     with pytest.raises(gp.GameProfileConformanceError, match="'CREWMATE_TASKS'"):
         revealed(inputs)
+
+
+def test_the_leak_facts_follow_the_recorded_endings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sourced: an ending the recorded types gain gets its own leak row.
+
+    The leak rule's facts are read from :func:`eval.gameplay_census.game_endings`
+    at call time, in its order, so a planted ending placed first leads the rows.
+    """
+
+    planted = ("PLANTED_STALEMATE", *game_endings())
+    monkeypatch.setattr(gp, "game_endings", lambda: planted)
+    games = (
+        game(0, end_reason="IMPOSTOR_PARITY"),
+        game(1, end_reason="PLANTED_STALEMATE"),
+    )
+    facts = gp.era_facts(revealed(carrier(*games)))
+    assert facts == (
+        ("PLANTED_STALEMATE", frozenset({1})),
+        ("IMPOSTOR_PARITY", frozenset({0})),
+        (gp.ANY_EJECTION, frozenset()),
+        (gp.CREWMATE_EJECTED, frozenset()),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1131,6 +1213,36 @@ def test_the_seed_26_shape_trips_decisive() -> None:
     assert gp.tripped(found)
 
 
+def test_a_removal_that_hands_the_tally_to_another_player_trips_decisive() -> None:
+    """Planted: without the two ungrounded ballots, the table ejects ``p-6`` instead.
+
+    Every other planted T1 case removes down to a tie or a skip; here the tally
+    after removal still ejects someone, just not the player the meeting ejected,
+    so only the "someone else" half of the definition can trip it.
+    """
+
+    ballots = (
+        ballot("p-0", "p-3", "supported"),
+        ballot("p-1", "p-3", "supported"),
+        ballot("p-2", "p-3", "off_target"),
+        ballot("p-4", "p-3", "uncited"),
+        ballot("p-5", "p-6", "supported"),
+        ballot("p-7", "p-6", "supported"),
+        ballot("p-8", "p-6", "supported"),
+    )
+    fact = ejecting_meeting(ballots)
+    assert fact.meetings[0].ejected == "p-3"
+    held = tuple(item for item in ballots if item.grounding_label == "supported")
+    assert tally_outcome(held, 0.6)[1] == "p-6"
+    found = readings_of(carrier(fact))
+    assert found["decisive"] == (0,)
+    assert found["decisive_read_as_skip"] == (0,)
+    assert found["decisive_all_ungrounded_removed"] == (0,)
+    assert found["any"] == (0,)
+    assert found["every"] == ()
+    assert gp.tripped(found)
+
+
 def test_every_reads_an_ejection_resting_on_ungrounded_ballots_alone() -> None:
     ballots = votes(
         ("p-3", "uncited"), ("p-3", "invalid_citation"), ("SKIP", "supported")
@@ -1199,17 +1311,26 @@ def test_removing_every_ungrounded_ballot_is_published_beside_the_governing_read
 
 
 def test_an_ejecting_none_held_ballot_raises_naming_all_four() -> None:
+    """The ballot sits at meeting index 1, so a constant index fails the match."""
+
     ballots = (
         *votes(("p-3", "supported"), ("p-3", "supported")),
         ballot("p-5", "p-3", "none_held"),
     )
     inputs = carrier(
-        game(seed=12, meetings=(meeting(0, tick=10, seed=12, ballots=ballots),))
+        game(
+            seed=12,
+            meetings=(
+                meeting(0, tick=5, seed=12),
+                meeting(1, tick=10, seed=12, ballots=ballots),
+            ),
+        )
     )
     with pytest.raises(
         gp.GameProfileConformanceError,
-        match=r"set planted/9p2i, seed 12, meeting index 0, voter p-5: an ejecting "
-        r"ballot labelled 'none_held' is a case the tripwire does not classify",
+        match=r"^set planted/9p2i, seed 12, meeting index 1, voter p-5: an ejecting "
+        r"ballot labelled 'none_held' is a case the tripwire does not classify; the "
+        r"owner decides how it reads$",
     ):
         gp.read_pre_reveal(blind_set(inputs))
 
@@ -1239,6 +1360,32 @@ def test_an_eighth_grounding_label_raises_unclassified(
         gp.GameProfileConformanceError, match="'half_held' has no class"
     ):
         gp.label_classes()
+
+
+def test_an_eighth_grounding_label_stops_the_reading_and_the_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sourced: the pre-reveal reading and the profile read the partition live.
+
+    A label the meeting layer gains after the blind projection is built stops
+    :func:`read_pre_reveal` and :func:`build_profile`, rather than either reading
+    the module's own table as if the label did not exist.
+    """
+
+    inputs = carrier(
+        ejecting_meeting(
+            votes(("p-3", "supported"), ("p-3", "supported"), ("SKIP", "supported"))
+        )
+    )
+    blind = blind_set(inputs)
+    assert gp.read_pre_reveal(blind).tripped == frozenset()
+    labels = grounding_labels()
+    monkeypatch.setattr(gp, "grounding_labels", lambda: (*labels, "half_held"))
+    unclassified = r"^the grounding label 'half_held' has no class in the tripwire's "
+    with pytest.raises(gp.GameProfileConformanceError, match=unclassified):
+        gp.read_pre_reveal(blind)
+    with pytest.raises(gp.GameProfileConformanceError, match=unclassified):
+        profile_of(inputs)
 
 
 def test_a_label_the_meeting_layer_dropped_is_refused(
@@ -1561,6 +1708,33 @@ def test_suspicion_moved_away_from_a_living_player_but_not_from_the_dead() -> No
     )
 
 
+def test_a_self_accusation_keeps_no_suspicion_on_a_player() -> None:
+    """Planted: the player who drew ballots only accuses themselves next meeting.
+
+    A recorded transcript can carry a self-accusation (the meeting layer's own
+    accuser indexes skip one, ``meetings/corroboration.py`` and
+    ``meetings/transcript.py``), so a speaker naming themselves is no charge
+    against them, and suspicion still moved away.
+    """
+
+    first = meeting(
+        0,
+        tick=10,
+        ballots=votes(
+            ("p-5", "supported"), ("SKIP", "supported"), ("SKIP", "supported")
+        ),
+    )
+    self_accused = meeting(
+        1,
+        tick=20,
+        ballots=votes(("SKIP", "supported"), ("SKIP", "supported")),
+        turns=(turn("p-5", "p-5"),),
+    )
+    assert shelves_of(blind_game(meetings=(first, self_accused)))[
+        gp.SUSPICION_MOVED
+    ] == gp.Pointer(meetings=(1,))
+
+
 def test_suspicion_moved_when_the_lead_changes_while_the_old_lead_lives() -> None:
     held = (("SKIP", "supported"), ("SKIP", "supported"))
     first = meeting(
@@ -1766,9 +1940,10 @@ def test_an_ejection_win_counts_at_the_deciding_meeting() -> None:
     )
     assert measured == gp.Distance(counts="kills_short_of_parity", steps=2, start=5)
     with pytest.raises(
-        gp.GameProfileConformanceError, match="an ejection win with no meeting"
+        gp.GameProfileConformanceError,
+        match=r"^seed 9: an ejection win with no meeting$",
     ):
-        gp.distance(reveal_of(end_reason="CREWMATE_EJECT"))
+        gp.distance(reveal_of(seed=9, end_reason="CREWMATE_EJECT"))
 
 
 def test_a_stopped_game_has_no_losing_side() -> None:
@@ -1948,7 +2123,9 @@ def test_the_fisher_p_reproduces_the_design_memos_tables() -> None:
     assert round(float(gp.fisher_two_sided(4, 2, 42, 2)), 4) == 0.0655
     assert round(float(gp.fisher_two_sided(2, 18, 11, 19)), 4) == 0.0498
     assert round(float(gp.fisher_two_sided(22, 18, 2, 8)), 4) == 0.0766
-    with pytest.raises(ValueError, match="negative count"):
+    with pytest.raises(
+        ValueError, match=r"^a 2x2 table cannot hold a negative count: \(1, -1, 2, 3\)$"
+    ):
         gp.fisher_two_sided(1, -1, 2, 3)
 
 
@@ -1978,8 +2155,14 @@ def test_a_candidate_matching_one_ending_exactly_leaks() -> None:
 
 
 def test_members_outside_the_era_are_refused() -> None:
-    with pytest.raises(ValueError, match="members outside the era"):
-        gp.classify_candidate("planted", frozenset({60}), seeds=_era(), facts=())
+    """The refusal names the candidate and only the members the era lacks."""
+
+    with pytest.raises(
+        ValueError, match=r"^planted-shelf: members outside the era: \[60, 61\]$"
+    ):
+        gp.classify_candidate(
+            "planted-shelf", frozenset({3, 60, 61}), seeds=_era(), facts=()
+        )
 
 
 def _fifty_game_era() -> CensusInputs:
@@ -2106,6 +2289,46 @@ def test_thirty_eight_of_fifty_is_a_facet_and_thirty_seven_a_shelf() -> None:
         == "shelf"
     )
     assert gp.is_saturated(38, 50) and not gp.is_saturated(37, 50)
+
+
+def test_a_tripped_member_does_not_saturate_a_candidate() -> None:
+    """Planted: 37 untripped games and one tripped game carry a double kill.
+
+    The catalogue classes the candidate over its 37 untripped members, a shelf,
+    so no game may carry it as a saturated moment; counting the tripped game
+    reads 38 of 50, and the two halves of the served file would disagree.
+    """
+
+    games: list[GameFacts] = []
+    for seed in range(50):
+        kills = (kill(5, "p-1"), kill(5, "p-2")) if seed < 38 else (kill(5, "p-1"),)
+        meetings: tuple[MeetingFact, ...] = ()
+        if seed == 0:
+            meetings = (
+                meeting(
+                    0,
+                    tick=10,
+                    seed=0,
+                    ballots=votes(
+                        ("p-3", "supported"),
+                        ("p-3", "off_target"),
+                        ("SKIP", "supported"),
+                    ),
+                ),
+            )
+        games.append(game(seed, kills=kills, meetings=meetings, terminal_tick=12))
+    inputs = carrier(*games)
+    assert gp.read_pre_reveal(blind_set(inputs)).saturated == ()
+    profile = profile_of(inputs)
+    assert [game.seed for game in profile.pre_reveal.games if game.tripped] == [0]
+    assert _class_of(profile, gp.DOUBLE_KILL) == "shelf"
+    shelf = next(
+        shelf for shelf in profile.pre_reveal.shelves if shelf.name == gp.DOUBLE_KILL
+    )
+    assert [member.seed for member in shelf.members] == list(range(1, 38))
+    assert not [
+        game.seed for game in profile.pre_reveal.games if gp.DOUBLE_KILL in game.moments
+    ]
 
 
 def test_saturation_applies_before_the_leak_rule() -> None:
@@ -2239,7 +2462,7 @@ def test_the_served_constants_are_the_modules() -> None:
         "leak_p_level": "0.05",
         "saturation_share": "3/4",
     }
-    with pytest.raises(ValueError, match="no short decimal form"):
+    with pytest.raises(ValueError, match=r"^1/3 has no short decimal form$"):
         gp._decimal(Fraction(1, 3))
 
 
@@ -2346,17 +2569,21 @@ def test_a_file_carrying_a_score_rank_or_total_is_refused_at_load() -> None:
 
 
 def test_members_out_of_seed_order_raise() -> None:
-    with pytest.raises(ValidationError, match="out of seed order"):
+    with pytest.raises(
+        ValidationError, match=r"planted-shelf: members out of seed order: \[4, 2\]"
+    ):
         gp.Shelf(
-            name="planted",
+            name="planted-shelf",
             members=(
                 gp.ShelfMember(seed=4, meetings=(), kill_ticks=()),
                 gp.ShelfMember(seed=2, meetings=(), kill_ticks=()),
             ),
         )
-    with pytest.raises(ValidationError, match="out of seed order"):
+    with pytest.raises(
+        ValidationError, match=r"planted-chip: members out of seed order: \[3, 3\]"
+    ):
         gp.Chip(
-            name="planted",
+            name="planted-chip",
             members=(
                 gp.ChipMember(seed=3, meetings=()),
                 gp.ChipMember(seed=3, meetings=()),

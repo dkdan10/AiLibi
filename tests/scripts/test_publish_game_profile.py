@@ -195,6 +195,26 @@ def test_a_four_player_set_is_refused_by_name(
     assert not (SAMPLES_4P1I / command.PROFILE_FILENAME).exists()
 
 
+@pytest.mark.parametrize("impostors", [1, 3])
+def test_a_nine_player_set_of_another_impostor_count_is_refused(
+    tmp_path: Path, impostors: int
+) -> None:
+    """Planted: nine players is not enough; the impostor count is read too."""
+
+    (tmp_path / "roster.json").write_text(
+        json.dumps(
+            {"num_impostors": impostors, "num_players": 9, "tasks_per_crewmate": 2}
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        command.ProfileRefused,
+        match=rf"^{re.escape(str(tmp_path))} holds a 9-player, {impostors}-impostor "
+        r"roster; the game-shape profile reads 9-player, 2-impostor sets only$",
+    ):
+        command.require_profile_roster(tmp_path)
+
+
 def test_set_dir_and_json_stdout_go_together() -> None:
     for argv in (
         ["--set-dir", str(SAMPLES_9P2I)],
@@ -289,7 +309,11 @@ def test_the_stamp_is_read_before_and_after_the_walk(tmp_path: Path) -> None:
         return census_inputs(SAMPLES_9P2I)
 
     loaders = command.Loaders(census=moving, scorecard=_committed_scorecard)
-    with pytest.raises(RuntimeError, match="the recordings changed while the profile"):
+    with pytest.raises(
+        RuntimeError,
+        match=rf"^{re.escape(str(copy))}: the recordings changed while the profile "
+        r"walked them$",
+    ):
         command.compute_profile(copy, loaders=loaders)
 
 
@@ -317,7 +341,10 @@ def test_a_set_with_no_roster_names_no_seedset(tmp_path: Path) -> None:
     shutil.copyfile(
         SAMPLES_9P2I / "replay-seed-0.jsonl", tmp_path / "replay-seed-0.jsonl"
     )
-    with pytest.raises(command.ProfileRefused, match="no roster.json"):
+    with pytest.raises(
+        command.ProfileRefused,
+        match=rf"^{re.escape(str(tmp_path))} has no roster.json to name its seedset$",
+    ):
         command.read_stamp(tmp_path, ROOT)
 
 
@@ -342,6 +369,12 @@ def test_the_era_is_the_registrys(tmp_path: Path) -> None:
     assert command.era_id(SAMPLES_9P2I, ROOT, registry=renamed) == "planted-era"
     assert command.era_id(tmp_path, ROOT) is None
     assert command.era_id(ROOT / "replays" / "candidates", ROOT) is None
+    # Planted: a registry that no longer files the shown set gives it no era.
+    without = tuple(
+        entry for entry in COMMITTED_SETS if entry.path != "replays/samples/9p2i"
+    )
+    assert len(without) == len(COMMITTED_SETS) - 1
+    assert command.era_id(SAMPLES_9P2I, ROOT, registry=without) is None
 
 
 def test_the_profiled_sets_and_their_roster() -> None:
@@ -358,7 +391,13 @@ def test_an_era_holding_two_sets_is_refused(
         "sets_in",
         lambda era: ("replays/samples/9p2i", "replays/elsewhere/9p2i"),
     )
-    with pytest.raises(command.ProfileRefused, match="the leak rule would span them"):
+    era = era_of("replays/samples/9p2i").id
+    with pytest.raises(
+        command.ProfileRefused,
+        match=rf"^the {re.escape(era)} era holds replays/samples/9p2i, "
+        r"replays/elsewhere/9p2i; the leak rule would span them, and the profile "
+        r"is computed per set$",
+    ):
         command.compute_profiles(planted_root, loaders=COMMITTED)
 
 

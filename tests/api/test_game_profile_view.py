@@ -11,6 +11,7 @@ file points at names a meeting or a kill the served replay shows, in the
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from collections.abc import Iterator, Mapping
 from pathlib import Path
@@ -181,7 +182,9 @@ def test_the_shown_set_serves_its_profile_fresh() -> None:
 
 def test_the_four_player_set_ships_no_profile() -> None:
     assert not (_PARENT / "4p1i" / _FILENAME).exists()
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(
+        FileNotFoundError, match=rf"^{re.escape(str(_PARENT / '4p1i' / _FILENAME))}$"
+    ):
         SetLoaderRegistry(_PARENT).get("4p1i").game_profile()
 
 
@@ -236,12 +239,21 @@ def test_a_file_carrying_a_score_or_a_total_is_refused_at_load(
 
 
 def test_a_malformed_file_fails_loud(copied_set: Path) -> None:
+    """Each refusal names the file it refused, so a reader can find it."""
+
+    path = re.escape(str(copied_set / _FILENAME))
     (copied_set / _FILENAME).write_text("[]", encoding="utf-8")
-    with pytest.raises(ValueError, match="expected a JSON object, got list"):
+    with pytest.raises(
+        ValueError,
+        match=rf"^invalid profile file {path}: expected a JSON object, got list$",
+    ):
         ReplayLoader(replay_dir=copied_set).game_profile()
     for computed in ("stale", "viewModelVersion", "view_model_version"):
         _write(copied_set, {**_committed(), computed: False})
-        with pytest.raises(ValueError, match=f"'{computed}' is the loader's to set"):
+        with pytest.raises(
+            ValueError,
+            match=rf"^invalid profile file {path}: '{computed}' is the loader's to set$",
+        ):
             ReplayLoader(replay_dir=copied_set).game_profile()
     missing = _committed()
     del missing["catalogue"]

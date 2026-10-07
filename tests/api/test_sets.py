@@ -24,7 +24,6 @@ import importlib.util
 import json
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -551,19 +550,114 @@ def test_version_one_writes_no_served_file_for_the_era(
     assert not any((tmp_path / "work" / "experiments" / "lab").iterdir())
 
 
+#: The served-file write the retirement deleted from the scorer, verbatim from
+#: ``experiments/lab/rubric_score.py`` at ``76270d6c`` (the producer's long
+#: docstring cut to its first line), each as (a line of today's module, that
+#: line with the deleted code restored beside it). The planted case rebuilds the
+#: pre-retirement scorer from today's module and these lines, so it reads no git
+#: history and runs on a shallow checkout.
+_RETIRED_SERVED_FILE_WRITE: tuple[tuple[str, str], ...] = (
+    (
+        "    sys.path.insert(0, str(_REPO_ROOT))\n",
+        "    sys.path.insert(0, str(_REPO_ROOT))\n"
+        "\n"
+        "from orchestrator.recording_fingerprint import recording_fingerprint"
+        "  # noqa: E402\n"
+        "\n"
+        'RUBRIC_RESULTS_FILENAME = "results-rubric-score.json"\n',
+    ),
+    (
+        "\n\ndef main() -> int:\n",
+        '''
+
+def regen_for_set(
+    facts: dict[str, Any], set_dir: Path, *, git_head: str | None = None
+) -> Path:
+    """Re-run the scorer and co-locate ``results-rubric-score.json`` into a set."""
+
+    source_fingerprint = facts.get("source_fingerprint")
+    if source_fingerprint != recording_fingerprint(set_dir):
+        raise ValueError(
+            "facts do not identify the current recording bytes; re-extract them "
+            "before publishing highlight scores"
+        )
+    head = (
+        git_head
+        if git_head is not None
+        else (_set_manifest_sha(set_dir) or facts.get("git_head"))
+    )
+    out = {
+        "seedset": facts.get("seedset"),
+        "git_head": head,
+        "source_fingerprint": source_fingerprint,
+        "interestingness": interestingness(facts),
+    }
+    dest = Path(set_dir) / RUBRIC_RESULTS_FILENAME
+    dest.write_text(json.dumps(out, indent=2))
+    return dest
+
+
+def main() -> int:
+''',
+    ),
+    (
+        '    parser.add_argument("facts_json", help="gameplay-facts extractor output")\n',
+        '    parser.add_argument("facts_json", help="gameplay-facts extractor output")\n'
+        "    parser.add_argument(\n"
+        '        "--set-dir",\n'
+        "        default=None,\n"
+        "        help=(\n"
+        '            "also co-locate results-rubric-score.json into this served replay "\n'
+        '            "set dir, stamped with git HEAD (the per-set regen producer for "\n'
+        '            "/eval/rubric)"\n'
+        "        ),\n"
+        "    )\n",
+    ),
+    (
+        "    set_dir = Path(sample_dir) if sample_dir else None\n",
+        "    set_dir = (\n"
+        "        Path(args.set_dir)\n"
+        "        if args.set_dir is not None\n"
+        "        else (Path(sample_dir) if sample_dir else None)\n"
+        "    )\n",
+    ),
+    (
+        "        f\"{rank['all_eject_decided_above_all_stopwatch']})\"\n"
+        "    )\n"
+        "    return 0\n",
+        "        f\"{rank['all_eject_decided_above_all_stopwatch']})\"\n"
+        "    )\n"
+        "\n"
+        "    if args.set_dir is not None:\n"
+        "        dest = regen_for_set(facts, Path(args.set_dir))\n"
+        '        print(f"co-located per-set rubric (git_head stamped): {dest}")\n'
+        "    return 0\n",
+    ),
+)
+
+
+def _pre_retirement_scorer_source() -> str:
+    """Today's scorer with the deleted served-file write restored, as text."""
+
+    source = Path(_rubric_score.__file__).read_text(encoding="utf-8")
+    for today, restored in _RETIRED_SERVED_FILE_WRITE:
+        assert source.count(today) == 1, today
+        source = source.replace(today, restored)
+    return source
+
+
 def test_the_scorer_before_the_retirement_wrote_one_and_fails_the_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Planted: the scorer as it stood at ``76270d6c``, read from git."""
+    """Planted: the scorer as it stood at ``76270d6c``, rebuilt without git history.
 
-    source = subprocess.run(
-        ["git", "show", "76270d6c:experiments/lab/rubric_score.py"],
-        cwd=_REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    path = tmp_path / "rubric_score_76270d6c.py"
+    Today's module with the retired ``regen_for_set`` and ``--set-dir`` restored
+    writes the served file, so the check that today's scorer passes fails on it.
+    """
+
+    source = _pre_retirement_scorer_source()
+    assert "def regen_for_set(" in source and '"--set-dir"' in source
+    path = tmp_path / "rubric_score_pre_retirement.py"
     path.write_text(source, encoding="utf-8")
     spec = importlib.util.spec_from_file_location(path.stem, path)
     assert spec is not None and spec.loader is not None
