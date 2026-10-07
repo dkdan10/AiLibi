@@ -1793,8 +1793,8 @@ argument, run `tests/eval/test_gameplay_census.py`, `tests/meetings/test_route_l
 meeting; 0 survivors, 0 named equivalent. The pass then stopped.
 
 **Verification at this head.** The code head is this round's test commit, `e91d8332`; the card commits after it touch
-only this card. The demo bundle diff, the lab `--check` runs and every other row of round 3's table do not depend on a test-only
-change and were not re-run beyond the gate; the gate's row records its exit code.
+only this card. The lab `--check` runs and every other row of round 3's table do not depend on a test-only change and were not re-run
+beyond the gate; the gate's row records its exit code.
 
 | command | exit | result |
 |---|---|---|
@@ -1802,7 +1802,8 @@ change and were not re-run beyond the gate; the gate's row records its exit code
 | `uv run pytest tests/eval/test_gameplay_census.py -k test_the_fields_reach_is_derivable_from_the_census_through_the_field` | 0 | 2 passed (r2, r1) |
 | `uv run ruff check`, `ruff format --check` and `mypy` on `tests/eval/test_gameplay_census.py` | 0 | clean |
 | `uv run python scripts/validate_task_docs.py` | 0 | Task docs validation passed: 390 phase tasks and prompts; 102 work cards |
-| `bash scripts/check.sh` at the pushed head after this card commit (run once, output to a file, exit code from the run itself) | pending | recorded by the card commit after the run |
+| demo bundle, built in this one checkout at `2228eb4a` (`main`) and at `5e62e38a` (`uv run python scripts/build_demo_bundle.py --out DIR` each, then `diff -r`) | 0 | 109 files each, empty diff: nothing ships |
+| `bash scripts/check.sh` at `5e62e38a`, the pushed head (run once, output to a file, exit code from the run itself) | 0 | pytest 10,697 passed, 20 skipped, 3 xfailed; frontend 695 passed; the build succeeds; the commit after it touches only this card |
 
 **Limitations.** As round 3. The presence cell is still exercised only by planted carriers, the field's scripted game
 and the reach derivation, since no committed set carries the route lines.
