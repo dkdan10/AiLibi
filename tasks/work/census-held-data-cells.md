@@ -157,6 +157,11 @@ card imports them, never copies them.
 
 Every item names its enforcing mechanism and the planted or perturbed case that must turn its test red.
 
+- [x] Review correction (round 3): phase 2 is built now that `route-lines-field` has merged. This branch merges
+  `main` (both sides of `tests/eval/test_gameplay_census.py` kept) and builds items 3, 4 and 4b as contracted
+  (`test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting`,
+  `test_the_scripted_route_lines_game_is_read_back_and_counted`,
+  `test_the_fields_reach_is_derivable_from_the_census_through_the_field`; both lab `--check` runs reproduce).
 - [x] Review correction: the ending rows follow the runner's stop type. `GameStopReason` gaining a member lists it
   as a row of `games_by_ending` and counts a game ending on it (`test_the_ending_rows_follow_the_runners_type`;
   mutant E1 red).
@@ -203,6 +208,9 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     unclassified tag in a recorded prompt. The `<routes>` tag the field adds is classified (an included source row
     of its own) when this branch merges `main` after `route-lines-field`, with item 4; until then the pin reads the
     base's templates.
+  - Phase 2 (2026-10-07): `routes` is a read block and its lines the source row `a route line`; the pin reads
+    `main`'s templates (`test_the_classified_blocks_are_every_tag_the_ballot_templates_render`,
+    `test_each_place_the_check_reads_names_its_own_row`, the held-place property).
 - [x] **2. The truth of the cited line.**
   - The denominator: `supported` EJECTs whose `primary_reason_id` names a turn of the same meeting that holds a
     placement of the target. The placement is one of the kinds `saw_player`, `company`, `saw_move` or
@@ -237,7 +245,7 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     - a non-spatial room is unverifiable, never false;
     - a cited placement of another player is not read;
     - a turn id from another meeting resolves nothing.
-- [ ] **3. Route-reconcilable charges.** Built only on `main` after `route-lines-field` merges and this branch merges
+- [x] **3. Route-reconcilable charges.** Built only on `main` after `route-lines-field` merges and this branch merges
   `main`, since its library imports that card's module.
   - The library: `Placement`, `PlacementKind`, the sort key, `_alibi_stay_placements`, `spoken_placements`,
     `placements_of` and `reconcilable` are imported from `meetings/route_lines.py`, under the names that module
@@ -272,7 +280,13 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     review round after `route-lines-field` merges and this branch merges `main`. Landed in phase 1: the drift check's
     blob-comparing precondition (`recording_blob_problems`, planted: an added results file stays green, a changed or
     missing replay fails, with and without the recorded commit in the clone).
-- [ ] **4. The route field's conformance cell.** It is written only after `route-lines-field` merges into `main` and
+  - Landed (2026-10-07, review round 3): the library and the lab's imports back
+    (`test_the_charge_half_has_one_home_and_the_lab_keeps_no_copy`); the one home with the field's `ast` test
+    (`test_the_field_one_home_test_holds_with_this_library_and_finds_a_copy_in_it`); the agreement on r2 and r1
+    (`test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting`), the flipped flag
+    (`test_a_column_with_one_misjudged_flag_flipped_names_that_meeting`) and the loader with no regroup ticks
+    (`test_a_loader_given_no_regroup_ticks_breaks_the_round_2_agreement`); both lab `--check` runs reproduce.
+- [x] **4. The route field's conformance cell.** It is written only after `route-lines-field` merges into `main` and
   this branch merges `main`, on that card's model and contract (its "The census contract" paragraph).
   - Mechanism: a new `SettingPredicate` on `route_lines_version = 1` scopes every cell and table here, and replaces
     the field card's not-read `FIELD_CLASSIFICATION` entry.
@@ -318,7 +332,10 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     - the search against `room_hops` on every room pair of the canonical map, with one door removed from the copy.
   - Every era without the field reads n/a.
   - Phase 2 (2026-10-06): lands in the review round after `route-lines-field` merges.
-- [ ] **4b. (Optional; the orchestrator may strike or move it to the record card.) The field's reach.** Built with
+  - Landed (2026-10-07, review round 3): the positive carrier is the field card's scripted game
+    (`test_the_scripted_route_lines_game_is_read_back_and_counted`); every planted case above is in
+    `tests/eval/test_gameplay_census.py` (the Results name each).
+- [x] **4b. (Optional; the orchestrator may strike or move it to the record card.) The field's reach.** Built with
   item 4.
   - The cell `ejections_charged_on_a_reconcilable_pair_shown_a_route_line`, scoped by the field: ejections charged
     on a reconcilable pair at which some EJECT voter's prompt carried a route line about the ejected player, over
@@ -326,6 +343,11 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
     counterpart of the lab's "reaches" for (c), which was 29 of 40 on round 2.
   - Planted: a line shown only to a SKIP voter does not reach; a line about another candidate does not reach.
   - Phase 2 (2026-10-06): built with item 4.
+  - Landed (2026-10-07, review round 3): built, under two hours, and derivable from the census carrier through
+    `meetings.route_lines`: the census's fold, with each ballot carrying the lines the field's builder gives it,
+    reproduces the route-lines replay's 31 of 40 and 7 of 7 on round 2
+    (`test_the_fields_reach_is_derivable_from_the_census_through_the_field`); planted
+    (`test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter`).
 - [x] **5. (Optional; the orchestrator may strike any table, never the fields.) The genre-shape tables, role-blind
   and descriptive.** The carrier gains, outside the strikable tables: each game's end reason and its final task
   count, with defaults that leave hand-built carriers counting nothing; `KillFact.victim` (from `KilledEvent.target`,
@@ -349,14 +371,17 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   - Planted, each red on its defect: a meeting on the kill's own tick dropped; a vent tick counted as a room; a
     sabotage active across a meeting counted twice.
   - Ruled 2026-10-06: every table is built, none struck; the fields are kept for `rubric-v2-profile`.
-- [ ] **Era grouping.** New cells pool only through the existing `pool()` and `census_from_inputs`. Planted: a tally
+- [x] **Era grouping.** New cells pool only through the existing `pool()` and `census_from_inputs`. Planted: a tally
   with round 1's era key pooled with the shown era's raises `GameplayCensusEraError` before any new cell is summed,
   and every scoped cell reads n/a, never 0, in an era without its setting. Round 1 is read with `--set-dir` and
   never pooled.
   - Phase 1's part is met: real round-1 and round-2 tallies refuse to pool before any cell is summed
     (`test_round_1_and_the_promoted_set_never_pool_before_a_new_cell_is_summed`), and no phase-1 cell or table carries
     a scope. The scoped cells are item 4's, so the box closes in phase 2.
-- [ ] **The census stays a census.** The page and JSON tests are extended.
+  - Phase 2 (2026-10-07): every route line cell and table reads n/a in every committed column, never 0
+    (`test_on_baseline_9_every_scoped_cell_and_table_reads_n_a`), and without the setting counts nothing, a
+    not-evaluable entry included (`test_every_route_line_cell_and_table_reads_n_a_without_the_setting`).
+- [x] **The census stays a census.** The page and JSON tests are extended.
   - No new cell or table has a guard or scope that reads a role.
   - No new definition names a bar, a flag value or a ratio of two rates.
   - The page carries the caveats: a held line is not a reason to vote; a true cited line is not a correct vote; a
@@ -366,7 +391,9 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   - Phase 1's part is met: no new guard or scope, the restatement scan refuses a line, a flag value and a bar
     (planted), two of the three caveats stand on the page, and the scorecard is byte-identical. The third caveat, a
     reconcilable pair proves no innocence, lands with item 3.
-- [ ] **Properties.** Hypothesis over hand-built carriers and prompts, with `settings(deadline=None)` on every test
+  - Phase 2 (2026-10-07): the third caveat stands on the page and in the `reconciles` term; no phase-2 guard or
+    scope reads a role (`test_the_phase_two_cells_and_tables_read_no_role`); the scorecard is byte-identical.
+- [x] **Properties.** Hypothesis over hand-built carriers and prompts, with `settings(deadline=None)` on every test
   that loads the map. Each property names the perturbed fold that turns it red:
   - adding a line naming a living candidate to an included block always makes a SKIP held, while adding one to an
     excluded block, or naming the voter or a dead player, never does (a parser reading the beliefs block fails it);
@@ -379,16 +406,21 @@ Every item names its enforcing mechanism and the planted or perturbed case that 
   - Phase 1's part is met: the held-place property and true plus false equals checkable, each red on its perturbed
     fold, and a role-permutation property over the promoted set's games. Items 3 and 4's two properties land in phase
     2.
-- [ ] **One bounded mutation pass.** A single pass over every production line this card adds or changes, using only
+  - Phase 2 (2026-10-07): `test_every_ejection_charged_on_a_pair_has_one_and_the_witness_counts_are_a_part` and
+    `test_the_link_check_is_doors_within_the_ticks_or_the_first_regroup_crossed`, each red on its perturbed fold
+    (Results).
+- [x] **One bounded mutation pass.** A single pass over every production line this card adds or changes, using only
   the eight operator classes: F filter, S swap, N comparison, C constant for a role, kind, room or tick read,
   M message, T tuple member, B branch swap, L loaded source to literal. Each mutant runs alone against the touched
   suites. A survivor is killed by a new test, or named equivalent with its reason. Results carries a per-line neuter
   table: each production line, and the test that goes red when it is neutered.
   - Run over phase 1's lines (Results: 243 neuters and 38 mutants); phase 2 runs it again over its own.
-- [ ] **Published and verified.** `publish_gameplay_census.py --check` is green on the regenerated page and JSON,
+  - Phase 2 (2026-10-07): 180 neuters, 173 red on the first run and the 7 green ones killed by a test added for each; 39 mutants of the eight classes, 33 killed on the first run and the 6 survivors killed by a test added for each (Results, round 3).
+- [x] **Published and verified.** `publish_gameplay_census.py --check` is green on the regenerated page and JSON,
   and `bash scripts/check.sh` passes at the head that states the numbers.
   - Phase 1: `--check` is green on the regenerated pages and `bash scripts/check.sh` ran once at the pushed head
     (Results); phase 2 runs both again.
+  - Phase 2 (2026-10-07): `--check` is green on the regenerated pages at `39e03863`, and `bash scripts/check.sh` runs once at the pushed head, its exit code recorded in the last card commit (Results, round 3).
 
 ## Constraints
 
@@ -1229,3 +1261,474 @@ for a separate task and not changed here.
 | `uv run pytest -m campaign -n 6` | 0 | 337 passed |
 | demo bundle | - | not rebuilt this round: installing the frontend's packages was refused in this environment. Since `62a91057`, built in one checkout beside `83806ab0` (109 files each, empty diff), only this card and `tests/eval/test_gameplay_census.py` moved (`git diff --stat 62a91057`), neither an input of the bundle, so nothing ships |
 | `AILIBI_SKIP_FRONTEND=1 bash scripts/check.sh` at `b5270be4`, the fix head (run once, output to a file, exit code from the run itself; the frontend leg opted out as CI's Python job runs it, because installing the frontend's packages was refused in this environment, and the PR's frontend-checks job runs that leg) | 0 | pytest 10,360 passed, 20 skipped, 3 xfailed (10,358 before, plus this round's two new tests); frontend skipped; the commit after it touches only this row |
+
+### Review corrections, round 3 (2026-10-07)
+
+One blocking finding of the round-3 dispatch, on `4549f38f` (correctness lens): phase 2 of this card is contracted to
+land after `route-lines-field` merges, and it has merged (PR #501 at `47bee59a`; PR #503, the census spy's cold-cache
+fix, at `e0bf4d92`; `main` at `2228eb4a`). This round is phase 2, built by the card's own order (Constraints,
+"Coordination with `route-lines-field` and the round"; decision memo 8.5). Phase 1 was verified at `4549f38f` over three
+review rounds and is not re-verified here beyond the merge. Every ruling in Phase 1's Decisions and in rounds 1 and 2
+stands.
+
+**The merge of `main`** (`331540a3`, a merge commit, never a rebase). Git merged every file without a conflict. In
+`tests/eval/test_gameplay_census.py` both sides are kept: `main`'s `_spied_walk` warms the committed game before the
+spy goes in, and its two callers install the spy before any other patch; this branch's phase-1 tests stand beside
+them. `main`'s not-read `FIELD_CLASSIFICATION` entry for `route_lines_version` was kept by the merge and replaced by
+this round's predicate (item 4), and both census pages were regenerated through the production path, never hand-edited.
+
+**Sections this rests on.** `docs/architecture.md` "Layering" (the census is an `eval/` reader; `eval/route_charges.py`
+imports only `meetings/` and the standard library, and the census now also imports `eval.route_charges`,
+`meetings.route_lines` and the arm spine's `orchestrator.game.experiment_arm_suffix` and `EXPERIMENT_ARM_TEMPLATES`),
+"Enforced boundaries" (`uv run lint-imports`: 4 kept, 0 broken; nothing under `agents/`, `meetings/` or `engine/`
+changes) and "Determinism and the substrate ladder" (no recorded, stamp, prompt or detector byte moves; the walk still
+verifies every state hash). `tasks/work/route-lines-field.md`, its "The census contract" paragraph and Results (the
+`RouteLine` and `RouteStep` model, the two readings, at most one line per candidate, the stamp, the block reader). The
+route-check card's Reading (`tasks/work/route-check-replay.md`). Decision memo section 8 (the rubric ruled a role-blind
+game-shape profile, 8.5's order and one-writer map). Ruling R13 (the census joins no scorecard).
+
+**What was built.**
+- **Item 3, the route-reconcilable charges.** `ordered_pairs`, `Charge`, `charges_against` and `misjudging_pairs` move
+  from `experiments/lab/route_check_replay.py` into the new `eval/route_charges.py`, body for body (each definition's
+  source text equals the lab's at `2228eb4a`, checked by `ast.get_source_segment`), importing `Placement`, the sort key,
+  `placements_of` and `reconcilable` from `meetings/route_lines.py`. `is_witness_meeting` moves, body for body, into
+  `eval/gameplay_census.py`. The lab imports all five back (re-exported with `as`, so its public names and its tests stay
+  as they were) and keeps no copy; its only other change is the two imports the move left unused (`KillFact`,
+  `_placement_key`). The loader keeps one `RouteChargeFact` per meeting from the recorded row, the living set at the open
+  and `derive_regroup_ticks` over the earlier meetings' ticks (`route_charge_fact`): the charges at the table, those
+  resting on a reconcilable pair, and at an ejection the ejected player's reconcilable pairs and whether a charge against
+  them rested on one. The census-local `turn_placements` reader is deleted: `turn_placements` now groups the field's
+  `spoken_placements` by turn, for the four checked kinds, in a fixed order, so no placement or reconcile definition
+  exists outside `meetings/route_lines.py`. Cells `charges_on_a_reconcilable_pair` (over charges),
+  `ejections_on_a_reconcilable_pair` and `ejections_charged_on_a_reconcilable_pair` (over ejections, the second the
+  replay's M), and their witness-meeting forms (over ejections at witness meetings, the second the replay's W), under a
+  new heading, "Stated places the map or the regroup reconciles". The page carries the third caveat: a reconcilable pair
+  proves no innocence.
+- **Item 4, the route field's conformance cell.** `route_lines_version` is read by the new `route_lines` predicate
+  (`route_lines_version = 1`), which scopes every route line cell and table and guards the two conformance cells; its
+  `FIELD_CLASSIFICATION` entry is that predicate. The loader refuses a game whose recorded settings serve route lines
+  while its ballot stamp lacks the arm, and one whose stamp credits the arm without the setting
+  (`route_lines_stamped`: a `+`-part of the ballot template's stamp ending in the suffix the arm spine derives). It reads
+  each ballot's served block with the field's own `parse_route_lines` (`ballot_route_lines`, on the voter's last call
+  that validates as a ballot), and refuses a block the parser refuses and a block in a game that does not serve route
+  lines, naming set, seed, meeting and voter. The fold re-checks every served step on its own (`step_true_to_the_map`):
+  the doors by a breadth-first search over the set's own `CensusInputs.neighbours` (`census_doors`, never the meeting
+  layer's `room_hops`), the reading by the rule (`census_reading`: walking fits when the doors are at most the ticks
+  between, otherwise the first regroup tick in (earlier, later], and neither is a breach whatever the step reads), the
+  regroup tick against the meeting's `derive_regroup_ticks`; and every line against the voter's living candidates, the
+  places the meeting stated for its subject (`stated_places`, the field's reader on its route kinds) and one line per
+  candidate (`line_on_the_table`). Cells `meetings_with_a_route_line`, `ballots_carrying_route_lines`, and the guarded
+  `route_lines_false_to_the_map` (over steps served) and `route_lines_off_the_table` (over lines served); tables
+  `route_lines_per_meeting` (0, 1, 2, 3 or more) and `route_steps_by_reading` (rows read from the field's
+  `RouteReading`). The `<routes>` block is a held-data source of its own, `a route line` (item 1's open note).
+- **Item 4b, the field's reach.** The cell `ejections_charged_on_a_reconcilable_pair_shown_a_route_line`, scoped by the
+  field: ejections charged on a reconcilable pair at which some voter who voted to eject that player was served a line
+  about them. It is derivable from the census carrier through `meetings.route_lines` without re-implementing the
+  instrument: with each recorded ballot carrying the lines the field's own `build_route_lines` gives it (the meeting's
+  transcript, the voter's living candidates, the meeting's regroup ticks), the census's own fold of that carrier gives
+  the route-lines replay's published reach, 31 of 40 and 7 of 7 at witness meetings on round 2, and 22 of 29 and 0 of 0
+  on round 1, and its steps by reading (1,343 walking fits and 25 regroup crossings on round 2; 1,499 and 37 on round
+  1), with every one of those lines and steps passing the census's own map and table check
+  (`test_the_fields_reach_is_derivable_from_the_census_through_the_field`). It cost well under the two hours the
+  dispatch allowed, so the box is checked.
+
+**Decisions.**
+1. Every route line cell and table is scoped by `route_lines_version = 1`, as item 4 and the Era grouping item contract
+   ("every era without the field reads n/a"; "every scoped cell reads n/a, never 0"). On every committed set the field
+   is off, so they read n/a in every column; the page states it in each definition ("Counted only in games recorded with
+   `route_lines_version = 1`; in any other era it reads n/a") and in its legend. In a set recorded with the field the
+   two conformance cells read `0/N by construction` (the scripted game: 0/15 and 0/15). The dispatch note's "presence
+   reads 0" is read as that in-scope reading; the card's n/a governs the committed sets.
+2. The meeting's charge count composes the lifted functions as the replay's `read_meeting` does (every living player a
+   ballot or a flag names), in the census loader's `route_charge_fact`; the replay's `read_meeting` is unchanged, and the
+   meeting-by-meeting agreement holds the two together.
+3. A route block is read on every ballot of every game, and one in a game whose settings do not serve route lines
+   raises, beside the card's two stamp refusals: on the committed sets no ballot carries one.
+4. `route_steps_by_reading` and `route_lines_per_meeting` count each meeting's distinct lines, as the route-lines
+   replay does (its 1,343 and 25 reproduce); the conformance cells count every line and step served on every ballot.
+5. `_Accumulator.not_evaluable` now counts nothing in a cell out of its scope, as `count` already did: a ballot with
+   no recorded ballot call in an era without the route lines would otherwise publish a not-evaluable entry in an n/a
+   cell, which the published model refuses. No committed count moves.
+6. Each turn's placements are kept in a fixed order (tick, rooms, player, kind), since the field's reader orders
+   equal-keyed placements by set iteration.
+7. Test follow-through, each named: the carrier shape check now also walks the field's frozen pydantic models
+   (`RouteLine.subject` and `RouteStep`'s rooms are ids, and `MeetingFact.stated_places` holds ids and rooms); a stamped
+   copy recording the route lines credits their arm in its stamps (`_stamps_for`), and the later-settings walk asserts
+   those credited stamps; the planted unclassified block is `<rumours>`, since `<routes>` is now read; the heading order,
+   the scoped cell and table maps, the predicate listing and the n/a test name the new entries; the two route guards
+   share their scope, so they have no publishing twin and carry their own planted breaches (`ROUTE_GUARD_BREACHES`).
+8. `SCHEMA_VERSION` stays 2: the JSON gains cells, tables, terms and a row only. Its in-tree readers (the publisher,
+   `scripts/verify_ml_evidence.py`, the census's tests) read it unchanged.
+9. Follow-through outside the card's file list: none. `docs/artifacts.md`'s census row names the new groups; the
+   `experiments/lab/` row's size does not move (170 files, 7.0 MB).
+
+**Measured at this head, count-only, through the production path** (`uv run python scripts/publish_gameplay_census.py
+--check` recomputes the four committed sets; the r1 column is `--set-dir replays/candidates/stage-b-r1/9p2i
+--json-stdout`, never pooled).
+
+| reading | `samples/9p2i` (stage-b-r2) | `stage-b-r1/9p2i` (`--set-dir`) | baseline-9, pooled |
+|---|---|---|---|
+| charges resting on a reconcilable pair | 276/402 | 265/406 | 1,104/1,675 |
+| ejections whose target had a reconcilable pair | 41/66 | 31/54 | 200/321 |
+| ejections charged on a reconcilable pair (M) | 40/66 | 29/54 | 198/321 |
+| at witness meetings: the target had a pair; charged on one (W) | 7/12; 7/12 | 0/3; 0/3 | 8/13; 8/13 |
+| every route line cell and table | n/a | n/a | n/a |
+
+The authoring counts reproduce exactly (66; 41; 40, 276/402, 12; 7 on round 2; 54; 31; 29, 265/406, 3; 0 on round 1;
+321; 200; 198, 1,104/1,675 on baseline 9). Every phase-1 count is unchanged: the cited-line check now reads the field's
+reader and still gives 278 true and 3 false of 281 on round 2 and 244 and 15 of 259 on round 1.
+
+**The route-check replay, meeting by meeting.** On both round columns every meeting's charges, charges on a
+reconcilable pair and witness-meeting flag, and at an ejection the target's pairs and the misjudged flag, equal the
+committed JSON's: 117 meetings on round 2 and 124 on round 1, 0 differing
+(`test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting[r2]` and `[r1]`, after the blob-comparing
+precondition of phase 1). Planted: a JSON copy with one meeting's misjudged flag flipped names that meeting and field
+(`test_a_column_with_one_misjudged_flag_flipped_names_that_meeting`); the charge facts recomputed with no regroup tick
+break the r2 agreement, and with the loader's regroup ticks reproduce its facts
+(`test_a_loader_given_no_regroup_ticks_breaks_the_round_2_agreement`).
+
+**The positive carrier.** The route field's scripted game (`tests/_helpers/scripted_routes.py`), recorded with the
+setting and folded through the production loader: 2 of 2 meetings with a route line; 12 of 13 ballots carrying lines
+(the ejected opener's own ballot carries none); 0 of 15 steps false to the map and 0 of 15 lines off the table, each by
+construction; one meeting with one player's line and one with two; 2 walking fits and 1 regroup crossing; the one
+ejection, charged on a reconcilable pair, reached by a line (1 of 1). Recorded without the setting, every ballot
+carries no line and every route line cell reads n/a.
+
+**Planted cases**, each red on its defect (all in `tests/eval/test_gameplay_census.py` unless named):
+- Charges: the cells over a witness's report, a button ejection with a pair and no charge on it, and a meeting
+  ejecting no one (`test_the_route_charge_cells_count_charges_ejections_and_witness_meetings`); a missing fact is not
+  evaluable (`test_a_meeting_without_its_charge_fact_is_not_evaluable`); four incoherent facts are refused, naming the
+  set, seed and meeting (`test_an_incoherent_charge_fact_is_refused_naming_its_meeting`); a witness meeting's window and
+  opener (`test_a_witness_meeting_is_a_report_opened_by_a_witness_since_the_last_one`).
+- The library (`tests/eval/test_route_charges.py`): one home for the charge half, a copy left in the lab found
+  (`test_the_charge_half_has_one_home_and_the_lab_keeps_no_copy`); the field's `ast` test green with this library in the
+  tree and a copy of `reconcilable` in `eval/route_charges.py` found
+  (`test_the_field_one_home_test_holds_with_this_library_and_finds_a_copy_in_it`); the library imports only `meetings/`
+  and the standard library, a planted `experiments` import found; a charge by ballot and by flag, a pair misjudged only
+  when the map or the regroup reconciles it, and every pair in placement order.
+- Route lines: a three-door pair read as a walk within two ticks; a pair that neither walks nor crosses (REACTOR at 4 to
+  MEDBAY at 6, five doors, no regroup) under each reading; a wrong door count with the reading otherwise right; a
+  crossing where a walk fits; a regroup tick that never happened and one outside (earlier, later]; the last regroup tick
+  in place of the first; a walk naming a regroup tick; a step that is no change of room; a room off the map
+  (`test_a_step_the_map_or_the_game_does_not_give_is_false_to_the_map`); the card's example steps read true; a line at an
+  unstated place, a second line for one candidate, the voter's own line and a dead player's line, each raising with the
+  setting on and naming set, seed, meeting and voter, and counting nothing (n/a) without it
+  (`test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter`, five cases); the off-the-table predicate
+  (`test_a_line_is_on_the_table_only_for_a_living_candidate_at_stated_places`); each stamp mismatch
+  (`test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises`); the arm's suffix and template moved, the check
+  follows (`test_the_stamp_check_follows_the_arm_spines_derivation`), and a composite stamp is split wherever the arm
+  stands (`test_the_stamp_check_splits_a_composite_stamp_wherever_the_arm_stands`); a block the field's parser refuses
+  (`test_a_route_block_the_fields_parser_refuses_raises_naming_the_voter`); a block in a game that does not serve route
+  lines (`test_a_route_block_in_a_game_that_does_not_serve_route_lines_raises`); a perturbed copy of the field's line
+  pattern refuses the served block (`test_the_census_reads_a_route_line_by_the_fields_own_pattern`); the census's search
+  equals `room_hops` on every room pair of the canonical map, and one door removed from the copy breaks it
+  (`test_the_census_door_search_is_the_maps_hop_count_on_every_room_pair`); a walk across a door cut from the set's own
+  inputs is a breach (`test_the_fold_checks_a_step_against_the_doors_its_inputs_carry`); a vent sighting states no route
+  place and an alibi stay states its two ends (`test_stated_places_are_the_route_kinds_only`); the rows follow
+  `RouteReading` and the cap (`test_the_route_rows_follow_their_types`); every route line cell and table reads n/a
+  without the setting, a not-evaluable entry included
+  (`test_every_route_line_cell_and_table_reads_n_a_without_the_setting`).
+- The reach: a line shown only to a SKIP voter does not reach; a line about another candidate does not reach; a line
+  about the ejected player on an EJECT ballot does; an ejection not charged on a pair is outside the cell; an ejecting
+  ballot with no recorded call is not evaluable (`test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter`).
+- The page (`tests/scripts/test_publish_gameplay_census.py`): the caveats now include a reconcilable pair proving no
+  innocence and showing a line not changing a vote; the restatement scan reads every new definition.
+
+**Properties** (Hypothesis, `settings(deadline=None)` on each):
+- `test_every_ejection_charged_on_a_pair_has_one_and_the_witness_counts_are_a_part`: over generated meetings, every
+  ejection charged on a pair has one, and each witness-meeting count is exactly the ejections at witness meetings and
+  never more than its whole.
+- `test_the_link_check_is_doors_within_the_ticks_or_the_first_regroup_crossed`: over random room pairs, gaps and regroup
+  ticks, walking fits exactly when the doors are at most the ticks between, otherwise the first regroup tick in
+  (earlier, later] is crossed, and with neither every reading is a breach.
+- The held-place property gains the route block as a read place; the scope property now also requires a not-evaluable
+  entry to count only in scope; `test_permuting_the_roles_moves_no_route_count` holds every charge cell under any
+  permutation of the promoted set's roles.
+
+**The properties' perturbations**, each run against its property alone (harness `<scratch>/census-fix-r3/perturb.py`:
+edit `eval/gameplay_census.py`, run, restore from a saved copy):
+
+| perturbation | result | test that went red |
+|---|---|---|
+| `P1` witness counts taken over every meeting | killed | `test_every_ejection_charged_on_a_pair_has_one_and_the_witness_counts_are_a_part` |
+| `P2` the last regroup tick crossed in place of the first | killed (green on the first draw, which rarely held two regroup ticks inside a pair's ticks; the property now draws them around the pair and carries an explicit two-tick example) | `test_the_link_check_is_doors_within_the_ticks_or_the_first_regroup_crossed` |
+| `P3` `<` for `<=` in the walk rule | killed | `test_the_link_check_is_doors_within_the_ticks_or_the_first_regroup_crossed` |
+
+**Neuter table** (lesson 1): every production line, row and argument phase 2 adds or changes in
+`eval/gameplay_census.py`, `eval/route_charges.py` and the lab's imports, neutered alone (harness
+`<scratch>/census-fix-r3/harness.py` with the probe list `probes.py`: edit, run `tests/eval/test_gameplay_census.py`,
+`tests/scripts/test_publish_gameplay_census.py` and `tests/eval/test_route_charges.py`, with
+`tests/experiments/test_route_check_replay.py` for the library and the lab, `-n 8 -x`, Hypothesis reporting a failing
+example without shrinking it, restore from a saved copy). A cell, table or term neuter drops the whole entry; an
+`__all__` neuter drops the one name. The red test is the first one the run reported. The seven green neuters were each
+re-run, red, against the test added for it in `39e03863`; two door-search neuters made the first run never end (the
+search loops), and the bounded door test added in `39e03863` now fails each instead.
+
+180 neuters: 173 red on the first run; 7 of the 7 green ones killed by a test added for it, 0 named equivalent.
+
+| neuter | first run | test that went red |
+|---|---|---|
+| `read-block-routes` | red | `test_the_classified_blocks_are_every_tag_the_ballot_templates_render` |
+| `held-row-route` | red | `test_the_script_runs_from_any_directory_and_exits_with_mains_code` |
+| `held-read-routes` | red | `test_each_place_the_check_reads_names_its_own_row` |
+| `route-field-name` | red | `test_the_classification_and_the_predicates_name_each_other` |
+| `count-cap` | red | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `predicate-value` | red | `test_on_baseline_9_every_scoped_cell_and_table_reads_n_a` |
+| `predicates-listed` | red | `test_the_classification_and_the_predicates_name_each_other` |
+| `field-classified` | red | `test_the_classification_and_the_predicates_name_each_other` |
+| `heading-listed` | red | `test_every_cell_and_table_is_published_and_ordered_under_a_heading` |
+| `charge-reads-turns` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `charge-reads-ballots` | red | `test_the_script_runs_from_any_directory_and_exits_with_mains_code` |
+| `charge-reads-flags` | red | `test_the_script_runs_from_any_directory_and_exits_with_mains_code` |
+| `charge-reads-state` | red | `test_the_script_runs_from_any_directory_and_exits_with_mains_code` |
+| `charge-reads-earlier` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `line-reads-prompt` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `line-reads-turns` | red | `test_the_script_runs_from_any_directory_and_exits_with_mains_code` |
+| `line-reads-state` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `line-reads-earlier` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `cell-charges_on_a_reconcilable_pair` | red | `test_the_rows_found_are_the_denominator_so_a_mismatch_reads_n_a` |
+| `cell-ejections_on_a_reconcilable_pair` | red | `test_resting_on_the_room_left_needs_a_living_crew_sighting` |
+| `cell-ejections_charged_on_a_reconcilable_pair` | red | `test_resting_on_the_room_left_needs_a_living_crew_sighting` |
+| `cell-witness_meeting_ejections_on_a_reconcilable_pair` | red | `test_the_phase_two_cells_and_tables_read_no_role` |
+| `cell-witness_meeting_ejections_charged_on_a_reconcilable_pair` | red | `test_the_phase_two_cells_and_tables_read_no_role` |
+| `cell-meetings_with_a_route_line` | red | `test_corpse_age_reads_the_kill_event_tick_never_the_body_id` |
+| `cell-ballots_carrying_route_lines` | red | `test_the_scoped_cells_and_tables_are_exactly_these` |
+| `cell-route_lines_false_to_the_map` | red | `test_every_guarded_cell_has_a_planted_pair` |
+| `cell-route_lines_off_the_table` | red | `test_every_guarded_cell_has_a_planted_pair` |
+| `cell-ejections_charged_on_a_reconcilable_pair_shown_a_route_line` | red | `test_the_scoped_cells_and_tables_are_exactly_these` |
+| `table-route_lines_per_meeting` | red | `test_a_breach_raises_with_the_setting_on_and_publishes_with_it_off[own_kill_rows_breaching-_own_kill_row_citing_nothing]` |
+| `table-route_steps_by_reading` | red | `test_the_rows_found_are_the_denominator_so_a_mismatch_reads_n_a` |
+| `scope-meetings` | red | `test_the_scoped_cells_and_tables_are_exactly_these` |
+| `scope-ballots` | red | `test_the_scoped_cells_and_tables_are_exactly_these` |
+| `scope-reach` | red | `test_the_scoped_cells_and_tables_are_exactly_these` |
+| `guard-false-map` | red | `test_every_guarded_cell_has_a_planted_pair` |
+| `scope-false-map` | red | `test_the_scoped_cells_and_tables_are_exactly_these` |
+| `guard-off-table` | red | `test_every_guarded_cell_has_a_planted_pair` |
+| `scope-off-table` | red | `test_the_scoped_cells_and_tables_are_exactly_these` |
+| `scope-per-meeting` | red | `test_the_scoped_cells_and_tables_are_exactly_these` |
+| `scope-by-reading` | red | `test_the_scoped_cells_and_tables_are_exactly_these` |
+| `term-stated pair` | red | `test_the_committed_census_matches_a_recomputation` |
+| `term-reconciles` | red | `test_the_page_states_what_a_held_or_a_true_line_is_not` |
+| `term-charge` | red | `test_the_committed_census_matches_a_recomputation` |
+| `term-witness meeting` | red | `test_the_committed_census_matches_a_recomputation` |
+| `term-route line` | red | `test_the_page_states_what_a_held_or_a_true_line_is_not` |
+| `term-check-route` | red | `test_the_committed_census_matches_a_recomputation` |
+| `meaning-route-lines` | red | `test_every_setting_a_guard_or_scope_reads_has_its_meaning_on_the_page` |
+| `definition-held-route` | red | `test_the_script_runs_from_any_directory_and_exits_with_mains_code` |
+| `definition-sources-route` | red | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `fold-call-routes` | red | `test_an_incoherent_charge_fact_is_refused_naming_its_meeting[fact2-p-0-an` |
+| `not-evaluable-scope` | red | `test_resting_on_the_room_left_needs_a_living_crew_sighting` |
+| `witness-report` | red | `test_a_witness_meeting_is_a_report_opened_by_a_witness_since_the_last_one` |
+| `witness-floor` | red | `test_a_witness_meeting_is_a_report_opened_by_a_witness_since_the_last_one` |
+| `witness-opener` | red | `test_a_witness_meeting_is_a_report_opened_by_a_witness_since_the_last_one` |
+| `witness-upper` | red | `test_a_witness_meeting_is_a_report_opened_by_a_witness_since_the_last_one` |
+| `witness-lower` | red | `test_a_witness_meeting_is_a_report_opened_by_a_witness_since_the_last_one` |
+| `readings-type` | red | `test_the_route_rows_follow_their_types` |
+| `count-rows-more` | red | `test_the_route_rows_follow_their_types` |
+| `count-row-min` | red | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `doors-off-map` | green, killed by a new test | `test_the_door_search_reads_no_door_count_for_a_room_off_the_map` |
+| `doors-frontier` | red | `test_the_card_example_steps_are_true_to_the_map` |
+| `doors-seen` | green, killed by a new test | `test_the_door_search_reads_each_room_once_and_ends_where_no_door_leads` |
+| `doors-hit` | red | `test_the_card_example_steps_are_true_to_the_map` |
+| `doors-count` | red | `test_the_card_example_steps_are_true_to_the_map` |
+| `doors-unseen` | red | the run did not finish in 300 s (the search never ends); since `39e03863` `test_the_door_search_reads_each_room_once_and_ends_where_no_door_leads` fails it |
+| `doors-seen-add` | green, killed by a new test | `test_the_door_search_reads_each_room_once_and_ends_where_no_door_leads` |
+| `doors-reached` | red | `test_the_card_example_steps_are_true_to_the_map` |
+| `doors-advance` | red | the run did not finish in 300 s (the search never ends); since `39e03863` `test_the_door_search_reads_each_room_once_and_ends_where_no_door_leads` fails it |
+| `reading-walk` | red | `test_a_step_the_map_or_the_game_does_not_give_is_false_to_the_map[planted4-regroups4]` |
+| `reading-window` | red | `test_a_step_the_map_or_the_game_does_not_give_is_false_to_the_map[planted6-regroups6]` |
+| `reading-crossing` | red | `test_the_card_example_steps_are_true_to_the_map` |
+| `step-door-guard` | red | `test_a_step_the_map_or_the_game_does_not_give_is_false_to_the_map[planted3-regroups3]` |
+| `step-door-zero` | red | `test_a_step_the_map_or_the_game_does_not_give_is_false_to_the_map[planted9-regroups9]` |
+| `step-door-count` | red | `test_a_step_the_map_or_the_game_does_not_give_is_false_to_the_map[planted3-regroups3]` |
+| `step-reading` | red | `test_a_step_the_map_or_the_game_does_not_give_is_false_to_the_map[planted4-regroups4]` |
+| `step-regroups` | red | `test_the_card_example_steps_are_true_to_the_map` |
+| `line-candidate` | red | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_the_voters_own_line]` |
+| `line-place` | red | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_unstated_place]` |
+| `line-from-place` | green, killed by a new test | `test_a_line_is_off_the_table_at_an_unstated_first_place` |
+| `line-to-place` | red | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_unstated_place]` |
+| `routes-zero-counts` | red | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `routes-zero-readings` | red | `test_the_route_rows_follow_their_types` |
+| `routes-previous` | red | `test_every_ejection_charged_on_a_pair_has_one_and_the_witness_counts_are_a_part` |
+| `routes-call-charges` | red | `test_an_incoherent_charge_fact_is_refused_naming_its_meeting[fact2-p-0-an` |
+| `routes-call-lines` | red | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `charges-none-charges` | red | `test_a_meeting_without_its_charge_fact_is_not_evaluable` |
+| `charges-none-on-pair` | red | `test_a_meeting_without_its_charge_fact_is_not_evaluable` |
+| `charges-none-charged` | red | `test_a_meeting_without_its_charge_fact_is_not_evaluable` |
+| `charges-none-witness` | red | `test_a_meeting_without_its_charge_fact_is_not_evaluable` |
+| `charges-coherent-count` | red | `test_an_incoherent_charge_fact_is_refused_naming_its_meeting[fact0-None-more` |
+| `charges-count-loop` | red | `test_the_route_charge_cells_count_charges_ejections_and_witness_meetings` |
+| `charges-count-hit` | red | `test_the_route_charge_cells_count_charges_ejections_and_witness_meetings` |
+| `charges-coherent-none` | red | `test_an_incoherent_charge_fact_is_refused_naming_its_meeting[fact1-None-a` |
+| `charges-coherent-pairs` | red | `test_an_incoherent_charge_fact_is_refused_naming_its_meeting[fact2-p-0-an` |
+| `charges-count-on-pair` | red | `test_every_ejection_charged_on_a_pair_has_one_and_the_witness_counts_are_a_part` |
+| `charges-count-charged` | red | `test_every_ejection_charged_on_a_pair_has_one_and_the_witness_counts_are_a_part` |
+| `charges-count-witness` | red | `test_the_route_charge_cells_count_charges_ejections_and_witness_meetings` |
+| `reach-charged-only` | red | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `reach-ejecting` | red | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `reach-unreadable` | red | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `reach-subject` | red | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `lines-none` | red | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `lines-ballots` | red | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `lines-candidates` | red | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_the_voters_own_line]` |
+| `lines-second` | red | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_second_line]` |
+| `lines-subjects-add` | red | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_second_line]` |
+| `lines-off-table` | red | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_a_dead_players_line]` |
+| `lines-false-map` | red | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_false_to_the_map-_off_map]` |
+| `lines-neighbours` | red | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_second_line]` |
+| `lines-regroups` | red | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `lines-distinct` | red | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `lines-meetings` | red | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `lines-per-meeting` | red | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `lines-steps` | red | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `placements-kinds` | red | `test_every_value_the_census_holds_is_read_only` |
+| `placements-sorted` | red | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
+| `placements-order-player` | red | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
+| `placements-player` | red | `test_turn_facts_keep_ids_ticks_and_alibi_legs` |
+| `placements-tick` | red | `test_turn_facts_keep_ids_ticks_and_alibi_legs` |
+| `stated-kinds` | red | `test_stated_places_are_the_route_kinds_only` |
+| `stated-tick` | red | `test_the_scripted_route_lines_game_is_read_back_and_counted` |
+| `charge-fact-ballots` | red | `test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting[r2]` |
+| `charge-fact-flags` | red | `test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting[r2]` |
+| `charge-fact-charges` | red | `test_every_value_the_census_holds_is_read_only` |
+| `charge-fact-resting` | red | `test_the_script_runs_from_any_directory_and_exits_with_mains_code` |
+| `charge-fact-regroups` | green, killed by a new test | `test_a_charge_resting_only_on_a_regroup_crossing_needs_the_regroup_ticks` |
+| `charge-fact-no-ejection` | red | `test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting[r2]` |
+| `charge-fact-pairs` | red | `test_every_value_the_census_holds_is_read_only` |
+| `charge-fact-charged` | red | `test_the_scripted_route_lines_game_is_read_back_and_counted` |
+| `charge-fact-union` | red | `test_the_scripted_route_lines_game_is_read_back_and_counted` |
+| `stamp-template` | red | `test_the_stamp_check_follows_the_arm_spines_derivation` |
+| `stamp-suffix` | red | `test_the_loader_reads_the_game_ending_trigger_tick_of_samples_4p1i_seed_3` |
+| `stamp-split` | red | `test_the_stamp_check_splits_a_composite_stamp_wherever_the_arm_stands` |
+| `block-no-call` | red | `test_the_opening_handle_is_read_from_the_openers_own_first_prompt` |
+| `block-parse-wrap` | red | `test_the_census_reads_a_route_line_by_the_fields_own_pattern` |
+| `block-not-served` | red | `test_a_route_block_in_a_game_that_does_not_serve_route_lines_raises` |
+| `block-return` | red | `test_the_census_reads_a_route_line_by_the_fields_own_pattern` |
+| `meeting-placements` | red | `test_round_1_and_the_promoted_set_never_pool_before_a_new_cell_is_summed` |
+| `meeting-route-lines` | red | `test_the_scripted_route_lines_game_is_read_back_and_counted` |
+| `meeting-served` | green, killed by a new test | `test_the_loader_refuses_a_route_block_its_settings_do_not_serve` |
+| `meeting-charges` | red | `test_a_loader_given_no_regroup_ticks_breaks_the_round_2_agreement` |
+| `meeting-charge-regroups` | red | `test_a_loader_given_no_regroup_ticks_breaks_the_round_2_agreement` |
+| `meeting-regroup-field` | red | `test_a_loader_given_no_regroup_ticks_breaks_the_round_2_agreement` |
+| `meeting-stated` | red | `test_the_fields_reach_is_derivable_from_the_census_through_the_field[r2]` |
+| `game-served` | red | `test_a_census_walk_without_a_layer_refuses_its_setting_before_advancing[route_lines_version-1]` |
+| `game-stamp-check` | red | `test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises` |
+| `game-config` | red | `test_a_loader_given_no_regroup_ticks_breaks_the_round_2_agreement` |
+| `game-earlier` | red | `test_a_loader_given_no_regroup_ticks_breaks_the_round_2_agreement` |
+| `game-served-arg` | red | `test_the_scripted_route_lines_game_is_read_back_and_counted` |
+| `export-ROUTE_LINES` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-ROUTE_LINES_FIELD` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-ROUTE_LINE_COUNT_CAP` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-RouteChargeFact` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-ballot_route_lines` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-census_doors` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-census_reading` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-is_witness_meeting` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-line_on_the_table` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-route_charge_fact` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-route_line_count_row` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-route_line_count_rows` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-route_lines_stamped` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-route_readings` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-stated_places` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `export-step_true_to_the_map` | red | `test_the_module_exports_every_public_name_it_defines` |
+| `lab-witness` | red | `test_the_charge_half_has_one_home_and_the_lab_keeps_no_copy` |
+| `lab-charge` | red | `test_the_charge_half_has_one_home_and_the_lab_keeps_no_copy` |
+| `lab-charges-against` | red | `test_the_charge_half_has_one_home_and_the_lab_keeps_no_copy` |
+| `lab-misjudging` | red | `test_the_charge_half_has_one_home_and_the_lab_keeps_no_copy` |
+| `lab-ordered` | red | `test_the_charge_half_has_one_home_and_the_lab_keeps_no_copy` |
+| `lib-ordered-sort` | green, killed by a new test | `test_ordered_pairs_sort_their_input_by_the_placement_key` |
+| `lib-ordered-later` | red | `test_the_fields_reach_is_derivable_from_the_census_through_the_field[r2]` |
+| `lib-ballot-guard` | red | `test_the_fields_reach_is_derivable_from_the_census_through_the_field[r2]` |
+| `lib-cited` | red | `test_the_fields_reach_is_derivable_from_the_census_through_the_field[r2]` |
+| `lib-cited-guard` | red | `test_the_script_runs_from_any_directory_and_exits_with_mains_code` |
+| `lib-flag-subject` | red | `test_a_charge_rests_on_a_cited_placement_or_a_flag_of_placements` |
+| `lib-flag-event` | red | `test_a_charge_rests_on_a_cited_placement_or_a_flag_of_placements` |
+| `lib-flag-all` | red | `test_a_charge_rests_on_a_cited_placement_or_a_flag_of_placements` |
+| `lib-flag-union` | red | `test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting[r2]` |
+| `lib-misjudged-charged` | red | `test_the_fields_reach_is_derivable_from_the_census_through_the_field[r2]` |
+| `lib-misjudged-rule` | red | `test_every_value_the_census_holds_is_read_only` |
+
+**The bounded mutation pass** (lesson 10): 39 mutants of exactly the eight listed classes over `eval/route_charges.py`
+and the census spans phase 2 adds, each run alone against the touched suites by the same harness. The six survivors
+were each re-run, red, against the test added for it in `39e03863`. The pass then stopped.
+
+39 mutants (F 7, S 4, N 7, C 5, M 4, T 4, B 2, L 6): 33 killed on the first run, 6 killed by a test added for them, 0 named equivalent. The pass then stopped.
+
+| mutant | class | result | test that went red |
+|---|---|---|---|
+| `F1-charge-targets-living` | F | survived, then killed | `test_a_dead_player_brings_no_charge_by_ballot_or_flag` |
+| `F2-charge-flags-living` | F | survived, then killed | `test_a_dead_player_brings_no_charge_by_ballot_or_flag` |
+| `F3-reach-ejecting` | F | killed | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `F4-placements-sorted` | F | killed | `test_turn_placements_read_the_four_kinds_and_nothing_else` |
+| `F5-stated-kinds` | F | killed | `test_stated_places_are_the_route_kinds_only` |
+| `F6-reading-window` | F | killed | `test_a_step_the_map_or_the_game_does_not_give_is_false_to_the_map[planted6-regroups6]` |
+| `F7-lib-misjudged-charged` | F | killed | `test_the_fields_reach_is_derivable_from_the_census_through_the_field[r2]` |
+| `S1-candidates-with-voter` | S | killed | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_off_the_table-_the_voters_own_line]` |
+| `S2-stated-any-player` | S | killed | `test_a_line_is_on_the_table_only_for_a_living_candidate_at_stated_places` |
+| `S3-charge-own-universe` | S | killed | `test_the_fields_reach_is_derivable_from_the_census_through_the_field[r2]` |
+| `S4-reach-all-ballots` | S | killed | `test_a_route_line_reaches_an_ejection_only_through_an_ejecting_voter` |
+| `N1-witness-floor` | N | killed | `test_a_witness_meeting_is_a_report_opened_by_a_witness_since_the_last_one` |
+| `N2-block-call` | N | killed | `test_the_opening_handle_is_read_from_the_openers_own_first_prompt` |
+| `N3-charge-fact` | N | killed | `test_entries_keep_the_fresh_kill_window_and_the_meeting_boundary` |
+| `N4-lines-none` | N | killed | `test_resting_on_the_room_left_needs_a_living_crew_sighting` |
+| `N5-walk-strict` | N | killed | `test_the_card_example_steps_are_true_to_the_map` |
+| `N6-door-count-inverse` | N | killed | `test_the_card_example_steps_are_true_to_the_map` |
+| `N7-no-ejection` | N | killed | `test_every_value_the_census_holds_is_read_only` |
+| `C1-witness-meeting-tick` | C | killed | `test_a_witness_meeting_is_a_report_opened_by_a_witness_since_the_last_one` |
+| `C2-stated-tick` | C | killed | `test_the_scripted_route_lines_game_is_read_back_and_counted` |
+| `C3-line-to-tick` | C | killed | `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter[route_lines_false_to_the_map-_off_map]` |
+| `C4-placement-kind` | C | killed | `test_turn_facts_keep_ids_ticks_and_alibi_legs` |
+| `C5-step-reading` | C | killed | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `M1-stamp-lacks` | M | killed | `test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises` |
+| `M2-block-voter` | M | killed | `test_a_route_block_in_a_game_that_does_not_serve_route_lines_raises` |
+| `M3-lines-voter` | M | survived, then killed | `test_a_route_line_breach_names_whichever_voter_was_served_it` |
+| `M4-charges-where` | M | survived, then killed | `test_an_incoherent_charge_fact_names_whichever_meeting_holds_it` |
+| `T1-read-blocks-routes` | T | killed | `test_the_classified_blocks_are_every_tag_the_ballot_templates_render` |
+| `T2-held-source-route` | T | killed | `test_the_script_runs_from_any_directory_and_exits_with_mains_code` |
+| `T3-count-rows-more` | T | killed | `test_the_route_lines_cells_count_ballots_lines_and_steps` |
+| `T4-charge-reads-flags` | T | killed | `test_set_dir_over_a_planted_copy_prints_json_and_writes_nothing` |
+| `B1-walk-and-crossing` | B | killed | `test_a_step_the_map_or_the_game_does_not_give_is_false_to_the_map[planted4-regroups4]` |
+| `B2-serve-message` | B | killed | `test_a_stamp_without_the_arm_or_the_arm_without_the_setting_raises` |
+| `L1-readings-literal` | L | killed | `test_the_route_rows_follow_their_types` |
+| `L2-stamp-suffix-literal` | L | killed | `test_the_stamp_check_follows_the_arm_spines_derivation` |
+| `L3-stamp-template-literal` | L | killed | `test_the_stamp_check_follows_the_arm_spines_derivation` |
+| `L4-checked-kinds-literal` | L | survived, then killed | `test_the_checked_placements_follow_their_type` |
+| `L5-route-kinds-literal` | L | survived, then killed | `test_the_stated_places_follow_the_fields_route_kinds` |
+| `L6-neighbours-canonical` | L | killed | `test_the_fold_checks_a_step_against_the_doors_its_inputs_carry` |
+
+**Verification at this head.** Measured at `39e03863`, the code head; the commits after it touch only this card.
+
+| command | exit | result |
+|---|---|---|
+| `env \| grep -c '^AILIBI_'` | - | 0 |
+| `uv run pytest tests/eval/test_route_charges.py tests/eval/test_gameplay_census.py tests/scripts/test_publish_gameplay_census.py tests/experiments/test_route_check_replay.py tests/meetings/test_route_lines.py -n 6 --dist loadfile` | 0 | 791 passed (the field's one-home `ast` test among them, green) |
+| `uv run pytest tests/eval/test_evidence_honesty.py -n 6 --dist loadfile` | 0 | 114 passed |
+| `uv run pytest tests/experiments/test_route_lines_replay.py -n 6 --dist loadfile` | 0 | 26 passed |
+| `uv run python -m experiments.lab.route_check_replay --check` (full clone) | 0 | reproduced, 46.5 s |
+| `uv run python -m experiments.lab.route_lines_replay --check` (full clone) | 0 | reproduced, 44.6 s |
+| `uv run python scripts/publish_gameplay_census.py --check` | 0 | consistent with the committed recordings |
+| `uv run python scripts/publish_gameplay_census.py --set-dir replays/candidates/stage-b-r1/9p2i --json-stdout` | 0 | the r1 column above |
+| `uv run python scripts/publish_process_scorecard.py --check` | 0 | consistent; the scorecard page and JSON are byte-identical |
+| `uv run python scripts/verify_ml_evidence.py` (offline, never `--complete`) | 0 | 63 checks, 51 OK, 0 FAIL, 7 evidence-branch absent, 5 info |
+| `uv run lint-imports` | 0 | 4 kept, 0 broken |
+| `uv run python scripts/validate_task_docs.py` | 0 | 390 phase tasks and prompts; 102 work cards |
+| `uv run python scripts/check_doc_facts.py` | 0 | every checked figure true |
+| `uv run mypy` on the three production modules and the three test modules; `uv run ruff check` and `ruff format --check` on `eval/`, `experiments/lab/`, `tests/eval/`, `tests/scripts/` | 0 | clean |
+| `git diff --stat origin/main -- replays/ docs/process-scorecard.md docs/process-scorecard.json experiments/lab/results-route-check-replay.json experiments/lab/report-route-check-replay.md experiments/lab/results-route-lines-replay.json experiments/lab/report-route-lines-replay.md` | - | empty |
+| `bash scripts/verify_samples.sh replays/<set>`, for samples/9p2i, samples/4p1i, ml_corpus/9p2i, ml_corpus/4p1i, candidates/stage-b-r1/9p2i | 0 each | 50, 50, 150, 50 and 50 samples verified clean |
+| `uv run python scripts/build_sample_report.py --check --sample-dir replays/<set>`, the same five | 0 each | each report consistent with its replays |
+| `uv run pytest -m campaign -n 6` | 0 | 337 passed |
+| demo bundle, built in this one checkout at `2228eb4a` (`main`) and at `39e03863` (`uv run python scripts/build_demo_bundle.py --out DIR` each, then `diff -r`) | 0 | 109 files each, empty diff: nothing ships |
+| `bash scripts/check.sh` at the pushed head (run once, output to a file, exit code from the run itself) | pending | recorded in the last card commit |
+
+**Limitations.**
+- Each round is one hosted recording of 50 games; the counts describe those games and are no bar.
+- A reconcilable pair proves no innocence: the charge cells count a process at the table, not a wrong vote.
+- No committed set carries the route lines, so every route line cell reads n/a there; the conformance check is
+  exercised by the field's scripted game, the planted carriers and the reach derivation, and first reads a hosted
+  recording at round 3.
+- The reach derivation runs the field's builder over the recorded ballots as a reading, never a recording; reaching is
+  showing a line, not changing a vote.
+- The r2 agreement reads `replays/samples/9p2i` as the route-check replay pinned it; a promotion that replaces that set
+  retires or re-points the r2 agreement, as the card's Constraints say, and the r1 agreement survives it.
