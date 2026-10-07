@@ -89,11 +89,20 @@ from eval.eras import STAGE_B_R2  # noqa: E402
 from eval.gameplay_census import (  # noqa: E402
     CensusInputs,
     GameFacts,
-    KillFact,
     MeetingFact,
     canonical_settings,
+    is_witness_meeting as is_witness_meeting,
     load_census_inputs,
     recorded_game_eras,
+)
+
+# The charge half lives in the census's library; the public names are
+# re-exported for this replay's readers and tests.
+from eval.route_charges import (  # noqa: E402
+    Charge as Charge,
+    charges_against as charges_against,
+    misjudging_pairs as misjudging_pairs,
+    ordered_pairs as ordered_pairs,
 )
 from eval.validity import seeds_on_disk  # noqa: E402
 from meetings.corroboration import (  # noqa: E402
@@ -109,7 +118,6 @@ from meetings.route_lines import (  # noqa: E402
     Placement as Placement,
     PlacementKind as PlacementKind,
     _alibi_stay_placements,
-    _placement_key,
     placements_of as placements_of,
     reconcilable as reconcilable,
     spoken_placements as spoken_placements,
@@ -429,79 +437,6 @@ def require_declared_settings(
                 f"column {label}: seed {seed} recorded settings that differ from "
                 f"the config its label declares ({declared})"
             )
-
-
-# ---------------------------------------------------------------------------
-# The universe of spoken placements, read by ``meetings.route_lines``
-# ---------------------------------------------------------------------------
-
-
-def ordered_pairs(spots: Sequence[Placement]) -> Iterator[tuple[Placement, Placement]]:
-    ordered = sorted(spots, key=_placement_key)
-    for index, earlier in enumerate(ordered):
-        for later in ordered[index + 1 :]:
-            yield earlier, later
-
-
-@dataclass(frozen=True)
-class Charge:
-    """An EJECT ballot or a flag resting on typed placements of its target."""
-
-    source: Literal["ballot", "flag"]
-    placements: frozenset[Placement]
-
-
-def charges_against(
-    target: PlayerId,
-    *,
-    ballots: Sequence[VoteBallot],
-    contradictions: Sequence[ContradictionRef],
-    universe: Sequence[Placement],
-) -> tuple[Charge, ...]:
-    """The charges against ``target`` at one meeting.
-
-    A charge is an EJECT ballot for ``target`` whose primary reason cites a turn
-    carrying a typed placement of ``target``, or a contradiction flag naming
-    ``target`` whose every event is such a placement.
-    """
-
-    own = placements_of(universe, target)
-    found: list[Charge] = []
-    for ballot in ballots:
-        if ballot.target != target or ballot.primary_reason_id is None:
-            continue
-        cited = frozenset(
-            spot for spot in own if spot.turn_id == ballot.primary_reason_id
-        )
-        if cited:
-            found.append(Charge("ballot", cited))
-    for flag in contradictions:
-        if target not in flag.subjects:
-            continue
-        events = (flag.event_a_id, flag.event_b_id)
-        resolved = [
-            frozenset(spot for spot in own if spot.event_id == event)
-            for event in events
-        ]
-        if all(resolved):
-            found.append(Charge("flag", frozenset().union(*resolved)))
-    return tuple(found)
-
-
-def misjudging_pairs(
-    universe_of_target: Sequence[Placement],
-    charged: frozenset[Placement],
-    *,
-    regroup_ticks: frozenset[int],
-) -> tuple[tuple[Placement, Placement], ...]:
-    """The reconcilable pairs of which a charged placement is one end."""
-
-    return tuple(
-        (earlier, later)
-        for earlier, later in ordered_pairs(universe_of_target)
-        if (earlier in charged or later in charged)
-        and reconcilable(earlier, later, regroup_ticks=regroup_ticks) is not None
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1596,20 +1531,6 @@ def meeting_kind(fact: MeetingFact) -> MeetingKind:
         return "button"
     proof = any(subjects & fact.living for subjects in fact.vent_flag_subjects)
     return "report_vent_proof" if proof else "report_no_vent_proof"
-
-
-def is_witness_meeting(
-    fact: MeetingFact, *, kills: Sequence[KillFact], previous_tick: int | None
-) -> bool:
-    """A report whose reporter the kill facts record witnessing a kill since the last meeting."""
-
-    if fact.trigger_kind != "report":
-        return False
-    floor = -1 if previous_tick is None else previous_tick
-    return any(
-        fact.opener in kill.witnesses and floor < kill.tick <= fact.tick
-        for kill in kills
-    )
 
 
 def walk_game(

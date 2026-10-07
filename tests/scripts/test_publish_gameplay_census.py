@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -667,13 +668,45 @@ def test_the_page_says_what_it_is_not_and_defines_its_terms() -> None:
         "re-tally",
         "holds-nothing label",
         "rebuttal citation",
+        "living candidate",
+        "holds-nothing check",
+        "cited line",
+        "checkable",
     ):
         assert f"* **{term}**:" in opening, term
     assert id_shapes(page) == []
     retally = census.TERMS["re-tally"]
     assert "Every other ballot is held fixed" in retally
     assert "real voters would have heard different speech" in retally
-    assert "not a checked fact" in census.CELLS["skips_holding_nothing"].definition
+    label = census.CELLS["skips_holding_nothing"].definition
+    assert "the holds-nothing check reads it against the lines" in label
+    assert (
+        "the holds-nothing check reads it against the lines"
+        in (census.TERMS["holds-nothing label"])
+    )
+
+
+def test_the_page_states_what_a_held_or_a_true_line_is_not() -> None:
+    """The held-data caveats stand on the page: a line held is not a reason to
+    vote, the label reads as nothing that resolves the vote rather than nothing
+    held, a true cited line is not a correct vote, a reconcilable pair proves no
+    innocence, and showing a route line is not changing a vote."""
+
+    page = " ".join((ROOT / command.MARKDOWN_PATH).read_text(encoding="utf-8").split())
+    for caveat in (
+        "a line held is not a reason to vote",
+        "reads as nothing that resolves the vote, not as nothing held",
+        "A true cited line is not a correct vote",
+        "a false one may still have been believed",
+        "This counts co-occurrence and measures no delay",
+        "A reconcilable pair proves no innocence",
+        "Showing a line is not changing a vote",
+    ):
+        assert caveat in page, caveat
+    assert "A reconcilable pair proves no innocence" in census.TERMS["reconciles"]
+    assert "showing a line is not changing a vote" in census.TERMS["route line"]
+    assert "is not a reason to vote" in census.TERMS["holds-nothing check"]
+    assert "a true cited line is not a correct vote" in census.TERMS["checkable"]
 
 
 #: What restating the reporter line, or relating one rate to another, reads like:
@@ -691,6 +724,9 @@ _RESTATEMENTS = (
         r"\brates?\b[^.|\n]*\b(?:divided by|over|against)\b[^.|\n]*\brates?\b",
         re.IGNORECASE,
     ),
+    re.compile(r"\bflagged (?:above|below|over|under)\b", re.IGNORECASE),
+    re.compile(r"\bbars?\b", re.IGNORECASE),
+    re.compile(r"\bflag values?\b", re.IGNORECASE),
 )
 
 
@@ -749,6 +785,29 @@ def test_a_relative_risk_cell_turns_the_restatement_scan_red(
         "relative",
         "risk",
     ]
+
+
+def test_a_definition_drawing_a_line_turns_the_restatement_scan_red(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planted: a new held-data definition naming a flag line and a bar."""
+
+    spec = census.CELLS["cited_lines_false_to_the_route"]
+    planted_cell = replace(
+        spec,
+        definition=spec.definition
+        + " A set is flagged above two in a hundred, the bar a round must clear.",
+    )
+    monkeypatch.setattr(
+        census,
+        "CELLS",
+        MappingProxyType(
+            {**census.CELLS, "cited_lines_false_to_the_route": planted_cell}
+        ),
+    )
+    planted = census_from_inputs([_planted_inputs()])
+    page = command.render_markdown(planted)
+    assert restatements(_published_text(planted, page)) == ["bar", "flagged above"]
 
 
 def test_a_title_carrying_a_memo_style_id_fails_the_copy_scan() -> None:

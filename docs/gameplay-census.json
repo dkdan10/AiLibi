@@ -45,6 +45,25 @@
             "scope": null,
             "title": "Impostor ballots written against a teammate"
           },
+          "ballots_carrying_route_lines": {
+            "by_construction": null,
+            "definition": "Ballots, whatever the voter's role, whose voter's own recorded ballot prompt carried the route lines block, over ballots with a recorded ballot call.",
+            "denominator": 0,
+            "guard": null,
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": false,
+            "not_evaluable": 0,
+            "numerator": 0,
+            "rate": null,
+            "reads": [
+              "recorded ballot prompt",
+              "meeting row turns",
+              "state at the meeting",
+              "earlier meeting rows"
+            ],
+            "scope": "route_lines_version = 1",
+            "title": "Ballots carrying route lines"
+          },
           "ballots_citing_a_rebuttal": {
             "by_construction": null,
             "definition": "Ballots whose cited turn is a repeat-speaker turn of the same meeting, over all ballots at meetings with a repeat-speaker turn.",
@@ -96,6 +115,64 @@
             "scope": null,
             "title": "Button meetings with vent proof"
           },
+          "charges_on_a_reconcilable_pair": {
+            "by_construction": null,
+            "definition": "Charges at the table, whatever the role of the voter or of the player charged, one of whose stated places is an end of a stated pair that reconciles, over every charge at the table. A charge is an EJECT ballot whose cited turn states a place of its target, or a flag whose two events each state a place of a player it names. A reconcilable pair proves no innocence.",
+            "denominator": 1675,
+            "guard": null,
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "numerator": 1104,
+            "rate": 0.659104,
+            "reads": [
+              "meeting row turns",
+              "meeting row ballots",
+              "meeting row flags",
+              "state at the meeting",
+              "earlier meeting rows"
+            ],
+            "scope": null,
+            "title": "Charges resting on a stated pair the map or the regroup reconciles"
+          },
+          "cited_lines_false_to_the_route": {
+            "by_construction": null,
+            "definition": "EJECT ballots labelled supported, whatever the voter's role, with at least one placement of the target in the cited turn the engine route makes false, over supported EJECTs whose cited turn places the target checkably. A voter who believed a false line still held it.",
+            "denominator": 842,
+            "guard": null,
+            "heading": "What a ballot held",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "numerator": 24,
+            "rate": 0.028504,
+            "reads": [
+              "meeting row ballots",
+              "meeting row turns",
+              "state after the tick",
+              "state after the meeting"
+            ],
+            "scope": null,
+            "title": "Supported EJECTs whose cited line the route makes false"
+          },
+          "cited_lines_true_to_the_route": {
+            "by_construction": null,
+            "definition": "EJECT ballots labelled supported, whatever the voter's role, whose every checkable placement of the target in the cited turn the engine route makes true, over supported EJECTs whose cited turn places the target checkably. A true cited line is not a correct vote.",
+            "denominator": 842,
+            "guard": null,
+            "heading": "What a ballot held",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "numerator": 818,
+            "rate": 0.971496,
+            "reads": [
+              "meeting row ballots",
+              "meeting row turns",
+              "state after the tick",
+              "state after the meeting"
+            ],
+            "scope": null,
+            "title": "Supported EJECTs whose cited line the route makes true"
+          },
           "crew_witnessed_kills_held_at_next_meeting": {
             "by_construction": null,
             "definition": "Crew-witnessed kills with a crewmate witness alive at the next meeting, over crew-witnessed kills a meeting followed; the rest are not evaluable.",
@@ -128,6 +205,67 @@
             ],
             "scope": null,
             "title": "Ejections whose confidence floor only impostors met"
+          },
+          "ejections_charged_on_a_reconcilable_pair": {
+            "by_construction": null,
+            "definition": "Ejections, whatever the ejected player's role, where some charge against the ejected player rested on a stated pair that reconciles, over all ejections. A reconcilable pair proves no innocence.",
+            "denominator": 321,
+            "guard": null,
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "numerator": 198,
+            "rate": 0.616822,
+            "reads": [
+              "meeting row turns",
+              "meeting row ballots",
+              "meeting row flags",
+              "state at the meeting",
+              "earlier meeting rows"
+            ],
+            "scope": null,
+            "title": "Ejections charged on a stated pair that reconciles"
+          },
+          "ejections_charged_on_a_reconcilable_pair_shown_a_route_line": {
+            "by_construction": null,
+            "definition": "Ejections charged on a stated pair that reconciles at which some voter who voted to eject that player was served a route line about them, over ejections charged on such a pair. Every served step reconciles. Showing a line is not changing a vote.",
+            "denominator": 0,
+            "guard": null,
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": false,
+            "not_evaluable": 0,
+            "numerator": 0,
+            "rate": null,
+            "reads": [
+              "meeting row turns",
+              "meeting row ballots",
+              "meeting row flags",
+              "state at the meeting",
+              "earlier meeting rows",
+              "recorded ballot prompt"
+            ],
+            "scope": "route_lines_version = 1",
+            "title": "Ejections charged on a stated pair that reconciles, with a route line shown to an ejecting voter"
+          },
+          "ejections_on_a_reconcilable_pair": {
+            "by_construction": null,
+            "definition": "Ejections, whatever the ejected player's role, where the meeting stated a pair of the ejected player's places that reconciles, over all ejections. A reconcilable pair proves no innocence: the two places could both be true, and either could be false.",
+            "denominator": 321,
+            "guard": null,
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "numerator": 200,
+            "rate": 0.623053,
+            "reads": [
+              "meeting row turns",
+              "meeting row ballots",
+              "meeting row flags",
+              "state at the meeting",
+              "earlier meeting rows"
+            ],
+            "scope": null,
+            "title": "Ejections whose ejected player had a stated pair that reconciles"
           },
           "ejections_undone_with_impostor_ballots_as_skip": {
             "by_construction": null,
@@ -278,6 +416,42 @@
             ],
             "scope": null,
             "title": "Held kills whose witness voted the killer"
+          },
+          "holds_nothing_skips_naming_a_candidate": {
+            "by_construction": null,
+            "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names a living candidate in at least one of those places, over all SKIP ballots labelled as holding nothing: the complement of the cell above. A line held is not a reason to vote.",
+            "denominator": 764,
+            "guard": null,
+            "heading": "What a ballot held",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "numerator": 764,
+            "rate": 1.0,
+            "reads": [
+              "meeting row ballots",
+              "recorded ballot prompt",
+              "state at the meeting"
+            ],
+            "scope": null,
+            "title": "Holds-nothing SKIPs whose prompt names a living candidate"
+          },
+          "holds_nothing_skips_naming_no_candidate": {
+            "by_construction": null,
+            "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names no living candidate in an observation row, an evidence row, a flag, a typed or spoken turn line or a route line, over all SKIP ballots labelled as holding nothing. The label reads as nothing that resolves the vote, not as nothing held, and a line held is not a reason to vote.",
+            "denominator": 764,
+            "guard": null,
+            "heading": "What a ballot held",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "numerator": 0,
+            "rate": 0.0,
+            "reads": [
+              "meeting row ballots",
+              "recorded ballot prompt",
+              "state at the meeting"
+            ],
+            "scope": null,
+            "title": "Holds-nothing SKIPs whose prompt names no living candidate"
           },
           "impostor_cooldown_zero_at_open": {
             "by_construction": null,
@@ -636,6 +810,25 @@
             ],
             "scope": null,
             "title": "Meetings opening with an impostor in a vent"
+          },
+          "meetings_with_a_route_line": {
+            "by_construction": null,
+            "definition": "Meetings where some voter's own recorded ballot prompt carried a route line, over meetings.",
+            "denominator": 0,
+            "guard": null,
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": false,
+            "not_evaluable": 0,
+            "numerator": 0,
+            "rate": null,
+            "reads": [
+              "recorded ballot prompt",
+              "meeting row turns",
+              "state at the meeting",
+              "earlier meeting rows"
+            ],
+            "scope": "route_lines_version = 1",
+            "title": "Meetings where a ballot carried a route line"
           },
           "meetings_with_repeat_speaker": {
             "by_construction": "bounded_rebuttal_version = unset",
@@ -1181,6 +1374,44 @@
             "scope": null,
             "title": "Ejections that removed an impostor"
           },
+          "route_lines_false_to_the_map": {
+            "by_construction": null,
+            "definition": "Steps of the route lines served on every ballot whose door count, reading or regroup tick disagrees with this census's own reading, over every step served. The census counts the fewest doors between the step's two rooms by its own search over the station's doors; walking fits when the doors are at most the ticks between, otherwise the step names the first public regroup tick after its earlier tick, up to its later one, and a change of room that neither allows is never served.",
+            "denominator": 0,
+            "guard": "route_lines_version = 1",
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": false,
+            "not_evaluable": 0,
+            "numerator": 0,
+            "rate": null,
+            "reads": [
+              "recorded ballot prompt",
+              "meeting row turns",
+              "state at the meeting",
+              "earlier meeting rows"
+            ],
+            "scope": "route_lines_version = 1",
+            "title": "Route steps false to the map"
+          },
+          "route_lines_off_the_table": {
+            "by_construction": null,
+            "definition": "Route lines served on a ballot about a player who is not a living candidate of its voter, with a place the meeting never stated for that player, or a second line for one player on one ballot, over every line served.",
+            "denominator": 0,
+            "guard": "route_lines_version = 1",
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": false,
+            "not_evaluable": 0,
+            "numerator": 0,
+            "rate": null,
+            "reads": [
+              "recorded ballot prompt",
+              "meeting row turns",
+              "state at the meeting",
+              "earlier meeting rows"
+            ],
+            "scope": "route_lines_version = 1",
+            "title": "Route lines off the table"
+          },
           "sabotage_active_at_regroup": {
             "by_construction": null,
             "definition": "Regroup meetings that opened with a sabotage active, over all regroup meetings.",
@@ -1216,7 +1447,7 @@
           },
           "skips_holding_nothing": {
             "by_construction": null,
-            "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement; it is not a checked fact.",
+            "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement, and the holds-nothing check reads it against the lines the voter's own ballot prompt held.",
             "denominator": 1183,
             "guard": null,
             "heading": "Ballots",
@@ -1264,6 +1495,23 @@
             ],
             "scope": null,
             "title": "Surfacings before the cap with someone in view"
+          },
+          "task_wins_with_sabotage_in_play": {
+            "by_construction": null,
+            "definition": "Games the crew won on tasks in which a sabotage was active before at least one play tick, over games the crew won on tasks. This counts co-occurrence and measures no delay.",
+            "denominator": 23,
+            "guard": null,
+            "heading": "The shape of a game",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "numerator": 2,
+            "rate": 0.086957,
+            "reads": [
+              "game over row",
+              "state before the tick"
+            ],
+            "scope": null,
+            "title": "Task wins in games with a sabotage in play"
           },
           "trips_closed_by_regroup": {
             "by_construction": null,
@@ -1483,6 +1731,48 @@
             ],
             "scope": null,
             "title": "Vent exits while a crewmate stood in the room left"
+          },
+          "witness_meeting_ejections_charged_on_a_reconcilable_pair": {
+            "by_construction": null,
+            "definition": "The second of the two counts above at witness meetings only: ejections at witness meetings where some charge against the ejected player rested on a stated pair that reconciles, over ejections at witness meetings.",
+            "denominator": 13,
+            "guard": null,
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "numerator": 8,
+            "rate": 0.615385,
+            "reads": [
+              "meeting row turns",
+              "meeting row ballots",
+              "meeting row flags",
+              "state at the meeting",
+              "earlier meeting rows",
+              "Killed"
+            ],
+            "scope": null,
+            "title": "Ejections at witness meetings charged on a stated pair that reconciles"
+          },
+          "witness_meeting_ejections_on_a_reconcilable_pair": {
+            "by_construction": null,
+            "definition": "The first of the two counts above at witness meetings only: ejections at witness meetings where the meeting stated a pair of the ejected player's places that reconciles, over ejections at witness meetings.",
+            "denominator": 13,
+            "guard": null,
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "numerator": 8,
+            "rate": 0.615385,
+            "reads": [
+              "meeting row turns",
+              "meeting row ballots",
+              "meeting row flags",
+              "state at the meeting",
+              "earlier meeting rows",
+              "Killed"
+            ],
+            "scope": null,
+            "title": "Ejections at witness meetings whose ejected player had a stated pair that reconciles"
           }
         },
         "era": {
@@ -1554,6 +1844,54 @@
             "scope": null,
             "title": "Actions thrown away on trigger ticks"
           },
+          "cited_placements_by_kind_and_verdict": {
+            "counts": {
+              "company: false": 15,
+              "company: false, but true one tick before its window": 2,
+              "company: true": 146,
+              "company: unverifiable": 0,
+              "saw_move: false": 4,
+              "saw_move: false, but true one tick before its window": 0,
+              "saw_move: true": 430,
+              "saw_move: unverifiable": 0,
+              "saw_player: false": 20,
+              "saw_player: false, but true one tick before its window": 2,
+              "saw_player: true": 517,
+              "saw_player: unverifiable": 6,
+              "whereabouts: false": 0,
+              "whereabouts: false, but true one tick before its window": 0,
+              "whereabouts: true": 73,
+              "whereabouts: unverifiable": 0
+            },
+            "definition": "Every placement of the target in the cited turn of a supported EJECT, by its kind and by whether the engine route makes it true or false at its kind's own clock, or cannot verify it. A whereabouts claim for a tick is read at that tick and the one before it; a sighting at the two ticks before the tick it names. The edge row counts a false placement the route makes true one tick before its window, so a clock off by one shows there rather than widening either window. Every row is listed.",
+            "heading": "What a ballot held",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "meeting row ballots",
+              "meeting row turns",
+              "state after the tick",
+              "state after the meeting"
+            ],
+            "scope": null,
+            "title": "Cited placements of the target, by kind and by what the route makes of them"
+          },
+          "copresence_share_per_game": {
+            "counts": {
+              "up to a half": 150,
+              "up to a quarter": 96,
+              "up to three quarters": 4
+            },
+            "definition": "Games by the share of their player-ticks, each a living player standing in a room before a play tick, on which exactly one other living player stood in the same room. A player inside a vent stands in no room.",
+            "heading": "The shape of a game",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "state before the tick"
+            ],
+            "scope": null,
+            "title": "How often a player stood with exactly one other"
+          },
           "corpse_age_at_report": {
             "counts": {
               "1": 42,
@@ -1590,6 +1928,25 @@
             "scope": null,
             "title": "Corpse age at report"
           },
+          "games_by_ending": {
+            "counts": {
+              "CREWMATE_EJECT": 150,
+              "CREWMATE_TASKS": 23,
+              "IMPOSTOR_PARITY": 77,
+              "IMPOSTOR_SABOTAGE": 0,
+              "MEETING_PHASE_REACHED": 0,
+              "TICK_BUDGET_REACHED": 0
+            },
+            "definition": "Games by the recorded reason they ended. Every ending the engine or the runner can record is listed; a game with no recorded ending is not evaluable.",
+            "heading": "The shape of a game",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "game over row"
+            ],
+            "scope": null,
+            "title": "Games by ending"
+          },
           "held_kill_next_meeting_outcomes": {
             "counts": {
               "one living crew witness: a witness ejected": 2,
@@ -1611,6 +1968,28 @@
             ],
             "scope": null,
             "title": "What the next meeting did after a held kill"
+          },
+          "holds_nothing_skips_by_source": {
+            "counts": {
+              "a flag": 203,
+              "a route line": 0,
+              "a spoken turn line": 762,
+              "a typed turn line": 764,
+              "an evidence row": 764,
+              "an observation row": 764,
+              "an observation row perceived since the previous meeting": 560
+            },
+            "definition": "SKIP ballots labelled as holding nothing, by each place in the voter's own recorded ballot prompt that names a living candidate: an observation row; an observation row whose id was perceived after the previous meeting (after the game began, at its first meeting); an evidence row; a flag; a typed turn line; a spoken turn line; a route line. One SKIP can name a candidate in several places, so the rows overlap and do not add up to the cell. Every place is listed.",
+            "heading": "What a ballot held",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "meeting row ballots",
+              "recorded ballot prompt",
+              "state at the meeting"
+            ],
+            "scope": null,
+            "title": "Where a holds-nothing SKIP's prompt names a living candidate"
           },
           "innocent_opener_ejections_by_trigger": {
             "counts": {
@@ -1645,6 +2024,50 @@
             "scope": null,
             "title": "Kill cooldown writes by writer"
           },
+          "kills_per_game": {
+            "counts": {
+              "0": 7,
+              "1": 64,
+              "2": 66,
+              "3": 35,
+              "4": 32,
+              "5": 31,
+              "6": 15
+            },
+            "definition": "Games by how many kills they held.",
+            "heading": "The shape of a game",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "Killed"
+            ],
+            "scope": null,
+            "title": "Kills per game"
+          },
+          "living_players_at_game_over_by_ending": {
+            "counts": {
+              "CREWMATE_EJECT: 2 living": 58,
+              "CREWMATE_EJECT: 3 living": 23,
+              "CREWMATE_EJECT: 4 living": 32,
+              "CREWMATE_EJECT: 5 living": 35,
+              "CREWMATE_EJECT: 6 living": 2,
+              "CREWMATE_TASKS: 3 living": 15,
+              "CREWMATE_TASKS: 4 living": 8,
+              "IMPOSTOR_PARITY: 2 living": 65,
+              "IMPOSTOR_PARITY: 4 living": 12
+            },
+            "definition": "Games by their recorded ending and the players still alive when it ended: every player less those killed and those ejected.",
+            "heading": "The shape of a game",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "game over row",
+              "Killed",
+              "meeting row"
+            ],
+            "scope": null,
+            "title": "Living players at game over, by ending"
+          },
           "meetings_by_trigger": {
             "counts": {
               "emergency": 43,
@@ -1672,6 +2095,32 @@
             "scope": "bounded_rebuttal_version = 1",
             "title": "Who received the rebuttal, and who had accused them"
           },
+          "report_openers_by_witness": {
+            "counts": {
+              "opened by a witness of a kill since the last meeting, 1 to 2 ticks": 17,
+              "opened by a witness of a kill since the last meeting, 11 to 20 ticks": 0,
+              "opened by a witness of a kill since the last meeting, 3 to 5 ticks": 0,
+              "opened by a witness of a kill since the last meeting, 6 to 10 ticks": 0,
+              "opened by a witness of a kill since the last meeting, more than 20 ticks": 0,
+              "opened by a witness of a kill since the last meeting, the same tick": 0,
+              "opened by another player, 1 to 2 ticks": 106,
+              "opened by another player, 11 to 20 ticks": 44,
+              "opened by another player, 3 to 5 ticks": 224,
+              "opened by another player, 6 to 10 ticks": 92,
+              "opened by another player, more than 20 ticks": 5,
+              "opened by another player, the same tick": 0
+            },
+            "definition": "Report meetings by whether their opener was among the recorded witnesses of some kill since the previous meeting (since the game began, at its first meeting), and by the ticks from the reported body's kill to the report. Every row is listed.",
+            "heading": "The shape of a game",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "Killed",
+              "MeetingTriggered"
+            ],
+            "scope": null,
+            "title": "Who found the body"
+          },
           "retally_outcome_changes": {
             "counts": {
               "impostor ballots as SKIP: an impostor ejected -> no one ejected": 1,
@@ -1691,6 +2140,52 @@
             ],
             "scope": null,
             "title": "Outcomes a re-tally changes"
+          },
+          "route_lines_per_meeting": {
+            "counts": {},
+            "definition": "Meetings by how many players some ballot carried a route line about: 0, 1, 2, or 3 or more. Every row is listed.",
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": false,
+            "not_evaluable": 0,
+            "reads": [
+              "recorded ballot prompt",
+              "meeting row turns",
+              "state at the meeting",
+              "earlier meeting rows"
+            ],
+            "scope": "route_lines_version = 1",
+            "title": "Meetings by the players with a route line"
+          },
+          "route_steps_by_reading": {
+            "counts": {},
+            "definition": "The steps of each meeting's distinct route lines by reading: walking fits, or the public regroup falls between, so walking cannot decide it. Every reading is listed.",
+            "heading": "Stated places the map or the regroup reconciles",
+            "in_scope": false,
+            "not_evaluable": 0,
+            "reads": [
+              "recorded ballot prompt",
+              "meeting row turns",
+              "state at the meeting",
+              "earlier meeting rows"
+            ],
+            "scope": "route_lines_version = 1",
+            "title": "Route steps by reading"
+          },
+          "sabotages_started_per_game": {
+            "counts": {
+              "0": 228,
+              "1": 13,
+              "2": 9
+            },
+            "definition": "Games by how many times a sabotage went from inactive to active between one play tick and the next. A sabotage that stays active across a meeting is one start.",
+            "heading": "The shape of a game",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "state before the tick"
+            ],
+            "scope": null,
+            "title": "Sabotages started per game"
           },
           "skips_by_grounding_label": {
             "counts": {
@@ -1712,6 +2207,89 @@
             ],
             "scope": null,
             "title": "SKIP ballots by grounding label"
+          },
+          "supported_ejects_not_checkable_by_reason": {
+            "counts": {
+              "every cited placement is unverifiable": 6,
+              "it cites no turn, only the voter's own observation": 254,
+              "the cited turn places the target nowhere checkable": 487
+            },
+            "definition": "EJECT ballots labelled supported that neither cell above counts: the ballot cites no turn, only the voter's own observation; the cited turn, if it is one of this meeting's, places the target nowhere checkable; or the route cannot verify any cited placement. Every row is listed.",
+            "heading": "What a ballot held",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "meeting row ballots",
+              "meeting row turns",
+              "state after the tick",
+              "state after the meeting"
+            ],
+            "scope": null,
+            "title": "Supported EJECTs whose cited line cannot be checked, by reason"
+          },
+          "tasks_left_at_game_over_by_ending": {
+            "counts": {
+              "CREWMATE_EJECT: more than three quarters": 19,
+              "CREWMATE_EJECT: up to a half": 78,
+              "CREWMATE_EJECT: up to a quarter": 18,
+              "CREWMATE_EJECT: up to three quarters": 35,
+              "CREWMATE_TASKS: none": 23,
+              "IMPOSTOR_PARITY: more than three quarters": 3,
+              "IMPOSTOR_PARITY: none": 2,
+              "IMPOSTOR_PARITY: up to a half": 34,
+              "IMPOSTOR_PARITY: up to a quarter": 22,
+              "IMPOSTOR_PARITY: up to three quarters": 16
+            },
+            "definition": "Games by their recorded ending and the share of all task instances still unfinished on the final state.",
+            "heading": "The shape of a game",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "game over row",
+              "final state"
+            ],
+            "scope": null,
+            "title": "Tasks left at game over, by ending"
+          },
+          "ticks_between_kills": {
+            "counts": {
+              "1 to 2 ticks": 84,
+              "11 to 20 ticks": 57,
+              "3 to 5 ticks": 109,
+              "6 to 10 ticks": 164,
+              "more than 20 ticks": 7,
+              "the same tick": 10
+            },
+            "definition": "Each kill after a game's first, by the ticks since the kill before it in the same game.",
+            "heading": "The shape of a game",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "Killed"
+            ],
+            "scope": null,
+            "title": "Ticks between consecutive kills"
+          },
+          "ticks_from_kill_to_report": {
+            "counts": {
+              "1 to 2 ticks": 123,
+              "11 to 20 ticks": 44,
+              "3 to 5 ticks": 224,
+              "6 to 10 ticks": 92,
+              "its body never reported": 186,
+              "more than 20 ticks": 5,
+              "the same tick": 0
+            },
+            "definition": "Every kill by the ticks from it to the report meeting whose reported body is its victim's, a meeting on the kill's own tick included, or by its body never being reported. A body joins its kill by victim, so two kills on one tick each keep their own row.",
+            "heading": "The shape of a game",
+            "in_scope": true,
+            "not_evaluable": 0,
+            "reads": [
+              "Killed",
+              "MeetingTriggered"
+            ],
+            "scope": null,
+            "title": "Ticks from a kill to the meeting that reported its body"
           },
           "ticks_inside_per_trip": {
             "counts": {
@@ -1803,9 +2381,9 @@
     "meeting_reset": "read by: meeting_regroup",
     "post_meeting_retarget": "not read: retargets impostors after a meeting; no cell is forced by it",
     "public_account_version": "not read: changes what a meeting renders; no cell is forced by it",
-    "redistribution_policy": "not read: decides who inherits a dead crewmate's tasks; no cell counts tasks",
+    "redistribution_policy": "not read: decides who inherits a dead crewmate's tasks; no cell is forced by it",
     "report_body_handle_version": "read by: public_body_handle",
-    "route_lines_version": "not read: adds role-blind route lines to a ballot; no cell is forced by it",
+    "route_lines_version": "read by: route_lines",
     "sabotage_threshold": "not read: a sabotage win rule; no cell is forced by it",
     "self_report": "read by: no_impostor_self_report",
     "vent_entry_policy": "read by: own_fresh_kill_entry",
@@ -1849,6 +2427,25 @@
           ],
           "scope": null,
           "title": "Impostor ballots written against a teammate"
+        },
+        "ballots_carrying_route_lines": {
+          "by_construction": null,
+          "definition": "Ballots, whatever the voter's role, whose voter's own recorded ballot prompt carried the route lines block, over ballots with a recorded ballot call.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Ballots carrying route lines"
         },
         "ballots_citing_a_rebuttal": {
           "by_construction": null,
@@ -1901,6 +2498,64 @@
           "scope": null,
           "title": "Button meetings with vent proof"
         },
+        "charges_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Charges at the table, whatever the role of the voter or of the player charged, one of whose stated places is an end of a stated pair that reconciles, over every charge at the table. A charge is an EJECT ballot whose cited turn states a place of its target, or a flag whose two events each state a place of a player it names. A reconcilable pair proves no innocence.",
+          "denominator": 1551,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 1041,
+          "rate": 0.67118,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Charges resting on a stated pair the map or the regroup reconciles"
+        },
+        "cited_lines_false_to_the_route": {
+          "by_construction": null,
+          "definition": "EJECT ballots labelled supported, whatever the voter's role, with at least one placement of the target in the cited turn the engine route makes false, over supported EJECTs whose cited turn places the target checkably. A voter who believed a false line still held it.",
+          "denominator": 807,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 23,
+          "rate": 0.028501,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line the route makes false"
+        },
+        "cited_lines_true_to_the_route": {
+          "by_construction": null,
+          "definition": "EJECT ballots labelled supported, whatever the voter's role, whose every checkable placement of the target in the cited turn the engine route makes true, over supported EJECTs whose cited turn places the target checkably. A true cited line is not a correct vote.",
+          "denominator": 807,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 784,
+          "rate": 0.971499,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line the route makes true"
+        },
         "crew_witnessed_kills_held_at_next_meeting": {
           "by_construction": null,
           "definition": "Crew-witnessed kills with a crewmate witness alive at the next meeting, over crew-witnessed kills a meeting followed; the rest are not evaluable.",
@@ -1933,6 +2588,67 @@
           ],
           "scope": null,
           "title": "Ejections whose confidence floor only impostors met"
+        },
+        "ejections_charged_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Ejections, whatever the ejected player's role, where some charge against the ejected player rested on a stated pair that reconciles, over all ejections. A reconcilable pair proves no innocence.",
+          "denominator": 273,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 173,
+          "rate": 0.6337,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Ejections charged on a stated pair that reconciles"
+        },
+        "ejections_charged_on_a_reconcilable_pair_shown_a_route_line": {
+          "by_construction": null,
+          "definition": "Ejections charged on a stated pair that reconciles at which some voter who voted to eject that player was served a route line about them, over ejections charged on such a pair. Every served step reconciles. Showing a line is not changing a vote.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "recorded ballot prompt"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Ejections charged on a stated pair that reconciles, with a route line shown to an ejecting voter"
+        },
+        "ejections_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Ejections, whatever the ejected player's role, where the meeting stated a pair of the ejected player's places that reconciles, over all ejections. A reconcilable pair proves no innocence: the two places could both be true, and either could be false.",
+          "denominator": 273,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 175,
+          "rate": 0.641026,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Ejections whose ejected player had a stated pair that reconciles"
         },
         "ejections_undone_with_impostor_ballots_as_skip": {
           "by_construction": null,
@@ -2083,6 +2799,42 @@
           ],
           "scope": null,
           "title": "Held kills whose witness voted the killer"
+        },
+        "holds_nothing_skips_naming_a_candidate": {
+          "by_construction": null,
+          "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names a living candidate in at least one of those places, over all SKIP ballots labelled as holding nothing: the complement of the cell above. A line held is not a reason to vote.",
+          "denominator": 702,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 702,
+          "rate": 1.0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Holds-nothing SKIPs whose prompt names a living candidate"
+        },
+        "holds_nothing_skips_naming_no_candidate": {
+          "by_construction": null,
+          "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names no living candidate in an observation row, an evidence row, a flag, a typed or spoken turn line or a route line, over all SKIP ballots labelled as holding nothing. The label reads as nothing that resolves the vote, not as nothing held, and a line held is not a reason to vote.",
+          "denominator": 702,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Holds-nothing SKIPs whose prompt names no living candidate"
         },
         "impostor_cooldown_zero_at_open": {
           "by_construction": null,
@@ -2441,6 +3193,25 @@
           ],
           "scope": null,
           "title": "Meetings opening with an impostor in a vent"
+        },
+        "meetings_with_a_route_line": {
+          "by_construction": null,
+          "definition": "Meetings where some voter's own recorded ballot prompt carried a route line, over meetings.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Meetings where a ballot carried a route line"
         },
         "meetings_with_repeat_speaker": {
           "by_construction": "bounded_rebuttal_version = unset",
@@ -2986,6 +3757,44 @@
           "scope": null,
           "title": "Ejections that removed an impostor"
         },
+        "route_lines_false_to_the_map": {
+          "by_construction": null,
+          "definition": "Steps of the route lines served on every ballot whose door count, reading or regroup tick disagrees with this census's own reading, over every step served. The census counts the fewest doors between the step's two rooms by its own search over the station's doors; walking fits when the doors are at most the ticks between, otherwise the step names the first public regroup tick after its earlier tick, up to its later one, and a change of room that neither allows is never served.",
+          "denominator": 0,
+          "guard": "route_lines_version = 1",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route steps false to the map"
+        },
+        "route_lines_off_the_table": {
+          "by_construction": null,
+          "definition": "Route lines served on a ballot about a player who is not a living candidate of its voter, with a place the meeting never stated for that player, or a second line for one player on one ballot, over every line served.",
+          "denominator": 0,
+          "guard": "route_lines_version = 1",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route lines off the table"
+        },
         "sabotage_active_at_regroup": {
           "by_construction": null,
           "definition": "Regroup meetings that opened with a sabotage active, over all regroup meetings.",
@@ -3021,7 +3830,7 @@
         },
         "skips_holding_nothing": {
           "by_construction": null,
-          "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement; it is not a checked fact.",
+          "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement, and the holds-nothing check reads it against the lines the voter's own ballot prompt held.",
           "denominator": 1052,
           "guard": null,
           "heading": "Ballots",
@@ -3069,6 +3878,23 @@
           ],
           "scope": null,
           "title": "Surfacings before the cap with someone in view"
+        },
+        "task_wins_with_sabotage_in_play": {
+          "by_construction": null,
+          "definition": "Games the crew won on tasks in which a sabotage was active before at least one play tick, over games the crew won on tasks. This counts co-occurrence and measures no delay.",
+          "denominator": 2,
+          "guard": null,
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 2,
+          "rate": 1.0,
+          "reads": [
+            "game over row",
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "Task wins in games with a sabotage in play"
         },
         "trips_closed_by_regroup": {
           "by_construction": null,
@@ -3288,6 +4114,48 @@
           ],
           "scope": null,
           "title": "Vent exits while a crewmate stood in the room left"
+        },
+        "witness_meeting_ejections_charged_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "The second of the two counts above at witness meetings only: ejections at witness meetings where some charge against the ejected player rested on a stated pair that reconciles, over ejections at witness meetings.",
+          "denominator": 13,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 8,
+          "rate": 0.615385,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ejections at witness meetings charged on a stated pair that reconciles"
+        },
+        "witness_meeting_ejections_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "The first of the two counts above at witness meetings only: ejections at witness meetings where the meeting stated a pair of the ejected player's places that reconciles, over ejections at witness meetings.",
+          "denominator": 13,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 8,
+          "rate": 0.615385,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ejections at witness meetings whose ejected player had a stated pair that reconciles"
         }
       },
       "era": {
@@ -3357,6 +4225,53 @@
           "scope": null,
           "title": "Actions thrown away on trigger ticks"
         },
+        "cited_placements_by_kind_and_verdict": {
+          "counts": {
+            "company: false": 15,
+            "company: false, but true one tick before its window": 2,
+            "company: true": 145,
+            "company: unverifiable": 0,
+            "saw_move: false": 3,
+            "saw_move: false, but true one tick before its window": 0,
+            "saw_move: true": 420,
+            "saw_move: unverifiable": 0,
+            "saw_player: false": 20,
+            "saw_player: false, but true one tick before its window": 2,
+            "saw_player: true": 497,
+            "saw_player: unverifiable": 2,
+            "whereabouts: false": 0,
+            "whereabouts: false, but true one tick before its window": 0,
+            "whereabouts: true": 66,
+            "whereabouts: unverifiable": 0
+          },
+          "definition": "Every placement of the target in the cited turn of a supported EJECT, by its kind and by whether the engine route makes it true or false at its kind's own clock, or cannot verify it. A whereabouts claim for a tick is read at that tick and the one before it; a sighting at the two ticks before the tick it names. The edge row counts a false placement the route makes true one tick before its window, so a clock off by one shows there rather than widening either window. Every row is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Cited placements of the target, by kind and by what the route makes of them"
+        },
+        "copresence_share_per_game": {
+          "counts": {
+            "up to a half": 116,
+            "up to a quarter": 34
+          },
+          "definition": "Games by the share of their player-ticks, each a living player standing in a room before a play tick, on which exactly one other living player stood in the same room. A player inside a vent stands in no room.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "How often a player stood with exactly one other"
+        },
         "corpse_age_at_report": {
           "counts": {
             "1": 41,
@@ -3393,6 +4308,25 @@
           "scope": null,
           "title": "Corpse age at report"
         },
+        "games_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT": 103,
+            "CREWMATE_TASKS": 2,
+            "IMPOSTOR_PARITY": 45,
+            "IMPOSTOR_SABOTAGE": 0,
+            "MEETING_PHASE_REACHED": 0,
+            "TICK_BUDGET_REACHED": 0
+          },
+          "definition": "Games by the recorded reason they ended. Every ending the engine or the runner can record is listed; a game with no recorded ending is not evaluable.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row"
+          ],
+          "scope": null,
+          "title": "Games by ending"
+        },
         "held_kill_next_meeting_outcomes": {
           "counts": {
             "one living crew witness: a witness ejected": 2,
@@ -3414,6 +4348,28 @@
           ],
           "scope": null,
           "title": "What the next meeting did after a held kill"
+        },
+        "holds_nothing_skips_by_source": {
+          "counts": {
+            "a flag": 196,
+            "a route line": 0,
+            "a spoken turn line": 700,
+            "a typed turn line": 702,
+            "an evidence row": 702,
+            "an observation row": 702,
+            "an observation row perceived since the previous meeting": 509
+          },
+          "definition": "SKIP ballots labelled as holding nothing, by each place in the voter's own recorded ballot prompt that names a living candidate: an observation row; an observation row whose id was perceived after the previous meeting (after the game began, at its first meeting); an evidence row; a flag; a typed turn line; a spoken turn line; a route line. One SKIP can name a candidate in several places, so the rows overlap and do not add up to the cell. Every place is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Where a holds-nothing SKIP's prompt names a living candidate"
         },
         "innocent_opener_ejections_by_trigger": {
           "counts": {
@@ -3448,6 +4404,49 @@
           "scope": null,
           "title": "Kill cooldown writes by writer"
         },
+        "kills_per_game": {
+          "counts": {
+            "1": 2,
+            "2": 35,
+            "3": 35,
+            "4": 32,
+            "5": 31,
+            "6": 15
+          },
+          "definition": "Games by how many kills they held.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Kills per game"
+        },
+        "living_players_at_game_over_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT: 2 living": 11,
+            "CREWMATE_EJECT: 3 living": 23,
+            "CREWMATE_EJECT: 4 living": 32,
+            "CREWMATE_EJECT: 5 living": 35,
+            "CREWMATE_EJECT: 6 living": 2,
+            "CREWMATE_TASKS: 3 living": 1,
+            "CREWMATE_TASKS: 4 living": 1,
+            "IMPOSTOR_PARITY: 2 living": 33,
+            "IMPOSTOR_PARITY: 4 living": 12
+          },
+          "definition": "Games by their recorded ending and the players still alive when it ended: every player less those killed and those ejected.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row",
+            "Killed",
+            "meeting row"
+          ],
+          "scope": null,
+          "title": "Living players at game over, by ending"
+        },
         "meetings_by_trigger": {
           "counts": {
             "emergency": 33,
@@ -3475,6 +4474,32 @@
           "scope": "bounded_rebuttal_version = 1",
           "title": "Who received the rebuttal, and who had accused them"
         },
+        "report_openers_by_witness": {
+          "counts": {
+            "opened by a witness of a kill since the last meeting, 1 to 2 ticks": 16,
+            "opened by a witness of a kill since the last meeting, 11 to 20 ticks": 0,
+            "opened by a witness of a kill since the last meeting, 3 to 5 ticks": 0,
+            "opened by a witness of a kill since the last meeting, 6 to 10 ticks": 0,
+            "opened by a witness of a kill since the last meeting, more than 20 ticks": 0,
+            "opened by a witness of a kill since the last meeting, the same tick": 0,
+            "opened by another player, 1 to 2 ticks": 90,
+            "opened by another player, 11 to 20 ticks": 44,
+            "opened by another player, 3 to 5 ticks": 180,
+            "opened by another player, 6 to 10 ticks": 81,
+            "opened by another player, more than 20 ticks": 5,
+            "opened by another player, the same tick": 0
+          },
+          "definition": "Report meetings by whether their opener was among the recorded witnesses of some kill since the previous meeting (since the game began, at its first meeting), and by the ticks from the reported body's kill to the report. Every row is listed.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed",
+            "MeetingTriggered"
+          ],
+          "scope": null,
+          "title": "Who found the body"
+        },
         "retally_outcome_changes": {
           "counts": {
             "impostor ballots as SKIP: an impostor ejected -> no one ejected": 1,
@@ -3494,6 +4519,52 @@
           ],
           "scope": null,
           "title": "Outcomes a re-tally changes"
+        },
+        "route_lines_per_meeting": {
+          "counts": {},
+          "definition": "Meetings by how many players some ballot carried a route line about: 0, 1, 2, or 3 or more. Every row is listed.",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Meetings by the players with a route line"
+        },
+        "route_steps_by_reading": {
+          "counts": {},
+          "definition": "The steps of each meeting's distinct route lines by reading: walking fits, or the public regroup falls between, so walking cannot decide it. Every reading is listed.",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route steps by reading"
+        },
+        "sabotages_started_per_game": {
+          "counts": {
+            "0": 128,
+            "1": 13,
+            "2": 9
+          },
+          "definition": "Games by how many times a sabotage went from inactive to active between one play tick and the next. A sabotage that stays active across a meeting is one start.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "Sabotages started per game"
         },
         "skips_by_grounding_label": {
           "counts": {
@@ -3515,6 +4586,87 @@
           ],
           "scope": null,
           "title": "SKIP ballots by grounding label"
+        },
+        "supported_ejects_not_checkable_by_reason": {
+          "counts": {
+            "every cited placement is unverifiable": 2,
+            "it cites no turn, only the voter's own observation": 223,
+            "the cited turn places the target nowhere checkable": 444
+          },
+          "definition": "EJECT ballots labelled supported that neither cell above counts: the ballot cites no turn, only the voter's own observation; the cited turn, if it is one of this meeting's, places the target nowhere checkable; or the route cannot verify any cited placement. Every row is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line cannot be checked, by reason"
+        },
+        "tasks_left_at_game_over_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT: more than three quarters": 5,
+            "CREWMATE_EJECT: up to a half": 65,
+            "CREWMATE_EJECT: up to a quarter": 18,
+            "CREWMATE_EJECT: up to three quarters": 15,
+            "CREWMATE_TASKS: none": 2,
+            "IMPOSTOR_PARITY: up to a half": 21,
+            "IMPOSTOR_PARITY: up to a quarter": 22,
+            "IMPOSTOR_PARITY: up to three quarters": 2
+          },
+          "definition": "Games by their recorded ending and the share of all task instances still unfinished on the final state.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row",
+            "final state"
+          ],
+          "scope": null,
+          "title": "Tasks left at game over, by ending"
+        },
+        "ticks_between_kills": {
+          "counts": {
+            "1 to 2 ticks": 84,
+            "11 to 20 ticks": 53,
+            "3 to 5 ticks": 107,
+            "6 to 10 ticks": 139,
+            "more than 20 ticks": 7,
+            "the same tick": 10
+          },
+          "definition": "Each kill after a game's first, by the ticks since the kill before it in the same game.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ticks between consecutive kills"
+        },
+        "ticks_from_kill_to_report": {
+          "counts": {
+            "1 to 2 ticks": 106,
+            "11 to 20 ticks": 44,
+            "3 to 5 ticks": 180,
+            "6 to 10 ticks": 81,
+            "its body never reported": 134,
+            "more than 20 ticks": 5,
+            "the same tick": 0
+          },
+          "definition": "Every kill by the ticks from it to the report meeting whose reported body is its victim's, a meeting on the kill's own tick included, or by its body never being reported. A body joins its kill by victim, so two kills on one tick each keep their own row.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed",
+            "MeetingTriggered"
+          ],
+          "scope": null,
+          "title": "Ticks from a kill to the meeting that reported its body"
         },
         "ticks_inside_per_trip": {
           "counts": {
@@ -3600,6 +4752,25 @@
           "scope": null,
           "title": "Impostor ballots written against a teammate"
         },
+        "ballots_carrying_route_lines": {
+          "by_construction": null,
+          "definition": "Ballots, whatever the voter's role, whose voter's own recorded ballot prompt carried the route lines block, over ballots with a recorded ballot call.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Ballots carrying route lines"
+        },
         "ballots_citing_a_rebuttal": {
           "by_construction": null,
           "definition": "Ballots whose cited turn is a repeat-speaker turn of the same meeting, over all ballots at meetings with a repeat-speaker turn.",
@@ -3651,6 +4822,64 @@
           "scope": null,
           "title": "Button meetings with vent proof"
         },
+        "charges_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Charges at the table, whatever the role of the voter or of the player charged, one of whose stated places is an end of a stated pair that reconciles, over every charge at the table. A charge is an EJECT ballot whose cited turn states a place of its target, or a flag whose two events each state a place of a player it names. A reconcilable pair proves no innocence.",
+          "denominator": 402,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 276,
+          "rate": 0.686567,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Charges resting on a stated pair the map or the regroup reconciles"
+        },
+        "cited_lines_false_to_the_route": {
+          "by_construction": null,
+          "definition": "EJECT ballots labelled supported, whatever the voter's role, with at least one placement of the target in the cited turn the engine route makes false, over supported EJECTs whose cited turn places the target checkably. A voter who believed a false line still held it.",
+          "denominator": 281,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 3,
+          "rate": 0.010676,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line the route makes false"
+        },
+        "cited_lines_true_to_the_route": {
+          "by_construction": null,
+          "definition": "EJECT ballots labelled supported, whatever the voter's role, whose every checkable placement of the target in the cited turn the engine route makes true, over supported EJECTs whose cited turn places the target checkably. A true cited line is not a correct vote.",
+          "denominator": 281,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 278,
+          "rate": 0.989324,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line the route makes true"
+        },
         "crew_witnessed_kills_held_at_next_meeting": {
           "by_construction": null,
           "definition": "Crew-witnessed kills with a crewmate witness alive at the next meeting, over crew-witnessed kills a meeting followed; the rest are not evaluable.",
@@ -3683,6 +4912,67 @@
           ],
           "scope": null,
           "title": "Ejections whose confidence floor only impostors met"
+        },
+        "ejections_charged_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Ejections, whatever the ejected player's role, where some charge against the ejected player rested on a stated pair that reconciles, over all ejections. A reconcilable pair proves no innocence.",
+          "denominator": 66,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 40,
+          "rate": 0.606061,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Ejections charged on a stated pair that reconciles"
+        },
+        "ejections_charged_on_a_reconcilable_pair_shown_a_route_line": {
+          "by_construction": null,
+          "definition": "Ejections charged on a stated pair that reconciles at which some voter who voted to eject that player was served a route line about them, over ejections charged on such a pair. Every served step reconciles. Showing a line is not changing a vote.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "recorded ballot prompt"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Ejections charged on a stated pair that reconciles, with a route line shown to an ejecting voter"
+        },
+        "ejections_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Ejections, whatever the ejected player's role, where the meeting stated a pair of the ejected player's places that reconciles, over all ejections. A reconcilable pair proves no innocence: the two places could both be true, and either could be false.",
+          "denominator": 66,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 41,
+          "rate": 0.621212,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Ejections whose ejected player had a stated pair that reconciles"
         },
         "ejections_undone_with_impostor_ballots_as_skip": {
           "by_construction": null,
@@ -3833,6 +5123,42 @@
           ],
           "scope": null,
           "title": "Held kills whose witness voted the killer"
+        },
+        "holds_nothing_skips_naming_a_candidate": {
+          "by_construction": null,
+          "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names a living candidate in at least one of those places, over all SKIP ballots labelled as holding nothing: the complement of the cell above. A line held is not a reason to vote.",
+          "denominator": 214,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 214,
+          "rate": 1.0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Holds-nothing SKIPs whose prompt names a living candidate"
+        },
+        "holds_nothing_skips_naming_no_candidate": {
+          "by_construction": null,
+          "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names no living candidate in an observation row, an evidence row, a flag, a typed or spoken turn line or a route line, over all SKIP ballots labelled as holding nothing. The label reads as nothing that resolves the vote, not as nothing held, and a line held is not a reason to vote.",
+          "denominator": 214,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Holds-nothing SKIPs whose prompt names no living candidate"
         },
         "impostor_cooldown_zero_at_open": {
           "by_construction": null,
@@ -4191,6 +5517,25 @@
           ],
           "scope": null,
           "title": "Meetings opening with an impostor in a vent"
+        },
+        "meetings_with_a_route_line": {
+          "by_construction": null,
+          "definition": "Meetings where some voter's own recorded ballot prompt carried a route line, over meetings.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Meetings where a ballot carried a route line"
         },
         "meetings_with_repeat_speaker": {
           "by_construction": null,
@@ -4736,6 +6081,44 @@
           "scope": null,
           "title": "Ejections that removed an impostor"
         },
+        "route_lines_false_to_the_map": {
+          "by_construction": null,
+          "definition": "Steps of the route lines served on every ballot whose door count, reading or regroup tick disagrees with this census's own reading, over every step served. The census counts the fewest doors between the step's two rooms by its own search over the station's doors; walking fits when the doors are at most the ticks between, otherwise the step names the first public regroup tick after its earlier tick, up to its later one, and a change of room that neither allows is never served.",
+          "denominator": 0,
+          "guard": "route_lines_version = 1",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route steps false to the map"
+        },
+        "route_lines_off_the_table": {
+          "by_construction": null,
+          "definition": "Route lines served on a ballot about a player who is not a living candidate of its voter, with a place the meeting never stated for that player, or a second line for one player on one ballot, over every line served.",
+          "denominator": 0,
+          "guard": "route_lines_version = 1",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route lines off the table"
+        },
         "sabotage_active_at_regroup": {
           "by_construction": null,
           "definition": "Regroup meetings that opened with a sabotage active, over all regroup meetings.",
@@ -4771,7 +6154,7 @@
         },
         "skips_holding_nothing": {
           "by_construction": null,
-          "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement; it is not a checked fact.",
+          "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement, and the holds-nothing check reads it against the lines the voter's own ballot prompt held.",
           "denominator": 281,
           "guard": null,
           "heading": "Ballots",
@@ -4819,6 +6202,23 @@
           ],
           "scope": null,
           "title": "Surfacings before the cap with someone in view"
+        },
+        "task_wins_with_sabotage_in_play": {
+          "by_construction": null,
+          "definition": "Games the crew won on tasks in which a sabotage was active before at least one play tick, over games the crew won on tasks. This counts co-occurrence and measures no delay.",
+          "denominator": 13,
+          "guard": null,
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 11,
+          "rate": 0.846154,
+          "reads": [
+            "game over row",
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "Task wins in games with a sabotage in play"
         },
         "trips_closed_by_regroup": {
           "by_construction": null,
@@ -5038,6 +6438,48 @@
           ],
           "scope": null,
           "title": "Vent exits while a crewmate stood in the room left"
+        },
+        "witness_meeting_ejections_charged_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "The second of the two counts above at witness meetings only: ejections at witness meetings where some charge against the ejected player rested on a stated pair that reconciles, over ejections at witness meetings.",
+          "denominator": 12,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 7,
+          "rate": 0.583333,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ejections at witness meetings charged on a stated pair that reconciles"
+        },
+        "witness_meeting_ejections_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "The first of the two counts above at witness meetings only: ejections at witness meetings where the meeting stated a pair of the ejected player's places that reconciles, over ejections at witness meetings.",
+          "denominator": 12,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 7,
+          "rate": 0.583333,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ejections at witness meetings whose ejected player had a stated pair that reconciles"
         }
       },
       "era": {
@@ -5114,6 +6556,53 @@
           "scope": null,
           "title": "Actions thrown away on trigger ticks"
         },
+        "cited_placements_by_kind_and_verdict": {
+          "counts": {
+            "company: false": 0,
+            "company: false, but true one tick before its window": 0,
+            "company: true": 34,
+            "company: unverifiable": 0,
+            "saw_move: false": 3,
+            "saw_move: false, but true one tick before its window": 2,
+            "saw_move: true": 163,
+            "saw_move: unverifiable": 0,
+            "saw_player: false": 0,
+            "saw_player: false, but true one tick before its window": 0,
+            "saw_player: true": 178,
+            "saw_player: unverifiable": 0,
+            "whereabouts: false": 0,
+            "whereabouts: false, but true one tick before its window": 0,
+            "whereabouts: true": 60,
+            "whereabouts: unverifiable": 0
+          },
+          "definition": "Every placement of the target in the cited turn of a supported EJECT, by its kind and by whether the engine route makes it true or false at its kind's own clock, or cannot verify it. A whereabouts claim for a tick is read at that tick and the one before it; a sighting at the two ticks before the tick it names. The edge row counts a false placement the route makes true one tick before its window, so a clock off by one shows there rather than widening either window. Every row is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Cited placements of the target, by kind and by what the route makes of them"
+        },
+        "copresence_share_per_game": {
+          "counts": {
+            "up to a half": 29,
+            "up to a quarter": 21
+          },
+          "definition": "Games by the share of their player-ticks, each a living player standing in a room before a play tick, on which exactly one other living player stood in the same room. A player inside a vent stands in no room.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "How often a player stood with exactly one other"
+        },
         "corpse_age_at_report": {
           "counts": {
             "1": 19,
@@ -5138,6 +6627,25 @@
           "scope": null,
           "title": "Corpse age at report"
         },
+        "games_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT": 13,
+            "CREWMATE_TASKS": 13,
+            "IMPOSTOR_PARITY": 24,
+            "IMPOSTOR_SABOTAGE": 0,
+            "MEETING_PHASE_REACHED": 0,
+            "TICK_BUDGET_REACHED": 0
+          },
+          "definition": "Games by the recorded reason they ended. Every ending the engine or the runner can record is listed; a game with no recorded ending is not evaluable.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row"
+          ],
+          "scope": null,
+          "title": "Games by ending"
+        },
         "held_kill_next_meeting_outcomes": {
           "counts": {
             "one living crew witness: a witness ejected": 5,
@@ -5159,6 +6667,28 @@
           ],
           "scope": null,
           "title": "What the next meeting did after a held kill"
+        },
+        "holds_nothing_skips_by_source": {
+          "counts": {
+            "a flag": 22,
+            "a route line": 0,
+            "a spoken turn line": 214,
+            "a typed turn line": 214,
+            "an evidence row": 214,
+            "an observation row": 214,
+            "an observation row perceived since the previous meeting": 166
+          },
+          "definition": "SKIP ballots labelled as holding nothing, by each place in the voter's own recorded ballot prompt that names a living candidate: an observation row; an observation row whose id was perceived after the previous meeting (after the game began, at its first meeting); an evidence row; a flag; a typed turn line; a spoken turn line; a route line. One SKIP can name a candidate in several places, so the rows overlap and do not add up to the cell. Every place is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Where a holds-nothing SKIP's prompt names a living candidate"
         },
         "innocent_opener_ejections_by_trigger": {
           "counts": {
@@ -5193,6 +6723,49 @@
           "scope": null,
           "title": "Kill cooldown writes by writer"
         },
+        "kills_per_game": {
+          "counts": {
+            "2": 5,
+            "3": 12,
+            "4": 19,
+            "5": 11,
+            "6": 3
+          },
+          "definition": "Games by how many kills they held.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Kills per game"
+        },
+        "living_players_at_game_over_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT: 2 living": 3,
+            "CREWMATE_EJECT: 3 living": 2,
+            "CREWMATE_EJECT: 4 living": 6,
+            "CREWMATE_EJECT: 5 living": 2,
+            "CREWMATE_TASKS: 3 living": 2,
+            "CREWMATE_TASKS: 4 living": 2,
+            "CREWMATE_TASKS: 5 living": 5,
+            "CREWMATE_TASKS: 6 living": 4,
+            "IMPOSTOR_PARITY: 2 living": 8,
+            "IMPOSTOR_PARITY: 4 living": 16
+          },
+          "definition": "Games by their recorded ending and the players still alive when it ended: every player less those killed and those ejected.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row",
+            "Killed",
+            "meeting row"
+          ],
+          "scope": null,
+          "title": "Living players at game over, by ending"
+        },
         "meetings_by_trigger": {
           "counts": {
             "emergency": 3,
@@ -5226,6 +6799,32 @@
           "scope": "bounded_rebuttal_version = 1",
           "title": "Who received the rebuttal, and who had accused them"
         },
+        "report_openers_by_witness": {
+          "counts": {
+            "opened by a witness of a kill since the last meeting, 1 to 2 ticks": 14,
+            "opened by a witness of a kill since the last meeting, 11 to 20 ticks": 0,
+            "opened by a witness of a kill since the last meeting, 3 to 5 ticks": 0,
+            "opened by a witness of a kill since the last meeting, 6 to 10 ticks": 0,
+            "opened by a witness of a kill since the last meeting, more than 20 ticks": 0,
+            "opened by a witness of a kill since the last meeting, the same tick": 0,
+            "opened by another player, 1 to 2 ticks": 18,
+            "opened by another player, 11 to 20 ticks": 1,
+            "opened by another player, 3 to 5 ticks": 69,
+            "opened by another player, 6 to 10 ticks": 12,
+            "opened by another player, more than 20 ticks": 0,
+            "opened by another player, the same tick": 0
+          },
+          "definition": "Report meetings by whether their opener was among the recorded witnesses of some kill since the previous meeting (since the game began, at its first meeting), and by the ticks from the reported body's kill to the report. Every row is listed.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed",
+            "MeetingTriggered"
+          ],
+          "scope": null,
+          "title": "Who found the body"
+        },
         "retally_outcome_changes": {
           "counts": {
             "impostor ballots as SKIP: an impostor ejected -> no one ejected": 1,
@@ -5249,6 +6848,52 @@
           "scope": null,
           "title": "Outcomes a re-tally changes"
         },
+        "route_lines_per_meeting": {
+          "counts": {},
+          "definition": "Meetings by how many players some ballot carried a route line about: 0, 1, 2, or 3 or more. Every row is listed.",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Meetings by the players with a route line"
+        },
+        "route_steps_by_reading": {
+          "counts": {},
+          "definition": "The steps of each meeting's distinct route lines by reading: walking fits, or the public regroup falls between, so walking cannot decide it. Every reading is listed.",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route steps by reading"
+        },
+        "sabotages_started_per_game": {
+          "counts": {
+            "0": 20,
+            "1": 17,
+            "2": 13
+          },
+          "definition": "Games by how many times a sabotage went from inactive to active between one play tick and the next. A sabotage that stays active across a meeting is one start.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "Sabotages started per game"
+        },
         "skips_by_grounding_label": {
           "counts": {
             "flag_only": 0,
@@ -5269,6 +6914,84 @@
           ],
           "scope": null,
           "title": "SKIP ballots by grounding label"
+        },
+        "supported_ejects_not_checkable_by_reason": {
+          "counts": {
+            "every cited placement is unverifiable": 0,
+            "it cites no turn, only the voter's own observation": 29,
+            "the cited turn places the target nowhere checkable": 97
+          },
+          "definition": "EJECT ballots labelled supported that neither cell above counts: the ballot cites no turn, only the voter's own observation; the cited turn, if it is one of this meeting's, places the target nowhere checkable; or the route cannot verify any cited placement. Every row is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line cannot be checked, by reason"
+        },
+        "tasks_left_at_game_over_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT: up to a half": 1,
+            "CREWMATE_EJECT: up to a quarter": 12,
+            "CREWMATE_TASKS: none": 13,
+            "IMPOSTOR_PARITY: up to a half": 6,
+            "IMPOSTOR_PARITY: up to a quarter": 18
+          },
+          "definition": "Games by their recorded ending and the share of all task instances still unfinished on the final state.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row",
+            "final state"
+          ],
+          "scope": null,
+          "title": "Tasks left at game over, by ending"
+        },
+        "ticks_between_kills": {
+          "counts": {
+            "1 to 2 ticks": 25,
+            "11 to 20 ticks": 59,
+            "3 to 5 ticks": 13,
+            "6 to 10 ticks": 32,
+            "more than 20 ticks": 9,
+            "the same tick": 7
+          },
+          "definition": "Each kill after a game's first, by the ticks since the kill before it in the same game.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ticks between consecutive kills"
+        },
+        "ticks_from_kill_to_report": {
+          "counts": {
+            "1 to 2 ticks": 32,
+            "11 to 20 ticks": 1,
+            "3 to 5 ticks": 69,
+            "6 to 10 ticks": 12,
+            "its body never reported": 81,
+            "more than 20 ticks": 0,
+            "the same tick": 0
+          },
+          "definition": "Every kill by the ticks from it to the report meeting whose reported body is its victim's, a meeting on the kill's own tick included, or by its body never being reported. A body joins its kill by victim, so two kills on one tick each keep their own row.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed",
+            "MeetingTriggered"
+          ],
+          "scope": null,
+          "title": "Ticks from a kill to the meeting that reported its body"
         },
         "ticks_inside_per_trip": {
           "counts": {
@@ -5360,6 +7083,25 @@
           "scope": null,
           "title": "Impostor ballots written against a teammate"
         },
+        "ballots_carrying_route_lines": {
+          "by_construction": null,
+          "definition": "Ballots, whatever the voter's role, whose voter's own recorded ballot prompt carried the route lines block, over ballots with a recorded ballot call.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Ballots carrying route lines"
+        },
         "ballots_citing_a_rebuttal": {
           "by_construction": null,
           "definition": "Ballots whose cited turn is a repeat-speaker turn of the same meeting, over all ballots at meetings with a repeat-speaker turn.",
@@ -5411,6 +7153,64 @@
           "scope": null,
           "title": "Button meetings with vent proof"
         },
+        "charges_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Charges at the table, whatever the role of the voter or of the player charged, one of whose stated places is an end of a stated pair that reconciles, over every charge at the table. A charge is an EJECT ballot whose cited turn states a place of its target, or a flag whose two events each state a place of a player it names. A reconcilable pair proves no innocence.",
+          "denominator": 69,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 40,
+          "rate": 0.57971,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Charges resting on a stated pair the map or the regroup reconciles"
+        },
+        "cited_lines_false_to_the_route": {
+          "by_construction": null,
+          "definition": "EJECT ballots labelled supported, whatever the voter's role, with at least one placement of the target in the cited turn the engine route makes false, over supported EJECTs whose cited turn places the target checkably. A voter who believed a false line still held it.",
+          "denominator": 23,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line the route makes false"
+        },
+        "cited_lines_true_to_the_route": {
+          "by_construction": null,
+          "definition": "EJECT ballots labelled supported, whatever the voter's role, whose every checkable placement of the target in the cited turn the engine route makes true, over supported EJECTs whose cited turn places the target checkably. A true cited line is not a correct vote.",
+          "denominator": 23,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 23,
+          "rate": 1.0,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line the route makes true"
+        },
         "crew_witnessed_kills_held_at_next_meeting": {
           "by_construction": null,
           "definition": "Crew-witnessed kills with a crewmate witness alive at the next meeting, over crew-witnessed kills a meeting followed; the rest are not evaluable.",
@@ -5443,6 +7243,67 @@
           ],
           "scope": null,
           "title": "Ejections whose confidence floor only impostors met"
+        },
+        "ejections_charged_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Ejections, whatever the ejected player's role, where some charge against the ejected player rested on a stated pair that reconciles, over all ejections. A reconcilable pair proves no innocence.",
+          "denominator": 28,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 17,
+          "rate": 0.607143,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Ejections charged on a stated pair that reconciles"
+        },
+        "ejections_charged_on_a_reconcilable_pair_shown_a_route_line": {
+          "by_construction": null,
+          "definition": "Ejections charged on a stated pair that reconciles at which some voter who voted to eject that player was served a route line about them, over ejections charged on such a pair. Every served step reconciles. Showing a line is not changing a vote.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "recorded ballot prompt"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Ejections charged on a stated pair that reconciles, with a route line shown to an ejecting voter"
+        },
+        "ejections_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Ejections, whatever the ejected player's role, where the meeting stated a pair of the ejected player's places that reconciles, over all ejections. A reconcilable pair proves no innocence: the two places could both be true, and either could be false.",
+          "denominator": 28,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 17,
+          "rate": 0.607143,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Ejections whose ejected player had a stated pair that reconciles"
         },
         "ejections_undone_with_impostor_ballots_as_skip": {
           "by_construction": null,
@@ -5593,6 +7454,42 @@
           ],
           "scope": null,
           "title": "Held kills whose witness voted the killer"
+        },
+        "holds_nothing_skips_naming_a_candidate": {
+          "by_construction": null,
+          "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names a living candidate in at least one of those places, over all SKIP ballots labelled as holding nothing: the complement of the cell above. A line held is not a reason to vote.",
+          "denominator": 34,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 34,
+          "rate": 1.0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Holds-nothing SKIPs whose prompt names a living candidate"
+        },
+        "holds_nothing_skips_naming_no_candidate": {
+          "by_construction": null,
+          "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names no living candidate in an observation row, an evidence row, a flag, a typed or spoken turn line or a route line, over all SKIP ballots labelled as holding nothing. The label reads as nothing that resolves the vote, not as nothing held, and a line held is not a reason to vote.",
+          "denominator": 34,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Holds-nothing SKIPs whose prompt names no living candidate"
         },
         "impostor_cooldown_zero_at_open": {
           "by_construction": null,
@@ -5951,6 +7848,25 @@
           ],
           "scope": null,
           "title": "Meetings opening with an impostor in a vent"
+        },
+        "meetings_with_a_route_line": {
+          "by_construction": null,
+          "definition": "Meetings where some voter's own recorded ballot prompt carried a route line, over meetings.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Meetings where a ballot carried a route line"
         },
         "meetings_with_repeat_speaker": {
           "by_construction": "bounded_rebuttal_version = unset",
@@ -6496,6 +8412,44 @@
           "scope": null,
           "title": "Ejections that removed an impostor"
         },
+        "route_lines_false_to_the_map": {
+          "by_construction": null,
+          "definition": "Steps of the route lines served on every ballot whose door count, reading or regroup tick disagrees with this census's own reading, over every step served. The census counts the fewest doors between the step's two rooms by its own search over the station's doors; walking fits when the doors are at most the ticks between, otherwise the step names the first public regroup tick after its earlier tick, up to its later one, and a change of room that neither allows is never served.",
+          "denominator": 0,
+          "guard": "route_lines_version = 1",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route steps false to the map"
+        },
+        "route_lines_off_the_table": {
+          "by_construction": null,
+          "definition": "Route lines served on a ballot about a player who is not a living candidate of its voter, with a place the meeting never stated for that player, or a second line for one player on one ballot, over every line served.",
+          "denominator": 0,
+          "guard": "route_lines_version = 1",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route lines off the table"
+        },
         "sabotage_active_at_regroup": {
           "by_construction": null,
           "definition": "Regroup meetings that opened with a sabotage active, over all regroup meetings.",
@@ -6531,7 +8485,7 @@
         },
         "skips_holding_nothing": {
           "by_construction": null,
-          "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement; it is not a checked fact.",
+          "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement, and the holds-nothing check reads it against the lines the voter's own ballot prompt held.",
           "denominator": 63,
           "guard": null,
           "heading": "Ballots",
@@ -6579,6 +8533,23 @@
           ],
           "scope": null,
           "title": "Surfacings before the cap with someone in view"
+        },
+        "task_wins_with_sabotage_in_play": {
+          "by_construction": null,
+          "definition": "Games the crew won on tasks in which a sabotage was active before at least one play tick, over games the crew won on tasks. This counts co-occurrence and measures no delay.",
+          "denominator": 9,
+          "guard": null,
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "game over row",
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "Task wins in games with a sabotage in play"
         },
         "trips_closed_by_regroup": {
           "by_construction": null,
@@ -6798,6 +8769,48 @@
           ],
           "scope": null,
           "title": "Vent exits while a crewmate stood in the room left"
+        },
+        "witness_meeting_ejections_charged_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "The second of the two counts above at witness meetings only: ejections at witness meetings where some charge against the ejected player rested on a stated pair that reconciles, over ejections at witness meetings.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ejections at witness meetings charged on a stated pair that reconciles"
+        },
+        "witness_meeting_ejections_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "The first of the two counts above at witness meetings only: ejections at witness meetings where the meeting stated a pair of the ejected player's places that reconciles, over ejections at witness meetings.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ejections at witness meetings whose ejected player had a stated pair that reconciles"
         }
       },
       "era": {
@@ -6864,6 +8877,54 @@
           "scope": null,
           "title": "Actions thrown away on trigger ticks"
         },
+        "cited_placements_by_kind_and_verdict": {
+          "counts": {
+            "company: false": 0,
+            "company: false, but true one tick before its window": 0,
+            "company: true": 0,
+            "company: unverifiable": 0,
+            "saw_move: false": 0,
+            "saw_move: false, but true one tick before its window": 0,
+            "saw_move: true": 8,
+            "saw_move: unverifiable": 0,
+            "saw_player: false": 0,
+            "saw_player: false, but true one tick before its window": 0,
+            "saw_player: true": 14,
+            "saw_player: unverifiable": 1,
+            "whereabouts: false": 0,
+            "whereabouts: false, but true one tick before its window": 0,
+            "whereabouts: true": 3,
+            "whereabouts: unverifiable": 0
+          },
+          "definition": "Every placement of the target in the cited turn of a supported EJECT, by its kind and by whether the engine route makes it true or false at its kind's own clock, or cannot verify it. A whereabouts claim for a tick is read at that tick and the one before it; a sighting at the two ticks before the tick it names. The edge row counts a false placement the route makes true one tick before its window, so a clock off by one shows there rather than widening either window. Every row is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Cited placements of the target, by kind and by what the route makes of them"
+        },
+        "copresence_share_per_game": {
+          "counts": {
+            "up to a half": 16,
+            "up to a quarter": 31,
+            "up to three quarters": 3
+          },
+          "definition": "Games by the share of their player-ticks, each a living player standing in a room before a play tick, on which exactly one other living player stood in the same room. A player inside a vent stands in no room.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "How often a player stood with exactly one other"
+        },
         "corpse_age_at_report": {
           "counts": {
             "2": 8,
@@ -6883,6 +8944,25 @@
           ],
           "scope": null,
           "title": "Corpse age at report"
+        },
+        "games_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT": 27,
+            "CREWMATE_TASKS": 9,
+            "IMPOSTOR_PARITY": 14,
+            "IMPOSTOR_SABOTAGE": 0,
+            "MEETING_PHASE_REACHED": 0,
+            "TICK_BUDGET_REACHED": 0
+          },
+          "definition": "Games by the recorded reason they ended. Every ending the engine or the runner can record is listed; a game with no recorded ending is not evaluable.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row"
+          ],
+          "scope": null,
+          "title": "Games by ending"
         },
         "held_kill_next_meeting_outcomes": {
           "counts": {
@@ -6905,6 +8985,28 @@
           ],
           "scope": null,
           "title": "What the next meeting did after a held kill"
+        },
+        "holds_nothing_skips_by_source": {
+          "counts": {
+            "a flag": 5,
+            "a route line": 0,
+            "a spoken turn line": 34,
+            "a typed turn line": 34,
+            "an evidence row": 34,
+            "an observation row": 34,
+            "an observation row perceived since the previous meeting": 29
+          },
+          "definition": "SKIP ballots labelled as holding nothing, by each place in the voter's own recorded ballot prompt that names a living candidate: an observation row; an observation row whose id was perceived after the previous meeting (after the game began, at its first meeting); an evidence row; a flag; a typed turn line; a spoken turn line; a route line. One SKIP can name a candidate in several places, so the rows overlap and do not add up to the cell. Every place is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Where a holds-nothing SKIP's prompt names a living candidate"
         },
         "innocent_opener_ejections_by_trigger": {
           "counts": {
@@ -6938,6 +9040,41 @@
           "scope": null,
           "title": "Kill cooldown writes by writer"
         },
+        "kills_per_game": {
+          "counts": {
+            "0": 5,
+            "1": 32,
+            "2": 13
+          },
+          "definition": "Games by how many kills they held.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Kills per game"
+        },
+        "living_players_at_game_over_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT: 2 living": 27,
+            "CREWMATE_TASKS: 3 living": 4,
+            "CREWMATE_TASKS: 4 living": 5,
+            "IMPOSTOR_PARITY: 2 living": 14
+          },
+          "definition": "Games by their recorded ending and the players still alive when it ended: every player less those killed and those ejected.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row",
+            "Killed",
+            "meeting row"
+          ],
+          "scope": null,
+          "title": "Living players at game over, by ending"
+        },
         "meetings_by_trigger": {
           "counts": {
             "emergency": 7,
@@ -6965,6 +9102,32 @@
           "scope": "bounded_rebuttal_version = 1",
           "title": "Who received the rebuttal, and who had accused them"
         },
+        "report_openers_by_witness": {
+          "counts": {
+            "opened by a witness of a kill since the last meeting, 1 to 2 ticks": 0,
+            "opened by a witness of a kill since the last meeting, 11 to 20 ticks": 0,
+            "opened by a witness of a kill since the last meeting, 3 to 5 ticks": 0,
+            "opened by a witness of a kill since the last meeting, 6 to 10 ticks": 0,
+            "opened by a witness of a kill since the last meeting, more than 20 ticks": 0,
+            "opened by a witness of a kill since the last meeting, the same tick": 0,
+            "opened by another player, 1 to 2 ticks": 8,
+            "opened by another player, 11 to 20 ticks": 0,
+            "opened by another player, 3 to 5 ticks": 23,
+            "opened by another player, 6 to 10 ticks": 5,
+            "opened by another player, more than 20 ticks": 0,
+            "opened by another player, the same tick": 0
+          },
+          "definition": "Report meetings by whether their opener was among the recorded witnesses of some kill since the previous meeting (since the game began, at its first meeting), and by the ticks from the reported body's kill to the report. Every row is listed.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed",
+            "MeetingTriggered"
+          ],
+          "scope": null,
+          "title": "Who found the body"
+        },
         "retally_outcome_changes": {
           "counts": {
             "impostor ballots as SKIP: the reporter ejected -> no one ejected": 1,
@@ -6980,6 +9143,50 @@
           ],
           "scope": null,
           "title": "Outcomes a re-tally changes"
+        },
+        "route_lines_per_meeting": {
+          "counts": {},
+          "definition": "Meetings by how many players some ballot carried a route line about: 0, 1, 2, or 3 or more. Every row is listed.",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Meetings by the players with a route line"
+        },
+        "route_steps_by_reading": {
+          "counts": {},
+          "definition": "The steps of each meeting's distinct route lines by reading: walking fits, or the public regroup falls between, so walking cannot decide it. Every reading is listed.",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route steps by reading"
+        },
+        "sabotages_started_per_game": {
+          "counts": {
+            "0": 50
+          },
+          "definition": "Games by how many times a sabotage went from inactive to active between one play tick and the next. A sabotage that stays active across a meeting is one start.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "Sabotages started per game"
         },
         "skips_by_grounding_label": {
           "counts": {
@@ -7001,6 +9208,87 @@
           ],
           "scope": null,
           "title": "SKIP ballots by grounding label"
+        },
+        "supported_ejects_not_checkable_by_reason": {
+          "counts": {
+            "every cited placement is unverifiable": 1,
+            "it cites no turn, only the voter's own observation": 19,
+            "the cited turn places the target nowhere checkable": 21
+          },
+          "definition": "EJECT ballots labelled supported that neither cell above counts: the ballot cites no turn, only the voter's own observation; the cited turn, if it is one of this meeting's, places the target nowhere checkable; or the route cannot verify any cited placement. Every row is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line cannot be checked, by reason"
+        },
+        "tasks_left_at_game_over_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT: more than three quarters": 9,
+            "CREWMATE_EJECT: up to a half": 10,
+            "CREWMATE_EJECT: up to three quarters": 8,
+            "CREWMATE_TASKS: none": 9,
+            "IMPOSTOR_PARITY: more than three quarters": 1,
+            "IMPOSTOR_PARITY: none": 1,
+            "IMPOSTOR_PARITY: up to a half": 5,
+            "IMPOSTOR_PARITY: up to three quarters": 7
+          },
+          "definition": "Games by their recorded ending and the share of all task instances still unfinished on the final state.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row",
+            "final state"
+          ],
+          "scope": null,
+          "title": "Tasks left at game over, by ending"
+        },
+        "ticks_between_kills": {
+          "counts": {
+            "1 to 2 ticks": 0,
+            "11 to 20 ticks": 2,
+            "3 to 5 ticks": 0,
+            "6 to 10 ticks": 11,
+            "more than 20 ticks": 0,
+            "the same tick": 0
+          },
+          "definition": "Each kill after a game's first, by the ticks since the kill before it in the same game.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ticks between consecutive kills"
+        },
+        "ticks_from_kill_to_report": {
+          "counts": {
+            "1 to 2 ticks": 8,
+            "11 to 20 ticks": 0,
+            "3 to 5 ticks": 23,
+            "6 to 10 ticks": 5,
+            "its body never reported": 22,
+            "more than 20 ticks": 0,
+            "the same tick": 0
+          },
+          "definition": "Every kill by the ticks from it to the report meeting whose reported body is its victim's, a meeting on the kill's own tick included, or by its body never being reported. A body joins its kill by victim, so two kills on one tick each keep their own row.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed",
+            "MeetingTriggered"
+          ],
+          "scope": null,
+          "title": "Ticks from a kill to the meeting that reported its body"
         },
         "ticks_inside_per_trip": {
           "counts": {
@@ -7085,6 +9373,25 @@
           "scope": null,
           "title": "Impostor ballots written against a teammate"
         },
+        "ballots_carrying_route_lines": {
+          "by_construction": null,
+          "definition": "Ballots, whatever the voter's role, whose voter's own recorded ballot prompt carried the route lines block, over ballots with a recorded ballot call.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Ballots carrying route lines"
+        },
         "ballots_citing_a_rebuttal": {
           "by_construction": null,
           "definition": "Ballots whose cited turn is a repeat-speaker turn of the same meeting, over all ballots at meetings with a repeat-speaker turn.",
@@ -7136,6 +9443,64 @@
           "scope": null,
           "title": "Button meetings with vent proof"
         },
+        "charges_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Charges at the table, whatever the role of the voter or of the player charged, one of whose stated places is an end of a stated pair that reconciles, over every charge at the table. A charge is an EJECT ballot whose cited turn states a place of its target, or a flag whose two events each state a place of a player it names. A reconcilable pair proves no innocence.",
+          "denominator": 55,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 23,
+          "rate": 0.418182,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Charges resting on a stated pair the map or the regroup reconciles"
+        },
+        "cited_lines_false_to_the_route": {
+          "by_construction": null,
+          "definition": "EJECT ballots labelled supported, whatever the voter's role, with at least one placement of the target in the cited turn the engine route makes false, over supported EJECTs whose cited turn places the target checkably. A voter who believed a false line still held it.",
+          "denominator": 12,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 1,
+          "rate": 0.083333,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line the route makes false"
+        },
+        "cited_lines_true_to_the_route": {
+          "by_construction": null,
+          "definition": "EJECT ballots labelled supported, whatever the voter's role, whose every checkable placement of the target in the cited turn the engine route makes true, over supported EJECTs whose cited turn places the target checkably. A true cited line is not a correct vote.",
+          "denominator": 12,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 11,
+          "rate": 0.916667,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line the route makes true"
+        },
         "crew_witnessed_kills_held_at_next_meeting": {
           "by_construction": null,
           "definition": "Crew-witnessed kills with a crewmate witness alive at the next meeting, over crew-witnessed kills a meeting followed; the rest are not evaluable.",
@@ -7168,6 +9533,67 @@
           ],
           "scope": null,
           "title": "Ejections whose confidence floor only impostors met"
+        },
+        "ejections_charged_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Ejections, whatever the ejected player's role, where some charge against the ejected player rested on a stated pair that reconciles, over all ejections. A reconcilable pair proves no innocence.",
+          "denominator": 20,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 8,
+          "rate": 0.4,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Ejections charged on a stated pair that reconciles"
+        },
+        "ejections_charged_on_a_reconcilable_pair_shown_a_route_line": {
+          "by_construction": null,
+          "definition": "Ejections charged on a stated pair that reconciles at which some voter who voted to eject that player was served a route line about them, over ejections charged on such a pair. Every served step reconciles. Showing a line is not changing a vote.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "recorded ballot prompt"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Ejections charged on a stated pair that reconciles, with a route line shown to an ejecting voter"
+        },
+        "ejections_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "Ejections, whatever the ejected player's role, where the meeting stated a pair of the ejected player's places that reconciles, over all ejections. A reconcilable pair proves no innocence: the two places could both be true, and either could be false.",
+          "denominator": 20,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 8,
+          "rate": 0.4,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": null,
+          "title": "Ejections whose ejected player had a stated pair that reconciles"
         },
         "ejections_undone_with_impostor_ballots_as_skip": {
           "by_construction": null,
@@ -7318,6 +9744,42 @@
           ],
           "scope": null,
           "title": "Held kills whose witness voted the killer"
+        },
+        "holds_nothing_skips_naming_a_candidate": {
+          "by_construction": null,
+          "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names a living candidate in at least one of those places, over all SKIP ballots labelled as holding nothing: the complement of the cell above. A line held is not a reason to vote.",
+          "denominator": 28,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 28,
+          "rate": 1.0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Holds-nothing SKIPs whose prompt names a living candidate"
+        },
+        "holds_nothing_skips_naming_no_candidate": {
+          "by_construction": null,
+          "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names no living candidate in an observation row, an evidence row, a flag, a typed or spoken turn line or a route line, over all SKIP ballots labelled as holding nothing. The label reads as nothing that resolves the vote, not as nothing held, and a line held is not a reason to vote.",
+          "denominator": 28,
+          "guard": null,
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Holds-nothing SKIPs whose prompt names no living candidate"
         },
         "impostor_cooldown_zero_at_open": {
           "by_construction": null,
@@ -7676,6 +10138,25 @@
           ],
           "scope": null,
           "title": "Meetings opening with an impostor in a vent"
+        },
+        "meetings_with_a_route_line": {
+          "by_construction": null,
+          "definition": "Meetings where some voter's own recorded ballot prompt carried a route line, over meetings.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Meetings where a ballot carried a route line"
         },
         "meetings_with_repeat_speaker": {
           "by_construction": "bounded_rebuttal_version = unset",
@@ -8221,6 +10702,44 @@
           "scope": null,
           "title": "Ejections that removed an impostor"
         },
+        "route_lines_false_to_the_map": {
+          "by_construction": null,
+          "definition": "Steps of the route lines served on every ballot whose door count, reading or regroup tick disagrees with this census's own reading, over every step served. The census counts the fewest doors between the step's two rooms by its own search over the station's doors; walking fits when the doors are at most the ticks between, otherwise the step names the first public regroup tick after its earlier tick, up to its later one, and a change of room that neither allows is never served.",
+          "denominator": 0,
+          "guard": "route_lines_version = 1",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route steps false to the map"
+        },
+        "route_lines_off_the_table": {
+          "by_construction": null,
+          "definition": "Route lines served on a ballot about a player who is not a living candidate of its voter, with a place the meeting never stated for that player, or a second line for one player on one ballot, over every line served.",
+          "denominator": 0,
+          "guard": "route_lines_version = 1",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route lines off the table"
+        },
         "sabotage_active_at_regroup": {
           "by_construction": null,
           "definition": "Regroup meetings that opened with a sabotage active, over all regroup meetings.",
@@ -8256,7 +10775,7 @@
         },
         "skips_holding_nothing": {
           "by_construction": null,
-          "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement; it is not a checked fact.",
+          "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement, and the holds-nothing check reads it against the lines the voter's own ballot prompt held.",
           "denominator": 68,
           "guard": null,
           "heading": "Ballots",
@@ -8304,6 +10823,23 @@
           ],
           "scope": null,
           "title": "Surfacings before the cap with someone in view"
+        },
+        "task_wins_with_sabotage_in_play": {
+          "by_construction": null,
+          "definition": "Games the crew won on tasks in which a sabotage was active before at least one play tick, over games the crew won on tasks. This counts co-occurrence and measures no delay.",
+          "denominator": 12,
+          "guard": null,
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": 0.0,
+          "reads": [
+            "game over row",
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "Task wins in games with a sabotage in play"
         },
         "trips_closed_by_regroup": {
           "by_construction": null,
@@ -8523,6 +11059,48 @@
           ],
           "scope": null,
           "title": "Vent exits while a crewmate stood in the room left"
+        },
+        "witness_meeting_ejections_charged_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "The second of the two counts above at witness meetings only: ejections at witness meetings where some charge against the ejected player rested on a stated pair that reconciles, over ejections at witness meetings.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ejections at witness meetings charged on a stated pair that reconciles"
+        },
+        "witness_meeting_ejections_on_a_reconcilable_pair": {
+          "by_construction": null,
+          "definition": "The first of the two counts above at witness meetings only: ejections at witness meetings where the meeting stated a pair of the ejected player's places that reconciles, over ejections at witness meetings.",
+          "denominator": 0,
+          "guard": null,
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "numerator": 0,
+          "rate": null,
+          "reads": [
+            "meeting row turns",
+            "meeting row ballots",
+            "meeting row flags",
+            "state at the meeting",
+            "earlier meeting rows",
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ejections at witness meetings whose ejected player had a stated pair that reconciles"
         }
       },
       "era": {
@@ -8588,6 +11166,54 @@
           "scope": null,
           "title": "Actions thrown away on trigger ticks"
         },
+        "cited_placements_by_kind_and_verdict": {
+          "counts": {
+            "company: false": 0,
+            "company: false, but true one tick before its window": 0,
+            "company: true": 1,
+            "company: unverifiable": 0,
+            "saw_move: false": 1,
+            "saw_move: false, but true one tick before its window": 0,
+            "saw_move: true": 2,
+            "saw_move: unverifiable": 0,
+            "saw_player: false": 0,
+            "saw_player: false, but true one tick before its window": 0,
+            "saw_player: true": 6,
+            "saw_player: unverifiable": 3,
+            "whereabouts: false": 0,
+            "whereabouts: false, but true one tick before its window": 0,
+            "whereabouts: true": 4,
+            "whereabouts: unverifiable": 0
+          },
+          "definition": "Every placement of the target in the cited turn of a supported EJECT, by its kind and by whether the engine route makes it true or false at its kind's own clock, or cannot verify it. A whereabouts claim for a tick is read at that tick and the one before it; a sighting at the two ticks before the tick it names. The edge row counts a false placement the route makes true one tick before its window, so a clock off by one shows there rather than widening either window. Every row is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Cited placements of the target, by kind and by what the route makes of them"
+        },
+        "copresence_share_per_game": {
+          "counts": {
+            "up to a half": 18,
+            "up to a quarter": 31,
+            "up to three quarters": 1
+          },
+          "definition": "Games by the share of their player-ticks, each a living player standing in a room before a play tick, on which exactly one other living player stood in the same room. A player inside a vent stands in no room.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "How often a player stood with exactly one other"
+        },
         "corpse_age_at_report": {
           "counts": {
             "1": 1,
@@ -8610,6 +11236,25 @@
           "scope": null,
           "title": "Corpse age at report"
         },
+        "games_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT": 20,
+            "CREWMATE_TASKS": 12,
+            "IMPOSTOR_PARITY": 18,
+            "IMPOSTOR_SABOTAGE": 0,
+            "MEETING_PHASE_REACHED": 0,
+            "TICK_BUDGET_REACHED": 0
+          },
+          "definition": "Games by the recorded reason they ended. Every ending the engine or the runner can record is listed; a game with no recorded ending is not evaluable.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row"
+          ],
+          "scope": null,
+          "title": "Games by ending"
+        },
         "held_kill_next_meeting_outcomes": {
           "counts": {
             "one living crew witness: a witness ejected": 0,
@@ -8631,6 +11276,28 @@
           ],
           "scope": null,
           "title": "What the next meeting did after a held kill"
+        },
+        "holds_nothing_skips_by_source": {
+          "counts": {
+            "a flag": 2,
+            "a route line": 0,
+            "a spoken turn line": 28,
+            "a typed turn line": 28,
+            "an evidence row": 28,
+            "an observation row": 28,
+            "an observation row perceived since the previous meeting": 22
+          },
+          "definition": "SKIP ballots labelled as holding nothing, by each place in the voter's own recorded ballot prompt that names a living candidate: an observation row; an observation row whose id was perceived after the previous meeting (after the game began, at its first meeting); an evidence row; a flag; a typed turn line; a spoken turn line; a route line. One SKIP can name a candidate in several places, so the rows overlap and do not add up to the cell. Every place is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "recorded ballot prompt",
+            "state at the meeting"
+          ],
+          "scope": null,
+          "title": "Where a holds-nothing SKIP's prompt names a living candidate"
         },
         "innocent_opener_ejections_by_trigger": {
           "counts": {},
@@ -8662,6 +11329,41 @@
           "scope": null,
           "title": "Kill cooldown writes by writer"
         },
+        "kills_per_game": {
+          "counts": {
+            "0": 2,
+            "1": 30,
+            "2": 18
+          },
+          "definition": "Games by how many kills they held.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Kills per game"
+        },
+        "living_players_at_game_over_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT: 2 living": 20,
+            "CREWMATE_TASKS: 3 living": 10,
+            "CREWMATE_TASKS: 4 living": 2,
+            "IMPOSTOR_PARITY: 2 living": 18
+          },
+          "definition": "Games by their recorded ending and the players still alive when it ended: every player less those killed and those ejected.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row",
+            "Killed",
+            "meeting row"
+          ],
+          "scope": null,
+          "title": "Living players at game over, by ending"
+        },
         "meetings_by_trigger": {
           "counts": {
             "emergency": 3,
@@ -8689,6 +11391,32 @@
           "scope": "bounded_rebuttal_version = 1",
           "title": "Who received the rebuttal, and who had accused them"
         },
+        "report_openers_by_witness": {
+          "counts": {
+            "opened by a witness of a kill since the last meeting, 1 to 2 ticks": 1,
+            "opened by a witness of a kill since the last meeting, 11 to 20 ticks": 0,
+            "opened by a witness of a kill since the last meeting, 3 to 5 ticks": 0,
+            "opened by a witness of a kill since the last meeting, 6 to 10 ticks": 0,
+            "opened by a witness of a kill since the last meeting, more than 20 ticks": 0,
+            "opened by a witness of a kill since the last meeting, the same tick": 0,
+            "opened by another player, 1 to 2 ticks": 8,
+            "opened by another player, 11 to 20 ticks": 0,
+            "opened by another player, 3 to 5 ticks": 21,
+            "opened by another player, 6 to 10 ticks": 6,
+            "opened by another player, more than 20 ticks": 0,
+            "opened by another player, the same tick": 0
+          },
+          "definition": "Report meetings by whether their opener was among the recorded witnesses of some kill since the previous meeting (since the game began, at its first meeting), and by the ticks from the reported body's kill to the report. Every row is listed.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed",
+            "MeetingTriggered"
+          ],
+          "scope": null,
+          "title": "Who found the body"
+        },
         "retally_outcome_changes": {
           "counts": {},
           "definition": "Meetings whose re-tally differs from the recorded outcome, by re-tally, by the recorded outcome (the reporter, another crewmate, an impostor or no one ejected) and by what the re-tally gives instead. Every other ballot is held fixed; real voters would have heard different speech.",
@@ -8701,6 +11429,50 @@
           ],
           "scope": null,
           "title": "Outcomes a re-tally changes"
+        },
+        "route_lines_per_meeting": {
+          "counts": {},
+          "definition": "Meetings by how many players some ballot carried a route line about: 0, 1, 2, or 3 or more. Every row is listed.",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Meetings by the players with a route line"
+        },
+        "route_steps_by_reading": {
+          "counts": {},
+          "definition": "The steps of each meeting's distinct route lines by reading: walking fits, or the public regroup falls between, so walking cannot decide it. Every reading is listed.",
+          "heading": "Stated places the map or the regroup reconciles",
+          "in_scope": false,
+          "not_evaluable": 0,
+          "reads": [
+            "recorded ballot prompt",
+            "meeting row turns",
+            "state at the meeting",
+            "earlier meeting rows"
+          ],
+          "scope": "route_lines_version = 1",
+          "title": "Route steps by reading"
+        },
+        "sabotages_started_per_game": {
+          "counts": {
+            "0": 50
+          },
+          "definition": "Games by how many times a sabotage went from inactive to active between one play tick and the next. A sabotage that stays active across a meeting is one start.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "state before the tick"
+          ],
+          "scope": null,
+          "title": "Sabotages started per game"
         },
         "skips_by_grounding_label": {
           "counts": {
@@ -8722,6 +11494,87 @@
           ],
           "scope": null,
           "title": "SKIP ballots by grounding label"
+        },
+        "supported_ejects_not_checkable_by_reason": {
+          "counts": {
+            "every cited placement is unverifiable": 3,
+            "it cites no turn, only the voter's own observation": 12,
+            "the cited turn places the target nowhere checkable": 22
+          },
+          "definition": "EJECT ballots labelled supported that neither cell above counts: the ballot cites no turn, only the voter's own observation; the cited turn, if it is one of this meeting's, places the target nowhere checkable; or the route cannot verify any cited placement. Every row is listed.",
+          "heading": "What a ballot held",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "meeting row ballots",
+            "meeting row turns",
+            "state after the tick",
+            "state after the meeting"
+          ],
+          "scope": null,
+          "title": "Supported EJECTs whose cited line cannot be checked, by reason"
+        },
+        "tasks_left_at_game_over_by_ending": {
+          "counts": {
+            "CREWMATE_EJECT: more than three quarters": 5,
+            "CREWMATE_EJECT: up to a half": 3,
+            "CREWMATE_EJECT: up to three quarters": 12,
+            "CREWMATE_TASKS: none": 12,
+            "IMPOSTOR_PARITY: more than three quarters": 2,
+            "IMPOSTOR_PARITY: none": 1,
+            "IMPOSTOR_PARITY: up to a half": 8,
+            "IMPOSTOR_PARITY: up to three quarters": 7
+          },
+          "definition": "Games by their recorded ending and the share of all task instances still unfinished on the final state.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "game over row",
+            "final state"
+          ],
+          "scope": null,
+          "title": "Tasks left at game over, by ending"
+        },
+        "ticks_between_kills": {
+          "counts": {
+            "1 to 2 ticks": 0,
+            "11 to 20 ticks": 2,
+            "3 to 5 ticks": 2,
+            "6 to 10 ticks": 14,
+            "more than 20 ticks": 0,
+            "the same tick": 0
+          },
+          "definition": "Each kill after a game's first, by the ticks since the kill before it in the same game.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed"
+          ],
+          "scope": null,
+          "title": "Ticks between consecutive kills"
+        },
+        "ticks_from_kill_to_report": {
+          "counts": {
+            "1 to 2 ticks": 9,
+            "11 to 20 ticks": 0,
+            "3 to 5 ticks": 21,
+            "6 to 10 ticks": 6,
+            "its body never reported": 30,
+            "more than 20 ticks": 0,
+            "the same tick": 0
+          },
+          "definition": "Every kill by the ticks from it to the report meeting whose reported body is its victim's, a meeting on the kill's own tick included, or by its body never being reported. A body joins its kill by victim, so two kills on one tick each keep their own row.",
+          "heading": "The shape of a game",
+          "in_scope": true,
+          "not_evaluable": 0,
+          "reads": [
+            "Killed",
+            "MeetingTriggered"
+          ],
+          "scope": null,
+          "title": "Ticks from a kill to the meeting that reported its body"
         },
         "ticks_inside_per_trip": {
           "counts": {
@@ -8779,6 +11632,7 @@
     "contextual_self_report_version": "a situational impostor self-report: unset means never.",
     "meeting_reset": "what a meeting leaves behind: under hub_with_grace, a regroup.",
     "report_body_handle_version": "how a report names the corpse: version 1 uses a handle without the death tick.",
+    "route_lines_version": "whether a ballot carries route lines: version 1 serves a line about each candidate whose stated places change room in a way the doors or the public regroup allow.",
     "self_report": "whether an impostor may report a corpse: off means never.",
     "vent_entry_policy": "when an impostor enters a vent: under own_fresh_kill, only at its own fresh kill.",
     "vent_exit_policy": "when an impostor surfaces: under look_and_wait, only when no non-teammate stands in its inferred-visible rooms, or at the in-vent cap.",
@@ -8786,25 +11640,34 @@
   },
   "terms": {
     "by construction": "a count a recorded setting forces to zero. While the setting is on the census checks the count is zero and stops with an error naming the game and the meeting or tick if it is not, and the page says 0 by construction instead of presenting a measured improvement.",
+    "charge": "an EJECT ballot whose cited turn states a place of its target, or a flag naming a player whose two events each state a place of that player. A charge rests on a reconcilable pair when one of its stated places is an end of a stated pair that reconciles.",
+    "checkable": "a cited placement the engine route can verify: its room is a room of the map and the route holds the target at the ticks its kind is read at. A checkable placement is true when the route puts the target there at one of those ticks and false otherwise; a true cited line is not a correct vote, and a false one may still have been believed.",
+    "cited line": "the turn an EJECT ballot cites as its reason, read for its spoken placements of the ballot's target: a sighting of the target, the target seen as company in another's sighting, the target seen arriving in a room, or the target's own whereabouts claim.",
     "era": "the recorded settings a group of games shares: its experiment settings, its observation delivery version, its substrate-flag stamp and its prompt versions. Games of different eras are never pooled.",
     "fresh kill": "the impostor's own victim, killed at most 3 ticks earlier in the same room, with no meeting in between.",
     "grace window": "the ticks after a regroup before the impostors' restarted kill cooldown runs out: from the tick after the meeting through the recorded kill cooldown, else the map's.",
     "held kill": "a kill a crewmate saw whose crew witness is still alive when the next meeting opens, a meeting on the kill's own tick included.",
-    "holds-nothing label": "the grounding label a SKIP ballot carries when its voter stated outright that it held nothing that resolves the vote. The label restates the voter's own statement; nothing checks it against what the voter held.",
+    "holds-nothing check": "whether a SKIP labelled as holding nothing was shown, in its own ballot prompt, a line naming a living candidate: an observation row of its memory, an open contradiction, an evidence row, a typed or spoken turn line, or a route line, never a turn's header naming its speaker, the beliefs section or the list of candidates, which name every living player. Such a line is held data, true or false. The label reads as nothing that resolves the vote, not as nothing held, and a line held is not a reason to vote.",
+    "holds-nothing label": "the grounding label a SKIP ballot carries when its voter stated outright that it held nothing that resolves the vote. The label restates the voter's own statement; the holds-nothing check reads it against the lines the voter's own ballot prompt held.",
     "in-vent cap": "4 ticks inside: under the look-and-wait exit an impostor must surface at this count.",
     "inferred-visible rooms": "the rooms an impostor inside a vent can infer it sees: the vent's own room and its map neighbours, or the own room alone while any sabotage is active. Never the engine's own visibility.",
+    "living candidate": "a player alive when the meeting opened, other than the voter: someone the voter's ballot could name.",
     "living witnesses": "the crewmates the engine recorded as seeing a kill who are still alive at the next meeting, counted as one, or as two or more. A fellow impostor who saw the kill is never one of them.",
     "n/a": "nothing to count, so no rate exists: either nothing of that kind happened, or the cell or table counts only games recorded with a setting these games were not recorded with.",
     "opener": "the player whose body report or button press opened a meeting; the opener speaks first.",
     "re-tally": "the meeting's recorded ballots counted again by the game's own vote count at the meeting's recorded confidence floor, with each impostor ballot read as a SKIP or removed. Every other ballot is held fixed, so a re-tally describes the ballots, not what the table would have done: real voters would have heard different speech.",
     "rebuttal": "a turn by a player who already spoke in the same meeting; the only such turn the meeting layer can produce is the bounded rebuttal.",
     "rebuttal citation": "a ballot whose cited turn, or whose counter slot (the strongest thing the voter held pointing away from its choice), names a rebuttal of the same meeting.",
+    "reconciles": "said of a stated pair: the station's doors link its two rooms within the ticks between, or the public regroup falls between its two ticks, so walking cannot decide it. A reconcilable pair proves no innocence: it says the two places could both be true, and either could be false.",
     "regroup": "the optional meeting reset: when play resumes every survivor stands in the meeting room, corpses are cleared, no one is inside a vent and each impostor's kill cooldown restarts at the recorded kill cooldown, else the map's value.",
+    "route line": "a line the route lines setting adds to a ballot about one candidate: each change of room among the places this meeting stated for that player, with the doors between the rooms, read as walking fits or as the public regroup falling between. A change of room that neither allows is left out. A line weighs no statement and says nothing about anyone's role, and showing a line is not changing a vote.",
     "seat": "one living player at one report meeting. The reporter's seat is the reporter's whatever its role; every other seat belongs to a crewmate or an impostor. A player dead before the meeting has no seat.",
+    "stated pair": "two places a meeting's turns stated for one player, each at a tick, in two different rooms: a sighting of the player, the player seen as company in another's sighting, the player seen arriving in a room or seen at a vent, the player's own whereabouts, or either end of a stay in an alibi route.",
     "ticks inside": "the play ticks a vent trip lasted, counting again from zero at a meeting the trip spanned.",
     "trigger tick": "the play tick on which a meeting opened. Actions submitted for that tick after the one that opened the meeting are thrown away unexecuted.",
     "vent band": "the ejections whose ejected player such a vent-sighting flag names.",
     "vent proof": "a meeting's contradiction flag of the vent-sighting kind naming a player who was alive when the meeting opened.",
-    "vent trip": "an impostor's stay inside the vents, from its entry to its exit, or to the meeting or game end that closed it."
+    "vent trip": "an impostor's stay inside the vents, from its entry to its exit, or to the meeting or game end that closed it.",
+    "witness meeting": "a report meeting whose reporter the engine recorded as a witness of a kill since the previous meeting (since the game began, at its first)."
   }
 }

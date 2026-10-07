@@ -26,7 +26,16 @@ This page is generated. Do not edit it by hand: run `uv run python scripts/publi
 * **living witnesses**: the crewmates the engine recorded as seeing a kill who are still alive at the next meeting, counted as one, or as two or more. A fellow impostor who saw the kill is never one of them.
 * **held kill**: a kill a crewmate saw whose crew witness is still alive when the next meeting opens, a meeting on the kill's own tick included.
 * **re-tally**: the meeting's recorded ballots counted again by the game's own vote count at the meeting's recorded confidence floor, with each impostor ballot read as a SKIP or removed. Every other ballot is held fixed, so a re-tally describes the ballots, not what the table would have done: real voters would have heard different speech.
-* **holds-nothing label**: the grounding label a SKIP ballot carries when its voter stated outright that it held nothing that resolves the vote. The label restates the voter's own statement; nothing checks it against what the voter held.
+* **holds-nothing label**: the grounding label a SKIP ballot carries when its voter stated outright that it held nothing that resolves the vote. The label restates the voter's own statement; the holds-nothing check reads it against the lines the voter's own ballot prompt held.
+* **living candidate**: a player alive when the meeting opened, other than the voter: someone the voter's ballot could name.
+* **holds-nothing check**: whether a SKIP labelled as holding nothing was shown, in its own ballot prompt, a line naming a living candidate: an observation row of its memory, an open contradiction, an evidence row, a typed or spoken turn line, or a route line, never a turn's header naming its speaker, the beliefs section or the list of candidates, which name every living player. Such a line is held data, true or false. The label reads as nothing that resolves the vote, not as nothing held, and a line held is not a reason to vote.
+* **cited line**: the turn an EJECT ballot cites as its reason, read for its spoken placements of the ballot's target: a sighting of the target, the target seen as company in another's sighting, the target seen arriving in a room, or the target's own whereabouts claim.
+* **checkable**: a cited placement the engine route can verify: its room is a room of the map and the route holds the target at the ticks its kind is read at. A checkable placement is true when the route puts the target there at one of those ticks and false otherwise; a true cited line is not a correct vote, and a false one may still have been believed.
+* **stated pair**: two places a meeting's turns stated for one player, each at a tick, in two different rooms: a sighting of the player, the player seen as company in another's sighting, the player seen arriving in a room or seen at a vent, the player's own whereabouts, or either end of a stay in an alibi route.
+* **reconciles**: said of a stated pair: the station's doors link its two rooms within the ticks between, or the public regroup falls between its two ticks, so walking cannot decide it. A reconcilable pair proves no innocence: it says the two places could both be true, and either could be false.
+* **charge**: an EJECT ballot whose cited turn states a place of its target, or a flag naming a player whose two events each state a place of that player. A charge rests on a reconcilable pair when one of its stated places is an end of a stated pair that reconciles.
+* **witness meeting**: a report meeting whose reporter the engine recorded as a witness of a kill since the previous meeting (since the game began, at its first).
+* **route line**: a line the route lines setting adds to a ballot about one candidate: each change of room among the places this meeting stated for that player, with the doors between the rooms, read as walking fits or as the public regroup falling between. A change of room that neither allows is left out. A line weighs no statement and says nothing about anyone's role, and showing a line is not changing a vote.
 * **rebuttal citation**: a ballot whose cited turn, or whose counter slot (the strongest thing the voter held pointing away from its choice), names a rebuttal of the same meeting.
 * **era**: the recorded settings a group of games shares: its experiment settings, its observation delivery version, its substrate-flag stamp and its prompt versions. Games of different eras are never pooled.
 * **by construction**: a count a recorded setting forces to zero. While the setting is on the census checks the count is zero and stops with an error naming the game and the meeting or tick if it is not, and the page says 0 by construction instead of presenting a measured improvement.
@@ -45,13 +54,14 @@ Each cell reads `numerator/denominator (rate)`. A cell whose count a recorded se
 * `self_report`: whether an impostor may report a corpse: off means never.
 * `contextual_self_report_version`: a situational impostor self-report: unset means never.
 * `ballot_kill_row_version`: whether a kill witness's ballot gets its own first-hand kill row: version 1 serves it.
+* `route_lines_version`: whether a ballot carries route lines: version 1 serves a line about each candidate whose stated places change room in a way the doors or the public regroup allow.
 
 Every recorded setting field, and how this census uses it:
 
 | setting | use |
 | --- | --- |
 | `format_version` | not read: a serialization version, not a game rule |
-| `redistribution_policy` | not read: decides who inherits a dead crewmate's tasks; no cell counts tasks |
+| `redistribution_policy` | not read: decides who inherits a dead crewmate's tasks; no cell is forced by it |
 | `meeting_reset` | read by: meeting_regroup |
 | `crew_idle_policy` | not read: moves idle crewmates; no cell is forced by it |
 | `vent_exit_policy` | read by: look_and_wait_exit |
@@ -70,7 +80,7 @@ Every recorded setting field, and how this census uses it:
 | `ballot_kill_row_version` | read by: own_kill_ballot_row |
 | `impostor_ballot_version` | not read: an instructed ballot framing; the tally does not enforce it, so no cell is forced by it |
 | `kill_cooldown_ticks` | read as a value by: the length of the grace window, and the value the kill cooldown cell checks every cooldown write against |
-| `route_lines_version` | not read: adds role-blind route lines to a ballot; no cell is forced by it |
+| `route_lines_version` | read by: route_lines |
 
 ## Eras
 
@@ -371,6 +381,199 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 | uncited | 0 | 0 | 0 | 0 | 0 |
 | unlabelled | 0 | 0 | 0 | 0 | 0 |
 
+### What a ballot held
+
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Holds-nothing SKIPs whose prompt names no living candidate | 0/764 (0.0%) | 0/702 (0.0%) | 0/34 (0.0%) | 0/28 (0.0%) | 0/214 (0.0%) |
+| Holds-nothing SKIPs whose prompt names a living candidate | 764/764 (100.0%) | 702/702 (100.0%) | 34/34 (100.0%) | 28/28 (100.0%) | 214/214 (100.0%) |
+| Supported EJECTs whose cited line the route makes true | 818/842 (97.1%) | 784/807 (97.1%) | 23/23 (100.0%) | 11/12 (91.7%) | 278/281 (98.9%) |
+| Supported EJECTs whose cited line the route makes false | 24/842 (2.9%) | 23/807 (2.9%) | 0/23 (0.0%) | 1/12 (8.3%) | 3/281 (1.1%) |
+
+**Where a holds-nothing SKIP's prompt names a living candidate.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| a flag | 203 | 196 | 5 | 2 | 22 |
+| a route line | 0 | 0 | 0 | 0 | 0 |
+| a spoken turn line | 762 | 700 | 34 | 28 | 214 |
+| a typed turn line | 764 | 702 | 34 | 28 | 214 |
+| an evidence row | 764 | 702 | 34 | 28 | 214 |
+| an observation row | 764 | 702 | 34 | 28 | 214 |
+| an observation row perceived since the previous meeting | 560 | 509 | 29 | 22 | 166 |
+
+**Cited placements of the target, by kind and by what the route makes of them.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| company: false | 15 | 15 | 0 | 0 | 0 |
+| company: false, but true one tick before its window | 2 | 2 | 0 | 0 | 0 |
+| company: true | 146 | 145 | 0 | 1 | 34 |
+| company: unverifiable | 0 | 0 | 0 | 0 | 0 |
+| saw_move: false | 4 | 3 | 0 | 1 | 3 |
+| saw_move: false, but true one tick before its window | 0 | 0 | 0 | 0 | 2 |
+| saw_move: true | 430 | 420 | 8 | 2 | 163 |
+| saw_move: unverifiable | 0 | 0 | 0 | 0 | 0 |
+| saw_player: false | 20 | 20 | 0 | 0 | 0 |
+| saw_player: false, but true one tick before its window | 2 | 2 | 0 | 0 | 0 |
+| saw_player: true | 517 | 497 | 14 | 6 | 178 |
+| saw_player: unverifiable | 6 | 2 | 1 | 3 | 0 |
+| whereabouts: false | 0 | 0 | 0 | 0 | 0 |
+| whereabouts: false, but true one tick before its window | 0 | 0 | 0 | 0 | 0 |
+| whereabouts: true | 73 | 66 | 3 | 4 | 60 |
+| whereabouts: unverifiable | 0 | 0 | 0 | 0 | 0 |
+
+**Supported EJECTs whose cited line cannot be checked, by reason.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| every cited placement is unverifiable | 6 | 2 | 1 | 3 | 0 |
+| it cites no turn, only the voter's own observation | 254 | 223 | 19 | 12 | 29 |
+| the cited turn places the target nowhere checkable | 487 | 444 | 21 | 22 | 97 |
+
+### Stated places the map or the regroup reconciles
+
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Charges resting on a stated pair the map or the regroup reconciles | 1104/1675 (65.9%) | 1041/1551 (67.1%) | 40/69 (58.0%) | 23/55 (41.8%) | 276/402 (68.7%) |
+| Ejections whose ejected player had a stated pair that reconciles | 200/321 (62.3%) | 175/273 (64.1%) | 17/28 (60.7%) | 8/20 (40.0%) | 41/66 (62.1%) |
+| Ejections charged on a stated pair that reconciles | 198/321 (61.7%) | 173/273 (63.4%) | 17/28 (60.7%) | 8/20 (40.0%) | 40/66 (60.6%) |
+| Ejections at witness meetings whose ejected player had a stated pair that reconciles | 8/13 (61.5%) | 8/13 (61.5%) | n/a | n/a | 7/12 (58.3%) |
+| Ejections at witness meetings charged on a stated pair that reconciles | 8/13 (61.5%) | 8/13 (61.5%) | n/a | n/a | 7/12 (58.3%) |
+| Meetings where a ballot carried a route line | n/a | n/a | n/a | n/a | n/a |
+| Ballots carrying route lines | n/a | n/a | n/a | n/a | n/a |
+| Route steps false to the map | n/a | n/a | n/a | n/a | n/a |
+| Route lines off the table | n/a | n/a | n/a | n/a | n/a |
+| Ejections charged on a stated pair that reconciles, with a route line shown to an ejecting voter | n/a | n/a | n/a | n/a | n/a |
+
+**Meetings by the players with a route line.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| (none) | n/a | n/a | n/a | n/a | n/a |
+
+**Route steps by reading.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| (none) | n/a | n/a | n/a | n/a | n/a |
+
+### The shape of a game
+
+| cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| Task wins in games with a sabotage in play | 2/23 (8.7%) | 2/2 (100.0%) | 0/9 (0.0%) | 0/12 (0.0%) | 11/13 (84.6%) |
+
+**Games by ending.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| CREWMATE_EJECT | 150 | 103 | 27 | 20 | 13 |
+| CREWMATE_TASKS | 23 | 2 | 9 | 12 | 13 |
+| IMPOSTOR_PARITY | 77 | 45 | 14 | 18 | 24 |
+| IMPOSTOR_SABOTAGE | 0 | 0 | 0 | 0 | 0 |
+| MEETING_PHASE_REACHED | 0 | 0 | 0 | 0 | 0 |
+| TICK_BUDGET_REACHED | 0 | 0 | 0 | 0 | 0 |
+
+**Kills per game.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 7 | 0 | 5 | 2 | 0 |
+| 1 | 64 | 2 | 32 | 30 | 0 |
+| 2 | 66 | 35 | 13 | 18 | 5 |
+| 3 | 35 | 35 | 0 | 0 | 12 |
+| 4 | 32 | 32 | 0 | 0 | 19 |
+| 5 | 31 | 31 | 0 | 0 | 11 |
+| 6 | 15 | 15 | 0 | 0 | 3 |
+
+**Ticks between consecutive kills.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| 1 to 2 ticks | 84 | 84 | 0 | 0 | 25 |
+| 11 to 20 ticks | 57 | 53 | 2 | 2 | 59 |
+| 3 to 5 ticks | 109 | 107 | 0 | 2 | 13 |
+| 6 to 10 ticks | 164 | 139 | 11 | 14 | 32 |
+| more than 20 ticks | 7 | 7 | 0 | 0 | 9 |
+| the same tick | 10 | 10 | 0 | 0 | 7 |
+
+**Ticks from a kill to the meeting that reported its body.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| 1 to 2 ticks | 123 | 106 | 8 | 9 | 32 |
+| 11 to 20 ticks | 44 | 44 | 0 | 0 | 1 |
+| 3 to 5 ticks | 224 | 180 | 23 | 21 | 69 |
+| 6 to 10 ticks | 92 | 81 | 5 | 6 | 12 |
+| its body never reported | 186 | 134 | 22 | 30 | 81 |
+| more than 20 ticks | 5 | 5 | 0 | 0 | 0 |
+| the same tick | 0 | 0 | 0 | 0 | 0 |
+
+**Living players at game over, by ending.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| CREWMATE_EJECT: 2 living | 58 | 11 | 27 | 20 | 3 |
+| CREWMATE_EJECT: 3 living | 23 | 23 | 0 | 0 | 2 |
+| CREWMATE_EJECT: 4 living | 32 | 32 | 0 | 0 | 6 |
+| CREWMATE_EJECT: 5 living | 35 | 35 | 0 | 0 | 2 |
+| CREWMATE_EJECT: 6 living | 2 | 2 | 0 | 0 | 0 |
+| CREWMATE_TASKS: 3 living | 15 | 1 | 4 | 10 | 2 |
+| CREWMATE_TASKS: 4 living | 8 | 1 | 5 | 2 | 2 |
+| CREWMATE_TASKS: 5 living | 0 | 0 | 0 | 0 | 5 |
+| CREWMATE_TASKS: 6 living | 0 | 0 | 0 | 0 | 4 |
+| IMPOSTOR_PARITY: 2 living | 65 | 33 | 14 | 18 | 8 |
+| IMPOSTOR_PARITY: 4 living | 12 | 12 | 0 | 0 | 16 |
+
+**Tasks left at game over, by ending.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| CREWMATE_EJECT: more than three quarters | 19 | 5 | 9 | 5 | 0 |
+| CREWMATE_EJECT: up to a half | 78 | 65 | 10 | 3 | 1 |
+| CREWMATE_EJECT: up to a quarter | 18 | 18 | 0 | 0 | 12 |
+| CREWMATE_EJECT: up to three quarters | 35 | 15 | 8 | 12 | 0 |
+| CREWMATE_TASKS: none | 23 | 2 | 9 | 12 | 13 |
+| IMPOSTOR_PARITY: more than three quarters | 3 | 0 | 1 | 2 | 0 |
+| IMPOSTOR_PARITY: none | 2 | 0 | 1 | 1 | 0 |
+| IMPOSTOR_PARITY: up to a half | 34 | 21 | 5 | 8 | 6 |
+| IMPOSTOR_PARITY: up to a quarter | 22 | 22 | 0 | 0 | 18 |
+| IMPOSTOR_PARITY: up to three quarters | 16 | 2 | 7 | 7 | 0 |
+
+**Sabotages started per game.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 228 | 128 | 50 | 50 | 20 |
+| 1 | 13 | 13 | 0 | 0 | 17 |
+| 2 | 9 | 9 | 0 | 0 | 13 |
+
+**Who found the body.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| opened by a witness of a kill since the last meeting, 1 to 2 ticks | 17 | 16 | 0 | 1 | 14 |
+| opened by a witness of a kill since the last meeting, 11 to 20 ticks | 0 | 0 | 0 | 0 | 0 |
+| opened by a witness of a kill since the last meeting, 3 to 5 ticks | 0 | 0 | 0 | 0 | 0 |
+| opened by a witness of a kill since the last meeting, 6 to 10 ticks | 0 | 0 | 0 | 0 | 0 |
+| opened by a witness of a kill since the last meeting, more than 20 ticks | 0 | 0 | 0 | 0 | 0 |
+| opened by a witness of a kill since the last meeting, the same tick | 0 | 0 | 0 | 0 | 0 |
+| opened by another player, 1 to 2 ticks | 106 | 90 | 8 | 8 | 18 |
+| opened by another player, 11 to 20 ticks | 44 | 44 | 0 | 0 | 1 |
+| opened by another player, 3 to 5 ticks | 224 | 180 | 23 | 21 | 69 |
+| opened by another player, 6 to 10 ticks | 92 | 81 | 5 | 6 | 12 |
+| opened by another player, more than 20 ticks | 5 | 5 | 0 | 0 | 0 |
+| opened by another player, the same tick | 0 | 0 | 0 | 0 | 0 |
+
+**How often a player stood with exactly one other.**
+
+| row | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
+| --- | --- | --- | --- | --- | --- |
+| up to a half | 150 | 116 | 16 | 18 | 29 |
+| up to a quarter | 96 | 34 | 31 | 31 | 21 |
+| up to three quarters | 4 | 0 | 3 | 1 | 0 |
+
 ### Reported beside the counts
 
 | cell | baseline-9, pooled | ml_corpus/9p2i (baseline-9) | ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) | samples/9p2i (stage-b-r2) |
@@ -548,7 +751,37 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 
 **Held kills whose living witness was ejected** (`held_kill_witnesses_ejected`). Held crew-witnessed kills where the next meeting ejected one of the kill's living crew witnesses, over held crew-witnessed kills. Reads `Killed`, `meeting row`.
 
-**SKIP ballots labelled as holding nothing** (`skips_holding_nothing`). SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement; it is not a checked fact. Reads `meeting row ballots`.
+**SKIP ballots labelled as holding nothing** (`skips_holding_nothing`). SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement, and the holds-nothing check reads it against the lines the voter's own ballot prompt held. Reads `meeting row ballots`.
+
+**Holds-nothing SKIPs whose prompt names no living candidate** (`holds_nothing_skips_naming_no_candidate`). SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names no living candidate in an observation row, an evidence row, a flag, a typed or spoken turn line or a route line, over all SKIP ballots labelled as holding nothing. The label reads as nothing that resolves the vote, not as nothing held, and a line held is not a reason to vote. Reads `meeting row ballots`, `recorded ballot prompt`, `state at the meeting`.
+
+**Holds-nothing SKIPs whose prompt names a living candidate** (`holds_nothing_skips_naming_a_candidate`). SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names a living candidate in at least one of those places, over all SKIP ballots labelled as holding nothing: the complement of the cell above. A line held is not a reason to vote. Reads `meeting row ballots`, `recorded ballot prompt`, `state at the meeting`.
+
+**Supported EJECTs whose cited line the route makes true** (`cited_lines_true_to_the_route`). EJECT ballots labelled supported, whatever the voter's role, whose every checkable placement of the target in the cited turn the engine route makes true, over supported EJECTs whose cited turn places the target checkably. A true cited line is not a correct vote. Reads `meeting row ballots`, `meeting row turns`, `state after the tick`, `state after the meeting`.
+
+**Supported EJECTs whose cited line the route makes false** (`cited_lines_false_to_the_route`). EJECT ballots labelled supported, whatever the voter's role, with at least one placement of the target in the cited turn the engine route makes false, over supported EJECTs whose cited turn places the target checkably. A voter who believed a false line still held it. Reads `meeting row ballots`, `meeting row turns`, `state after the tick`, `state after the meeting`.
+
+**Charges resting on a stated pair the map or the regroup reconciles** (`charges_on_a_reconcilable_pair`). Charges at the table, whatever the role of the voter or of the player charged, one of whose stated places is an end of a stated pair that reconciles, over every charge at the table. A charge is an EJECT ballot whose cited turn states a place of its target, or a flag whose two events each state a place of a player it names. A reconcilable pair proves no innocence. Reads `meeting row turns`, `meeting row ballots`, `meeting row flags`, `state at the meeting`, `earlier meeting rows`.
+
+**Ejections whose ejected player had a stated pair that reconciles** (`ejections_on_a_reconcilable_pair`). Ejections, whatever the ejected player's role, where the meeting stated a pair of the ejected player's places that reconciles, over all ejections. A reconcilable pair proves no innocence: the two places could both be true, and either could be false. Reads `meeting row turns`, `meeting row ballots`, `meeting row flags`, `state at the meeting`, `earlier meeting rows`.
+
+**Ejections charged on a stated pair that reconciles** (`ejections_charged_on_a_reconcilable_pair`). Ejections, whatever the ejected player's role, where some charge against the ejected player rested on a stated pair that reconciles, over all ejections. A reconcilable pair proves no innocence. Reads `meeting row turns`, `meeting row ballots`, `meeting row flags`, `state at the meeting`, `earlier meeting rows`.
+
+**Ejections at witness meetings whose ejected player had a stated pair that reconciles** (`witness_meeting_ejections_on_a_reconcilable_pair`). The first of the two counts above at witness meetings only: ejections at witness meetings where the meeting stated a pair of the ejected player's places that reconciles, over ejections at witness meetings. Reads `meeting row turns`, `meeting row ballots`, `meeting row flags`, `state at the meeting`, `earlier meeting rows`, `Killed`.
+
+**Ejections at witness meetings charged on a stated pair that reconciles** (`witness_meeting_ejections_charged_on_a_reconcilable_pair`). The second of the two counts above at witness meetings only: ejections at witness meetings where some charge against the ejected player rested on a stated pair that reconciles, over ejections at witness meetings. Reads `meeting row turns`, `meeting row ballots`, `meeting row flags`, `state at the meeting`, `earlier meeting rows`, `Killed`.
+
+**Meetings where a ballot carried a route line** (`meetings_with_a_route_line`). Meetings where some voter's own recorded ballot prompt carried a route line, over meetings. Reads `recorded ballot prompt`, `meeting row turns`, `state at the meeting`, `earlier meeting rows`. Counted only in games recorded with `route_lines_version = 1`; in any other era it reads n/a.
+
+**Ballots carrying route lines** (`ballots_carrying_route_lines`). Ballots, whatever the voter's role, whose voter's own recorded ballot prompt carried the route lines block, over ballots with a recorded ballot call. Reads `recorded ballot prompt`, `meeting row turns`, `state at the meeting`, `earlier meeting rows`. Counted only in games recorded with `route_lines_version = 1`; in any other era it reads n/a.
+
+**Route steps false to the map** (`route_lines_false_to_the_map`). Steps of the route lines served on every ballot whose door count, reading or regroup tick disagrees with this census's own reading, over every step served. The census counts the fewest doors between the step's two rooms by its own search over the station's doors; walking fits when the doors are at most the ticks between, otherwise the step names the first public regroup tick after its earlier tick, up to its later one, and a change of room that neither allows is never served. Reads `recorded ballot prompt`, `meeting row turns`, `state at the meeting`, `earlier meeting rows`. Zero by construction while `route_lines_version = 1`. Counted only in games recorded with `route_lines_version = 1`; in any other era it reads n/a.
+
+**Route lines off the table** (`route_lines_off_the_table`). Route lines served on a ballot about a player who is not a living candidate of its voter, with a place the meeting never stated for that player, or a second line for one player on one ballot, over every line served. Reads `recorded ballot prompt`, `meeting row turns`, `state at the meeting`, `earlier meeting rows`. Zero by construction while `route_lines_version = 1`. Counted only in games recorded with `route_lines_version = 1`; in any other era it reads n/a.
+
+**Ejections charged on a stated pair that reconciles, with a route line shown to an ejecting voter** (`ejections_charged_on_a_reconcilable_pair_shown_a_route_line`). Ejections charged on a stated pair that reconciles at which some voter who voted to eject that player was served a route line about them, over ejections charged on such a pair. Every served step reconciles. Showing a line is not changing a vote. Reads `meeting row turns`, `meeting row ballots`, `meeting row flags`, `state at the meeting`, `earlier meeting rows`, `recorded ballot prompt`. Counted only in games recorded with `route_lines_version = 1`; in any other era it reads n/a.
+
+**Task wins in games with a sabotage in play** (`task_wins_with_sabotage_in_play`). Games the crew won on tasks in which a sabotage was active before at least one play tick, over games the crew won on tasks. This counts co-occurrence and measures no delay. Reads `game over row`, `state before the tick`.
 
 **Games the impostors won** (`impostor_wins`). Games whose recorded winner is the impostors, over games with a recorded winner. Reads `game over row`.
 
@@ -577,3 +810,31 @@ Sets: `samples/9p2i`, recorded 2026-10-01. Declared config: `replays/samples/9p2
 **What the next meeting did after a held kill** (`held_kill_next_meeting_outcomes`). Held crew-witnessed kills by how many of the kill's crew witnesses were alive at the next meeting, one or two or more, and by what that meeting did: ejected the killer, ejected one of those witnesses, ejected another player, or ejected no one. Every row is listed. Reads `Killed`, `meeting row`.
 
 **SKIP ballots by grounding label** (`skips_by_grounding_label`). Every SKIP ballot by its recorded grounding label. Every label the meeting layer can write is listed, and unlabelled counts a ballot recorded before ballots were labelled. Reads `meeting row ballots`.
+
+**Where a holds-nothing SKIP's prompt names a living candidate** (`holds_nothing_skips_by_source`). SKIP ballots labelled as holding nothing, by each place in the voter's own recorded ballot prompt that names a living candidate: an observation row; an observation row whose id was perceived after the previous meeting (after the game began, at its first meeting); an evidence row; a flag; a typed turn line; a spoken turn line; a route line. One SKIP can name a candidate in several places, so the rows overlap and do not add up to the cell. Every place is listed. Reads `meeting row ballots`, `recorded ballot prompt`, `state at the meeting`.
+
+**Cited placements of the target, by kind and by what the route makes of them** (`cited_placements_by_kind_and_verdict`). Every placement of the target in the cited turn of a supported EJECT, by its kind and by whether the engine route makes it true or false at its kind's own clock, or cannot verify it. A whereabouts claim for a tick is read at that tick and the one before it; a sighting at the two ticks before the tick it names. The edge row counts a false placement the route makes true one tick before its window, so a clock off by one shows there rather than widening either window. Every row is listed. Reads `meeting row ballots`, `meeting row turns`, `state after the tick`, `state after the meeting`.
+
+**Supported EJECTs whose cited line cannot be checked, by reason** (`supported_ejects_not_checkable_by_reason`). EJECT ballots labelled supported that neither cell above counts: the ballot cites no turn, only the voter's own observation; the cited turn, if it is one of this meeting's, places the target nowhere checkable; or the route cannot verify any cited placement. Every row is listed. Reads `meeting row ballots`, `meeting row turns`, `state after the tick`, `state after the meeting`.
+
+**Meetings by the players with a route line** (`route_lines_per_meeting`). Meetings by how many players some ballot carried a route line about: 0, 1, 2, or 3 or more. Every row is listed. Reads `recorded ballot prompt`, `meeting row turns`, `state at the meeting`, `earlier meeting rows`. Counted only in games recorded with `route_lines_version = 1`; in any other era it reads n/a.
+
+**Route steps by reading** (`route_steps_by_reading`). The steps of each meeting's distinct route lines by reading: walking fits, or the public regroup falls between, so walking cannot decide it. Every reading is listed. Reads `recorded ballot prompt`, `meeting row turns`, `state at the meeting`, `earlier meeting rows`. Counted only in games recorded with `route_lines_version = 1`; in any other era it reads n/a.
+
+**Games by ending** (`games_by_ending`). Games by the recorded reason they ended. Every ending the engine or the runner can record is listed; a game with no recorded ending is not evaluable. Reads `game over row`.
+
+**Kills per game** (`kills_per_game`). Games by how many kills they held. Reads `Killed`.
+
+**Ticks between consecutive kills** (`ticks_between_kills`). Each kill after a game's first, by the ticks since the kill before it in the same game. Reads `Killed`.
+
+**Ticks from a kill to the meeting that reported its body** (`ticks_from_kill_to_report`). Every kill by the ticks from it to the report meeting whose reported body is its victim's, a meeting on the kill's own tick included, or by its body never being reported. A body joins its kill by victim, so two kills on one tick each keep their own row. Reads `Killed`, `MeetingTriggered`.
+
+**Living players at game over, by ending** (`living_players_at_game_over_by_ending`). Games by their recorded ending and the players still alive when it ended: every player less those killed and those ejected. Reads `game over row`, `Killed`, `meeting row`.
+
+**Tasks left at game over, by ending** (`tasks_left_at_game_over_by_ending`). Games by their recorded ending and the share of all task instances still unfinished on the final state. Reads `game over row`, `final state`.
+
+**Sabotages started per game** (`sabotages_started_per_game`). Games by how many times a sabotage went from inactive to active between one play tick and the next. A sabotage that stays active across a meeting is one start. Reads `state before the tick`.
+
+**Who found the body** (`report_openers_by_witness`). Report meetings by whether their opener was among the recorded witnesses of some kill since the previous meeting (since the game began, at its first meeting), and by the ticks from the reported body's kill to the report. Every row is listed. Reads `Killed`, `MeetingTriggered`.
+
+**How often a player stood with exactly one other** (`copresence_share_per_game`). Games by the share of their player-ticks, each a living player standing in a room before a play tick, on which exactly one other living player stood in the same room. A player inside a vent stands in no room. Reads `state before the tick`.
