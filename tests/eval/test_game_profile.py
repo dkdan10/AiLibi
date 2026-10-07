@@ -1355,6 +1355,20 @@ def test_the_reporter_saw_it_happen() -> None:
     )
 
 
+def test_only_a_report_meeting_counts_as_a_reporter_or_a_report() -> None:
+    """Planted: an emergency meeting that names a body is still no report."""
+
+    seen = kill(5, "p-1", "p-2")
+    called = meeting(0, tick=8, trigger="emergency", opener="p-2", body=body_id(seen))
+    blind = blind_game(kills=(seen,), meetings=(called,))
+    assert gp.REPORTER_SAW_IT not in shelves_of(blind)
+    (facets,) = profile_of(
+        carrier(game(kills=(seen,), meetings=(called,)))
+    ).pre_reveal.games
+    assert facets.reports == ()
+    assert facets.bodies_never_found == 1
+
+
 def test_a_same_tick_double_kill_joins_each_body_by_victim() -> None:
     first = kill(5, "p-1", "p-2")
     second = kill(5, "p-3", "p-4")
