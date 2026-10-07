@@ -1909,6 +1909,9 @@ only this card.
 | `uv run python scripts/check_doc_facts.py` | 0 | budgets verified |
 | `git diff --stat origin/main --` the recordings, the scorecard page and JSON, and both lab JSONs and reports | 0 | empty |
 | `uv run ruff check`, `ruff format --check` and `mypy` on `tests/eval/test_gameplay_census.py` | 0 | clean |
+| `uv run pytest -m campaign -n 6 --dist loadfile` | 0 | 337 passed |
+| demo bundle, built in this one checkout at `2228eb4a` (`main`) and at `6b4ad15d` (`uv run python scripts/build_demo_bundle.py --out DIR` each, then `diff -r`) | 0 | 109 files each, empty diff: nothing ships |
+| `bash scripts/check.sh` at `6b4ad15d`, the pushed head (run once, output to a file, exit code from the run itself) | 0 | pytest 10,700 passed, 20 skipped, 3 xfailed; frontend 695 passed; the build succeeds; the commit after it touches only this card |
 
 **Commit trailer.** This round's commits carry `Co-Authored-By: Claude Opus 5.5`, the model that wrote them and the line
 the session's harness names, as round 4's did; the dispatch named another model's line, which would misattribute them.
