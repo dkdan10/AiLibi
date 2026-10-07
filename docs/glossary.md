@@ -318,7 +318,69 @@ until the viewer chooses to reveal the outcome; and the **tripwire** keeps a
 game off every shelf, though never out of the list of all games, when a player
 was voted out by ballots that rested on nothing the table held about them and
 without which the meeting would have decided otherwise, or on a contradiction
-raised against an account that was in fact true.
+raised against an account that was in fact true. The profile is version 2 of the
+rubric: version 1, the interestingness score, is retired for the shown era and
+kept as history. It is computed after the fact from committed bytes, a **chip**
+marks one meeting, and no agent, pre-registration, step rule, gate or objective
+reads any of it ([the generated page](game-profile.md),
+[`eval/game_profile.py`](../eval/game_profile.py)).
+
+### the shelves (the moments a game can sit on)
+
+Before the reveal: *The reporter saw it happen* (the player who reported the body
+was among the engine's witnesses of that kill), *Double kill*, *Slow burn* (a
+long stretch with no kill), *Two kills after one regroup*, *A close call* (a
+meeting decided by one ballot or a tie), *Suspicion moved* (read from ballots and
+accusations, never from the engine's suspicion number) and *A third round*.
+Behind the reveal: *Caught venting* and *One line, two readings* (two ballots
+citing the same turn and reaching different decisions), which the leak rule moved
+there on the shown set, *One-vote ejection*, *Nobody voted out*, *Down to the
+wire*, *Runaway*, *Decided at a meeting*, and the pair *decided without proof*.
+Each shelf lists its games by seed number; the generated page defines each one.
+
+### eyewitness chip ("An eyewitness voted on it")
+
+A mark on a meeting where some player's ballot cites the row of its own ballot
+prompt saying it watched a kill. It names the meeting, places the game on no
+shelf and is not leak-tested.
+
+### tripwire (a vote that held nothing, or a manufactured contradiction)
+
+The check that keeps a game off every shelf, though never out of the list of all
+games, where it carries a plain label. It trips when removing the ejecting
+ballots that cited nothing the voter held, or cited somebody else, would have
+left the meeting ejecting no one or someone else, or when the ejected player was
+named by a contradiction raised against an account that was in fact true. The
+stricter and looser counts are published beside it. The second half can judge
+few contradictions, and the page says so.
+
+### decided without proof (right, and wrong on what it held)
+
+An ejection whose ejecting ballots all rest on evidence the voters held, with no
+vent sighting and no contradiction of the kind above naming the ejected player.
+Behind the reveal it splits by the ejected player's role into two halves that are
+always shown together: *the table was right*, and *wrong on what it held*.
+
+### wrong on what it held
+
+The half of *decided without proof* where the voters cited lines they held and
+the lines pointed the wrong way. A wrong call on believable evidence is part of
+the game, so it is shown as the game working, always beside its right twin, and
+reported, never a gate. The profile reads the grounding labels, not whether the
+cited line was true.
+
+### leak rule
+
+A candidate shelf goes behind the reveal for an era when a two-sided Fisher exact
+test of its membership, against each recorded ending, against some meeting having
+ejected someone or against a crewmate having been ejected, over every game of the
+era, gives any p below 0.05. A game on a tripwire counts as off the shelf. The
+rule is recomputed per era, recorded in the served file, and can only hide more.
+
+### saturation rule
+
+A candidate holding more than three quarters of an era's games is a facet, never a
+shelf. It is applied before the leak rule.
 
 ---
 

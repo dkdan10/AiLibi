@@ -367,6 +367,46 @@ def test_import_linter_reports_a_planted_agents_to_engine_route(
     assert re.search(r"-> engine(\.\w+)*\b", hops[-1]), chain
 
 
+_PROFILE_CONTRACT = (
+    "Agents, meetings, orchestrator, engine and training must not import the "
+    "game-shape profile"
+)
+
+# One planted importer per package the game runs, so nothing that decides a
+# game can read the after-the-fact profile; the last leg reaches the publisher.
+_PROFILE_PLANTS: tuple[tuple[str, str], ...] = (
+    ("agents", "eval.game_profile"),
+    ("meetings", "eval.game_profile"),
+    ("orchestrator", "eval.game_profile"),
+    ("engine", "eval.game_profile"),
+    ("training", "eval.game_profile"),
+    ("orchestrator", "scripts.publish_game_profile"),
+)
+
+
+@pytest.mark.parametrize(
+    ("package", "target"),
+    _PROFILE_PLANTS,
+    ids=[f"{package}->{target}" for package, target in _PROFILE_PLANTS],
+)
+def test_import_linter_refuses_a_planted_import_of_the_game_profile(
+    package: str, target: str, firewall_tree: FirewallTree
+) -> None:
+    """Each leg breaks the profile contract, naming the planted importer."""
+
+    importer = f"{package}._firewall_probe_game_profile"
+    firewall_tree.plant(
+        f"{package}/_firewall_probe_game_profile.py", f"import {target}\n"
+    )
+
+    result = firewall_tree.lint()
+
+    assert result.returncode != 0, result.stdout
+    report = " ".join(result.stdout.split())
+    assert f"{_PROFILE_CONTRACT} BROKEN" in report, result.stdout
+    assert f"{importer} -> {target}" in report, result.stdout
+
+
 # --------------------------------------------------------------------------- #
 # 2. The AST source scan over agents/ — the grimp-independent second layer.    #
 # --------------------------------------------------------------------------- #

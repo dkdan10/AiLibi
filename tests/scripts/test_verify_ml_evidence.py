@@ -169,6 +169,8 @@ def _availability_tree(root: Path) -> None:
         # The gameplay census's row probes its pair the same way.
         "docs/gameplay-census.md",
         "docs/gameplay-census.json",
+        # The game-shape profile's page has a row of its own.
+        "docs/game-profile.md",
         "design/phase-12",
         "experiments/lab",
         "experiments/model_probe",

@@ -50,3 +50,16 @@ forbidden_modules =
     agents
     meetings
     llm
+
+[importlinter:nothing_the_game_runs_reads_the_game_profile]
+name = Agents, meetings, orchestrator, engine and training must not import the game-shape profile
+type = forbidden
+source_modules =
+    agents
+    meetings
+    orchestrator
+    engine
+    training
+forbidden_modules =
+    eval.game_profile
+    scripts.publish_game_profile

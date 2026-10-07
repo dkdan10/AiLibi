@@ -1,0 +1,6175 @@
+{
+  "rubric_version": 2,
+  "era": "stage-b-r2",
+  "manifest_key": "43b5ee45",
+  "source_fingerprint": "sha256:ebb629f67c36607e39733660db7e069729fff198adcf34c091a4d6252d796ae2",
+  "seedset": "9p2i",
+  "constants": {
+    "slow_burn_ticks": 20,
+    "wave_slack_ticks": 4,
+    "close_call_margin": 1,
+    "third_round_meetings": 3,
+    "down_to_the_wire_start": 3,
+    "runaway_share": "1/2",
+    "leak_p_level": "0.05",
+    "saturation_share": "3/4"
+  },
+  "catalogue": [
+    {
+      "name": "the_reporter_saw_it_happen",
+      "half": "pre_reveal",
+      "kind": "shelf",
+      "classification": "shelf"
+    },
+    {
+      "name": "double_kill",
+      "half": "pre_reveal",
+      "kind": "shelf",
+      "classification": "shelf"
+    },
+    {
+      "name": "slow_burn",
+      "half": "pre_reveal",
+      "kind": "shelf",
+      "classification": "shelf"
+    },
+    {
+      "name": "two_kills_after_one_regroup",
+      "half": "pre_reveal",
+      "kind": "shelf",
+      "classification": "shelf"
+    },
+    {
+      "name": "a_close_call",
+      "half": "pre_reveal",
+      "kind": "shelf",
+      "classification": "shelf"
+    },
+    {
+      "name": "suspicion_moved",
+      "half": "pre_reveal",
+      "kind": "shelf",
+      "classification": "shelf"
+    },
+    {
+      "name": "a_third_round",
+      "half": "pre_reveal",
+      "kind": "shelf",
+      "classification": "shelf"
+    },
+    {
+      "name": "caught_venting",
+      "half": "reveal",
+      "kind": "shelf",
+      "classification": "leaks"
+    },
+    {
+      "name": "one_line_two_readings",
+      "half": "reveal",
+      "kind": "shelf",
+      "classification": "leaks"
+    },
+    {
+      "name": "struck_after_the_regroup",
+      "half": "pre_reveal",
+      "kind": "facet",
+      "classification": "saturated"
+    },
+    {
+      "name": "one_vote_ejection",
+      "half": "reveal",
+      "kind": "shelf",
+      "classification": "reads_an_ejection"
+    },
+    {
+      "name": "nobody_voted_out",
+      "half": "reveal",
+      "kind": "shelf",
+      "classification": "reads_an_ejection"
+    },
+    {
+      "name": "down_to_the_wire",
+      "half": "reveal",
+      "kind": "shelf",
+      "classification": "reads_the_ending"
+    },
+    {
+      "name": "runaway",
+      "half": "reveal",
+      "kind": "shelf",
+      "classification": "reads_the_ending"
+    },
+    {
+      "name": "decided_at_a_meeting",
+      "half": "reveal",
+      "kind": "shelf",
+      "classification": "reads_the_ending"
+    },
+    {
+      "name": "decided_without_proof_right",
+      "half": "reveal",
+      "kind": "shelf",
+      "classification": "reads_a_role"
+    },
+    {
+      "name": "decided_without_proof_wrong",
+      "half": "reveal",
+      "kind": "shelf",
+      "classification": "reads_a_role"
+    },
+    {
+      "name": "an_eyewitness_voted_on_it",
+      "half": "pre_reveal",
+      "kind": "chip",
+      "classification": "chip"
+    },
+    {
+      "name": "length_in_ticks",
+      "half": "pre_reveal",
+      "kind": "facet",
+      "classification": "facet"
+    },
+    {
+      "name": "meetings_by_trigger",
+      "half": "pre_reveal",
+      "kind": "facet",
+      "classification": "facet"
+    },
+    {
+      "name": "kill_timeline",
+      "half": "pre_reveal",
+      "kind": "facet",
+      "classification": "facet"
+    },
+    {
+      "name": "reports_with_corpse_age",
+      "half": "pre_reveal",
+      "kind": "facet",
+      "classification": "facet"
+    },
+    {
+      "name": "bodies_never_found",
+      "half": "pre_reveal",
+      "kind": "facet",
+      "classification": "facet"
+    },
+    {
+      "name": "ending",
+      "half": "reveal",
+      "kind": "facet",
+      "classification": "facet"
+    },
+    {
+      "name": "distance_from_the_other_ending",
+      "half": "reveal",
+      "kind": "facet",
+      "classification": "facet"
+    },
+    {
+      "name": "sabotage_starts",
+      "half": "reveal",
+      "kind": "facet",
+      "classification": "facet"
+    },
+    {
+      "name": "ejection_annotations",
+      "half": "reveal",
+      "kind": "facet",
+      "classification": "facet"
+    },
+    {
+      "name": "decided_by_a_vote_that_held_nothing",
+      "half": "pre_reveal",
+      "kind": "tripwire",
+      "classification": "tripwire"
+    },
+    {
+      "name": "decided_on_a_manufactured_contradiction",
+      "half": "pre_reveal",
+      "kind": "tripwire",
+      "classification": "tripwire"
+    }
+  ],
+  "pre_reveal": {
+    "shelves": [
+      {
+        "name": "the_reporter_saw_it_happen",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 1,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 7,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 16,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 19,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 23,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 28,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 29,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 30,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 32,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 35,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 38,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 43,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          }
+        ]
+      },
+      {
+        "name": "double_kill",
+        "members": [
+          {
+            "seed": 1,
+            "meetings": [],
+            "kill_ticks": [
+              7
+            ]
+          },
+          {
+            "seed": 3,
+            "meetings": [],
+            "kill_ticks": [
+              8
+            ]
+          },
+          {
+            "seed": 4,
+            "meetings": [],
+            "kill_ticks": [
+              15
+            ]
+          },
+          {
+            "seed": 8,
+            "meetings": [],
+            "kill_ticks": [
+              7
+            ]
+          },
+          {
+            "seed": 21,
+            "meetings": [],
+            "kill_ticks": [
+              7
+            ]
+          },
+          {
+            "seed": 24,
+            "meetings": [],
+            "kill_ticks": [
+              7
+            ]
+          },
+          {
+            "seed": 32,
+            "meetings": [],
+            "kill_ticks": [
+              7
+            ]
+          }
+        ]
+      },
+      {
+        "name": "slow_burn",
+        "members": [
+          {
+            "seed": 1,
+            "meetings": [],
+            "kill_ticks": [
+              19,
+              40
+            ]
+          },
+          {
+            "seed": 5,
+            "meetings": [],
+            "kill_ticks": [
+              9,
+              32
+            ]
+          },
+          {
+            "seed": 6,
+            "meetings": [],
+            "kill_ticks": [
+              16,
+              36
+            ]
+          },
+          {
+            "seed": 8,
+            "meetings": [],
+            "kill_ticks": [
+              18,
+              50
+            ]
+          },
+          {
+            "seed": 18,
+            "meetings": [],
+            "kill_ticks": [
+              19,
+              39
+            ]
+          },
+          {
+            "seed": 19,
+            "meetings": [],
+            "kill_ticks": [
+              20,
+              43
+            ]
+          },
+          {
+            "seed": 22,
+            "meetings": [],
+            "kill_ticks": [
+              9,
+              32,
+              52
+            ]
+          },
+          {
+            "seed": 25,
+            "meetings": [],
+            "kill_ticks": [
+              7,
+              28
+            ]
+          },
+          {
+            "seed": 32,
+            "meetings": [],
+            "kill_ticks": [
+              25,
+              49
+            ]
+          },
+          {
+            "seed": 39,
+            "meetings": [],
+            "kill_ticks": [
+              17,
+              42
+            ]
+          },
+          {
+            "seed": 47,
+            "meetings": [],
+            "kill_ticks": [
+              17,
+              42
+            ]
+          }
+        ]
+      },
+      {
+        "name": "two_kills_after_one_regroup",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              25,
+              27
+            ]
+          },
+          {
+            "seed": 4,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              15,
+              15
+            ]
+          },
+          {
+            "seed": 12,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              19,
+              22
+            ]
+          },
+          {
+            "seed": 13,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              18,
+              20
+            ]
+          },
+          {
+            "seed": 16,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              18,
+              21
+            ]
+          },
+          {
+            "seed": 36,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              20,
+              22
+            ]
+          }
+        ]
+      },
+      {
+        "name": "a_close_call",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 1,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              1,
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 16,
+            "meetings": [
+              1,
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 21,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 22,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 23,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 24,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 25,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 31,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 36,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 37,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 38,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 41,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 43,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 47,
+            "meetings": [
+              0,
+              3
+            ],
+            "kill_ticks": []
+          }
+        ]
+      },
+      {
+        "name": "suspicion_moved",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              1,
+              3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 1,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 7,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 8,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              1,
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 13,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 18,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 21,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 25,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 30,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 34,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 35,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 38,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 39,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 40,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 47,
+            "meetings": [
+              2,
+              3
+            ],
+            "kill_ticks": []
+          }
+        ]
+      },
+      {
+        "name": "a_third_round",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 1,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 3,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 8,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 15,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 16,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 17,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 18,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 19,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 22,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 24,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 32,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 37,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 38,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 39,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 41,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 47,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 49,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          }
+        ]
+      }
+    ],
+    "chips": [
+      {
+        "name": "an_eyewitness_voted_on_it",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              3
+            ]
+          },
+          {
+            "seed": 1,
+            "meetings": [
+              2
+            ]
+          },
+          {
+            "seed": 7,
+            "meetings": [
+              1
+            ]
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              2
+            ]
+          },
+          {
+            "seed": 16,
+            "meetings": [
+              1
+            ]
+          },
+          {
+            "seed": 19,
+            "meetings": [
+              2
+            ]
+          },
+          {
+            "seed": 23,
+            "meetings": [
+              1
+            ]
+          },
+          {
+            "seed": 28,
+            "meetings": [
+              0
+            ]
+          },
+          {
+            "seed": 29,
+            "meetings": [
+              0
+            ]
+          },
+          {
+            "seed": 30,
+            "meetings": [
+              1
+            ]
+          },
+          {
+            "seed": 32,
+            "meetings": [
+              1
+            ]
+          },
+          {
+            "seed": 35,
+            "meetings": [
+              0
+            ]
+          },
+          {
+            "seed": 38,
+            "meetings": [
+              0,
+              1
+            ]
+          },
+          {
+            "seed": 43,
+            "meetings": [
+              0
+            ]
+          }
+        ]
+      }
+    ],
+    "games": [
+      {
+        "seed": 0,
+        "ticks": 52,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 17,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 30,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 42,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 3,
+            "tick": 52,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 25,
+            "in_wave": true
+          },
+          {
+            "tick": 27,
+            "in_wave": true
+          },
+          {
+            "tick": 38,
+            "in_wave": true
+          },
+          {
+            "tick": 51,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 10
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 5
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 3,
+            "corpse_age": 1
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 1,
+        "ticks": 41,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 10,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 29,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 41,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 19,
+            "in_wave": true
+          },
+          {
+            "tick": 40,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 10
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 1
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 2,
+        "ticks": 22,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 9,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 6,
+            "in_wave": false
+          },
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 16,
+            "in_wave": true
+          },
+          {
+            "tick": 22,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 3,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 3,
+        "ticks": 62,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 22,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 33,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 3,
+            "tick": 49,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 19,
+            "in_wave": true
+          },
+          {
+            "tick": 29,
+            "in_wave": true
+          },
+          {
+            "tick": 46,
+            "in_wave": false
+          },
+          {
+            "tick": 62,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 3,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 4,
+        "ticks": 25,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 8,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 18,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 6,
+            "in_wave": false
+          },
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 15,
+            "in_wave": true
+          },
+          {
+            "tick": 15,
+            "in_wave": true
+          },
+          {
+            "tick": 25,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 2
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 3,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 5,
+        "ticks": 41,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 15,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 41,
+            "trigger": "emergency",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 32,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 6
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [],
+        "tripped": []
+      },
+      {
+        "seed": 6,
+        "ticks": 43,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 20,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 39,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 16,
+            "in_wave": false
+          },
+          {
+            "tick": 36,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [],
+        "tripped": []
+      },
+      {
+        "seed": 7,
+        "ticks": 28,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 10,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 28,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 17,
+            "in_wave": true
+          },
+          {
+            "tick": 27,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 2
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 1
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 8,
+        "ticks": 62,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 11,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 26,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 53,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 18,
+            "in_wave": true
+          },
+          {
+            "tick": 50,
+            "in_wave": false
+          },
+          {
+            "tick": 62,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 8
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 9,
+        "ticks": 33,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 7,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 19,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 33,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 6,
+            "in_wave": false
+          },
+          {
+            "tick": 15,
+            "in_wave": true
+          },
+          {
+            "tick": 18,
+            "in_wave": false
+          },
+          {
+            "tick": 27,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 6
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 10,
+        "ticks": 29,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 10,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 29,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 25,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 2
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [],
+        "tripped": []
+      },
+      {
+        "seed": 11,
+        "ticks": 20,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 10,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 20,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 18,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 2
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 2
+          }
+        ],
+        "bodies_never_found": 0,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 12,
+        "ticks": 22,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 19,
+            "in_wave": true
+          },
+          {
+            "tick": 22,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 3,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 13,
+        "ticks": 40,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 11,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 22,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 18,
+            "in_wave": true
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          },
+          {
+            "tick": 32,
+            "in_wave": true
+          },
+          {
+            "tick": 40,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 2
+          }
+        ],
+        "bodies_never_found": 3,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 14,
+        "ticks": 27,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 11,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 10,
+            "in_wave": false
+          },
+          {
+            "tick": 27,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [],
+        "tripped": []
+      },
+      {
+        "seed": 15,
+        "ticks": 45,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 9,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 22,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 40,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 6,
+            "in_wave": false
+          },
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 19,
+            "in_wave": true
+          },
+          {
+            "tick": 35,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 5
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 16,
+        "ticks": 51,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 11,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 22,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 35,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 18,
+            "in_wave": true
+          },
+          {
+            "tick": 21,
+            "in_wave": true
+          },
+          {
+            "tick": 32,
+            "in_wave": true
+          },
+          {
+            "tick": 51,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 3,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 17,
+        "ticks": 44,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 7,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 17,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 30,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 6,
+            "in_wave": false
+          },
+          {
+            "tick": 14,
+            "in_wave": true
+          },
+          {
+            "tick": 26,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 0,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 18,
+        "ticks": 66,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 21,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 42,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 19,
+            "in_wave": true
+          },
+          {
+            "tick": 39,
+            "in_wave": false
+          },
+          {
+            "tick": 52,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 2
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 19,
+        "ticks": 44,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 31,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 44,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          },
+          {
+            "tick": 43,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 11
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 1
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 20,
+        "ticks": 26,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 26,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 6
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 21,
+        "ticks": 35,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 11,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 27,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 22,
+            "in_wave": false
+          },
+          {
+            "tick": 35,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 5
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 22,
+        "ticks": 62,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 36,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 55,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 32,
+            "in_wave": false
+          },
+          {
+            "tick": 52,
+            "in_wave": false
+          },
+          {
+            "tick": 62,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 23,
+        "ticks": 35,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 13,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 22,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 21,
+            "in_wave": true
+          },
+          {
+            "tick": 35,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 1
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 24,
+        "ticks": 46,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 9,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 18,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 37,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 16,
+            "in_wave": true
+          },
+          {
+            "tick": 33,
+            "in_wave": false
+          },
+          {
+            "tick": 46,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 2
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 2
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 25,
+        "ticks": 43,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 14,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 31,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 6,
+            "in_wave": false
+          },
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 28,
+            "in_wave": false
+          },
+          {
+            "tick": 43,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 8
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [],
+        "tripped": []
+      },
+      {
+        "seed": 26,
+        "ticks": 33,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 13,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 22,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 33,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 12,
+            "in_wave": false
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          },
+          {
+            "tick": 21,
+            "in_wave": true
+          },
+          {
+            "tick": 30,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 2
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [],
+        "tripped": [
+          {
+            "tripwire": "decided_by_a_vote_that_held_nothing",
+            "meeting": 2
+          }
+        ]
+      },
+      {
+        "seed": 27,
+        "ticks": 36,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 15,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 36,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 13,
+            "in_wave": false
+          },
+          {
+            "tick": 32,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 6
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [],
+        "tripped": []
+      },
+      {
+        "seed": 28,
+        "ticks": 27,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 9,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 20,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 6,
+            "in_wave": false
+          },
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 18,
+            "in_wave": true
+          },
+          {
+            "tick": 27,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 2
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 29,
+        "ticks": 30,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 13,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 12,
+            "in_wave": false
+          },
+          {
+            "tick": 29,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 1
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [],
+        "tripped": []
+      },
+      {
+        "seed": 30,
+        "ticks": 31,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 11,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 19,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 18,
+            "in_wave": true
+          },
+          {
+            "tick": 28,
+            "in_wave": true
+          },
+          {
+            "tick": 31,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 1
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 31,
+        "ticks": 28,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 10,
+            "in_wave": false
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 5
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 32,
+        "ticks": 58,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 14,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 26,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 52,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 25,
+            "in_wave": false
+          },
+          {
+            "tick": 49,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 7
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [],
+        "tripped": []
+      },
+      {
+        "seed": 33,
+        "ticks": 32,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 23,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 6,
+            "in_wave": false
+          },
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          },
+          {
+            "tick": 32,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 6
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 34,
+        "ticks": 24,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 11,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 24,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 0,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 35,
+        "ticks": 35,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 26,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 11,
+            "in_wave": false
+          },
+          {
+            "tick": 22,
+            "in_wave": true
+          },
+          {
+            "tick": 35,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 36,
+        "ticks": 34,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 27,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 11,
+            "in_wave": false
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          },
+          {
+            "tick": 22,
+            "in_wave": true
+          },
+          {
+            "tick": 34,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 5
+          }
+        ],
+        "bodies_never_found": 3,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 37,
+        "ticks": 40,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 10,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 28,
+            "trigger": "emergency",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 40,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 19,
+            "in_wave": true
+          },
+          {
+            "tick": 23,
+            "in_wave": false
+          },
+          {
+            "tick": 39,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 1
+          }
+        ],
+        "bodies_never_found": 3,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 38,
+        "ticks": 58,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 11,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 22,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 39,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 3,
+            "tick": 49,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 10,
+            "in_wave": false
+          },
+          {
+            "tick": 18,
+            "in_wave": true
+          },
+          {
+            "tick": 36,
+            "in_wave": false
+          },
+          {
+            "tick": 46,
+            "in_wave": true
+          },
+          {
+            "tick": 58,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 3,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 39,
+        "ticks": 54,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 10,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 22,
+            "trigger": "emergency",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 45,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 6,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 17,
+            "in_wave": true
+          },
+          {
+            "tick": 42,
+            "in_wave": false
+          },
+          {
+            "tick": 54,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 3,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 40,
+        "ticks": 33,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 28,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 25,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 0,
+        "moments": [],
+        "tripped": []
+      },
+      {
+        "seed": 41,
+        "ticks": 59,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 11,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 42,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 56,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          },
+          {
+            "tick": 39,
+            "in_wave": false
+          },
+          {
+            "tick": 53,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 42,
+        "ticks": 26,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 8,
+            "in_wave": false
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 43,
+        "ticks": 35,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 10,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 22,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 19,
+            "in_wave": true
+          },
+          {
+            "tick": 35,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 44,
+        "ticks": 25,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 10,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 19,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 1
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 45,
+        "ticks": 38,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 16,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 30,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 27,
+            "in_wave": false
+          },
+          {
+            "tick": 38,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 7
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 46,
+        "ticks": 35,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 12,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 27,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 23,
+            "in_wave": false
+          },
+          {
+            "tick": 35,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 2,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 47,
+        "ticks": 65,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 9,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 23,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 45,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 3,
+            "tick": 57,
+            "trigger": "report",
+            "regrouped": true
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 17,
+            "in_wave": true
+          },
+          {
+            "tick": 42,
+            "in_wave": false
+          },
+          {
+            "tick": 53,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 2
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 6
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 3,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 0,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 48,
+        "ticks": 25,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 13,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 25,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 9,
+            "in_wave": false
+          },
+          {
+            "tick": 20,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 4
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 5
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 49,
+        "ticks": 34,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 9,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 20,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 34,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 17,
+            "in_wave": true
+          },
+          {
+            "tick": 30,
+            "in_wave": true
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 2
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 4
+          }
+        ],
+        "bodies_never_found": 0,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      }
+    ],
+    "tripwires": {
+      "readings": [
+        {
+          "name": "decisive",
+          "tripwire": "decided_by_a_vote_that_held_nothing",
+          "governs": true,
+          "entries": [
+            {
+              "seed": 26,
+              "meeting": 2
+            }
+          ]
+        },
+        {
+          "name": "decisive_read_as_skip",
+          "tripwire": "decided_by_a_vote_that_held_nothing",
+          "governs": false,
+          "entries": [
+            {
+              "seed": 26,
+              "meeting": 2
+            }
+          ]
+        },
+        {
+          "name": "decisive_all_ungrounded_removed",
+          "tripwire": "decided_by_a_vote_that_held_nothing",
+          "governs": false,
+          "entries": [
+            {
+              "seed": 26,
+              "meeting": 2
+            }
+          ]
+        },
+        {
+          "name": "every",
+          "tripwire": "decided_by_a_vote_that_held_nothing",
+          "governs": false,
+          "entries": []
+        },
+        {
+          "name": "any",
+          "tripwire": "decided_by_a_vote_that_held_nothing",
+          "governs": false,
+          "entries": [
+            {
+              "seed": 26,
+              "meeting": 2
+            },
+            {
+              "seed": 41,
+              "meeting": 0
+            }
+          ]
+        },
+        {
+          "name": "manufactured",
+          "tripwire": "decided_on_a_manufactured_contradiction",
+          "governs": true,
+          "entries": []
+        }
+      ],
+      "alibi_flags": 15,
+      "alibi_flags_evaluable": 1
+    }
+  },
+  "reveal": {
+    "shelves": [
+      {
+        "name": "caught_venting",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 3,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 5,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 6,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 7,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 10,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 11,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 13,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 18,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 19,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 20,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 22,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 27,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 34,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 37,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 39,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 42,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 49,
+            "meetings": [
+              0,
+              2
+            ],
+            "kill_ticks": []
+          }
+        ]
+      },
+      {
+        "name": "one_line_two_readings",
+        "members": [
+          {
+            "seed": 2,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 3,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 5,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              1,
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 11,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 13,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 18,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 19,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 20,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 21,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 22,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 24,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 32,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 34,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 36,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 37,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 38,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 39,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 43,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 49,
+            "meetings": [
+              0,
+              2
+            ],
+            "kill_ticks": []
+          }
+        ]
+      },
+      {
+        "name": "one_vote_ejection",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 1,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              1,
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 16,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 22,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 23,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 24,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 37,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 43,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 47,
+            "meetings": [
+              3
+            ],
+            "kill_ticks": []
+          }
+        ]
+      },
+      {
+        "name": "nobody_voted_out",
+        "members": [
+          {
+            "seed": 4,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 15,
+            "meetings": [
+              0,
+              1,
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 31,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 36,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          }
+        ]
+      },
+      {
+        "name": "down_to_the_wire",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 3,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 8,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 13,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 15,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 16,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 18,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 29,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 37,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 38,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 41,
+            "meetings": [],
+            "kill_ticks": []
+          }
+        ]
+      },
+      {
+        "name": "runaway",
+        "members": [
+          {
+            "seed": 5,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 6,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 7,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 10,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 11,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 14,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 17,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 20,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 27,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 34,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 40,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 42,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 44,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 49,
+            "meetings": [],
+            "kill_ticks": []
+          }
+        ]
+      },
+      {
+        "name": "decided_at_a_meeting",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 1,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 5,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 7,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 10,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 11,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 19,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 20,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 27,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 34,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 37,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 48,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 49,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          }
+        ]
+      }
+    ],
+    "decided_without_proof": {
+      "right": {
+        "name": "decided_without_proof_right",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 1,
+            "meetings": [
+              1,
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 7,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 8,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 14,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 16,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 17,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 19,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 20,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 24,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 32,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 34,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 37,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 38,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 40,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 44,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 47,
+            "meetings": [
+              3
+            ],
+            "kill_ticks": []
+          }
+        ]
+      },
+      "wrong": {
+        "name": "decided_without_proof_wrong",
+        "members": [
+          {
+            "seed": 2,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 8,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 9,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 12,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 13,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 21,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 22,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 23,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 24,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 25,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 28,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 29,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 30,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 33,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 35,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 39,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 43,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 45,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 46,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 48,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          }
+        ]
+      }
+    },
+    "games": [
+      {
+        "seed": 0,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 1,
+          "start": 5
+        },
+        "sabotage_starts": [
+          26,
+          50
+        ],
+        "tasks_done": 13,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 2,
+            "right": true
+          },
+          {
+            "meeting": 3,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 1,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 2,
+          "start": 5
+        },
+        "sabotage_starts": [
+          39
+        ],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": true
+          },
+          {
+            "meeting": 2,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 2,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 5,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 9,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 3,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 1,
+          "start": 14
+        },
+        "sabotage_starts": [
+          39,
+          55
+        ],
+        "tasks_done": 13,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 4,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 5,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 9,
+        "tasks_assigned": 14,
+        "ejections": []
+      },
+      {
+        "seed": 5,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 3,
+          "start": 5
+        },
+        "sabotage_starts": [
+          36
+        ],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 6,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 3,
+          "start": 5
+        },
+        "sabotage_starts": [
+          30
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 7,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 3,
+          "start": 5
+        },
+        "sabotage_starts": [
+          21,
+          26
+        ],
+        "tasks_done": 13,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 8,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 1,
+          "start": 14
+        },
+        "sabotage_starts": [
+          27,
+          42
+        ],
+        "tasks_done": 13,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 1,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 9,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 1,
+          "start": 5
+        },
+        "sabotage_starts": [
+          32
+        ],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          },
+          {
+            "meeting": 1,
+            "right": true
+          },
+          {
+            "meeting": 2,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 10,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 3,
+          "start": 5
+        },
+        "sabotage_starts": [],
+        "tasks_done": 11,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 11,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 4,
+          "start": 5
+        },
+        "sabotage_starts": [],
+        "tasks_done": 10,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 12,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 6,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 8,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 13,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 1,
+          "start": 14
+        },
+        "sabotage_starts": [
+          35,
+          40
+        ],
+        "tasks_done": 13,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          },
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 14,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 3,
+          "start": 5
+        },
+        "sabotage_starts": [
+          22
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 15,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 1,
+          "start": 5
+        },
+        "sabotage_starts": [
+          28,
+          35
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": []
+      },
+      {
+        "seed": 16,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 1,
+          "start": 14
+        },
+        "sabotage_starts": [
+          35,
+          44
+        ],
+        "tasks_done": 13,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 17,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 3,
+          "start": 5
+        },
+        "sabotage_starts": [
+          32,
+          39
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 18,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 1,
+          "start": 5
+        },
+        "sabotage_starts": [
+          31,
+          56
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 19,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 2,
+          "start": 5
+        },
+        "sabotage_starts": [
+          42
+        ],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 2,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 20,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 3,
+          "start": 5
+        },
+        "sabotage_starts": [],
+        "tasks_done": 11,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 21,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 2,
+          "start": 14
+        },
+        "sabotage_starts": [
+          27
+        ],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 22,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 2,
+          "start": 14
+        },
+        "sabotage_starts": [
+          44
+        ],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          },
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 23,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 3,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 11,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 24,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 2,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 2,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 25,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 2,
+          "start": 14
+        },
+        "sabotage_starts": [
+          37
+        ],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 26,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 1,
+          "start": 14
+        },
+        "sabotage_starts": [
+          21
+        ],
+        "tasks_done": 13,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 2,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 27,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 3,
+          "start": 5
+        },
+        "sabotage_starts": [
+          27
+        ],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 28,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 4,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 10,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 29,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 1,
+          "start": 5
+        },
+        "sabotage_starts": [
+          22
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 30,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 2,
+          "start": 14
+        },
+        "sabotage_starts": [
+          27
+        ],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 31,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 2,
+          "start": 5
+        },
+        "sabotage_starts": [
+          23
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": []
+      },
+      {
+        "seed": 32,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 2,
+          "start": 5
+        },
+        "sabotage_starts": [
+          24,
+          43
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 33,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 4,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 10,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 34,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 4,
+          "start": 5
+        },
+        "sabotage_starts": [],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 35,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 3,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 11,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 36,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 3,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 11,
+        "tasks_assigned": 14,
+        "ejections": []
+      },
+      {
+        "seed": 37,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 1,
+          "start": 5
+        },
+        "sabotage_starts": [
+          38
+        ],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": true
+          },
+          {
+            "meeting": 2,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 38,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 1,
+          "start": 14
+        },
+        "sabotage_starts": [
+          29,
+          57
+        ],
+        "tasks_done": 13,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 39,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 3,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 11,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          },
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 40,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 4,
+          "start": 5
+        },
+        "sabotage_starts": [
+          22
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 41,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 1,
+          "start": 5
+        },
+        "sabotage_starts": [
+          33,
+          47
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 42,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 4,
+          "start": 5
+        },
+        "sabotage_starts": [],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 43,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 3,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 11,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 44,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 4,
+          "start": 5
+        },
+        "sabotage_starts": [],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 45,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 2,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 12,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 46,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 3,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 11,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 47,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 2,
+          "start": 5
+        },
+        "sabotage_starts": [
+          34,
+          52
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 3,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 48,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 5,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 9,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          },
+          {
+            "meeting": 1,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 49,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 3,
+          "start": 5
+        },
+        "sabotage_starts": [
+          26
+        ],
+        "tasks_done": 13,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 2,
+            "right": true
+          }
+        ]
+      }
+    ],
+    "class_tables": [
+      {
+        "name": "the_reporter_saw_it_happen",
+        "games": 50,
+        "members": 14,
+        "rows": [
+          {
+            "fact": "CREWMATE_TASKS",
+            "a": 2,
+            "b": 12,
+            "c": 11,
+            "d": 25,
+            "p": 0.30298630988925124
+          },
+          {
+            "fact": "CREWMATE_EJECT",
+            "a": 5,
+            "b": 9,
+            "c": 8,
+            "d": 28,
+            "p": 0.4737046555620967
+          },
+          {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 7,
+            "b": 7,
+            "c": 17,
+            "d": 19,
+            "p": 1.0
+          },
+          {
+            "fact": "some_meeting_ejected_someone",
+            "a": 14,
+            "b": 0,
+            "c": 32,
+            "d": 4,
+            "p": 0.5659574468085107
+          },
+          {
+            "fact": "a_crewmate_was_ejected",
+            "a": 7,
+            "b": 7,
+            "c": 14,
+            "d": 22,
+            "p": 0.5343537712293822
+          }
+        ],
+        "classification": "shelf"
+      },
+      {
+        "name": "double_kill",
+        "games": 50,
+        "members": 7,
+        "rows": [
+          {
+            "fact": "CREWMATE_TASKS",
+            "a": 1,
+            "b": 6,
+            "c": 12,
+            "d": 31,
+            "p": 0.6596068455134135
+          },
+          {
+            "fact": "CREWMATE_EJECT",
+            "a": 1,
+            "b": 6,
+            "c": 12,
+            "d": 31,
+            "p": 0.6596068455134135
+          },
+          {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 5,
+            "b": 2,
+            "c": 19,
+            "d": 24,
+            "p": 0.2387031408308004
+          },
+          {
+            "fact": "some_meeting_ejected_someone",
+            "a": 6,
+            "b": 1,
+            "c": 40,
+            "d": 3,
+            "p": 0.4641337386018237
+          },
+          {
+            "fact": "a_crewmate_was_ejected",
+            "a": 3,
+            "b": 4,
+            "c": 18,
+            "d": 25,
+            "p": 1.0
+          }
+        ],
+        "classification": "shelf"
+      },
+      {
+        "name": "slow_burn",
+        "games": 50,
+        "members": 11,
+        "rows": [
+          {
+            "fact": "CREWMATE_TASKS",
+            "a": 4,
+            "b": 7,
+            "c": 9,
+            "d": 30,
+            "p": 0.4446238382970114
+          },
+          {
+            "fact": "CREWMATE_EJECT",
+            "a": 3,
+            "b": 8,
+            "c": 10,
+            "d": 29,
+            "p": 1.0
+          },
+          {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 4,
+            "b": 7,
+            "c": 20,
+            "d": 19,
+            "p": 0.5010025395369526
+          },
+          {
+            "fact": "some_meeting_ejected_someone",
+            "a": 11,
+            "b": 0,
+            "c": 35,
+            "d": 4,
+            "p": 0.5634867564046895
+          },
+          {
+            "fact": "a_crewmate_was_ejected",
+            "a": 4,
+            "b": 7,
+            "c": 17,
+            "d": 22,
+            "p": 0.7412258507306368
+          }
+        ],
+        "classification": "shelf"
+      },
+      {
+        "name": "two_kills_after_one_regroup",
+        "games": 50,
+        "members": 6,
+        "rows": [
+          {
+            "fact": "CREWMATE_TASKS",
+            "a": 0,
+            "b": 6,
+            "c": 13,
+            "d": 31,
+            "p": 0.319213691026827
+          },
+          {
+            "fact": "CREWMATE_EJECT",
+            "a": 1,
+            "b": 5,
+            "c": 12,
+            "d": 32,
+            "p": 1.0
+          },
+          {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 5,
+            "b": 1,
+            "c": 19,
+            "d": 25,
+            "p": 0.09250253292806485
+          },
+          {
+            "fact": "some_meeting_ejected_someone",
+            "a": 4,
+            "b": 2,
+            "c": 42,
+            "d": 2,
+            "p": 0.0655015197568389
+          },
+          {
+            "fact": "a_crewmate_was_ejected",
+            "a": 2,
+            "b": 4,
+            "c": 19,
+            "d": 25,
+            "p": 1.0
+          }
+        ],
+        "classification": "shelf"
+      },
+      {
+        "name": "a_close_call",
+        "games": 50,
+        "members": 16,
+        "rows": [
+          {
+            "fact": "CREWMATE_TASKS",
+            "a": 3,
+            "b": 13,
+            "c": 10,
+            "d": 24,
+            "p": 0.507503439149852
+          },
+          {
+            "fact": "CREWMATE_EJECT",
+            "a": 4,
+            "b": 12,
+            "c": 9,
+            "d": 25,
+            "p": 1.0
+          },
+          {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 9,
+            "b": 7,
+            "c": 15,
+            "d": 19,
+            "p": 0.5470008575622625
+          },
+          {
+            "fact": "some_meeting_ejected_someone",
+            "a": 14,
+            "b": 2,
+            "c": 32,
+            "d": 2,
+            "p": 0.5842640034737299
+          },
+          {
+            "fact": "a_crewmate_was_ejected",
+            "a": 7,
+            "b": 9,
+            "c": 14,
+            "d": 20,
+            "p": 1.0
+          }
+        ],
+        "classification": "shelf"
+      },
+      {
+        "name": "suspicion_moved",
+        "games": 50,
+        "members": 16,
+        "rows": [
+          {
+            "fact": "CREWMATE_TASKS",
+            "a": 3,
+            "b": 13,
+            "c": 10,
+            "d": 24,
+            "p": 0.507503439149852
+          },
+          {
+            "fact": "CREWMATE_EJECT",
+            "a": 5,
+            "b": 11,
+            "c": 8,
+            "d": 26,
+            "p": 0.7309892734852133
+          },
+          {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 8,
+            "b": 8,
+            "c": 16,
+            "d": 18,
+            "p": 1.0
+          },
+          {
+            "fact": "some_meeting_ejected_someone",
+            "a": 16,
+            "b": 0,
+            "c": 30,
+            "d": 4,
+            "p": 0.29194963091619625
+          },
+          {
+            "fact": "a_crewmate_was_ejected",
+            "a": 8,
+            "b": 8,
+            "c": 13,
+            "d": 21,
+            "p": 0.542730475873933
+          }
+        ],
+        "classification": "shelf"
+      },
+      {
+        "name": "a_third_round",
+        "games": 50,
+        "members": 19,
+        "rows": [
+          {
+            "fact": "CREWMATE_TASKS",
+            "a": 6,
+            "b": 13,
+            "c": 7,
+            "d": 24,
+            "p": 0.5213033400554806
+          },
+          {
+            "fact": "CREWMATE_EJECT",
+            "a": 6,
+            "b": 13,
+            "c": 7,
+            "d": 24,
+            "p": 0.5213033400554806
+          },
+          {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 7,
+            "b": 12,
+            "c": 17,
+            "d": 14,
+            "p": 0.2549092492319273
+          },
+          {
+            "fact": "some_meeting_ejected_someone",
+            "a": 18,
+            "b": 1,
+            "c": 28,
+            "d": 3,
+            "p": 1.0
+          },
+          {
+            "fact": "a_crewmate_was_ejected",
+            "a": 5,
+            "b": 14,
+            "c": 16,
+            "d": 15,
+            "p": 0.1390794108758531
+          }
+        ],
+        "classification": "shelf"
+      },
+      {
+        "name": "caught_venting",
+        "games": 50,
+        "members": 19,
+        "rows": [
+          {
+            "fact": "CREWMATE_TASKS",
+            "a": 3,
+            "b": 16,
+            "c": 10,
+            "d": 21,
+            "p": 0.32025074287878247
+          },
+          {
+            "fact": "CREWMATE_EJECT",
+            "a": 12,
+            "b": 7,
+            "c": 1,
+            "d": 30,
+            "p": 4.478266577159874e-6
+          },
+          {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 4,
+            "b": 15,
+            "c": 20,
+            "d": 11,
+            "p": 0.00379284700187003
+          },
+          {
+            "fact": "some_meeting_ejected_someone",
+            "a": 19,
+            "b": 0,
+            "c": 27,
+            "d": 4,
+            "p": 0.2838905775075988
+          },
+          {
+            "fact": "a_crewmate_was_ejected",
+            "a": 4,
+            "b": 15,
+            "c": 17,
+            "d": 14,
+            "p": 0.03738378564593551
+          }
+        ],
+        "classification": "leaks"
+      },
+      {
+        "name": "one_line_two_readings",
+        "games": 50,
+        "members": 20,
+        "rows": [
+          {
+            "fact": "CREWMATE_TASKS",
+            "a": 2,
+            "b": 18,
+            "c": 11,
+            "d": 19,
+            "p": 0.04976260475430642
+          },
+          {
+            "fact": "CREWMATE_EJECT",
+            "a": 8,
+            "b": 12,
+            "c": 5,
+            "d": 25,
+            "p": 0.10035003243102401
+          },
+          {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 10,
+            "b": 10,
+            "c": 14,
+            "d": 16,
+            "p": 1.0
+          },
+          {
+            "fact": "some_meeting_ejected_someone",
+            "a": 19,
+            "b": 1,
+            "c": 27,
+            "d": 3,
+            "p": 0.6411202778983934
+          },
+          {
+            "fact": "a_crewmate_was_ejected",
+            "a": 8,
+            "b": 12,
+            "c": 13,
+            "d": 17,
+            "p": 1.0
+          }
+        ],
+        "classification": "leaks"
+      },
+      {
+        "name": "struck_after_the_regroup",
+        "games": 50,
+        "members": 40,
+        "rows": [
+          {
+            "fact": "CREWMATE_TASKS",
+            "a": 8,
+            "b": 32,
+            "c": 5,
+            "d": 5,
+            "p": 0.1009396339195904
+          },
+          {
+            "fact": "CREWMATE_EJECT",
+            "a": 10,
+            "b": 30,
+            "c": 3,
+            "d": 7,
+            "p": 0.7068395627374253
+          },
+          {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 22,
+            "b": 18,
+            "c": 2,
+            "d": 8,
+            "p": 0.07656269203231672
+          },
+          {
+            "fact": "some_meeting_ejected_someone",
+            "a": 36,
+            "b": 4,
+            "c": 10,
+            "d": 0,
+            "p": 0.5709943551888841
+          },
+          {
+            "fact": "a_crewmate_was_ejected",
+            "a": 18,
+            "b": 22,
+            "c": 3,
+            "d": 7,
+            "p": 0.48798697738147406
+          }
+        ],
+        "classification": "saturated"
+      }
+    ]
+  }
+}
