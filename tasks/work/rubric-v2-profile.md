@@ -124,6 +124,16 @@ dashboard renders its "No tournament report" card (`TournamentDashboard.tsx:1115
 Each item names its enforcing mechanism and the planted or perturbed case that turns its test red; each new test is
 seen red before the code it guards exists.
 
+- [x] Review correction: the round-2 corpse-count item counts the location arguments it pins. The set label, the seed
+  and the meeting index at each of the two call sites that join a body are six arguments, rows GP11 to GP16, where
+  the item said five. Re-measured this round with the same six mutants: each survives `7c89de83`'s
+  `tests/eval/test_game_profile.py` and each is killed at the head by
+  `test_a_reported_body_joining_two_corpses_raises_at_both_readers` (Results, round 3).
+- [x] Review correction: the PR body states the branch as it stands. Its Definition of done item 21 said the round-2
+  gate's card commit `c376e01d` was not on the branch; the orchestrator pushed it after the remote refused the
+  worker, and CI run 37642583408 at `c376e01d` succeeded on all three jobs (Project checks 10,843 passed, 40 skipped,
+  3 xfailed). The body now says so, read back with `gh pr view 504 --json headRefOid,body` against
+  `gh run view 37642583408` (Results, round 3).
 - [x] Review correction: the revealed pair's halves are pinned at the call site. With seed 8 the only game on the
   wrong half and seed 7 the only one on the right, each opens once inside its own half's region and never inside the
   other's ("lists each half's games under that half's own heading", `ReplayPicker.test.tsx`); the halves swapped where
@@ -137,8 +147,9 @@ seen red before the code it guards exists.
 - [x] Review correction: the reported-body join's corpse count is pinned with every location value off its default.
   Two corpses share the reported body's id at set `elsewhere`, seed 7, meeting index 1, and both readers that join a
   body, the shelves and the facets, raise the full message ending "joins 2 corpses"
-  (`test_a_reported_body_joining_two_corpses_raises_at_both_readers`); the count set to 0 and the five location
-  arguments of the two call sites, which each survived at `7c89de83`, are red at the head (rows GP1 and GP11 to GP16).
+  (`test_a_reported_body_joining_two_corpses_raises_at_both_readers`); the count set to 0 and the six location
+  arguments of the two call sites (the set label, the seed and the meeting index at each), which each survived at
+  `7c89de83`, are red at the head (rows GP1 and GP11 to GP16).
 - [x] Review correction: the set-neutral check on the no-profile copy holds every rule it held before this card. The
   "is scored" alternative and the "median N ticks" pattern are restored to `assertSetNeutral`, with the check on the
   dashboard's absent copy naming no `9p2i`, which `b46c5c53` had also dropped; a planted line breaking each of the
@@ -1257,3 +1268,70 @@ round 1 measured.
 - CI, a shallow `actions/checkout`: run 37640184843 at `e59047ca`, conclusion success. Project checks (job
   112856749054) 10,843 passed, 40 skipped, 3 xfailed in 1,041.9 s, with no failure; Frontend checks and Frontend e2e
   (Playwright) success.
+
+### Review corrections, round 3 (2026-10-07)
+
+Built on `c376e01d`, the branch head the orchestrator pushed after the remote refused round 2's worker; `origin/main`
+was still `ef1a2a59` at the final fetch, so `main` needed no merge. Commits: this Results commit, then the commit
+recording the gate. No production line and no test moved: `git diff --stat c376e01d` against this commit lists this
+card only, so the served file, the page, the bundle diff and the shown set's reading are those round 2 measured.
+
+**The findings and their repair.** The two documentation-lens findings name two defects.
+1. The round-2 Acceptance item for the corpse-count repair said "the five location arguments of the two call sites",
+   while the rows it cites, GP11 to GP16, are six mutants: the set label, the seed and the meeting index at each of
+   the two call sites that join a body (`candidate_pointers`, whose location carries the set and the seed and whose
+   call adds the meeting index, and `_game_facets`). Round 2's finding 3 above already said six; the item now says
+   six and names them.
+2. The pull request body's Definition of done item 21 said the round-2 gate's card commit `c376e01d` had been refused
+   by the remote and was not yet on the branch. It is the branch head: the orchestrator pushed it after the remote
+   refused the worker, and CI run 37642583408 ran at `c376e01d` and succeeded on all three jobs (Project checks, job
+   112865453344: 10,843 passed, 40 skipped, 3 xfailed in 1,460.0 s; Frontend checks; Frontend e2e (Playwright)).
+   Item 21 of the body now says so, read back with `gh pr view 504 --json body` after the edit. No card text repeated
+   the stale claim: round 2's gate paragraph names `e59047ca` and run 37640184843 only.
+
+**The probe.** No production or test span moved this round, so the bounded pass covers the spans the findings name:
+the six location arguments of `_kill_of`'s two call sites in `eval/game_profile.py`, each a message argument replaced
+by a constant (class M), mutants GP11 to GP16 as round 2 defines them. Method as round 2's: each mutant applied alone
+in place, `tests/eval/test_game_profile.py`, `tests/scripts/test_publish_game_profile.py` and
+`tests/api/test_game_profile_view.py` run with `-x -n 6`, and the file restored from its saved bytes and checked equal
+(scratch `probe.py`). It ran twice: with `7c89de83`'s `tests/eval/test_game_profile.py` installed from a copy, then
+with the head's (the tree then checked clean). Six mutants, none named equivalent.
+
+| id | mutant | at `7c89de83` | at the head, killed by |
+| --- | --- | --- | --- |
+| GP11 | the seed in `candidate_pointers`' location set to 0 | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP12 | the meeting index at the shelves' call site set to 0 | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP13 | the seed at the facets' call site set to 0 | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP14 | the meeting index at the facets' call site set to 0 | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP15 | the set label at the facets' call site set to `planted` | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+| GP16 | the set label in `candidate_pointers`' location set to `planted` | SURVIVED | `test_a_reported_body_joining_two_corpses_raises_at_both_readers` |
+
+**Verification at this commit** (production code and tests identical to `e59047ca`; a scratch `validate.sh` ran each
+command on its own and logged its exit code directly).
+- `env | grep -c '^AILIBI_'`: 0.
+- The card's first pytest line (eleven files, `-n 6 --dist loadfile`): 482 passed, 1 skipped (the pre-existing
+  `tests/api/test_view_model.py:399` skip), exit 0. `uv run pytest tests/scripts/test_refresh_samples.py -n 4 --dist
+  loadfile`: 167 passed, exit 0.
+- `uv run python scripts/publish_game_profile.py --check`, twice: exit 0 both. `--set-dir replays/samples/4p1i
+  --json-stdout`: exit 1, refused by name as round 2 quotes.
+- `.venv/bin/python <memo dir>/rubric-v2-repro.py replays/samples/9p2i`: exit 0, the reading round 2 quotes (every 0;
+  decisive, read as SKIP and all ungrounded removed 1 each at (26, 2); any 2; manufactured 0 of 15; 282 `supported`
+  and 2 `off_target`; endings 13, 13 and 24, 46 ejecting; the seven pre-reveal shelves 14, 7, 11, 6, 16, 16 and 19).
+- `scripts/publish_gameplay_census.py --check`, `scripts/publish_process_scorecard.py --check`,
+  `scripts/gen_frontend_types.py --check`: exit 0 each. `uv run lint-imports`: 5 contracts kept, 0 broken.
+- `git diff --exit-code d41c9006 --` the two baseline-9 lab files: exit 0. `git diff --stat ef1a2a59 -- replays/`:
+  the one served file, 6,175 insertions.
+- `bash scripts/verify_samples.sh`: exit 0, "All 50 samples verified clean." for each of its three sets.
+  `build_sample_report.py --sample-dir <set> --check` for `replays/samples/9p2i`, `replays/samples/4p1i`,
+  `replays/ml_corpus/9p2i`, `replays/ml_corpus/4p1i` and `replays/candidates/stage-b-r1/9p2i`: exit 0 each.
+- Offline `scripts/verify_ml_evidence.py`: exit 0, 64 checks, 52 OK, 0 FAIL, 7 ABSENT (the evidence branch, not
+  restored here), 5 INFO. `uv run pytest -m campaign`: 337 passed, exit 0.
+- `uv run ruff check .`: all passed; `uv run ruff format --check .`: 567 files already formatted.
+- Frontend: `npm run lint`, `npm run tsc:check`, `npm run build` exit 0; `npm test`: 27 files, 811 tests passed;
+  `npm run e2e` (serial, one worker): 15 passed, 3 skipped (the README media capture), exit 0, 1.6 min.
+- `scripts/validate_task_docs.py`: exit 0 on this text (390 phase tasks, 390 prompts, 102 work cards).
+  `scripts/check_doc_facts.py`: exit 0.
+- The bundle was not rebuilt: this round changes no viewer, recording, featured-list or served byte, so the diff
+  round 2 measured in one checkout at `e59047ca` is the diff at this head.
+
+**The gate, round 3.** Recorded by the commit after this one, which changes only this card.
