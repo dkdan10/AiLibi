@@ -3381,24 +3381,26 @@ class TestCommittedBytes1010Pins:
         assert all(is_weak_contradiction(flag) for flag in retargeted)
 
     @staticmethod
-    def _two_unflagged() -> tuple[CommittedMeeting, PlayerId, PlayerId]:
-        """The shown set's first meeting with two living players no flag names.
+    def _flagged_and_unflagged() -> tuple[CommittedMeeting, tuple[PlayerId, ...]]:
+        """The shown set's first meeting where a flag names a living player.
 
-        Seed order, then meeting order; the two lowest such ids. The coordinate
-        moves with every re-record, so it is found by this shape, never named.
+        It must also leave two living players unnamed. Seed order, then meeting
+        order; returned with every living player no re-derived flag names. The
+        coordinate moves with every re-record, so it is found by this shape,
+        never named.
         """
 
         for seed in range(50):
             for meeting in _channelled_meetings(seed):
                 rederived = meeting.rederive()
-                unflagged = [
+                unflagged = tuple(
                     player
                     for player in sorted(meeting.roster)
                     if not any(player in flag.subjects for flag in rederived)
-                ]
-                if len(unflagged) >= 2:
-                    return meeting, unflagged[0], unflagged[1]
-        raise AssertionError("no meeting with two unflagged players on these bytes")
+                )
+                if 2 <= len(unflagged) < len(meeting.roster):
+                    return meeting, unflagged
+        raise AssertionError("no meeting of the shape on these bytes")
 
     def test_an_unflagged_player_stays_below_gate_and_is_not_redirect_argmax(
         self,
@@ -3411,10 +3413,10 @@ class TestCommittedBytes1010Pins:
         # re-recorded bytes, so the single turn's artifact crosses the gate on NO
         # ONE. Walked from the 0.5 prior, the seed-28 pin's convention.
         # History (2026-10-09): the meeting is found by shape; on round 2's bytes
-        # the pin read seed 38 m1 with p-6 and p-2.
+        # the pin read seed 38 m1 with p-6 and p-2, both unflagged there.
         from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 
-        meeting, first, second = self._two_unflagged()
+        meeting, unflagged = self._flagged_and_unflagged()
         rederived = meeting.rederive()
 
         def lifted_max(player: str) -> float:
@@ -3428,21 +3430,20 @@ class TestCommittedBytes1010Pins:
                 .suspicion
             )
 
-        assert lifted_max(first) < 0.60
-        # The second carries no flag either, so it stays at the 0.5 prior,
-        # still below the gate (the P1-review tripwire).
-        assert lifted_max(second) == pytest.approx(0.50)
-        assert lifted_max(second) < 0.60
+        # Each unflagged player stays at the 0.5 prior, below the gate, beside
+        # a flag the same meeting raised (the P1-review tripwire).
+        for player in unflagged:
+            assert lifted_max(player) == pytest.approx(0.50)
+            assert lifted_max(player) < 0.60
         # The redirect argmax is the highest over-gate candidate (ties to
-        # the lowest id); no unflagged player is over-gate, so neither can
-        # ever be that argmax.
+        # the lowest id); no unflagged player is over-gate, so none can ever
+        # be that argmax.
         graph = {player: lifted_max(player) for player in sorted(meeting.roster)}
         over_gate = {p: s for p, s in graph.items() if s >= 0.60}
-        assert first not in over_gate
-        assert second not in over_gate
+        assert not set(unflagged) & set(over_gate)
         if over_gate:
             argmax = min(over_gate, key=lambda p: (-over_gate[p], p))
-            assert argmax not in (first, second)
+            assert argmax not in unflagged
 
     def test_proxy_intra_turn_retargets_weak_set_wide(self) -> None:
         # INTENT-PRESERVED (doctrine rule 3) on the Task 18.12 baseline-6 re-record
