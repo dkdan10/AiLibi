@@ -406,6 +406,16 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   Its dated section 9 records the owner's promotion of the round on 2026-10-02:
   its bytes are now `replays/samples/9p2i`, the shown 9-player set, in its own
   era, with the reporter flag stated and the ladder tip still at baseline 9.
+- [audit-2026-10-09-stage-b-r3.md](audit-2026-10-09-stage-b-r3.md) —
+  candidate round 3: the same 50 seeds recorded once more on the shown set's
+  rules with one more switch, which gives each voter a plain line about the
+  places stated at the table that the station's doors or the public regroup
+  reconcile, the same for every role. It opens with the readings fixed before
+  the first seed and the owner's confirmation of them, then records the spend
+  against the owner's ceilings, the gates and the operating events, and reads
+  the round in three columns, the first round, the shown set and this one,
+  never pooled. It gives no verdict and adopts nothing; the step its rule names
+  is taken on the owner's criteria, and any promotion is the owner's merge.
 
 ## Cleanup measurements
 
