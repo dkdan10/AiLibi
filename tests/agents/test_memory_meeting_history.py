@@ -52,6 +52,7 @@ from tests._helpers.committed import (
     SAMPLES_4P1I,
     SAMPLES_9P2I,
 )
+from tests._helpers.recorded_counts import recorded_counts
 
 _WORKING_PY = Path("agents/memory/working.py")
 
@@ -701,8 +702,8 @@ def test_v3_encode_is_inert_to_the_announcement_fields() -> None:
 # The committed-bytes counterfactual
 # ---------------------------------------------------------------------------- #
 
-#: What the block would have cost and bought over the four committed sets, keyed
-#: by set: (rendered memories, renders that would gain a prior-ejection line,
+#: What the block would have cost and bought over the three frozen committed
+#: sets, keyed by set: (rendered memories, renders that would gain a prior-ejection line,
 #: those following at least one IMPOSTOR reveal, those following at least one
 #: CREWMATE reveal, ``saw_vent`` observations naming an already-ejected player).
 #:
@@ -723,12 +724,11 @@ def test_v3_encode_is_inert_to_the_announcement_fields() -> None:
 #: ``saw_vent`` columns fell from baseline 6 to 8 (68 -> 14 -> 8 and
 #: 232 -> 45 -> 44) because the meeting-outcome channel renders the ejection, so
 #: a witness has far less occasion to name an already-ejected player; baseline 9
-#: reads 11 and 42. Since 2026-10-02 samples/9p2i holds candidate round 2's
-#: bytes (its own era), re-measured here; its baseline-9 row was
-#: 845/401/396/24/11.
+#: reads 11 and 42. The shown samples/9p2i set follows the promoted round and
+#: is held to the census's own structure instead (its baseline-9 row was
+#: 845/401/396/24/11).
 _COUNTERFACTUAL_CENSUS: Final[dict[str, tuple[int, int, int, int, int]]] = {
     "samples/4p1i": (117, 0, 0, 0, 0),  # was (120, 0, 0, 0, 0)
-    "samples/9p2i": (691, 206, 146, 72, 2),  # was (845, 401, 396, 24, 11)
     "ml_corpus/4p1i": (129, 0, 0, 0, 0),  # was (132, 0, 0, 0, 0)
     "ml_corpus/9p2i": (2539, 1247, 1163, 183, 42),  # was (2516, 1186, 1160, 78, 44)
 }
@@ -790,7 +790,6 @@ def test_committed_bytes_counterfactual_is_what_the_record_is_judged_against(
 ) -> None:
     sample_dir = {
         "samples/4p1i": SAMPLES_4P1I,
-        "samples/9p2i": SAMPLES_9P2I,
         "ml_corpus/4p1i": CORPUS_4P1I,
         "ml_corpus/9p2i": CORPUS_9P2I,
     }[set_name]
@@ -798,14 +797,34 @@ def test_committed_bytes_counterfactual_is_what_the_record_is_judged_against(
 
 
 @pytest.mark.slow
+def test_the_shown_sets_counterfactual_holds_its_own_structure() -> None:
+    """The shown set's census, derived rather than transcribed.
+
+    Every recorded meeting renders at least one memory, a render can gain the
+    block only after an ejection, and each gaining render follows an IMPOSTOR
+    reveal, a CREWMATE reveal or both.
+    """
+
+    renders, gained, after_impostor, after_crewmate, stale_vents = _census_for(
+        SAMPLES_9P2I
+    )
+    rows = recorded_counts(SAMPLES_9P2I)
+    assert rows.meetings <= renders <= 9 * rows.meetings
+    assert 0 < gained <= renders
+    assert max(after_impostor, after_crewmate) <= gained
+    assert after_impostor + after_crewmate >= gained
+    assert stale_vents >= 0
+
+
+@pytest.mark.slow
 def test_the_census_totals_reproduce_the_review_counts() -> None:
     renders = sum(row[0] for row in _COUNTERFACTUAL_CENSUS.values())
     gained = sum(row[1] for row in _COUNTERFACTUAL_CENSUS.values())
     stale_vents = sum(row[4] for row in _COUNTERFACTUAL_CENSUS.values())
-    # Counts of what the tree holds, across both recorded eras since 2026-10-02;
-    # the four baseline-9 sets read (3630, 1648) and 53.
-    assert (renders, gained) == (3476, 1453)  # was (3631, 1597) on baseline 8
+    # Counts over the three frozen sets; the four baseline-9 sets read
+    # (3630, 1648) and 53, the shown set included.
+    assert (renders, gained) == (2785, 1247)  # was (3631, 1597) on baseline 8
     # The re-litigation denominator: the meeting-outcome channel renders the
     # ejection, so a witness has far less occasion to name an already-ejected
     # player (baseline 6: 300).
-    assert stale_vents == 44  # was 52 on baseline 8
+    assert stale_vents == 42  # was 52 on baseline 8

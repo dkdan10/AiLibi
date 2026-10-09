@@ -25,6 +25,7 @@ from eval.leak_scan import (
 from eval.witness_entitlement import assert_event_witnesses_match_source_state
 from observation.service import ObservationService
 from orchestrator.seeder import seed_initial_state
+from tests._helpers.committed import kill_craft_report
 from tests.engine.test_vent_witness_rule import _player as _scene_player
 from tests.engine.test_vent_witness_rule import _scene, _vent
 
@@ -142,19 +143,35 @@ def test_factory_scan_rejects_another_crewmates_valid_task_id(tmp_path: Path) ->
         assert_no_factory_packet_leaks([(poisoned, context)])
 
 
+def _first_game_with_a_crew_witnessed_kill() -> int:
+    """The shown set's lowest seed whose recorded kill a crewmate witnessed."""
+
+    seeds = sorted(
+        {
+            row.seed
+            for row in kill_craft_report(_SHOWN_9P2I).per_kill
+            if row.crew_witnessed
+        }
+    )
+    assert seeds, "no kill of the shown set is crew-witnessed"
+    return seeds[0]
+
+
 def test_factory_reconstruction_checks_the_actual_engine_witness_producer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # A missing witness list changes no engine hash, so strict hash equality
-    # alone cannot detect this producer mutation.
+    # alone cannot detect this producer mutation. The game is found, not named
+    # (seed 23 on round 2's bytes): any game holding a witnessed kill exposes it.
+    seed = _first_game_with_a_crew_witnessed_kill()
     monkeypatch.setattr("engine.rules._witnesses_in_room", lambda *args, **kwargs: ())
-    source = Path("replays/samples/9p2i/replay-seed-23.jsonl")
+    source = _SHOWN_9P2I / f"replay-seed-{seed}.jsonl"
     with pytest.raises(AssertionError, match="witness entitlement"):
         _reconstruct_factory_records(
             source,
             game_map=load_canonical_map(),
-            seed=23,
+            seed=seed,
             num_players=9,
             num_impostors=2,
             tasks_per_crewmate=2,
@@ -168,6 +185,7 @@ def test_factory_reconstruction_checks_the_actual_engine_witness_producer(
 # --------------------------------------------------------------------------- #
 
 _MAP = load_canonical_map()
+_SHOWN_9P2I = Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
 
 
 def _cross_room_exit(

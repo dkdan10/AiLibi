@@ -29,6 +29,7 @@ from eval.evidence_honesty import (
     compute_evidence_honesty,
     reconstruct_impostor_decisions,
 )
+from eval.validity import seeds_on_disk
 from observation.action_intent import (
     DoTaskIntent,
     KillIntent,
@@ -2135,24 +2136,39 @@ class TestImpostorRefutedSighting:
         assert [target.player_id for target in ranking] == ["ghost"]
 
     @pytest.mark.slow
-    def test_seed_0_refutes_a_living_lead_and_keeps_it_dropped(self) -> None:
+    def test_a_committed_game_refutes_a_living_lead_and_keeps_it_dropped(
+        self,
+    ) -> None:
         # The demonstrable case for the LIVING half of C-4, the half the ejection
-        # barrier does not cover: p-8 stands in WEST_HALL at tick 8 without seeing
-        # p-4 there, so p-4 leaves the ranking -- and stays out at tick 9, after
-        # p-8 has moved on to ADMIN. Re-read on the promoted bytes (candidate round
-        # 2, 2026-10-02); was seed 20 p-8 ticks 5-6 on the baseline-9 bytes, and
-        # seed 7 p-2 ticks 13-14 before them.
-        rows = {
-            row.tick: row
-            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=0)
-            if row.actor == "p-8" and row.tick in (8, 9)
-        }
-        for tick in (8, 9):
-            frozen = _frozen_static_ranking(rows[tick].memory)
-            assert frozen[0].player_id == "p-4" and frozen[0].room == "WEST_HALL"
-            assert all(target.player_id != "p-4" for target in rows[tick].ranked)
-        assert _own_room(rows[8].memory) == "WEST_HALL"
-        assert _own_room(rows[9].memory) == "ADMIN"
+        # barrier does not cover: an impostor stands in its frozen top lead's
+        # room without seeing the lead there, so the lead leaves the ranking --
+        # and stays out the next tick, after the impostor has moved on. The case
+        # is found on the shown bytes, not named (seed 0 p-8 ticks 8-9 on round
+        # 2's bytes, seed 20 p-8 ticks 5-6 on the baseline-9 bytes, and seed 7
+        # p-2 ticks 13-14 before them).
+        for seed in sorted(seeds_on_disk(_SAMPLES_9P2I)):
+            rows = {
+                (row.actor, row.tick): row
+                for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=seed)
+            }
+            for (actor, tick), row in sorted(rows.items(), key=lambda kv: kv[0][::-1]):
+                after = rows.get((actor, tick + 1))
+                frozen = _frozen_static_ranking(row.memory)
+                if after is None or not frozen:
+                    continue
+                lead = frozen[0]
+                frozen_after = _frozen_static_ranking(after.memory)
+                if (
+                    _own_room(row.memory) == lead.room
+                    and _own_room(after.memory) != lead.room
+                    and frozen_after
+                    and (frozen_after[0].player_id, frozen_after[0].room)
+                    == (lead.player_id, lead.room)
+                    and all(t.player_id != lead.player_id for t in row.ranked)
+                    and all(t.player_id != lead.player_id for t in after.ranked)
+                ):
+                    return
+        raise AssertionError("no committed decision refutes a living lead")
 
 
 def _recorded_kill_actions(set_dir: Path) -> int:

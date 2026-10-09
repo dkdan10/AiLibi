@@ -206,6 +206,7 @@ from orchestrator.replay import (
     require_legacy_observations,
 )
 from orchestrator.seeder import seed_initial_state
+from tests._helpers.recorded_counts import recorded_counts
 
 # --------------------------------------------------------------------------- #
 # Committed-sample paths + the four template kinds                            #
@@ -353,9 +354,9 @@ class ReconstructedMeeting:
     190 meetings -- instead of making every recording unwalkable until the
     re-record. The baseline-9 record was written after D6, so no committed
     ballot carries either retired reason and nothing moves: the census
-    :func:`test_every_reconstruction_divergence_is_a_retired_guard` pins per set
-    (``_RETIRED_GUARD_PINS``) reads ``(145, 845, 0, 0)`` for samples/9p2i and
-    ``(39, 117, 0, 0)`` for samples/4p1i. Every
+    :func:`test_every_reconstruction_divergence_is_a_retired_guard` holds per
+    set (:func:`_retired_guard_row`) reads zero moved ballots in every walked
+    set (``(39, 117, 0, 0)`` for samples/4p1i). Every
     consumer of this walk therefore reads the decision the recording actually
     made, which is what each of them was already asserting about.
 
@@ -1354,28 +1355,35 @@ _RETIRED_REWRITE_REASONS: Final[frozenset[str]] = frozenset(
     {"under_gate_redirect", "uncited_coerced"}
 )
 
-#: Pinned at this head, through the production path, as
+#: Pinned for the frozen sets, through the production path, as
 #: ``(meetings, ballots, ballots whose target moved, meetings holding one)``.
 #: Keyed by the set's path under ``replays/``, never by its base name: a
 #: candidate set takes its roster's name, so it shares that name with a sample
-#: set. Every directory the golden walks has its own row.
+#: set. A walked set without a frozen row (the shown samples/9p2i set, and a
+#: retired round's candidate copy) reads its recorded meetings and ballots with
+#: nothing moved (samples/9p2i read (145, 845, 0, 0) on the baseline-9 bytes,
+#: and (151, 869, 23, 14) on baseline 8's).
 _RETIRED_GUARD_PINS: Final[Mapping[str, tuple[int, int, int, int]]] = {
-    # was (145, 845, 0, 0) on the baseline-9 bytes, and (151, 869, 23, 14) on
-    # baseline 8's; since 2026-10-02 the set holds candidate round 2's bytes,
-    # whose candidate row read (117, 691, 0, 0) until the round's copy retired.
-    "samples/9p2i": (117, 691, 0, 0),
     "samples/4p1i": (39, 117, 0, 0),  # was (39, 117, 1, 1)
     "candidates/stage-b-r1/9p2i": (124, 717, 0, 0),
 }
 
 
-def _retired_guard_pin(set_dir: Path) -> tuple[int, int, int, int]:
-    """``set_dir``'s pinned census, by its path under ``replays/``; unpinned raises."""
+def _retired_guard_row(set_dir: Path) -> tuple[int, int, int, int]:
+    """``set_dir``'s census row, by its path under ``replays/``; an unwalked set raises.
+
+    A frozen set reads its pinned row; any other walked set reads its recorded
+    meetings and ballots and the semantic zeros: no committed ballot carries a
+    retired guard's reason, so no target moves.
+    """
 
     key = set_dir.relative_to(_REPO_ROOT / "replays").as_posix()
-    if key not in _RETIRED_GUARD_PINS:
-        raise KeyError(f"no retired-guard pin for {key}")
-    return _RETIRED_GUARD_PINS[key]
+    if key in _RETIRED_GUARD_PINS:
+        return _RETIRED_GUARD_PINS[key]
+    if set_dir not in golden_directories():
+        raise KeyError(f"no retired-guard row for {key}")
+    rows = recorded_counts(set_dir)
+    return (rows.meetings, rows.ballots, 0, 0)
 
 
 def test_every_reconstruction_divergence_is_a_retired_guard(
@@ -1448,7 +1456,7 @@ def test_every_reconstruction_divergence_is_a_retired_guard(
     # and no target moves: today's chain re-decides every recorded ballot to its
     # recorded target. The moved-ballot branch above is therefore unexercised on
     # these bytes; it held on baseline 8's 23 and 1 redirects.
-    expected = _retired_guard_pin(set_walk.set_dir)
+    expected = _retired_guard_row(set_walk.set_dir)
     assert (
         meetings,
         ballots,
@@ -1458,27 +1466,30 @@ def test_every_reconstruction_divergence_is_a_retired_guard(
 
 
 def test_the_retired_guard_pins_are_keyed_by_the_path_under_replays() -> None:
-    """Planted: two sets that share the base name ``9p2i`` read different pins.
+    """Planted: two sets that share the base name ``9p2i`` read different rows.
 
     Keyed by base name, the candidate round was held to the sample set's row.
-    Keyed by path, each walked set reads its own row, no row names a set the
-    golden does not walk, and an unpinned set raises instead of borrowing one.
+    Keyed by path, each walked set reads its own row, every frozen row names a
+    set the golden walks, and an unwalked set raises instead of borrowing one.
     """
 
     replays = _REPO_ROOT / "replays"
     sample = replays / "samples" / "9p2i"
     candidate = replays / "candidates" / "stage-b-r1" / "9p2i"
     assert sample.name == candidate.name
-    assert _retired_guard_pin(sample) == (117, 691, 0, 0)
-    assert _retired_guard_pin(candidate) == (124, 717, 0, 0)
+    shown = recorded_counts(sample)
+    assert _retired_guard_row(sample) == (shown.meetings, shown.ballots, 0, 0)
+    assert _retired_guard_row(candidate) == (124, 717, 0, 0)
     # The defect this keying removes: by base name, two rows collapse into one.
-    by_base_name = {Path(key).name: pin for key, pin in _RETIRED_GUARD_PINS.items()}
-    assert len(by_base_name) < len(_RETIRED_GUARD_PINS)
-    assert {
-        directory.relative_to(replays).as_posix() for directory in golden_directories()
-    } == set(_RETIRED_GUARD_PINS)
+    walked = {
+        directory.relative_to(replays).as_posix(): _retired_guard_row(directory)
+        for directory in golden_directories()
+    }
+    by_base_name = {Path(key).name: row for key, row in walked.items()}
+    assert len(by_base_name) < len(walked)
+    assert set(_RETIRED_GUARD_PINS) <= set(walked)
     with pytest.raises(KeyError, match="candidates/round-2/9p2i"):
-        _retired_guard_pin(replays / "candidates" / "round-2" / "9p2i")
+        _retired_guard_row(replays / "candidates" / "round-2" / "9p2i")
 
 
 # --------------------------------------------------------------------------- #
@@ -2615,19 +2626,16 @@ def test_the_kill_row_gate_forced_on_fails_the_golden_at_the_kill_holders(
 # The route lines' OFF gate is not vacuous                                     #
 # --------------------------------------------------------------------------- #
 
-#: MEASURED at the route-lines card: per committed sample set, the ballots whose
-#: transcript states, for one of the voter's candidates, a change of room the
-#: station's doors or the public regroup reconcile, as their count and the sha256
-#: of their sorted ``set:seed:meeting id:voter`` keys. Both sets recorded the
-#: route lines OFF, so these are the only ballots the gate moves, and the
+#: MEASURED at the route-lines card: for the frozen sample set, the ballots
+#: whose transcript states, for one of the voter's candidates, a change of room
+#: the station's doors or the public regroup reconcile, as their count and the
+#: sha256 of their sorted ``set:seed:meeting id:voter`` keys. Both sets recorded
+#: the route lines OFF, so these are the only ballots the gate moves, and the
 #: golden's OFF leg bites at exactly them. Pinned as digests so a failure prints
-#: no prompt.
+#: no prompt. The shown 9p2i set is held to its own reconciled ballots rather
+#: than a digest (665 ballots on round 2's bytes).
 _ROUTE_LINE_BALLOTS: Final[Mapping[str, tuple[int, str]]] = MappingProxyType(
     {
-        "9p2i": (
-            665,
-            "154f15d21ce9aee3ee642ff71503ba6e4df8ff843b3a8a9f9ab6f66e21718b19",
-        ),
         "4p1i": (
             86,
             "3e284684ff82c63ffe1f0bb06fd1b71858989bfe1d5ef2fc7eef340bde2e6d6e",
@@ -2700,4 +2708,6 @@ def test_the_route_lines_forced_on_fail_the_golden_at_the_reconciled_ballots(
             if not prompt.reproduced
         }
         assert failing == _reconciled_ballots(set_dir)
-        assert _ballot_digest(failing) == _ROUTE_LINE_BALLOTS[set_dir.name]
+        assert failing, set_dir.name
+        if set_dir.name in _ROUTE_LINE_BALLOTS:
+            assert _ballot_digest(failing) == _ROUTE_LINE_BALLOTS[set_dir.name]
