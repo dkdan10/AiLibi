@@ -162,7 +162,8 @@ def test_partial_recording_retains_reported_spend_without_a_win(
 
 def test_the_kept_cases_sit_on_the_featured_head_and_pin_its_bytes() -> None:
     # Two cases are kept, both re-written on the featured 9-player head (seed 19,
-    # the promoted set since 2026-10-02): its first meeting is the supported
+    # re-read on round 3's bytes, the promoted set since 2026-10-09, as on round
+    # 2's from 2026-10-02): its first meeting is the supported
     # case, its second the unresolved one. The disputed-route case is withdrawn:
     # its game (seed 29 meeting 1 on the baseline-9 bytes) has no promoted
     # counterpart on the strip, and no featured meeting ejects an innocent

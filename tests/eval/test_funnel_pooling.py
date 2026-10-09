@@ -709,7 +709,7 @@ def test_9p2i_pooling_roll_call_breakdown_reproduces_baseline_5(
     nine_pooling: PoolingFunnelReport,
 ) -> None:
     # Task 17.4 per-role / per-surface / answered-asked breakdown. Re-derived
-    # from the committed 9p2i bytes (the promoted stage-b-r2 recording) via
+    # from the committed 9p2i bytes (the promoted stage-b-r3 recording) via
     # eval.funnel — the breakdown DECOMPOSES the aggregate coverage (0.863 at
     # the phase-16 close, audits/audit-phase-16-close.md §6), it moves no
     # existing cell: the role split shows the answer rate is STRUCTURED (crew

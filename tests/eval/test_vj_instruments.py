@@ -7,24 +7,27 @@ Three layers:
   deterministic voice tier in isolation — every judgment/voice fold proves
   it can MOVE on a synthetic fixture;
 * the REPRODUCTION PINS — ``compute_vj_instruments`` over the committed
-  9p2i / 4p1i bytes. ``samples/9p2i`` is the stage-b-r2 era (candidate round 2,
-  promoted 2026-10-02: the adopted gameplay arms and a six-tick kill cooldown,
-  recorded on Qwen/Qwen3.6-27B with the qwen3_6_27b prompts and the two ballot
-  arm overlays on vote_ballot v8); ``samples/4p1i`` is the baseline-9 re-record.
+  9p2i / 4p1i bytes. ``samples/9p2i`` is the stage-b-r3 era (candidate round 3,
+  promoted 2026-10-09: the adopted gameplay arms, a six-tick kill cooldown and
+  the route lines, recorded on Qwen/Qwen3.6-27B with the qwen3_6_27b prompts and
+  three ballot arm overlays on vote_ballot v8, where round 2 carried two);
+  ``samples/4p1i`` is the baseline-9 re-record.
   The ballot-ECE cell reads the recorded ballot stream; the committed
   ``eval.accusation_calibration`` fold's ``vote_ballot_ece`` reads the same
   stream minus its guard-authored EJECT ballots, so on the 9p2i sample set,
-  which carries none, the two agree exactly — 0.3049 at n=410. The zero-flag
-  conviction channel and the citation-compliance cells are pinned on the
-  promoted bytes: 40 of the 66 9p2i convictions are zero-flag, typed 10
-  hard-backed / 15 soft-only / 14 unattributed-only / 1 with no row, and the
-  typed and proxy splits agree on 35 of them. The soft/hard split's
+  which carries none, the two agree exactly — 0.2792 at n=397 (was 0.3049 at
+  n=410 on round 2's bytes). The zero-flag conviction channel and the
+  citation-compliance cells are read on the promoted bytes: 36 of the 61 9p2i
+  convictions are zero-flag, typed 8 hard-backed / 19 soft-only / 9
+  unattributed-only / 0 with no row, and the typed and proxy splits agree on 31
+  of them (was 40 of 66, typed 10 / 15 / 14 / 1, agreeing on 35, on round 2's
+  bytes). The soft/hard split's
   rendered-value axis pins clean (0 rendered-value mismatches). The provenance
   axis reads 0 sum breaches: the gauge learned the J1 clamp-exemption
   (Task 17.1), so a by-design J1-clamped row — the ballot-graph scalar clamped
   to 0.59 while the raw typed provenance sums to 0.60 — is exempt by the
-  production predicate, not an integrity failure (the promoted bytes hold none;
-  the per-row census is ``test_9p2i_j1_clamp_exempt_rows_pinned``);
+  production predicate, not an integrity failure (the shown set's exempt rows
+  are listed, not transcribed, by ``test_9p2i_j1_clamp_exempt_rows_pinned``);
 * the CLI surface — ``measure_baseline.py --vj [--json]`` emits the report
   and round-trips, plus the DoD determinism double-run (two computes of the
   same set are identical).

@@ -412,8 +412,8 @@ def test_accepts_a_bare_game_sequence(samples_4p1i: TournamentEvalReport) -> Non
 # cross-pin the contract asks for; a diff on either side is a loud failure in
 # both suites.
 # The weak-signal column is what the baseline-9 record moved: 50 -> 11 on the
-# samples set and 126 -> 44 on the corpus. The samples set now holds the
-# stage-b-r2 bytes, which carry far fewer vent flags.
+# samples set and 126 -> 44 on the corpus. The samples set now holds round 3's
+# bytes (stage-b-r3; round 2's before them), so its row is derived below.
 _EXPECTED_CATEGORY_COUNTS: Final[dict[str, tuple[int, int, int]]] = {
     # set -> (role_proof, cross_statement, weak_signal); the shown 9p2i set is
     # derived from its own flags instead (test_the_shown_sets_taxonomy_...).
@@ -606,9 +606,9 @@ def test_thirteen_engine_redirected_ejects_reproduces(
     The triage listed it UNVERIFIED-CHEAPLY. The recount over the triage's bytes
     found exactly 13 redirect-marked ballots on ``replays/samples/9p2i``, all 13
     recorded as ejects, none coerced to SKIP, and the recount became the pin.
-    The class is EMPTY on the baseline-9 bytes and on the promoted stage-b-r2
-    bytes: not one ballot on the set carries the redirect marker (baseline 8
-    read 23, all ejects).
+    The class is EMPTY on the baseline-9 bytes, on round 2's and on the
+    promoted stage-b-r3 bytes: not one ballot on the set carries the redirect
+    marker (baseline 8 read 23, all ejects).
     """
 
     redirects = samples_9p2i.deduction.redirected_ballots
@@ -654,8 +654,8 @@ def test_weak_flag_only_conviction_lands_on_the_audit_exhibit(
     metric is ejectee-scoped, so it is not merely counting meetings that happen
     to be weak-flagged. Every weak-only conviction on the CORPUS set still
     ejected an innocent (2 of 2), and the sample set's one on the promoted
-    stage-b-r2 bytes did too (the baseline-9 bytes carried none; baseline 8
-    read six there, five of them innocent). The numerators are 1 and 2, so the
+    stage-b-r3 bytes did too, as round 2's one did (the baseline-9 bytes
+    carried none; baseline 8 read six there, five of them innocent). The numerators are 1 and 2, so the
     cells keep the rare-event advisory: the interval, not the rate, is the
     honest read.
     """
@@ -681,8 +681,9 @@ def test_seed_47_is_the_sample_weak_only_conviction(
 ) -> None:
     """Name the exhibits: every weak-only conviction, walked independently.
 
-    The class began as seed 47's innocent p-8. On the promoted stage-b-r2 bytes
-    the sample set carries one, seed 8's innocent p-9, beside the corpus set's
+    The class began as seed 47's innocent p-8. On the promoted stage-b-r3 bytes
+    the sample set carries one, the innocent ejected at seed 12's first meeting
+    (was seed 8's innocent p-9 on round 2's bytes), beside the corpus set's
     two, all three innocent.
     """
 

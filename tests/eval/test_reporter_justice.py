@@ -7,16 +7,17 @@ beside the pin as a REFERENCE, so a reader can see which way the class moved
 without either number pretending to be the other.
 
 The sets are read per recorded era (eval/eras.py) and never pooled across one:
-the three baseline-9 sets pool together, and samples/9p2i, the stage-b-r2 era
-since the promotion of 2026-10-02, is read on its own. Pooling across the two
+the three baseline-9 sets pool together, and samples/9p2i, the stage-b-r3 era
+since the promotion of 2026-10-09, is read on its own. Pooling across the two
 raises (``test_the_pool_refuses_two_eras``).
 
 Three independent cross-checks make the walk more than self-consistent: the
 baseline-9 ejection ledger reproduces the baseline-9 record's own published
 per-set innocent cells summed over its three sets (32 + 0 + 1 = 33,
 audits/audit-2026-09-22-process-rerecord.md §6.2), the promoted set's ledger
-reproduces the promotion record's 22 innocent of 66 ejections
-(audits/audit-2026-10-01-stage-b-r2.md §9), each without reading the document,
+equals its recorded ejections (15 innocent of 61 on round 3's bytes; was 22 of
+66 on round 2's, audits/audit-2026-10-01-stage-b-r2.md §9), each without
+reading the document,
 and the reporter role census reproduces the premise the whole class rests on --
 the reporter is a crewmate in every body-report meeting, so exculpating them
 launders nobody.
@@ -70,7 +71,7 @@ def pooled() -> ReporterJusticeCells:
 
 @pytest.fixture(scope="module")
 def promoted() -> ReporterJusticeCells:
-    """The stage-b-r2 era: samples/9p2i, on its own."""
+    """The stage-b-r3 era: samples/9p2i, on its own."""
 
     return compute_reporter_justice(_SETS[0])
 

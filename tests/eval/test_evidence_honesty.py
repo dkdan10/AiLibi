@@ -147,9 +147,9 @@ _SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples" / "4p1i"
 _CORPUS_9P2I = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 _CORPUS_4P1I = _REPO_ROOT / "replays" / "ml_corpus" / "4p1i"
 # The committed sets by recorded era (eval/eras.py). The three baseline-9 sets
-# pool together; samples/9p2i has been its own era (stage-b-r2) since the
-# promotion of 2026-10-02, so a pooled pin sums the three and reads samples/9p2i
-# beside it, never with it.
+# pool together; samples/9p2i has been its own era since the promotion of
+# 2026-10-02 (stage-b-r2, then stage-b-r3 since 2026-10-09), so a pooled pin
+# sums the three and reads samples/9p2i beside it, never with it.
 _BASELINE_9_SETS: Final[tuple[Path, ...]] = tuple(
     _REPO_ROOT / path for path in sets_in(BASELINE_9)
 )
@@ -1776,7 +1776,7 @@ def test_i3_sole_flag_precision_pins(
     ]
     assert per_victim == [(0, 0), (1, 1), (0, 0), (0, 0)]
     # Pooled within an era only: the three baseline-9 sets (samples/9p2i, the
-    # stage-b-r2 era, is the first entry above and is never pooled with them).
+    # stage-b-r3 era, is the first entry above and is never pooled with them).
     assert (sum(n for n, _ in per_victim[1:]), sum(d for _, d in per_victim[1:])) == (
         1,
         1,
@@ -3150,7 +3150,7 @@ def test_the_price_of_the_lever_in_the_other_direction(
     # live accessor drops them
     assert per_set == [2, 9, 0, 0]
     # Counted within an era only: the three baseline-9 sets, then samples/9p2i
-    # (stage-b-r2) alone.
+    # (stage-b-r3) alone.
     era = _BASELINE_9_SETS
     assert sum(movement[d].new_flags for d in era) == 9
     assert sum(movement[d].new_flags_strong for d in sets) == 0
@@ -3537,7 +3537,7 @@ def test_the_grounded_lever_prices_the_prosecution_class(
     per_set = [grounded[d].strong_grounded for d in sets]
     assert per_set == [0, 5, 0, 0]  # was 3 first, on round 2's bytes
     # Everything below is counted within an era only: the three baseline-9 sets,
-    # then samples/9p2i (stage-b-r2) alone.
+    # then samples/9p2i (stage-b-r3) alone.
     era = _BASELINE_9_SETS
     samples = grounded[_SAMPLES_9P2I]
     # Direction 2 — what the class looks like after: every surviving sighting
@@ -4128,9 +4128,10 @@ def _sighting_ticks_covered(view: str) -> int:
 # 9p2i at audits/audit-phase-20-preregistration.md:351-356). The re-render
 # recounts it from the memories rather than from the recorded prompts, so the two
 # agree only if the reconstruction is faithful. The census reads the baseline-9
-# era's nine-player set, ml_corpus/9p2i, since samples/9p2i moved to the
-# stage-b-r2 era (2026-10-02): there the recorded cell counts the one-reply calls
-# a snapshot per living player does not, and the two means sit 0.23 rows apart.
+# era's nine-player set, ml_corpus/9p2i, since samples/9p2i left that era on
+# 2026-10-02 (stage-b-r2, then stage-b-r3 since 2026-10-09): on round 2's bytes
+# the recorded cell counted the one-reply calls a snapshot per living player
+# does not, and the two means sat 0.23 rows apart.
 _COMMITTED_OFF_MEAN: Final[float] = 39.0830  # was 37.8943 on samples/9p2i
 # The ON-path row count the review PROJECTED (53.2 x 0.68), falsified by the
 # measurement below, and the cell that replaces it as the ratified pin.

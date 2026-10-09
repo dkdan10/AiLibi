@@ -146,6 +146,31 @@ is weakened, and a retired check is deleted with its mechanism and one history l
 goes through `SPECTATOR_COPY` or the picker data, with no task or audit ID, no unexplained jargon and no threshold
 arithmetic.
 
+- [x] Review correction: the replaced-era check reads the shown set's era off the registry, never a fixed id.
+  `test_the_replaced_era_check_reads_the_shown_sets_era_off_the_registry` files `samples/9p2i` under round 2 beside
+  the grown before file (no error: round 2 shows baseline 9's block, the era it replaced) and then leaves round 2's
+  block alone (the exact no-block message). With `check_replaced_era`'s `era.id` read replaced by the literal
+  `"stage-b-r3"` the test fails (mutant F1, killed).
+- [x] Review correction: a tip record without a later set's win-split row is named, not skipped.
+  `test_a_tip_record_without_a_later_sets_row_is_named` drops the `samples/9p2i` row of baseline 9's win-split table
+  and asserts the one exact error. With the `tip_found` line of `check_repeated_claims` dropped it fails (mutant F2,
+  killed); with that line's `not in errors` filter dropped, `test_missing_win_split_table_fails_loud` fails (F3,
+  killed).
+- [x] Review correction: the re-pin sweep is re-run over every file its pattern matches, production comments
+  included, and each live-tense sentence still stating round 2's bytes as the shown set's is re-derived on round 3's
+  bytes with its old value inline or labelled as round 2's: three production comments and the story (the next item),
+  and twenty-one sentences in twelve test files, listed with their commands under "Review corrections, round 1"
+  in Results. Mechanism: the sweep's `git grep` pattern and the era-name scan, re-run at the fix head; the targeted
+  suites pass.
+- [x] Review correction: the four comments re-derived on round 3's bytes, old value inline. `eval/watchability.py`
+  39 of 54 vent flags (was 38 of 53; `measure_baseline.py --watchability --json`); `eval/vote_correctness.py` 0.7826
+  beside 46/61 = 0.7541, 15 of 61 crewmates (was 0.7955, 44/66 = 0.6667, 22 of 66; the report gz);
+  `TournamentDashboard.tsx` 36 of 46, 0.783 (was 35 of 44, 0.795); `MeetingView.stories.tsx` 27 of 702 (was 28 of
+  691; `measure_featured_criterion.py --set 9p2i --alternatives`), with the seed-2 example dropped (seed 2 now lists
+  none, 0 of 7). `check_doc_facts.py`, which reads `eval/vote_correctness.py`, exits 0.
+- [x] Review correction: the media table's GIF row reads 13 frames again. `ffprobe -count_frames` on the committed
+  GIF (sha256 `754e61b3...1cc8`, the provenance digest) reads 640x400, 13 frames, 8.5 s: twelve of 0.5 s and one of
+  2.5 s, the 17 captured stills after Pillow merges repeats. `test_public_recording_provenance.py` passes.
 - [x] **Round 2's bytes are kept as the candidate copy `replays/candidates/stage-b-r2`, identically** (the
   amendment). First, `git mv` the 50 `replay-seed-*.jsonl`, `MANIFEST.md`, `roster.json` and
   `tournament-eval-report.json.gz` from `replays/samples/9p2i/` to `replays/candidates/stage-b-r2/9p2i/`, and
@@ -809,3 +834,77 @@ stories (comments and stamps).
 - The before column's form is the orchestrator's recorded default; the owner may replace it before merge, and the
   reversal is one block.
 - The r3 lab column sits at `60059688` rather than the bytes commit (Decisions).
+
+### Review corrections, round 1 (2026-10-09)
+
+Built on `work/promote-round-3` at `44546084`, which the three verifier lenses read with CI run 37986165157 at
+`7dfda292`. Five blocking findings and two Codex comments; each is repaired or refuted here, and no test is
+weakened. Every census stayed count-only, no provider was called and the untracked `.env` was not read.
+
+**The replaced-era read (correctness).** `check_replaced_era` picked the before block with `era.id`, but no test
+filed the shown set under any era but `stage-b-r3`, so the literal `"stage-b-r3"` in its place survived.
+`test_the_replaced_era_check_reads_the_shown_sets_era_off_the_registry` (in `tests/scripts/test_check_doc_facts.py`)
+plants `era_of` as `STAGE_B_R2` beside the grown before file and asserts no error, because round 2 then shows the
+baseline-9 block, the era round 2 replaced. It then leaves round 2's block alone and asserts the exact message
+naming "the no era's block".
+
+**The tip record's row (correctness).** The read of baseline 9's win-split table for a later era's set moved out of
+`record_win_rates`, and no test removed that set's row, so dropping the line that reports it survived and claims
+naming baseline 9 beside a 9p2i rate went unexamined. `test_a_tip_record_without_a_later_sets_row_is_named`
+removes the `samples/9p2i` row from that table and asserts the one error, "the win-split table has no
+'samples/9p2i' row".
+
+**The sweep, re-run (integrity and docs).** The card's pattern
+(`samples/9p2i|samples" / "9p2i|"samples", "9p2i"|SAMPLES_9P2I|9p2i seed [0-9]|committed 9p2i`) was re-run over
+`tests/`, `frontend/` and the production trees, with a scan for `stage-b-r2`, "promoted stage-b-r2", the round-2
+dates and the "round 2" phrasings. `agent_prompts/`, `design/`, the dated lab reports and the audits are history and
+stay as written. Each sentence still stating round 2's bytes as the shown set's is now re-derived on round 3's bytes
+with the old value inline, or labelled as round 2's.
+
+| file | sentence | now (was) | command |
+|---|---|---|---|
+| `eval/watchability.py` | vent flags in `_supply_gauge_values` | 39 of 54 (38 of 53) | `measure_baseline.py --watchability --json replays/samples/9p2i`: flags 0.4538 and persisted vent 0.3277 over 119 meetings |
+| `eval/vote_correctness.py` | the rate-versus-accuracy gap | 0.7826, 46/61 = 0.7541, 15 of 61 (0.7955, 44/66 = 0.6667, 22 of 66) | the `vote_correctness` block of each report gz, at the head and at `B` |
+| `frontend/src/components/TournamentDashboard.tsx` | the rate is not 1.0 | 36 of 46, 0.783 (35 of 44, 0.795) | the same block |
+| `frontend/src/stories/MeetingView.stories.tsx` | ballots listing the voter | 27 of 702 (28 of 691); the seed-2 example dropped | `measure_featured_criterion.py --set 9p2i --alternatives`; `--games 9p2i:2 --alternatives` reads 0 of 7 |
+| `tests/eval/test_vj_instruments.py` | module docstring | stage-b-r3, three ballot overlays (two); ECE 0.2792 at n=397 (0.3049 at n=410); 36 of 61 zero-flag, 8 / 19 / 9 / 0, agreeing on 31 (40 of 66, 10 / 15 / 14 / 1, 35); the clamp-row count now a pointer to its test | `measure_baseline.py --vj --json` on `samples/9p2i` and on `candidates/stage-b-r2/9p2i`; the calibration fold reads 397, 0.2792, 0 excluded |
+| `tests/meetings/test_manager.py` | inform-yield docstring | round 3, 2026-10-09; 65 / 20, 0 converted (66 / 17, 0) | `_derive_inform_yield()` from that module, called in a one-line `uv run python -c` |
+| `tests/eval/test_deduction_metrics.py` | four sentences: the category comment, the redirect class, the weak-only class twice | round 3's bytes; its one weak-only conviction ejects an innocent at seed 12's first meeting (seed 8's p-9) | the test's own weak-only walk, run on each report; the report cell reads 1 and 1 |
+| `tests/eval/test_reporter_justice.py` | three sentences | stage-b-r3 since 2026-10-09; the ledger equals its recorded ejections, 15 innocent of 61 (22 of 66) | `compute_reporter_justice(replays/samples/9p2i)`: 61, 15, 46 |
+| `tests/eval/test_evidence_honesty.py` | five era comments | stage-b-r3; the off-mean note labelled as round 2's reading | era registry |
+| `tests/eval/test_funnel.py`, `test_funnel_pooling.py`, `test_meeting_quality.py`, `test_gameplay_census.py` | one sentence each | the promoted stage-b-r3 bytes | era registry; each test passes on them |
+| `tests/meetings/test_corroboration.py`, `test_prompt_byte_golden.py`, `tests/api/test_public_results.py` | one sentence each | round 3, promoted 2026-10-09 | era registry; each test passes on them |
+
+The remaining hits are already annotated with their round, labelled as baseline-9 or earlier history, or true of
+both rounds (for example "since 2026-10-02 the shown set sits in a later era").
+
+**The GIF row (docs).** `docs/media/README.md` reads "640×400, 13 frames" again. `ffprobe -count_frames` on the
+committed GIF (sha256 `754e61b3...1cc8`, equal to `docs/media/provenance.json`) reads 640x400, 13 frames, 8.5 s,
+and `-show_entries frame=duration_time` reads twelve frames of 0.5 s and one of 2.5 s. The capture takes 17 stills
+at 0.5 s and Pillow merges the repeats. The note of `c9e1a601` ("the GIF has 17 frames") is wrong, and this line
+corrects it; the pushed commit is not rewritten.
+
+**Codex.** The P2 on `eval/watchability.py` (the docstring's 38 of 53) is the first row of the table above. The P1
+("Record the promoted route field as adopted") is refuted, not taken. The acceptance item names the field "as the
+orchestrator's step in the round-3 audit names it", with adopted only as the menu's default. Section 11 of that
+audit promotes the round and names no adoption. The orchestrator's dispatch ruling 5 (Decisions) names the field a
+recorded setting beside the cooldown, never called adopted, and AGENTS.md holds that task completion never
+authorizes an experimental adoption. So `ADOPTED_RULES` and the "Adopted arms" paragraph keep seven pairs, and "Also
+in place" is the true heading for the route lines.
+
+**Mutation (bounded).** Three mutants over the named spans, each applied alone with the file restored after it (the
+diff of `scripts/check_doc_facts.py` was empty after each):
+
+| id | class | where | verdict |
+|---|---|---|---|
+| F1 | loaded source read as its literal | `check_replaced_era`, `era.id` to `"stage-b-r3"` | killed by the new registry-era test |
+| F2 | dropped wrapper | `check_repeated_claims`, the `tip_found` report line | killed by the new tip-row test |
+| F3 | dropped filter | the same line, `if error not in errors` | killed by `test_missing_win_split_table_fails_loud` |
+
+**Verification at the fix head.** `pytest` over `test_check_doc_facts`, `test_deduction_metrics`, `test_funnel`,
+`test_funnel_pooling`, `test_meeting_quality`, `test_vj_instruments`, `test_corroboration`, `test_gameplay_census`,
+`test_reporter_justice`, `test_public_results`, `test_vote_correctness` and `test_watchability`: 1397 passed. Over
+`test_evidence_honesty`, `test_manager` and `test_prompt_byte_golden`: 444 passed. `test_public_recording_provenance`:
+31 passed. `check_doc_facts.py` exits 0. `ruff check` and `ruff format --check` are clean on the changed Python, and
+`eslint` is clean on the two changed TSX files. The fix dispatch asks for one local `bash scripts/check.sh` at the
+fix head. Its exit code and CI's run at the head are cited by run id in the PR body, and no commit records them.

@@ -13,7 +13,7 @@ Placement below refers to the README and architecture note.
 | --- | --- | --- |
 | `spectator-two-truths.png` | 2036×909 — the same scene through omniscient and crewmate views, with the following accusation | [README image](../../README.md) |
 | `spectator-meeting.png` | 1440×900 — accusation chain, ballots and mind inspector | Archive only |
-| `spectator-journey.gif` | 640×400, 17 frames — playback from the opening tick to a meeting | Archive only |
+| `spectator-journey.gif` | 640×400, 13 frames — playback from the opening tick to a meeting | Archive only |
 | `spectator-journey.webm` | 1440×900, 9 s — movement, a kill flash, a meeting pause and fog | [README clip link](../../README.md) |
 | `architecture.svg` | Text SVG of the packages, data flow and observation firewall | [Architecture image](../architecture.md) |
 

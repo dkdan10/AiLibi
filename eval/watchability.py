@@ -2435,9 +2435,9 @@ def _supply_gauge_values(
     array, split on kind, so nothing is counted twice and nothing is dropped.
     The merge exists because a vent-rich candidate's strongest evidence must
     not read as starvation. The split is far from academic on the committed
-    bytes: vent flags are 38 of the 53 on ``replays/samples/9p2i``, 20 of 20
-    on ``replays/samples/4p1i``, and read 308 of 428 on the baseline-7
-    ``replays/ml_corpus/9p2i``
+    bytes: vent flags are 39 of the 54 on ``replays/samples/9p2i`` (was 38 of
+    53 on round 2's bytes), 20 of 20 on ``replays/samples/4p1i``, and read 308
+    of 428 on the baseline-7 ``replays/ml_corpus/9p2i``
     — which is why :class:`SupplyFloors` gates each component as well as the
     merge (a candidate must not clear the evidence floor on vents alone).
 

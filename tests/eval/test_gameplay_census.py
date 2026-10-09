@@ -1026,7 +1026,8 @@ def test_the_committed_json_reproduces_the_figures() -> None:
     """The acceptance figures, re-measured at the branch head through the fold.
 
     Per era since the promotion of candidate round 2 (2026-10-02): the three
-    baseline-9 sets pooled, and samples/9p2i (stage-b-r2) on its own. The
+    baseline-9 sets pooled, and samples/9p2i (stage-b-r3 since round 3's
+    promotion of 2026-10-09) on its own. The
     four-set figures the census first published (kills seen 20 of 849, vent
     proof in 330 of 676 meetings, 521 of 676 first replies accusing the opener)
     pooled samples/9p2i's baseline-9 bytes, which left the tree.

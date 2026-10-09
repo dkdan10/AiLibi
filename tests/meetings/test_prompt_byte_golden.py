@@ -1800,7 +1800,7 @@ def test_the_bump_in_flight_window_is_closed_and_the_archive_is_empty() -> None:
     later bump that moves the default entry without re-opening the archive fails
     HERE. A recording with no experiment config (the baseline-9 sets) must wear
     its set's live default mapping; one with a config (the shown 9-player set,
-    promoted 2026-10-02) must wear the live set's stamp under that config, which
+    promoted 2026-10-09) must wear the live set's stamp under that config, which
     folds in the arms it turns on. Both kinds are present in the sample sets.
 
     Every directory the golden walks is held to :func:`stamp_window_problems`: a

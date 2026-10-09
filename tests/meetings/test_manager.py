@@ -6039,14 +6039,15 @@ class TestSingleWitnessInformYieldOnCommittedBytes:
     """The Task 10.15 inform-yield bloc, walked offline over the committed bytes.
 
     The deliverable number, re-anchored to the latest recording of the committed
-    9p2i set (Qwen/Qwen3.6-27B, candidate round 2, promoted 2026-10-02). The
+    9p2i set (Qwen/Qwen3.6-27B, candidate round 3, promoted 2026-10-09). The
     derivation first reproduces the §4(3) partition EXACTLY off the committed
-    bytes (66 accused living-impostor meeting-subjects the ballots did not eject;
-    17 of them rendered over the §4.6 gate yet lost plurality -- prior recordings
-    read 42 / 16 (baseline 9), 51 / 18, 52 / 18, 70 / 34, 60 / 29, 75 / 37,
-    46 / 19, 46 / 10, 72 / 38), which validates the offline oracle, then counts
-    how many the single-witness inform converts WITHOUT any tally change (this
-    recording: 0; prior: 0, 1, 0, 1, 4, 4, none, none).
+    bytes (65 accused living-impostor meeting-subjects the ballots did not eject;
+    20 of them rendered over the §4.6 gate yet lost plurality -- prior recordings
+    read 66 / 17 (round 2), 42 / 16 (baseline 9), 51 / 18, 52 / 18, 70 / 34,
+    60 / 29, 75 / 37, 46 / 19, 46 / 10, 72 / 38), which validates the offline
+    oracle, then counts how many the single-witness inform converts WITHOUT any
+    tally change (this recording: 0; prior: 0 (round 2), 0, 1, 0, 1, 4, 4, none,
+    none).
     """
 
     def test_methodology_reproduces_the_audit_partition(

@@ -2066,6 +2066,53 @@ def test_a_shown_set_at_the_ladder_tip_reads_no_replaced_era(
     assert errors == []
 
 
+def test_the_replaced_era_check_reads_the_shown_sets_era_off_the_registry(
+    doc_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The check picks the before block by the era the registry files the shown
+    # set under, never by a fixed id. Planted: the registry filing samples/9p2i
+    # under round 2 beside the grown before file. Round 2's own block is then
+    # the era's own, so the set shows the block recorded before it, baseline
+    # 9's, the era round 2 replaced: the two before columns agree. A check
+    # reading round 3's id instead would show round 2's block and report it.
+    from eval.eras import STAGE_B_R2
+
+    monkeypatch.setattr(check_doc_facts, "era_of", lambda path: STAGE_B_R2)
+    errors: list[str] = []
+    check_doc_facts.check_replaced_era(doc_tree, errors)
+    assert errors == []
+    # With round 2's block alone in the file, round 2 shows no block, and the
+    # check names that against the era round 2 replaced.
+    blocks = read_before_columns(doc_tree)
+    assert [block.era_id for block in blocks[1:]] == ["stage-b-r2"]
+    monkeypatch.setattr(check_doc_facts, "read_before_columns", lambda root: blocks[1:])
+    check_doc_facts.check_replaced_era(doc_tree, errors)
+    assert errors == [
+        "scripts/check_doc_facts.py: the front door reads 9p2i's before cells "
+        "from the baseline-9 era's record, but the process scorecard's before "
+        "column for replays/samples/9p2i is the no era's block."
+    ]
+
+
+def test_a_tip_record_without_a_later_sets_row_is_named(doc_tree: Path) -> None:
+    # A sentence naming baseline 9 beside a 9p2i rate is held to the rate the
+    # tip's record published for that set, which only that read reaches: the
+    # set's own era reads another record. Planted: the tip record's win-split
+    # table without its samples/9p2i row. The checker names the missing row
+    # rather than skipping every such sentence unexamined.
+    _substitute(
+        doc_tree,
+        _LADDER_TIP_AUDIT,
+        "| `samples/9p2i` | 30% (15/50) | **22% (11/50)** |\n",
+        "",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{_LADDER_TIP_AUDIT}: the win-split table has no 'samples/9p2i' row, "
+        "so the before-column win rate for 9p2i cannot be re-derived."
+    ]
+
+
 def test_an_unreadable_before_file_is_named(doc_tree: Path) -> None:
     # One edited byte of the frozen before file fails its digest pin, and the
     # check says the column cannot be read rather than skipping it.

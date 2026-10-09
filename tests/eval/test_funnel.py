@@ -574,7 +574,7 @@ def test_walk_raises_on_missing_meeting_row(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 9p2i reproduction pins (the promoted stage-b-r2 bytes)                       #
+# 9p2i reproduction pins (the promoted stage-b-r3 bytes)                       #
 # --------------------------------------------------------------------------- #
 
 

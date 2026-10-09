@@ -544,7 +544,7 @@ def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
 
     The baseline-6 and baseline-7 records each produced a single uncited
     zero-flag EJECT->SKIP coercion prefix; the baseline-8 and baseline-9
-    re-records and the promoted stage-b-r2 recording produce none, so
+    re-records, round 2's and the promoted stage-b-r3 recording produce none, so
     ``citation_coerced_skip_ballots`` reads 0 and
     no ballot carries the marker head. The class going empty is a measurement,
     not a widening — the scan below still counts the marker exactly and fails
