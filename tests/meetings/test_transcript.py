@@ -3380,18 +3380,41 @@ class TestCommittedBytes1010Pins:
         assert retargeted == []
         assert all(is_weak_contradiction(flag) for flag in retargeted)
 
-    def test_seed38_m1_p6_below_gate_and_not_redirect_argmax(self) -> None:
+    @staticmethod
+    def _two_unflagged() -> tuple[CommittedMeeting, PlayerId, PlayerId]:
+        """The shown set's first meeting with two living players no flag names.
+
+        Seed order, then meeting order; the two lowest such ids. The coordinate
+        moves with every re-record, so it is found by this shape, never named.
+        """
+
+        for seed in range(50):
+            for meeting in _channelled_meetings(seed):
+                rederived = meeting.rederive()
+                unflagged = [
+                    player
+                    for player in sorted(meeting.roster)
+                    if not any(player in flag.subjects for flag in rederived)
+                ]
+                if len(unflagged) >= 2:
+                    return meeting, unflagged[0], unflagged[1]
+        raise AssertionError("no meeting with two unflagged players on these bytes")
+
+    def test_an_unflagged_player_stays_below_gate_and_is_not_redirect_argmax(
+        self,
+    ) -> None:
         # C-C-2 (re-pointed to the Task 16.14 baseline-4 re-record):
-        # p-6's re-derived max stays at the 0.5 prior (it carries no flag), below
-        # the §4.6 gate, so the 10.9.2 redirect -- which only ever targets an
-        # over-gate candidate -- can never launder an ungrounded ballot onto p-6.
-        # On the re-recorded bytes the seed-38 m1 proxy-intra-turn re-target no
-        # longer occurs (it moved off this coordinate), so p-2 too carries no flag
-        # and stays at the 0.5 prior -- the single turn's artifact crosses the gate
-        # on NO ONE. Walked from the 0.5 prior, the seed-28 pin's convention.
+        # a player carrying no re-derived flag stays at the 0.5 prior, below the
+        # §4.6 gate, so the 10.9.2 redirect -- which only ever targets an
+        # over-gate candidate -- can never launder an ungrounded ballot onto them.
+        # The seed-38 m1 proxy-intra-turn re-target no longer occurs on the
+        # re-recorded bytes, so the single turn's artifact crosses the gate on NO
+        # ONE. Walked from the 0.5 prior, the seed-28 pin's convention.
+        # History (2026-10-09): the meeting is found by shape; on round 2's bytes
+        # the pin read seed 38 m1 with p-6 and p-2.
         from agents.memory.beliefs import BeliefState, apply_contradiction_rule
 
-        meeting = _channelled_meetings(38)[1]
+        meeting, first, second = self._two_unflagged()
         rederived = meeting.rederive()
 
         def lifted_max(player: str) -> float:
@@ -3405,21 +3428,21 @@ class TestCommittedBytes1010Pins:
                 .suspicion
             )
 
-        assert lifted_max("p-6") < 0.60
-        # p-2 carries no flag at this re-recorded coordinate, so it stays at the
-        # 0.5 prior, still below the gate (the P1-review tripwire).
-        assert lifted_max("p-2") == pytest.approx(0.50)
-        assert lifted_max("p-2") < 0.60
+        assert lifted_max(first) < 0.60
+        # The second carries no flag either, so it stays at the 0.5 prior,
+        # still below the gate (the P1-review tripwire).
+        assert lifted_max(second) == pytest.approx(0.50)
+        assert lifted_max(second) < 0.60
         # The redirect argmax is the highest over-gate candidate (ties to
-        # the lowest id); no proxy artifact row is over-gate, so p-6 (and
-        # p-2) can never be that argmax.
+        # the lowest id); no unflagged player is over-gate, so neither can
+        # ever be that argmax.
         graph = {player: lifted_max(player) for player in sorted(meeting.roster)}
         over_gate = {p: s for p, s in graph.items() if s >= 0.60}
-        assert "p-6" not in over_gate
-        assert "p-2" not in over_gate
+        assert first not in over_gate
+        assert second not in over_gate
         if over_gate:
             argmax = min(over_gate, key=lambda p: (-over_gate[p], p))
-            assert argmax != "p-6"
+            assert argmax not in (first, second)
 
     def test_proxy_intra_turn_retargets_weak_set_wide(self) -> None:
         # INTENT-PRESERVED (doctrine rule 3) on the Task 18.12 baseline-6 re-record

@@ -882,19 +882,30 @@ class TestTheRedactionRecognizerIsGenerationAware:
         # Pins the literal against the record it exists for: if no committed
         # ballot carried it, the entry would be dead on arrival. The pre-reword
         # body retired at the baseline-8 record — it appeared 36 times across the
-        # recording before that and zero times since. The promoted stage-b-r2
-        # bytes carry it sixteen times, one per coerced teammate ballot.
-        carried = sum(
-            1
+        # recording before that and zero times since. The shown set carries it
+        # once per coerced teammate ballot, which the ballot's own recorded
+        # rewrite reason counts, so a reworded body reads 0 against that count.
+        # History (2026-10-09): the count is derived; it read 16 on round 2's bytes.
+        ballots = [
+            ballot
             for path in sorted(_SAMPLES_9P2I.glob("replay-seed-*.jsonl"))
             for line in path.read_text(encoding="utf-8").splitlines()
             for record in (json.loads(line),)
             if record.get("kind") == "meeting"
             for ballot in record["ballots"]
+        ]
+        carried = sum(
+            1
+            for ballot in ballots
             if ballot["rationale_text"].endswith(TEAMMATE_COERCED_VOTE_RATIONALE)
         )
+        coerced = sum(
+            1
+            for ballot in ballots
+            if ballot.get("guard_rewrite_reason") == "teammate_coerced"
+        )
 
-        assert carried == 16  # was 1
+        assert carried == coerced > 0
 
 
 @pytest.mark.parametrize(

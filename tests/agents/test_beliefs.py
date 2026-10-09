@@ -2655,13 +2655,16 @@ class TestRelevanceGatedFoldOnCommittedBytes:
         # The gate's contribution, isolated: WITHOUT the relevance predicate the
         # detector re-derives a presence-at-the-kill-scene corroboration for the
         # subject from a body-room sighting, which vouches them and offsets the
-        # accusation by a full meeting -- so the ungated carry is still sitting at
-        # the prior where the gated one has already lifted.
+        # accusation -- so the ungated carry starts no higher than the gated one,
+        # which sits at the prior, and ends below it.
+        # History (2026-10-09): meeting 0's ungated carry is no longer pinned; it
+        # read the 0.5 prior on round 2's anchor.
         gated = self._trajectory(anchor)
         ungated = self._trajectory(anchor, gate_killscene_vouches=False)
 
         assert ungated == pytest.approx(census[anchor][1])
-        assert ungated[0] == pytest.approx(0.5)  # meeting-0: quiet, no accusation yet
+        assert gated[0] == pytest.approx(_DEFAULT_SUSPICION)
+        assert ungated[0] <= gated[0] + 1e-9  # a surviving vouch only offsets
         assert gated[-1] > ungated[-1]  # the gate is what keeps it more elevated
 
     def _all_trajectories(
