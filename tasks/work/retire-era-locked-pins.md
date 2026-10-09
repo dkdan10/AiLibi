@@ -200,7 +200,7 @@ with `main` after `main` is merged in following the round-3 record's merge; `H` 
   its commit and links no deleted path. Mechanism: the sweep and `check_doc_facts.py`. Proof: a count-only scan of the
   added lines of `docs/history.md`, `docs/workflow.md`, `training/README.md` and `replays/ml_corpus/README.md` for
   `\b[A-Z][0-9]+\b` prints 0, and a scratch line with "G24" gives one hit.
-- [ ] **One bounded mutation pass and the CI record.** One pass over the card's changed production and gate lines
+- [x] **One bounded mutation pass and the CI record.** One pass over the card's changed production and gate lines
   (the checker's disclosure branch, the scorecard writer, the tier meta-tests and workflow pin, the derived e2e and
   golden checks) with the classes: dropped filter or wrapper, swapped collection, comparison made a None test, role,
   kind, room or tick read made a constant, dropped tuple member, swapped branches, loaded source read as its
@@ -587,9 +587,9 @@ disclosure branch 8, the scorecard writer 6, the tier meta-tests and the workflo
 rows 4, the count helper 2, the e2e's derived links 2, over the classes the card names (dropped filter or
 wrapper, swapped collection, comparison made a None test, role or kind read made a constant, dropped tuple
 member, swapped branches, loaded source read as its literal, message argument made a constant). 26 killed:
-21 by a failing run on the clean tree, 5 (T1, T5, T6, T7, T8, the meta-test lines) because the gate's planted
-case stopped biting or lost its message; the golden's literal-count mutant G4 is killed on the swapped
-rehearsal, where the count is not round 2's. 4 survived, each equivalent or unobservable on the recorded
+21 by a failing run (20 on the committed bytes; the golden's literal-count mutant G4 on the swapped
+rehearsal, where the count is not round 2's) and 5 (T1, T5, T6, T7, T8, the meta-test lines) because the
+gate's planted case stopped biting or lost its message. 4 survived, each equivalent or unobservable on the recorded
 bytes, so no fix round followed:
 - C4, the pooled crew-triggered cell's numerator and denominator swapped: both read 531, since no recorded
   meeting is impostor-triggered (the cell's own claim).
@@ -599,7 +599,7 @@ bytes, so no fix round followed:
 - G3, the frozen-row lookup made a None test: the round-1 row's pin equals its independent count.
 Each killing command passes unmutated (checked in the same worktree).
 
-**CI.** The runs at this head are cited by the commit that follows this one, which changes only this card.
+**CI.** At `3aaa5966` (the Results commit; every later commit changes only this card): CI run 37917006312 green (project checks, frontend checks, frontend e2e), and the campaign workflow's run 37917006619 green on the same head, triggered by the new `pull_request` path filter. These are the gate record (memo 8.7 item 1).
 
 ### Decisions and limitations
 
