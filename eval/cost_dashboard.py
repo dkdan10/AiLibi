@@ -39,11 +39,11 @@ Four semantic decisions are pinned here; each is load-bearing and tested:
   contributes to the total and to no version key, so the equality does not hold
   in that case (see "Empty inputs" below). The breakdown's
   comparative value (version A vs version B) is therefore a CROSS-report
-  comparison of two runs — consumed by Task 5.8's regression loop — not a
-  within-report delta. :class:`CostDashboard` is a frozen value object with a
-  deterministically ordered, ``(template_name, version)``-keyed breakdown, so
-  two dashboards are cleanly comparable; Task 5.8 computes the cross-run delta
-  by matching keys across two dashboards.
+  comparison of two runs, not a within-report delta. :class:`CostDashboard` is
+  a frozen value object with a deterministically ordered,
+  ``(template_name, version)``-keyed breakdown, so two dashboards are cleanly
+  comparable: a consumer computes the cross-run delta by matching keys across
+  two dashboards.
 
 * **Empty inputs are well-defined.** A zero-game tournament, a game with zero
   cost / zero meetings, or an empty ``prompt_versions`` all produce finite,
@@ -121,7 +121,7 @@ class CostDashboard(_FrozenModel):
     tournament is auditable per model. ``per_prompt_version`` is the overlapping
     (non-partition) per-``(template_name, version)`` breakdown, ordered
     deterministically by ``(template_name, version)`` so two dashboards from two
-    runs compare cleanly (Task 5.8's cross-run delta).
+    runs compare cleanly, key by key.
 
     Under a $0 provider (the Phase 7 Ollama default) every USD field here is
     ``0.0`` and informational-only — use ``total_input_tokens`` /

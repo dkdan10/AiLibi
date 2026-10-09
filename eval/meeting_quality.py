@@ -160,8 +160,8 @@ retires a doctrine in this module (audits/audit-phase-19-triage.md §7 items
 ``extra="forbid"``, so the metric outputs cannot be added as fields on it.
 They live instead on :class:`TournamentEvalReport`, a frozen wrapper that
 holds the immutable report plus the metric results as named fields. This
-wrapper is the single typed shape the dashboard (Task 5.7) and the regression
-suite (Task 5.8) consume.
+wrapper is the single typed shape the committed sample reports persist and the
+dashboard's API reads.
 
 :func:`build_tournament_eval_report` is the assembler: it calls each public
 ``compute_*`` analyzer over a :class:`TournamentReport` and packs the results.
@@ -3085,8 +3085,8 @@ class TournamentEvalReport(BaseModel):
     fields are the outputs of the DESIGN.md §11.3 analyzers (plus the Phase 7
     W0.3 :class:`MeetingRateReport`) over that report. Because every member is a
     frozen Pydantic model, the whole bundle round-trips through
-    ``model_dump_json`` / ``model_validate_json``, which is how Task 5.7
-    (dashboard) and Task 5.8 (regression suite) load it.
+    ``model_dump_json`` / ``model_validate_json``, which is how the committed
+    sample reports are written and how the dashboard's API loads them.
 
     ``meeting_rate`` is added to this WRAPPER, which is not version-stamped;
     ``format_version`` lives only on the inner persisted ``report`` and is

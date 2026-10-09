@@ -190,7 +190,7 @@ def test_single_version_collapses_to_one_key_equal_to_total() -> None:
     With a single template held constant, the breakdown collapses to one key
     whose total equals the whole tournament cost and whose game_count is every
     game — the within-report breakdown carries no comparative signal, which is
-    why version-vs-version is a cross-report comparison (Task 5.8).
+    why version-vs-version is a cross-report comparison.
     """
 
     report = _tournament(
@@ -472,12 +472,12 @@ def test_dashboard_is_frozen() -> None:
 
 
 def test_two_dashboards_compare_cleanly_by_prompt_version_key() -> None:
-    """Backs the cross-report comparison contract (Task 5.8 computes the delta).
+    """Backs the cross-report comparison contract (a consumer computes the delta).
 
     Two runs of the SAME template at different versions each collapse to one key
     equal to that run's total; a consumer matches the two dashboards by
     ``(template_name, version)`` and reads the cost delta. This test demonstrates
-    the model is cleanly comparable; it does not implement the delta (Task 5.8).
+    the model is cleanly comparable; it does not implement the delta.
     """
 
     run_a = compute_cost_dashboard(
@@ -506,7 +506,7 @@ def test_two_dashboards_compare_cleanly_by_prompt_version_key() -> None:
 
     assert a_by_key[("meeting_v", "v1")].total_cost_usd == 0.20
     assert b_by_key[("meeting_v", "v2")].total_cost_usd == 0.26
-    # The cross-run cost delta a consumer (Task 5.8) would compute.
+    # The cross-run cost delta a consumer would compute.
     assert run_b.total_cost_usd - run_a.total_cost_usd == pytest.approx(0.06)
 
 
