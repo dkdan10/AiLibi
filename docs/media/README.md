@@ -11,9 +11,9 @@ Placement below refers to the README and architecture note.
 
 | File | What it is | Current placement |
 | --- | --- | --- |
-| `spectator-two-truths.png` | 2036×864 — the same scene through omniscient and crewmate views, with the following accusation | [README image](../../README.md) |
+| `spectator-two-truths.png` | 2036×909 — the same scene through omniscient and crewmate views, with the following accusation | [README image](../../README.md) |
 | `spectator-meeting.png` | 1440×900 — accusation chain, ballots and mind inspector | Archive only |
-| `spectator-journey.gif` | 640×400, 13 frames — playback from the opening tick to a meeting | Archive only |
+| `spectator-journey.gif` | 640×400, 17 frames — playback from the opening tick to a meeting | Archive only |
 | `spectator-journey.webm` | 1440×900, 9 s — movement, a kill flash, a meeting pause and fog | [README clip link](../../README.md) |
 | `architecture.svg` | Text SVG of the packages, data flow and observation firewall | [Architecture image](../architecture.md) |
 
@@ -70,9 +70,9 @@ fails rather than shipping a picture of the dock.
 ### Provenance
 
 Every spectator asset is a capture of **9p2i seed 19** (`headless-seed-19`)
-from the shown 9-player set, recorded 2026-10-01 on `Qwen/Qwen3.6-27B` with v6
+from the shown 9-player set, recorded 2026-10-09 on `Qwen/Qwen3.6-27B` with v6
 prompts and a v8 ballot, $0, under that set's declared experiment config. Its
-[manifest](https://github.com/dkdan10/AiLibi/blob/148fa211a5851c288eeaf1a9591197f8ba13bdcc/replays/samples/9p2i/MANIFEST.md) and [source replay](https://github.com/dkdan10/AiLibi/blob/148fa211a5851c288eeaf1a9591197f8ba13bdcc/replays/samples/9p2i/replay-seed-19.jsonl) are pinned to the commit that landed those bytes.
+[manifest](https://github.com/dkdan10/AiLibi/blob/5095a1c210d890d289405564d2af2607d2fbd4e9/replays/samples/9p2i/MANIFEST.md) and [source replay](https://github.com/dkdan10/AiLibi/blob/5095a1c210d890d289405564d2af2607d2fbd4e9/replays/samples/9p2i/replay-seed-19.jsonl) are pinned to the commit that landed those bytes.
 
 Verify the source replay against the one this checkout serves:
 
@@ -130,6 +130,6 @@ The README embeds `spectator-two-truths.png` and links
 names the game, its set and its recording date, and the image links to the
 interactive demo, which serves the same game.
 
-Budget: the directory is currently 1.4 MB. Keep the still under 400 kB, the clip
+Budget: the directory is currently 1.6 MB. Keep the still under 400 kB, the clip
 under 3 MB and the GIF under 1.5 MB — the capture asserts all three, so a walk
 that grows past them fails instead of landing in the tree.

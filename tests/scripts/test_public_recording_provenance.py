@@ -138,9 +138,10 @@ def _recording_mismatch(root: Path, provenance: dict[str, Any]) -> bool:
 def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
     # The captures show the game the guided tour opens on in the shown 9-player
     # set, 9p2i seed 19, since the promotion of 2026-10-02 (they were a
-    # historical seed-2 capture from the baseline-7 record before it): the
-    # captured recording is the replay this checkout serves, byte for byte, and
-    # the README caption names that game, its set and its record.
+    # historical seed-2 capture from the baseline-7 record before it), re-shot
+    # on round 3's bytes at its promotion of 2026-10-09: the captured recording
+    # is the replay this checkout serves, byte for byte, and the README caption
+    # names that game, its set and its record.
     root = Path(__file__).resolve().parents[2]
     media = root / "docs/media"
     assert not _asset_mismatches(media)
@@ -151,12 +152,12 @@ def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
     assert (recording["game_id"], recording["seed"], recording["recorded_on"]) == (
         "headless-seed-19",
         19,
-        "2026-10-01",
+        "2026-10-09",  # was 2026-10-01, round 2's recording
     )
     readme = (root / "README.md").read_text()
     assert (
         "9p2i seed 19, the game the demo's guided tour opens on, from the "
-        "2026-10-01 record" in readme
+        "2026-10-09 record" in readme
     )
     assert "earlier recording" not in readme
     # A capture of a recording the checkout no longer serves must fail.
