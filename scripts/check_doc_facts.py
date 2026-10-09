@@ -938,8 +938,7 @@ _FRONT_DOOR_BUDGETS: Final[tuple[tuple[str, int | None, int], ...]] = (
 )
 
 # The ML corpus's capability-disclosures section and the three recorded sets its
-# live headline cells are re-derived from (the fourth, S9, is history: below).
-# Each cell is located by the label the
+# headline cells are re-derived from. Each cell is located by the label the
 # prose writes immediately before it, so a cell is bound to its own claim rather
 # than to a position in a sentence that may be rewritten.
 _CORPUS_README: Final = "replays/ml_corpus/README.md"
@@ -947,21 +946,6 @@ _DISCLOSURE_SETS: Final[tuple[tuple[str, str], ...]] = (
     ("C9", "replays/ml_corpus/9p2i"),
     ("S4", "replays/samples/4p1i"),
     ("C4", "replays/ml_corpus/4p1i"),
-)
-# The disclosures describe the baseline-9 substrate, and S9 is the baseline-9
-# bytes of ``replays/samples/9p2i`` as of ``d41c9006``, the last commit that held
-# them (the promotion of candidate round 2 moved a later era into the set on
-# 2026-10-02). Its cells are therefore HISTORY, held to the values those bytes
-# gave rather than to the reports the set holds now, the way the baseline-2
-# watchability block is kept (``eval/watchability.py``): crew-triggered
-# meetings, then each role's coverage pair, as ``(numerator, denominator)``.
-_DISCLOSURE_HISTORY_COMMIT: Final = "d41c9006"
-_DISCLOSURE_HISTORY: Final[
-    tuple[str, tuple[int, int], tuple[tuple[str, int, int], ...]]
-] = (
-    "S9",
-    (145, 145),
-    (("crew", 635, 635), ("impostor", 104, 210)),
 )
 _COVERAGE_KEY: Final = '"public_response_coverage":'
 # Each role's ``(numerator, denominator)`` field pair in that block.
@@ -1051,9 +1035,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         f"Budgets verified: {len(_FRONT_DOOR_BUDGETS)} front-door pages sit "
         f"inside their word budgets; {_CORPUS_README}'s headline disclosure "
-        f"cells recompute from {len(_DISCLOSURE_SETS)} recorded eval reports "
-        f"and the {_DISCLOSURE_HISTORY[0]} history as of "
-        f"{_DISCLOSURE_HISTORY_COMMIT}."
+        f"cells recompute from {len(_DISCLOSURE_SETS)} recorded eval reports."
     )
     return 0
 
@@ -1149,12 +1131,6 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
     of that label is held to the same value — a stale duplicate beside the
     correct one is drift too — and a disagreement is reported with the README
     line it sits on.
-
-    The S9 cells are history (:data:`_DISCLOSURE_HISTORY`): the baseline-9 bytes
-    they describe left ``replays/samples/9p2i`` at the promotion of candidate
-    round 2, so they are held to the values those bytes gave at
-    :data:`_DISCLOSURE_HISTORY_COMMIT`, and the pooled meeting cell adds them to
-    the three live sets.
     """
 
     readme = read_document(repo_root, _CORPUS_README, errors)
@@ -1163,11 +1139,9 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
 
     check_disclosure_substrate(repo_root, readme, errors)
 
-    history_tag, (crew_triggered, meetings), history_cells = _DISCLOSURE_HISTORY
-    cells: list[tuple[str, int, int]] = [
-        (f"{role} {history_tag}", numerator, denominator)
-        for role, numerator, denominator in history_cells
-    ]
+    crew_triggered = 0
+    meetings = 0
+    cells: list[tuple[str, int, int]] = []
     for tag, set_dir in _DISCLOSURE_SETS:
         report = _EVAL_REPORT_PATH.format(set_dir=set_dir)
         facts = read_disclosure_facts(repo_root, report, errors)
@@ -1210,15 +1184,10 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
                 int(cell.group(2).replace(",", "")),
             )
             if stated != (numerator, denominator):
-                source = (
-                    f"the {history_tag} bytes gave at {_DISCLOSURE_HISTORY_COMMIT}"
-                    if label.endswith(f" {history_tag}")
-                    else "the recorded reports give"
-                )
                 errors.append(
                     f"{_CORPUS_README}:{line_number(readme, cell.start())}: the "
                     f"'{label}' cell reads {stated[0]}/{stated[1]}, but "
-                    f"{source} {numerator}/{denominator}."
+                    f"the recorded reports give {numerator}/{denominator}."
                 )
 
 
