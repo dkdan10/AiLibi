@@ -43,7 +43,12 @@ from meetings.route_lines import (
 )
 from meetings.schemas import MeetingTranscript, VoteBallot
 from eval.eras import STAGE_B_R3
-from tests._helpers.committed import CANDIDATE_R2_9P2I, census_inputs, repo_root
+from tests._helpers.committed import (
+    CANDIDATE_R2_9P2I,
+    SAMPLES_9P2I,
+    census_inputs,
+    repo_root,
+)
 from tests._helpers.scripted_routes import record_routes_game, round_two_config
 
 #: r2's game with one meeting, the cheapest whole-game run (the route-check
@@ -965,14 +970,19 @@ def test_a_set_whose_games_record_the_field_both_ways_is_refused(
 # ---------------------------------------------------------------------------
 
 
-def test_the_committed_outputs_hold_three_columns_with_r2_governing() -> None:
+def test_the_committed_outputs_hold_four_columns_with_r2_governing() -> None:
+    """s9, r1 and r2 rendered ON beside their recorded ballots; r3, the shown set
+    since 2026-10-09, read off the blocks its ballots were served (was three
+    columns, before the shown set gained its lab twin)."""
+
     payload = json.loads(_COMMITTED_JSON.read_text())
-    assert [column["label"] for column in payload["columns"]] == ["s9", "r1", "r2"]
+    labels = [column["label"] for column in payload["columns"]]
+    assert labels == ["s9", "r1", "r2", "r3"]
     assert payload["governing_column"] == "r2"
     route_check = json.loads(_ROUTE_CHECK_JSON.read_text())
     for column in payload["columns"]:
         assert column["route_check_parity"] is True
-        assert column["mode"] == "rendered"
+        assert column["mode"] == ("served" if column["label"] == "r3" else "rendered")
         pinned = rlr.committed_column(route_check, column["label"])
         assert pinned is not None
         assert (column["sha"], column["path"], column["tree"]) == (
@@ -995,15 +1005,23 @@ def test_the_committed_report_is_the_committed_jsons_rendering() -> None:
     assert rlr.render_report(payload) == _COMMITTED_REPORT.read_text()
 
 
-def test_the_committed_r2_column_recomputes_from_the_checkouts_bytes() -> None:
-    """The committed r2 column is what the instrument reads from these replays today."""
+@pytest.mark.parametrize(
+    ("label", "directory"),
+    (("r2", _R2_DIR), ("r3", SAMPLES_9P2I)),
+    ids=("r2", "r3"),
+)
+def test_the_committed_round_column_recomputes_from_the_checkouts_bytes(
+    label: str, directory: Path
+) -> None:
+    """Each committed round column is what the instrument reads from its replays
+    today: r2's at round 2's candidate copy, r3's at the shown set."""
 
     payload = json.loads(_COMMITTED_JSON.read_text())
-    (committed,) = [column for column in payload["columns"] if column["label"] == "r2"]
-    census = census_inputs(_R2_DIR)
-    reading = rlr.read_set(_R2_DIR, label="r2", census=census)
+    (committed,) = [column for column in payload["columns"] if column["label"] == label]
+    census = census_inputs(directory)
+    reading = rlr.read_set(directory, label=label, census=census)
     source = rcr.ColumnSource(
-        label="r2",
+        label=label,
         commit=committed["commit"],
         sha=committed["sha"],
         path=committed["path"],
