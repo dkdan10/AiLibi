@@ -978,3 +978,113 @@ for p in glob.glob(sys.argv[1]+"/replay-seed-*.jsonl"):
       c+=1; i+=k["input_tokens"]; o+=k["output_tokens"]; u+=k["cost_usd"]
 print(c,i,o,u)' <set dir>
 ```
+
+## 2. The owner's confirmation (dated addendum, 2026-10-09)
+
+This section is the `coordination:` commit the card calls Q. Section 1 is
+unchanged, byte for byte, from P (`641b4254`). It quotes the owner's ruling
+of 2026-10-09 that confirms, as proposed, the five points the card reserves
+for the owner, and the owner's delegation of the step after the round. The
+confirmation was given before P, on the amended card; it amends nothing in
+section 1. By memo 8.7, the recording starts once P and Q are pushed and P is
+reviewed; no provider is called before then.
+
+### 2.1 The ruling, verbatim and dated
+
+On **2026-10-09** the owner asked how long the project needs to reach its
+finalized state and which redundancies the remaining workflow carries, then
+ruled, verbatim:
+
+> Apply all five redundancy removals and confirm the five points as proposed
+
+Memo section 8.7, which records the ruling and applies it, whole:
+
+> The owner asked how long the project needs to reach its finalized state and which redundancies the remaining
+> workflow carries, then ruled, verbatim: "Apply all five redundancy removals and confirm the five points as
+> proposed". The five removals, in force from this date for every remaining card and for round 3's recording:
+>
+> 1. **CI is the gate record.** The project gate (`bash scripts/check.sh`) is run by CI on every pushed head; its
+>    green run at the exact head, cited by run id in the pull request and the card, stands as the gate record.
+>    Workers no longer run it locally at the final head and no longer add a card-only commit to record it. AGENTS.md's
+>    requirement that the gate passes is met by that run.
+> 2. **Message-argument survivors are nonblocking after the first fix round.** In the bounded review standard, a
+>    mutation that replaces a message argument with a constant and survives is reported, and blocks only in the
+>    first review round of a card; from the first fix round on it is nonblocking. The behavioural classes (a dropped
+>    filter or wrapper, a swapped collection, a comparison made a None test, a role, kind, room or tick read made a
+>    constant, a dropped tuple member, swapped branches, a loaded source read as its literal) stay blocking.
+> 3. **A promotion is one card.** If round 3 is promoted, the era-keyed promotion and the tour's re-curation are one
+>    card, one pull request and one merge (the owner's, because it publishes), not two stacked cards.
+> 4. **Document-only changes get the documentation lens only.** A card or commit that changes only documents (a close
+>    audit, a card closure, a planning document) is verified by the documentation lens alone.
+> 5. **Recording gates every second batch, checkpoints every batch.** In a recording sitting, each batch of five ends
+>    with the tally, the re-projection, the count-only key scan and a pushed checkpoint; the full gate set runs after
+>    the probe and after every second batch. A checkpointed seed is never re-recorded, so a later gate failure stops
+>    the sitting and names the batches it covers. `tasks/work/stage-b-record-r3.md` carries the amendment in its
+>    Acceptance, Constraints and Validation.
+>
+> **The round-3 confirmation, given before P.** The same ruling confirms, as proposed, the five points the record
+> card reserves for the owner (8.5): the standing ceilings (2,800 calls; 17,500,000 input and 750,000 output tokens;
+> a 12 h recording wall summed over sittings, each inside an 18 h window; $0.00 marginal; each with its stop at 90
+> percent); the pre-registration as the card tables it; the reporter flag re-keyed by seat and vent proof with bar A,
+> flagged above twice round 2's relative rate (21.28), non-gating and never read by the step rule; the carrier of round
+> 2's not-carried cells as the card states it (resume perceptions by the resume helper plus the golden's byte-equal
+> re-render; the turn citation as the cell for ballots citing a rebuttal, with the counter slot beside it); and that
+> the step rule may take the impostor win share as one of its conditions. The pre-registration commit P is written
+> from the amended card; Q, the dated addendum, quotes this confirmation; the recording starts once P and Q are
+> pushed and P is reviewed. The step after the round stays the owner's to take or override.
+
+### 2.2 The five points, each against the owner's words
+
+The owner's words for every point, 2026-10-09: "Apply all five redundancy
+removals and confirm the five points as proposed". Beside each point, the words of memo 8.7's confirmation paragraph that name it, quoted
+verbatim, and the place section 1 states it.
+
+| point the card reserves for the owner | memo 8.7's confirmation, verbatim | section 1 |
+|---|---|---|
+| 1. the ceilings | "the standing ceilings (2,800 calls; 17,500,000 input and 750,000 output tokens; a 12 h recording wall summed over sittings, each inside an 18 h window; $0.00 marginal; each with its stop at 90 percent)" | 1.5; the stops in 1.6 |
+| 2. the pre-registration | "the pre-registration as the card tables it" | the whole of section 1 |
+| 3. the reporter flag's form and bar | "the reporter flag re-keyed by seat and vent proof with bar A, flagged above twice round 2's relative rate (21.28), non-gating and never read by the step rule" | 1.9, bar A; B and C declined |
+| 4. the carrier of round 2's not-carried cells | "the carrier of round 2's not-carried cells as the card states it (resume perceptions by the resume helper plus the golden's byte-equal re-render; the turn citation as the cell for ballots citing a rebuttal, with the counter slot beside it)" | 1.10 |
+| 5. the step rule may read the win share | "that the step rule may take the impostor win share as one of its conditions" | 1.11 |
+
+**How this record applies the five process amendments** (memo 8.7 items 1 to
+5). The project gate's record at each pushed head is CI's green run there,
+cited by run id in the pull request and the card's Results; no local
+`check.sh` runs at the final head and no card-only commit records a gate,
+while the targeted suites, the document gates and the instruments' `--check`
+runs are still run and quoted (item 1). The recording discipline is 1.7's:
+each batch of five ends with the tally, the re-projection, the count-only key
+scan and a pushed checkpoint, and the full gate set runs after the probe and
+after every second batch (item 5). If the step is the promotion, the era-keyed
+promotion and the tour's re-curation are one card and one merge, the owner's
+because it publishes (item 3). Items 2 and 4 set the review standard for this
+record's pull request.
+
+### 2.3 The step after round 3, delegated to the orchestrator
+
+On **2026-10-09** the owner ruled, verbatim:
+
+> I will let this session, as the orchestrator, decide about promoting round 3. Keep what I want for the project in mind. I lean towards wanting to promote round 3, but if there is an issue you find with recording, or think it is really a step down in terms of gameplay, you can make the decision to keep round 2.
+
+Memo section 8.8, whole:
+
+> The owner ruled, verbatim: "I will let this session, as the orchestrator, decide about promoting round 3. Keep what
+> I want for the project in mind. I lean towards wanting to promote round 3, but if there is an issue you find with
+> recording, or think it is really a step down in terms of gameplay, you can make the decision to keep round 2."
+>
+> So the step the record card pre-registers (promote round 3 as the shown set by the era-keyed path if every
+> conformance cell is 0, the win share is inside the band and the misjudged route-charge count did not rise;
+> otherwise round 2 stays shown and round 3 is a comparison record) is taken by the orchestrator, on the owner's
+> criteria and leaning: round 3 is promoted unless the recording carries an issue (a stop rule fired, a conformance
+> cell above 0, a gate or scan failure, a ceiling breached, a seed outside the pre-registered protocol) or its
+> gameplay is a real step down against the direction (grounded votes, honest process, the genre shape, showability,
+> read on the pre-registered table and the census, never on role-correctness). The decision is written into the
+> round-3 audit with the readings it rests on, and a promotion is one card and one merge (8.7, item 3), the merge
+> still the owner's because it publishes.
+
+So the step 1.11's rule names after the round is taken by the orchestrator on
+the owner's criteria and leaning, and written into this audit with the
+readings it rests on. The rule itself, its conditions and the table are
+unchanged; the rule never reads the reporter flag or a role-correct figure,
+and the step reads the pre-registered table and the census, never
+role-correctness.
