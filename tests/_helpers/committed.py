@@ -736,6 +736,10 @@ MOVEMENT_DECIDED_MEETINGS: Final[frozenset[str]] = frozenset(
 #: The candidate family's root, one directory per round.
 CANDIDATES_ROOT: Final[Path] = repo_root / "replays" / "candidates"
 
+#: Candidate round 2's 9-player set: the shown set's bytes from 2026-10-02 until
+#: round 3's promotion, kept here as that round's comparison record.
+CANDIDATE_R2_9P2I: Final[Path] = CANDIDATES_ROOT / "stage-b-r2" / "9p2i"
+
 
 def candidate_rounds(root: Path = CANDIDATES_ROOT) -> tuple[Path, ...]:
     """Every round directory under ``root``, sorted by name.

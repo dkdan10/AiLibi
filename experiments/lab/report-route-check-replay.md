@@ -19,6 +19,7 @@ Each column is one recording, read alone and never pooled, from the exact commit
 | s9 | `d41c90067a0023d08997231f181cc02deb6461bc` | `replays/samples/9p2i` | `5c12c060e75b026daf643ab8b20e5aaca8de20b0` | none | 0-49 | 9 | 2 | 50 |
 | r1 | `5877adb48e046042a1e2927675451f896168673a` | `replays/candidates/stage-b-r1/9p2i` | `2c0529eb694fc011c836cb564d241101da1957e4` | `replays/candidates/stage-b-r1/experiment-config.json` | 0-49 | 9 | 2 | 50 |
 | r2 | `5877adb48e046042a1e2927675451f896168673a` | `replays/samples/9p2i` | `8197dc791afbe432186a5bd8c16e3e16f7dd8477` | `replays/samples/9p2i/experiment-config.json` | 0-49 | 9 | 2 | 50 |
+| r3 | `600596883a4522e621e990a2aa33144d2e22031a` | `replays/samples/9p2i` | `ba728841c9431eaa6391d4846891080820dcef68` | `replays/samples/9p2i/experiment-config.json` | 0-49 | 9 | 2 | 50 |
 
 Terms, as counted here:
 
@@ -274,6 +275,83 @@ The same cases' reconcilable charged pairs, each given its own first reason:
 
 Lines saying the timing is insufficient, about a misjudged ejected player over two rooms, shown to a voter who voted to eject: (b) 115, (b-snapshot) 49.
 
+### Column r3
+
+| meetings | count | witness meetings | ejections | charges at the table | resting on a reconcilable pair | misjudged |
+| --- | --- | --- | --- | --- | --- | --- |
+| all meetings | 119 | 14 | 61 | 376 | 226 | 29 |
+| report vent proof | 20 | 0 | 20 | 132 | 38 | 4 |
+| report no vent proof | 95 | 14 | 37 | 220 | 175 | 23 |
+| button | 4 | 0 | 4 | 24 | 13 | 2 |
+
+| check | lines shown to voters | reaches misjudged | reaches the charge |
+| --- | --- | --- | --- |
+| (a) as built | 594 | 8 of 29 | 6 |
+| (a) transcript only | 447 | 7 of 29 | 6 |
+| (b) as recorded | 2162 | 15 of 29 | 13 |
+| (b-snapshot), approximation | 2139 | 18 of 29 | 15 |
+| (c) reference | 2322 | 25 of 29 | 23 |
+
+By ejection class, as description only (an ejected witness is innocent too). Each check column counts the class's misjudged cases that check reaches; the judgment-net column counts the class's ejections with an eject ballot the net tags:
+
+| class | ejections | misjudged | (a) as built | (a) transcript only | (b) as recorded | (b-snapshot), approximation | (c) reference | judgment net |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| innocent | 15 | 15 | 6 | 6 | 7 | 9 | 15 | 5 |
+| impostor | 46 | 14 | 2 | 1 | 8 | 9 | 10 | 5 |
+| ejected witness | 6 | 6 | 2 | 2 | 2 | 3 | 6 | 5 |
+
+Ejections with a walkable pair under each leg of (a) (any pair, charged or not):
+
+| class | ejections | as built | transcript only | no movement records | no regroup ticks | with movement origins |
+| --- | --- | --- | --- | --- | --- | --- |
+| innocent | 15 | 6 | 6 | 4 | 8 | 11 |
+| impostor | 46 | 2 | 1 | 1 | 2 | 4 |
+| ejected witness | 6 | 2 | 2 | 1 | 3 | 4 |
+
+Ejections on which the legs of (a) disagree, and the input that moves each between (a) as built and the transcript-only leg:
+
+| seed | meeting | classes | as built | transcript only | no movement records | no regroup ticks | with movement origins | moved by |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 0 | innocent | False | False | False | False | True | not moved |
+| 7 | 0 | impostor | False | False | False | False | True | not moved |
+| 12 | 0 | innocent | True | False | False | True | True | movement records |
+| 16 | 1 | impostor | False | False | False | False | True | not moved |
+| 17 | 1 | innocent | False | True | False | True | False | regroup ticks |
+| 19 | 0 | impostor | True | False | False | True | True | movement records |
+| 23 | 0 | innocent | False | False | False | False | True | not moved |
+| 24 | 1 | innocent | False | False | False | False | True | not moved |
+| 30 | 1 | innocent, ejected witness | False | True | False | True | True | regroup ticks |
+| 38 | 0 | innocent, ejected witness | False | False | False | False | True | not moved |
+| 43 | 0 | innocent, ejected witness | True | False | False | True | True | movement records |
+
+Unreached misjudged cases by reason:
+
+| reason | (a) as built | (a) transcript only | (b) as recorded | (b-snapshot), approximation | (c) reference |
+| --- | --- | --- | --- | --- | --- |
+| placement kind outside the check's inputs | 14 | 15 | 1 | 1 | 3 |
+| dropped by the relevance gate | 7 | 6 | 0 | 0 | 1 |
+| beyond the hop bound | 0 | 1 | 0 | 0 | 0 |
+| beyond the tick bound | 0 | 0 | 0 | 0 | 0 |
+| cut by the cap or the memory budget | 0 | 0 | 8 | 6 | 0 |
+| claim not yet held at ballot time | 0 | 0 | 2 | 2 | 0 |
+| the unknown-phase rule | 0 | 0 | 1 | 0 | 0 |
+| none of the listed reasons | 0 | 0 | 2 | 2 | 0 |
+
+The same cases' reconcilable charged pairs, each given its own first reason:
+
+| reason | (a) as built | (a) transcript only | (b) as recorded | (b-snapshot), approximation | (c) reference |
+| --- | --- | --- | --- | --- | --- |
+| placement kind outside the check's inputs | 509 | 407 | 1 | 1 | 10 |
+| dropped by the relevance gate | 104 | 115 | 0 | 0 | 1 |
+| beyond the hop bound | 18 | 10 | 0 | 0 | 0 |
+| beyond the tick bound | 2 | 6 | 0 | 0 | 0 |
+| cut by the cap or the memory budget | 0 | 0 | 146 | 127 | 0 |
+| claim not yet held at ballot time | 0 | 0 | 90 | 90 | 0 |
+| the unknown-phase rule | 0 | 0 | 4 | 0 | 0 |
+| none of the listed reasons | 0 | 0 | 407 | 385 | 0 |
+
+Lines saying the timing is insufficient, about a misjudged ejected player over two rooms, shown to a voter who voted to eject: (b) 92, (b-snapshot) 40.
+
 ## Decision input
 
 The card's rule, applied to r2 and set beside s9 and r1: with M the misjudged cases, W those at witness meetings and R(X) the cases check X reaches, branch 1 when M is empty; branch 2 when (b-snapshot) reaches at least half of M, and of W when W is not empty; branch 3 when (c) does; branch 4 otherwise.
@@ -283,6 +361,7 @@ The card's rule, applied to r2 and set beside s9 and r1: with M the misjudged ca
 | s9 | 50 | 0 | 27 / 0 | 30 / 0 | 32 / 0 | 2: name evidence_reasoning_version = 2, conditional on the owner lifting the temporal-observations exclusion it requires |
 | r1 | 29 | 0 | 8 / 0 | 15 / 0 | 20 / 0 | 2: name evidence_reasoning_version = 2, conditional on the owner lifting the temporal-observations exclusion it requires |
 | r2 | 40 | 7 | 16 / 2 | 20 / 3 | 29 / 7 | 3: name the narrow new field, shaped by the reference reading's unreached reasons |
+| r3 | 29 | 7 | 15 / 2 | 18 / 3 | 25 / 7 | 3: name the narrow new field, shaped by the reference reading's unreached reasons |
 
 The branch is advisory and gates nothing. Branch 2 would need the owner to lift the exclusion of temporal observations, which changes every prompt and fails the validity gate's provenance check, and that field also carries death-evidence and account-uncertainty lines; its one live reading cast 14 eject and 136 skip ballots. A round 3 is the owner's spend decision.
 

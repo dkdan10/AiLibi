@@ -10310,22 +10310,34 @@ def flat_tree_id(entries: Sequence[tuple[str, str, str, str]]) -> str:
     return hashlib.sha1(f"tree {len(body)}".encode() + b"\0" + body).hexdigest()
 
 
-def recording_blob_problems(repo: Path, *, sha: str, path: str, tree: str) -> list[str]:
-    """Each way the recording files at ``sha:path`` differ from ``HEAD:path``.
+def recording_blob_problems(
+    repo: Path,
+    *,
+    sha: str,
+    path: str,
+    tree: str,
+    head_path: str | None = None,
+    beside: Sequence[str] = (),
+) -> list[str]:
+    """Each way the recording files at ``sha:path`` differ from HEAD's.
 
-    The recording files are the ones the recording fingerprint hashes: every
-    replay, the roster and the manifest. A file added beside them later, such as
-    a derived results file, changes nothing. With the recorded commit in the
-    clone the two listings are compared blob by blob, and the recorded tree is
-    held to the column's. In a shallow clone without it, the recorded tree must
-    be what ``HEAD:path`` reads as with some of its other files left out, which
-    proves every recording file unchanged; a clone where neither holds fails by
-    name.
+    HEAD's recordings sit at ``head_path``, which is ``path`` unless they moved
+    since the recorded commit (round 2's moved to its candidate copy when round 3
+    was promoted). The recording files are the ones the recording fingerprint
+    hashes: every replay, the roster and the manifest. A file added beside them
+    later, such as a derived results file, changes nothing. With the recorded
+    commit in the clone the two listings are compared blob by blob, and the
+    recorded tree is held to the column's. In a shallow clone without it, the
+    recorded tree must be what HEAD's directory reads as with some of its other
+    files left out and some of the ``beside`` files (HEAD paths the move took out
+    of the directory, such as a round's declared config) put back, which proves
+    every recording file unchanged; a clone where neither holds fails by name.
     """
 
-    head = _tree_listing(repo, f"HEAD:{path}")
+    where = head_path or path
+    head = _tree_listing(repo, f"HEAD:{where}")
     if head is None:
-        return [f"HEAD holds no {path}"]
+        return [f"HEAD holds no {where}"]
     recorded = _tree_listing(repo, f"{sha}:{path}")
     if recorded is not None:
         problems: list[str] = []
@@ -10336,22 +10348,30 @@ def recording_blob_problems(repo: Path, *, sha: str, path: str, tree: str) -> li
         after = {name: oid for _, _, oid, name in head if is_recording_file(name)}
         for name in sorted(set(before) | set(after)):
             if name not in after:
-                problems.append(f"{path}/{name}: absent at HEAD")
+                problems.append(f"{where}/{name}: absent at HEAD")
             elif name not in before:
-                problems.append(f"{path}/{name}: added since {sha}")
+                problems.append(f"{where}/{name}: added since {sha}")
             elif before[name] != after[name]:
-                problems.append(f"{path}/{name}: a different blob at HEAD")
+                problems.append(f"{where}/{name}: a different blob at HEAD")
         return problems
-    others = [entry for entry in head if not is_recording_file(entry[3])]
+    returned: list[tuple[str, str, str, str]] = []
+    for item in beside:
+        parent, _, name = item.rpartition("/")
+        listing = _tree_listing(repo, f"HEAD:{parent}") or []
+        returned += [entry for entry in listing if entry[3] == name]
+    recordings = [entry for entry in head if is_recording_file(entry[3])]
+    others = [entry for entry in head if not is_recording_file(entry[3])] + returned
     if len(others) > 12:
-        return [f"{path}: too many files beside the recordings to read"]
+        return [f"{where}: too many files beside the recordings to read"]
     for size in range(len(others) + 1):
-        for left_out in combinations(others, size):
-            kept = [entry for entry in head if entry not in left_out]
-            if flat_tree_id(kept) == tree:
+        for kept_others in combinations(others, size):
+            names = [entry[3] for entry in kept_others]
+            if len(set(names)) != len(names):
+                continue
+            if flat_tree_id([*recordings, *kept_others]) == tree:
                 return []
     return [
-        f"{sha} is not in this clone, and no reading of HEAD:{path} with only "
+        f"{sha} is not in this clone, and no reading of HEAD:{where} with only "
         f"files beside its recordings left out is the recorded tree {tree}"
     ]
 
@@ -10362,22 +10382,80 @@ def _route_check_columns() -> dict[str, Mapping[str, Any]]:
 
 
 def test_the_route_check_columns_read_the_recordings_now_at_head() -> None:
-    """The lab's r2 and r1 columns: each column's recording files at its recorded
-    sha and path are HEAD's, blob for blob. A failed precondition fails by name."""
+    """The lab's r3, r2 and r1 columns: each column's recording files at its
+    recorded sha and path are HEAD's, blob for blob, where HEAD holds them now
+    (r2's at its candidate copy). A failed precondition fails by name."""
 
     columns = _route_check_columns()
-    assert set(columns) >= {"r1", "r2"}
+    assert set(columns) >= set(_ROUND_COLUMNS)  # was {"r1", "r2"}
     assert _run_git(repo_root, "rev-parse", "--show-object-format").stdout.strip() == (
         "sha1"
     )
-    for label in ("r2", "r1"):
-        column = columns[label]
-        assert (
-            recording_blob_problems(
-                repo_root, sha=column["sha"], path=column["path"], tree=column["tree"]
+    for label in _ROUND_COLUMNS:
+        assert _round_blob_problems(label, columns[label]) == [], label
+
+
+def test_r2_read_at_its_recorded_path_fails_against_the_promoted_tree() -> None:
+    """Planted: the helper as it read r2 before the promotion, at the column's
+    own path. HEAD's ``replays/samples/9p2i`` now holds round 3's recordings, so
+    the reading fails, naming r2's column path."""
+
+    column = _route_check_columns()["r2"]
+    assert column["path"] == "replays/samples/9p2i"
+    problems = recording_blob_problems(
+        repo_root, sha=column["sha"], path=column["path"], tree=column["tree"]
+    )
+    assert problems, "r2"
+    assert all(column["path"] in problem for problem in problems), problems
+    assert _round_blob_problems("r2", column) == []
+
+
+def test_one_replay_changed_at_a_moved_columns_new_path_fails_by_name(
+    tmp_path: Path,
+) -> None:
+    """Planted: a column's recordings moved to a candidate copy, with its config
+    lifted to the round's root, then one replay changed there; read with the
+    recorded commit in the clone and in a shallow clone without it."""
+
+    moved = "replays/candidates/r/9p2i"
+    config = "replays/candidates/r/experiment-config.json"
+    repo, sha, tree = _drift_repo(tmp_path)
+
+    def _move(column: Path) -> None:
+        target = repo / moved
+        target.mkdir(parents=True)
+        for item in sorted(column.iterdir()):
+            destination = (
+                repo / config
+                if item.name == "experiment-config.json"
+                else target / item.name
             )
-            == []
-        ), label
+            shutil.move(item, destination)
+
+    _commit_change(repo, _move)
+    kept = {"head_path": moved, "beside": (config,)}
+    assert recording_blob_problems(repo, sha=sha, path=_COLUMN, tree=tree, **kept) == []
+    clone = _shallow(repo, tmp_path)
+    assert _run_git(clone, "cat-file", "-e", f"{sha}^{{commit}}").returncode != 0
+    assert (
+        recording_blob_problems(clone, sha=sha, path=_COLUMN, tree=tree, **kept) == []
+    )
+    # Without the lifted config the shallow reading cannot rebuild the tree.
+    assert recording_blob_problems(
+        clone, sha=sha, path=_COLUMN, tree=tree, head_path=moved
+    )
+    replay = repo / moved / "replay-seed-1.jsonl"
+    replay.write_bytes(replay.read_bytes() + b"\n")
+    _git_write(repo, "add", "-A")
+    _git_write(repo, "commit", "-q", "-m", "a replay changed at the new path")
+    assert recording_blob_problems(repo, sha=sha, path=_COLUMN, tree=tree, **kept) == [
+        f"{moved}/replay-seed-1.jsonl: a different blob at HEAD"
+    ]
+    clone = _shallow(repo, tmp_path / "again")
+    assert recording_blob_problems(clone, sha=sha, path=_COLUMN, tree=tree, **kept) == [
+        f"{sha} is not in this clone, and no reading of HEAD:{moved} with only "
+        f"files beside its recordings left out is the recorded tree {tree}"
+    ]
 
 
 def _git_write(repo: Path, *args: str) -> str:
@@ -10644,8 +10722,41 @@ def test_round_1_and_the_promoted_set_never_pool_before_a_new_cell_is_summed() -
 #: committed columns, rendered ON beside the ballots as recorded.
 ROUTE_LINES_JSON: Final = repo_root / "experiments/lab/results-route-lines-replay.json"
 
-#: The two round columns the census is held to, meeting by meeting.
-_ROUND_COLUMNS: Final = ("r2", "r1")
+#: The round columns the census is held to, meeting by meeting: r3 the shown
+#: set's, r2 and r1 the kept candidate copies' (was ("r2", "r1")).
+_ROUND_COLUMNS: Final = ("r3", "r2", "r1")
+
+#: Where HEAD holds a round column's recordings when they moved since the column
+#: was recorded, and the files the move lifted out of the set directory. Round 2's
+#: moved to its candidate copy at round 3's promotion, its config to the round root.
+_ROUND_HEAD_PATHS: Final[Mapping[str, tuple[str, tuple[str, ...]]]] = MappingProxyType(
+    {
+        "r2": (
+            "replays/candidates/stage-b-r2/9p2i",
+            ("replays/candidates/stage-b-r2/experiment-config.json",),
+        )
+    }
+)
+
+
+def _round_head_path(label: str, column: Mapping[str, Any]) -> str:
+    """The HEAD path of a round column's recordings."""
+
+    return _ROUND_HEAD_PATHS.get(label, (column["path"], ()))[0]
+
+
+def _round_blob_problems(label: str, column: Mapping[str, Any]) -> list[str]:
+    """:func:`recording_blob_problems` for a round column, read where HEAD holds it."""
+
+    head_path, beside = _ROUND_HEAD_PATHS.get(label, (column["path"], ()))
+    return recording_blob_problems(
+        repo_root,
+        sha=column["sha"],
+        path=column["path"],
+        tree=column["tree"],
+        head_path=head_path,
+        beside=beside,
+    )
 
 
 def _previous_tick(item: GameFacts, index: int) -> int | None:
@@ -10726,11 +10837,9 @@ def _round_column(label: str) -> tuple[Mapping[str, Any], CensusInputs]:
     directory, after the column's recordings are held to HEAD's blob for blob."""
 
     column = _route_check_columns()[label]
-    problems = recording_blob_problems(
-        repo_root, sha=column["sha"], path=column["path"], tree=column["tree"]
-    )
+    problems = _round_blob_problems(label, column)
     assert problems == [], f"{label}: {problems}"
-    return column, census_inputs(repo_root / column["path"])
+    return column, census_inputs(repo_root / _round_head_path(label, column))
 
 
 @pytest.mark.slow
@@ -10761,10 +10870,13 @@ def test_the_census_route_charges_are_the_route_check_replays_meeting_by_meeting
 
 
 @pytest.mark.slow
-def test_a_column_with_one_misjudged_flag_flipped_names_that_meeting() -> None:
-    """Planted: a copy of the committed r2 column with one meeting's flag flipped."""
+@pytest.mark.parametrize("label", ("r3", "r2"))
+def test_a_column_with_one_misjudged_flag_flipped_names_that_meeting(
+    label: str,
+) -> None:
+    """Planted: a copy of a committed round column with one meeting's flag flipped."""
 
-    column, loaded = _round_column("r2")
+    column, loaded = _round_column(label)
     planted = json.loads(json.dumps(column))
     row = next(row for row in planted["meetings"] if row.get("case"))
     row["case"]["misjudged"] = not row["case"]["misjudged"]
@@ -10817,7 +10929,7 @@ def test_a_loader_given_no_regroup_ticks_breaks_the_round_2_agreement() -> None:
     regroup ticks the loader keeps they reproduce the loader's facts."""
 
     column, loaded = _round_column("r2")
-    set_dir = repo_root / column["path"]
+    set_dir = repo_root / _round_head_path("r2", column)  # was column["path"]
     lab = lab_route_records(column)
     kept = _recharged(loaded, set_dir, lambda fact: fact.regroup_ticks)
     assert census_route_records(kept) == census_route_records(loaded)
@@ -12105,7 +12217,9 @@ def test_the_fields_reach_is_derivable_from_the_census_through_the_field(
     assert published_column["route_check_parity"] is True
     assert published_column["sha"] == column["sha"]
     published = published_column["all"]
-    counterfactual = _served_counterfactually(loaded, repo_root / column["path"])
+    counterfactual = _served_counterfactually(
+        loaded, repo_root / _round_head_path(label, column)
+    )
     folded = fold_set(counterfactual)
     reach = folded.cells["ejections_charged_on_a_reconcilable_pair_shown_a_route_line"]
     assert (reach.numerator, reach.denominator) == (

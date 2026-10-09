@@ -12,7 +12,11 @@ as served, an r3 set recorded under another config is refused by name, and no
 output carries a rendered line or a recorded text.
 
 Columns are read from temporary repositories built here; the committed-output
-checks read the checkout's working tree, never history.
+checks read the checkout's working tree, never history. The r2 games are round
+2's bytes where they now live (the candidate copy ``replays/candidates/stage-b-r2``,
+moved there without a byte changed when round 3 was promoted), placed at the path
+the r2 column was recorded at; a scripted r3 column sits where the shown era's
+declared config names it.
 """
 
 from __future__ import annotations
@@ -38,12 +42,20 @@ from meetings.route_lines import (
     without_route_block,
 )
 from meetings.schemas import MeetingTranscript, VoteBallot
-from tests._helpers.committed import SAMPLES_9P2I, census_inputs, repo_root
+from eval.eras import STAGE_B_R3
+from tests._helpers.committed import CANDIDATE_R2_9P2I, census_inputs, repo_root
 from tests._helpers.scripted_routes import record_routes_game, round_two_config
 
 #: r2's game with one meeting, the cheapest whole-game run (the route-check
 #: replay's own choice).
 _RUN_SEED: Final[int] = 2
+#: Round 2's games and declared config, at the candidate copy their bytes moved
+#: to (was ``replays/samples/9p2i`` and the config beside its games).
+_R2_DIR: Final[Path] = CANDIDATE_R2_9P2I
+_R2_CONFIG: Final[Path] = CANDIDATE_R2_9P2I.parent / "experiment-config.json"
+#: Where an r3 column's games sit: the shown set, beside its declared config (was
+#: ``replays/candidates/stage-b-r3/9p2i`` while round 3 was a candidate).
+_R3_PATH: Final[str] = "replays/samples/9p2i"
 _COMMITTED_JSON: Final[Path] = repo_root / rlr.DEFAULT_JSON
 _COMMITTED_REPORT: Final[Path] = repo_root / rlr.DEFAULT_REPORT
 _ROUTE_CHECK_JSON: Final[Path] = repo_root / rcr.DEFAULT_JSON
@@ -78,9 +90,10 @@ def _r2_repo(root: Path) -> tuple[Path, str]:
     repo = root / "repo"
     target = repo / "replays" / "samples" / "9p2i"
     target.mkdir(parents=True)
-    for name in ("MANIFEST.md", "roster.json", "experiment-config.json"):
-        shutil.copy(SAMPLES_9P2I / name, target / name)
-    shutil.copy(SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl", target)
+    for name in ("MANIFEST.md", "roster.json"):
+        shutil.copy(_R2_DIR / name, target / name)
+    shutil.copy(_R2_CONFIG, target / "experiment-config.json")
+    shutil.copy(_R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl", target)
     return repo, _commit(repo)
 
 
@@ -88,19 +101,34 @@ def _r3_repo(root: Path, *, declared_route_lines: bool = True) -> tuple[Path, st
     """A throwaway commit holding scripted ON games as r3, under a declared file."""
 
     repo = root / "repo"
-    set_dir = repo / "replays" / "candidates" / "stage-b-r3" / "9p2i"
+    set_dir = repo / _R3_PATH
     record_routes_game(set_dir, route_lines=True)
     config = round_two_config(route_lines=declared_route_lines).model_dump(mode="json")
-    declared = json.loads(
-        (SAMPLES_9P2I / "experiment-config.json").read_text(encoding="utf-8")
-    )
+    declared = json.loads(_R2_CONFIG.read_text(encoding="utf-8"))
     payload = {key: config[key] for key in declared}
     if declared_route_lines:
         payload["route_lines_version"] = 1
-    (set_dir.parent / "experiment-config.json").write_text(
-        json.dumps(payload) + "\n", encoding="utf-8"
-    )
+    declared_path = STAGE_B_R3.declared_config
+    assert declared_path == f"{_R3_PATH}/experiment-config.json"
+    (repo / declared_path).write_text(json.dumps(payload) + "\n", encoding="utf-8")
     return repo, _commit(repo)
+
+
+def _route_check_without_r3(root: Path) -> Path:
+    """The committed route-check JSON with its r3 column left out, written to ``root``.
+
+    The committed JSON records the shown set's r3 column, whose sha and tree a
+    scripted r3 column never matches; a run on a scripted column reads this copy,
+    which records no r3, so its parity is not held to the shown set's column.
+    """
+
+    payload = json.loads(_ROUTE_CHECK_JSON.read_text(encoding="utf-8"))
+    labels = [column["label"] for column in payload["columns"]]
+    assert "r3" in labels
+    payload["columns"] = [c for c in payload["columns"] if c["label"] != "r3"]
+    path = root / "route-check-without-r3.json"
+    path.write_text(rcr.serialize(payload), encoding="utf-8")
+    return path
 
 
 def _run(
@@ -223,7 +251,7 @@ def test_a_run_holds_parity_and_its_check_reproduces(r2_run: dict[str, Any]) -> 
 def _census_game(change: str) -> GameFacts:
     """r2's one-meeting game as the census reads it, with ``change`` planted."""
 
-    (game,) = [g for g in census_inputs(SAMPLES_9P2I).games if g.seed == _RUN_SEED]
+    (game,) = [g for g in census_inputs(_R2_DIR).games if g.seed == _RUN_SEED]
     (fact,) = game.meetings
     if change == "one meeting short":
         return replace(game, meetings=())
@@ -263,7 +291,7 @@ def test_a_census_the_walk_disagrees_with_is_refused_by_name(
 
     with pytest.raises(rlr.RouteLinesReplayError, match=message):
         rlr.read_game(
-            SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl",
+            _R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl",
             label="r2",
             game=_census_game(change),
         )
@@ -733,15 +761,18 @@ def test_an_r3_column_is_read_from_its_served_blocks_by_both_instruments(
     tmp_path: Path,
 ) -> None:
     repo, sha = _r3_repo(tmp_path)
-    spec = f"r3={sha}:replays/candidates/stage-b-r3/9p2i"
+    spec = f"r3={sha}:{_R3_PATH}"
     out = tmp_path / "out"
     out.mkdir()
-    assert _run(repo, out, spec) == 0
+    # Against the committed JSON, which pins the shown set's r3 bytes, a
+    # scripted r3 column is refused; read against a copy that records no r3.
+    assert _run(repo, out, spec) == 1
+    assert _run(repo, out, spec, route_check=_route_check_without_r3(tmp_path)) == 0
     (column,) = json.loads((out / "results.json").read_text())["columns"]
     assert column["label"] == "r3"
     assert column["mode"] == "served"
     assert column["route_check_parity"] is False
-    assert column["declared_config"] == rcr.R3_CONFIG_PATH
+    assert column["declared_config"] == STAGE_B_R3.declared_config
     whole = column["all"]
     assert whole["ballots_with_block"] > 0
     assert whole["field_reaches_M_served"] == whole["field_reaches_M"]
@@ -770,7 +801,7 @@ def test_an_r3_column_is_read_from_its_served_blocks_by_both_instruments(
     )
     (checked,) = json.loads((route_check_out / "results.json").read_text())["columns"]
     assert checked["label"] == "r3"
-    assert checked["declared_config"] == rcr.R3_CONFIG_PATH
+    assert checked["declared_config"] == STAGE_B_R3.declared_config
 
 
 #: The report's sentence for a column whose ballots recorded the route lines.
@@ -805,7 +836,8 @@ def test_an_r3_columns_block_cost_and_report_are_read_as_served(
     repo, sha = _r3_repo(tmp_path)
     out = tmp_path / "out"
     out.mkdir()
-    assert _run(repo, out, f"r3={sha}:replays/candidates/stage-b-r3/9p2i") == 0
+    without_r3 = _route_check_without_r3(tmp_path)
+    assert _run(repo, out, f"r3={sha}:{_R3_PATH}", route_check=without_r3) == 0
     payload = json.loads((out / "results.json").read_text())
     (column,) = payload["columns"]
     whole = column["all"]
@@ -858,16 +890,18 @@ def test_an_r3_set_recorded_under_another_config_is_refused_naming_the_column(
     repo, sha = _r3_repo(tmp_path, declared_route_lines=False)
     out = tmp_path / "out"
     out.mkdir()
-    assert _run(repo, out, f"r3={sha}:replays/candidates/stage-b-r3/9p2i") == 1
+    assert _run(repo, out, f"r3={sha}:{_R3_PATH}") == 1
     assert "column r3: seed 0 recorded settings that differ" in capsys.readouterr().err
 
 
 def _copy_r2_game(set_dir: Path) -> None:
     set_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("MANIFEST.md", "roster.json", "experiment-config.json"):
+    for name in ("MANIFEST.md", "roster.json"):
         if not (set_dir / name).exists():
-            shutil.copy(SAMPLES_9P2I / name, set_dir / name)
-    shutil.copy(SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl", set_dir)
+            shutil.copy(_R2_DIR / name, set_dir / name)
+    if not (set_dir / "experiment-config.json").exists():
+        shutil.copy(_R2_CONFIG, set_dir / "experiment-config.json")
+    shutil.copy(_R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl", set_dir)
 
 
 def test_a_census_whose_seeds_differ_from_the_set_is_refused(tmp_path: Path) -> None:
@@ -879,7 +913,7 @@ def test_a_census_whose_seeds_differ_from_the_set_is_refused(tmp_path: Path) -> 
         rlr.RouteLinesReplayError,
         match=r"^r2: the census and the set hold different seeds$",
     ):
-        rlr.read_set(set_dir, label="r2", census=census_inputs(SAMPLES_9P2I))
+        rlr.read_set(set_dir, label="r2", census=census_inputs(_R2_DIR))
 
 
 def test_a_set_whose_games_record_the_field_both_ways_is_refused(
@@ -899,7 +933,7 @@ def test_a_set_whose_games_record_the_field_both_ways_is_refused(
         for seed in (0, _RUN_SEED)
     }
     assert modes == {"served", "rendered"}
-    census = census_inputs(SAMPLES_9P2I)
+    census = census_inputs(_R2_DIR)
     (game,) = [g for g in census.games if g.seed == _RUN_SEED]
     read: list[int] = []
 
@@ -966,8 +1000,8 @@ def test_the_committed_r2_column_recomputes_from_the_checkouts_bytes() -> None:
 
     payload = json.loads(_COMMITTED_JSON.read_text())
     (committed,) = [column for column in payload["columns"] if column["label"] == "r2"]
-    census = census_inputs(SAMPLES_9P2I)
-    reading = rlr.read_set(SAMPLES_9P2I, label="r2", census=census)
+    census = census_inputs(_R2_DIR)
+    reading = rlr.read_set(_R2_DIR, label="r2", census=census)
     source = rcr.ColumnSource(
         label="r2",
         commit=committed["commit"],
