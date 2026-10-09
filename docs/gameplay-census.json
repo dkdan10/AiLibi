@@ -2358,10 +2358,10 @@
         "short_window_ticks": 2
       },
       "declared_config": "replays/samples/9p2i/experiment-config.json",
-      "era_id": "stage-b-r2",
+      "era_id": "stage-b-r3",
       "pooled": null,
-      "record": "audits/audit-2026-10-01-stage-b-r2.md",
-      "recorded_on": "2026-10-01",
+      "record": "audits/audit-2026-10-09-stage-b-r3.md",
+      "recorded_on": "2026-10-09",
       "sets": [
         "samples/9p2i"
       ]
@@ -4723,13 +4723,13 @@
         "accused_opener_answers": {
           "by_construction": null,
           "definition": "Meetings where the opener spoke again after another speaker accused them, over meetings where another speaker accused the opener.",
-          "denominator": 105,
+          "denominator": 109,
           "guard": "bounded_rebuttal_version = unset",
           "heading": "Meeting structure",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 87,
-          "rate": 0.828571,
+          "numerator": 90,
+          "rate": 0.825688,
           "reads": [
             "meeting row turns"
           ],
@@ -4739,13 +4739,13 @@
         "authored_teammate_ballot_targets": {
           "by_construction": null,
           "definition": "Impostor ballots whose authored target, read from the typed guard fields, is a fellow impostor, over all impostor ballots.",
-          "denominator": 200,
+          "denominator": 198,
           "guard": null,
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 16,
-          "rate": 0.08,
+          "numerator": 10,
+          "rate": 0.050505,
           "reads": [
             "meeting row ballots"
           ],
@@ -4755,13 +4755,13 @@
         "ballots_carrying_route_lines": {
           "by_construction": null,
           "definition": "Ballots, whatever the voter's role, whose voter's own recorded ballot prompt carried the route lines block, over ballots with a recorded ballot call.",
-          "denominator": 0,
+          "denominator": 702,
           "guard": null,
           "heading": "Stated places the map or the regroup reconciles",
-          "in_scope": false,
+          "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 0,
-          "rate": null,
+          "numerator": 671,
+          "rate": 0.95584,
           "reads": [
             "recorded ballot prompt",
             "meeting row turns",
@@ -4774,13 +4774,13 @@
         "ballots_citing_a_rebuttal": {
           "by_construction": null,
           "definition": "Ballots whose cited turn is a repeat-speaker turn of the same meeting, over all ballots at meetings with a repeat-speaker turn.",
-          "denominator": 691,
+          "denominator": 702,
           "guard": null,
           "heading": "Rebuttals",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 57,
-          "rate": 0.082489,
+          "numerator": 67,
+          "rate": 0.095442,
           "reads": [
             "meeting row turns",
             "meeting row ballots"
@@ -4791,13 +4791,13 @@
         "ballots_countering_with_a_rebuttal": {
           "by_construction": null,
           "definition": "Ballots whose counter slot, the strongest thing the voter held pointing away from its choice, names a repeat-speaker turn of the same meeting, over all ballots at meetings with a repeat-speaker turn.",
-          "denominator": 691,
+          "denominator": 702,
           "guard": null,
           "heading": "Rebuttals",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 175,
-          "rate": 0.253256,
+          "numerator": 158,
+          "rate": 0.225071,
           "reads": [
             "meeting row turns",
             "meeting row ballots"
@@ -4808,12 +4808,12 @@
         "button_meetings_with_vent_proof": {
           "by_construction": null,
           "definition": "Button meetings with vent proof, over all button meetings.",
-          "denominator": 3,
+          "denominator": 4,
           "guard": null,
           "heading": "Vent proof at meetings",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 3,
+          "numerator": 4,
           "rate": 1.0,
           "reads": [
             "MeetingTriggered",
@@ -4825,13 +4825,13 @@
         "charges_on_a_reconcilable_pair": {
           "by_construction": null,
           "definition": "Charges at the table, whatever the role of the voter or of the player charged, one of whose stated places is an end of a stated pair that reconciles, over every charge at the table. A charge is an EJECT ballot whose cited turn states a place of its target, or a flag whose two events each state a place of a player it names. A reconcilable pair proves no innocence.",
-          "denominator": 402,
+          "denominator": 376,
           "guard": null,
           "heading": "Stated places the map or the regroup reconciles",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 276,
-          "rate": 0.686567,
+          "numerator": 226,
+          "rate": 0.601064,
           "reads": [
             "meeting row turns",
             "meeting row ballots",
@@ -4845,13 +4845,13 @@
         "cited_lines_false_to_the_route": {
           "by_construction": null,
           "definition": "EJECT ballots labelled supported, whatever the voter's role, with at least one placement of the target in the cited turn the engine route makes false, over supported EJECTs whose cited turn places the target checkably. A voter who believed a false line still held it.",
-          "denominator": 281,
+          "denominator": 248,
           "guard": null,
           "heading": "What a ballot held",
           "in_scope": true,
           "not_evaluable": 0,
           "numerator": 3,
-          "rate": 0.010676,
+          "rate": 0.012097,
           "reads": [
             "meeting row ballots",
             "meeting row turns",
@@ -4864,13 +4864,13 @@
         "cited_lines_true_to_the_route": {
           "by_construction": null,
           "definition": "EJECT ballots labelled supported, whatever the voter's role, whose every checkable placement of the target in the cited turn the engine route makes true, over supported EJECTs whose cited turn places the target checkably. A true cited line is not a correct vote.",
-          "denominator": 281,
+          "denominator": 248,
           "guard": null,
           "heading": "What a ballot held",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 278,
-          "rate": 0.989324,
+          "numerator": 245,
+          "rate": 0.987903,
           "reads": [
             "meeting row ballots",
             "meeting row turns",
@@ -4900,7 +4900,7 @@
         "ejections_carried_only_by_impostor_ballots": {
           "by_construction": null,
           "definition": "Ejections where every ballot for the ejected player at or above the tally's recorded confidence floor was cast by an impostor, over all ejections.",
-          "denominator": 66,
+          "denominator": 61,
           "guard": null,
           "heading": "Ballots",
           "in_scope": true,
@@ -4916,13 +4916,13 @@
         "ejections_charged_on_a_reconcilable_pair": {
           "by_construction": null,
           "definition": "Ejections, whatever the ejected player's role, where some charge against the ejected player rested on a stated pair that reconciles, over all ejections. A reconcilable pair proves no innocence.",
-          "denominator": 66,
+          "denominator": 61,
           "guard": null,
           "heading": "Stated places the map or the regroup reconciles",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 40,
-          "rate": 0.606061,
+          "numerator": 29,
+          "rate": 0.47541,
           "reads": [
             "meeting row turns",
             "meeting row ballots",
@@ -4936,13 +4936,13 @@
         "ejections_charged_on_a_reconcilable_pair_shown_a_route_line": {
           "by_construction": null,
           "definition": "Ejections charged on a stated pair that reconciles at which some voter who voted to eject that player was served a route line about them, over ejections charged on such a pair. Every served step reconciles. Showing a line is not changing a vote.",
-          "denominator": 0,
+          "denominator": 29,
           "guard": null,
           "heading": "Stated places the map or the regroup reconciles",
-          "in_scope": false,
+          "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 0,
-          "rate": null,
+          "numerator": 26,
+          "rate": 0.896552,
           "reads": [
             "meeting row turns",
             "meeting row ballots",
@@ -4957,13 +4957,13 @@
         "ejections_on_a_reconcilable_pair": {
           "by_construction": null,
           "definition": "Ejections, whatever the ejected player's role, where the meeting stated a pair of the ejected player's places that reconciles, over all ejections. A reconcilable pair proves no innocence: the two places could both be true, and either could be false.",
-          "denominator": 66,
+          "denominator": 61,
           "guard": null,
           "heading": "Stated places the map or the regroup reconciles",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 41,
-          "rate": 0.621212,
+          "numerator": 29,
+          "rate": 0.47541,
           "reads": [
             "meeting row turns",
             "meeting row ballots",
@@ -4977,13 +4977,13 @@
         "ejections_undone_with_impostor_ballots_as_skip": {
           "by_construction": null,
           "definition": "Ejections whose re-tally, with every impostor ballot read as SKIP and every other ballot held fixed, ejects no one or a different player, over all ejections.",
-          "denominator": 66,
+          "denominator": 61,
           "guard": null,
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 14,
-          "rate": 0.212121,
+          "numerator": 8,
+          "rate": 0.131148,
           "reads": [
             "meeting row ballots"
           ],
@@ -4993,13 +4993,13 @@
         "ejections_undone_with_impostor_ballots_removed": {
           "by_construction": null,
           "definition": "Ejections whose re-tally, with every impostor ballot removed and every other ballot held fixed, ejects no one or a different player, over all ejections.",
-          "denominator": 66,
+          "denominator": 61,
           "guard": null,
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 5,
-          "rate": 0.075758,
+          "numerator": 3,
+          "rate": 0.04918,
           "reads": [
             "meeting row ballots"
           ],
@@ -5009,13 +5009,13 @@
         "ejections_without_vent_proof_of_impostors": {
           "by_construction": null,
           "definition": "Impostor ejections, over all ejections at meetings without vent proof.",
-          "denominator": 42,
+          "denominator": 37,
           "guard": null,
           "heading": "Vent proof at meetings",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 20,
-          "rate": 0.47619,
+          "numerator": 22,
+          "rate": 0.594595,
           "reads": [
             "meeting row flags"
           ],
@@ -5025,13 +5025,13 @@
         "first_reply_accuses_opener": {
           "by_construction": null,
           "definition": "Meetings whose second turn carries a structured accusation of the opener, over all meetings.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": null,
           "heading": "Meeting structure",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 80,
-          "rate": 0.683761,
+          "numerator": 82,
+          "rate": 0.689076,
           "reads": [
             "meeting row turns"
           ],
@@ -5041,13 +5041,13 @@
         "forced_surfacings": {
           "by_construction": null,
           "definition": "Vent exits made exactly at the in-vent cap, over all vent exits.",
-          "denominator": 72,
+          "denominator": 70,
           "guard": null,
           "heading": "Vent trips and surfacings",
           "in_scope": true,
           "not_evaluable": 0,
           "numerator": 5,
-          "rate": 0.069444,
+          "rate": 0.071429,
           "reads": [
             "VentEntered",
             "VentExited",
@@ -5064,8 +5064,8 @@
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 6,
-          "rate": 0.428571,
+          "numerator": 7,
+          "rate": 0.5,
           "reads": [
             "Killed",
             "meeting row"
@@ -5098,8 +5098,8 @@
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 5,
-          "rate": 0.357143,
+          "numerator": 6,
+          "rate": 0.428571,
           "reads": [
             "Killed",
             "meeting row"
@@ -5115,8 +5115,8 @@
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 13,
-          "rate": 0.928571,
+          "numerator": 14,
+          "rate": 1.0,
           "reads": [
             "Killed",
             "meeting row ballots"
@@ -5127,12 +5127,12 @@
         "holds_nothing_skips_naming_a_candidate": {
           "by_construction": null,
           "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names a living candidate in at least one of those places, over all SKIP ballots labelled as holding nothing: the complement of the cell above. A line held is not a reason to vote.",
-          "denominator": 214,
+          "denominator": 235,
           "guard": null,
           "heading": "What a ballot held",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 214,
+          "numerator": 235,
           "rate": 1.0,
           "reads": [
             "meeting row ballots",
@@ -5145,7 +5145,7 @@
         "holds_nothing_skips_naming_no_candidate": {
           "by_construction": null,
           "definition": "SKIP ballots labelled as holding nothing, whatever the voter's role, whose voter's own recorded ballot prompt names no living candidate in an observation row, an evidence row, a flag, a typed or spoken turn line or a route line, over all SKIP ballots labelled as holding nothing. The label reads as nothing that resolves the vote, not as nothing held, and a line held is not a reason to vote.",
-          "denominator": 214,
+          "denominator": 235,
           "guard": null,
           "heading": "What a ballot held",
           "in_scope": true,
@@ -5163,13 +5163,13 @@
         "impostor_cooldown_zero_at_open": {
           "by_construction": null,
           "definition": "Living impostors whose kill cooldown was zero when a meeting opened, over living impostors at every meeting.",
-          "denominator": 200,
+          "denominator": 198,
           "guard": null,
           "heading": "Corpses and the state play resumes in",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 54,
-          "rate": 0.27,
+          "numerator": 53,
+          "rate": 0.267677,
           "reads": [
             "state at the meeting"
           ],
@@ -5179,13 +5179,13 @@
         "impostor_eject_ballots": {
           "by_construction": null,
           "definition": "Impostor ballots whose recorded target is a player, over all impostor ballots.",
-          "denominator": 200,
+          "denominator": 198,
           "guard": null,
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 111,
-          "rate": 0.555,
+          "numerator": 101,
+          "rate": 0.510101,
           "reads": [
             "meeting row ballots"
           ],
@@ -5195,13 +5195,13 @@
         "impostor_ejections_without_vent_proof": {
           "by_construction": null,
           "definition": "Impostor ejections at meetings without vent proof, over all impostor ejections.",
-          "denominator": 44,
+          "denominator": 46,
           "guard": null,
           "heading": "Vent proof at meetings",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 20,
-          "rate": 0.454545,
+          "numerator": 22,
+          "rate": 0.478261,
           "reads": [
             "meeting row flags"
           ],
@@ -5211,13 +5211,13 @@
         "impostor_ejects_labelled_supported": {
           "by_construction": null,
           "definition": "Impostor ballots naming a player whose meeting-layer grounding label is supported, over impostor ballots naming a player.",
-          "denominator": 111,
+          "denominator": 101,
           "guard": null,
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 111,
-          "rate": 1.0,
+          "numerator": 100,
+          "rate": 0.990099,
           "reads": [
             "meeting row ballots"
           ],
@@ -5227,7 +5227,7 @@
         "impostor_openers": {
           "by_construction": "self_report = off and contextual_self_report_version = unset",
           "definition": "Meetings whose opener is an impostor, over all meetings.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": "self_report = off and contextual_self_report_version = unset",
           "heading": "Meeting structure",
           "in_scope": true,
@@ -5243,13 +5243,13 @@
         "impostor_seats_ejected": {
           "by_construction": null,
           "definition": "Seats of living impostors other than the reporter that a report meeting ejected, over those seats at every report meeting.",
-          "denominator": 195,
+          "denominator": 191,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 41,
-          "rate": 0.210256,
+          "numerator": 42,
+          "rate": 0.219895,
           "reads": [
             "MeetingTriggered",
             "state at the meeting",
@@ -5262,13 +5262,13 @@
         "impostor_seats_ejected_with_vent_proof": {
           "by_construction": null,
           "definition": "Seats of living impostors other than the reporter that a report meeting with vent proof ejected, over those seats at report meetings with vent proof.",
-          "denominator": 37,
+          "denominator": 34,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 21,
-          "rate": 0.567568,
+          "numerator": 20,
+          "rate": 0.588235,
           "reads": [
             "MeetingTriggered",
             "state at the meeting",
@@ -5281,13 +5281,13 @@
         "impostor_seats_ejected_without_vent_proof": {
           "by_construction": null,
           "definition": "Seats of living impostors other than the reporter that a report meeting without vent proof ejected, over those seats at report meetings without vent proof.",
-          "denominator": 158,
+          "denominator": 157,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 20,
-          "rate": 0.126582,
+          "numerator": 22,
+          "rate": 0.140127,
           "reads": [
             "MeetingTriggered",
             "state at the meeting",
@@ -5300,13 +5300,13 @@
         "impostor_skip_ballots": {
           "by_construction": null,
           "definition": "Impostor ballots whose recorded target is SKIP, over all impostor ballots.",
-          "denominator": 200,
+          "denominator": 198,
           "guard": null,
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 89,
-          "rate": 0.445,
+          "numerator": 97,
+          "rate": 0.489899,
           "reads": [
             "meeting row ballots"
           ],
@@ -5321,8 +5321,8 @@
           "heading": "Reported beside the counts",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 24,
-          "rate": 0.48,
+          "numerator": 17,
+          "rate": 0.34,
           "reads": [
             "game over row"
           ],
@@ -5337,8 +5337,8 @@
           "heading": "Witnesses",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 8,
-          "rate": 0.333333,
+          "numerator": 10,
+          "rate": 0.416667,
           "reads": [
             "VentEntered",
             "VentExited",
@@ -5386,13 +5386,13 @@
         "in_place_surfacings_near_crew": {
           "by_construction": null,
           "definition": "Vent exits back into the room the impostor entered from, where a living crewmate stands in that room on some tick after the surfacing and before the impostor leaves it, over all such in-place exits.",
-          "denominator": 44,
+          "denominator": 42,
           "guard": null,
           "heading": "Vent trips and surfacings",
           "in_scope": true,
           "not_evaluable": 0,
           "numerator": 2,
-          "rate": 0.045455,
+          "rate": 0.047619,
           "reads": [
             "VentExited",
             "state before the tick"
@@ -5403,7 +5403,7 @@
         "kill_cooldowns_differing_from_recorded": {
           "by_construction": "always",
           "definition": "Impostor kill cooldowns that differ from the recorded kill cooldown, else the map's, read on the state each engine write leaves: every impostor at round start, the killer after each of its kills and every living impostor after each regroup; over all such writes.",
-          "denominator": 447,
+          "denominator": 442,
           "guard": "always",
           "heading": "The kill cooldown",
           "in_scope": true,
@@ -5421,7 +5421,7 @@
         "kill_witness_button_calls_soon_after_regroup": {
           "by_construction": null,
           "definition": "Button meetings called at most 6 ticks after a regroup by a player who witnessed a kill since it, over button meetings whose previous meeting regrouped.",
-          "denominator": 3,
+          "denominator": 4,
           "guard": null,
           "heading": "After a regroup",
           "in_scope": true,
@@ -5439,7 +5439,7 @@
         "kills_in_grace_window_after_regroup": {
           "by_construction": "meeting_reset = hub_with_grace",
           "definition": "Kills made on a tick after a regroup meeting no later than the recorded kill cooldown, else the map's, over all kills made between a regroup and the next meeting.",
-          "denominator": 109,
+          "denominator": 106,
           "guard": "meeting_reset = hub_with_grace",
           "heading": "After a regroup",
           "in_scope": true,
@@ -5456,13 +5456,13 @@
         "kills_seen_by_crew": {
           "by_construction": null,
           "definition": "Kills with at least one crewmate among the engine's recorded witnesses, over all kills.",
-          "denominator": 195,
+          "denominator": 192,
           "guard": null,
           "heading": "Witnesses",
           "in_scope": true,
           "not_evaluable": 0,
           "numerator": 14,
-          "rate": 0.071795,
+          "rate": 0.072917,
           "reads": [
             "Killed"
           ],
@@ -5472,7 +5472,7 @@
         "kills_soon_after_surfacing": {
           "by_construction": null,
           "definition": "Kills made at most 2 ticks after the killer's own vent exit, over all kills.",
-          "denominator": 195,
+          "denominator": 192,
           "guard": null,
           "heading": "Vent trips and surfacings",
           "in_scope": true,
@@ -5489,13 +5489,13 @@
         "meetings_opening_with_another_unreported_corpse": {
           "by_construction": null,
           "definition": "Meetings that opened with a corpse other than the reported one that no one had discovered, over all meetings.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": null,
           "heading": "Corpses and the state play resumes in",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 48,
-          "rate": 0.410256,
+          "numerator": 46,
+          "rate": 0.386555,
           "reads": [
             "state at the meeting"
           ],
@@ -5505,13 +5505,13 @@
         "meetings_opening_with_impostor_in_vent": {
           "by_construction": null,
           "definition": "Meetings that opened with an impostor inside a vent, over all meetings.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": null,
           "heading": "Corpses and the state play resumes in",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 66,
-          "rate": 0.564103,
+          "numerator": 67,
+          "rate": 0.563025,
           "reads": [
             "state at the meeting"
           ],
@@ -5521,13 +5521,13 @@
         "meetings_with_a_route_line": {
           "by_construction": null,
           "definition": "Meetings where some voter's own recorded ballot prompt carried a route line, over meetings.",
-          "denominator": 0,
+          "denominator": 119,
           "guard": null,
           "heading": "Stated places the map or the regroup reconciles",
-          "in_scope": false,
+          "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 0,
-          "rate": null,
+          "numerator": 117,
+          "rate": 0.983193,
           "reads": [
             "recorded ballot prompt",
             "meeting row turns",
@@ -5540,12 +5540,12 @@
         "meetings_with_repeat_speaker": {
           "by_construction": null,
           "definition": "Meetings with at least one turn by a player who had already spoken, over all meetings.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": "bounded_rebuttal_version = unset",
           "heading": "Meeting structure",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 117,
+          "numerator": 119,
           "rate": 1.0,
           "reads": [
             "meeting row turns"
@@ -5556,7 +5556,7 @@
         "meetings_with_second_repeat_speaker": {
           "by_construction": "always",
           "definition": "Meetings with two or more turns by players who had already spoken, over all meetings.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": "always",
           "heading": "Meeting structure",
           "in_scope": true,
@@ -5572,13 +5572,13 @@
         "meetings_with_vent_proof": {
           "by_construction": null,
           "definition": "Meetings with a vent-sighting flag naming a player alive when the meeting opened, over all meetings.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": null,
           "heading": "Vent proof at meetings",
           "in_scope": true,
           "not_evaluable": 0,
           "numerator": 24,
-          "rate": 0.205128,
+          "rate": 0.201681,
           "reads": [
             "meeting row flags"
           ],
@@ -5588,13 +5588,13 @@
         "meetings_without_vent_proof_ejecting": {
           "by_construction": null,
           "definition": "Meetings without vent proof that ejected someone, over all meetings without vent proof.",
-          "denominator": 93,
+          "denominator": 95,
           "guard": null,
           "heading": "Vent proof at meetings",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 42,
-          "rate": 0.451613,
+          "numerator": 37,
+          "rate": 0.389474,
           "reads": [
             "meeting row flags"
           ],
@@ -5604,13 +5604,13 @@
         "opener_accused_after_opening": {
           "by_construction": null,
           "definition": "Meetings where a speaker other than the opener accused the opener, over all meetings.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": null,
           "heading": "Meeting structure",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 105,
-          "rate": 0.897436,
+          "numerator": 109,
+          "rate": 0.915966,
           "reads": [
             "meeting row turns"
           ],
@@ -5620,13 +5620,13 @@
         "opener_rebuttals_answering_charged_tick": {
           "by_construction": null,
           "definition": "Repeat-speaker turns by the opener carrying an alibi leg, a whereabouts claim or a sighting at a tick the answered turn observed the opener, over such turns whose answered turn observed the opener at some tick; the rest are not evaluable.",
-          "denominator": 18,
+          "denominator": 20,
           "guard": null,
           "heading": "Rebuttals",
           "in_scope": true,
-          "not_evaluable": 69,
-          "numerator": 17,
-          "rate": 0.944444,
+          "not_evaluable": 70,
+          "numerator": 20,
+          "rate": 1.0,
           "reads": [
             "meeting row turns"
           ],
@@ -5636,13 +5636,13 @@
         "opener_speaks_again": {
           "by_construction": null,
           "definition": "Meetings where the opener took more than one turn, over all meetings.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": null,
           "heading": "Meeting structure",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 87,
-          "rate": 0.74359,
+          "numerator": 90,
+          "rate": 0.756303,
           "reads": [
             "meeting row turns"
           ],
@@ -5652,13 +5652,13 @@
         "openers_among_innocent_ejections": {
           "by_construction": null,
           "definition": "Crewmate ejections that removed the meeting's opener, over all crewmate ejections.",
-          "denominator": 22,
+          "denominator": 15,
           "guard": null,
           "heading": "Meeting structure",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 17,
-          "rate": 0.772727,
+          "numerator": 10,
+          "rate": 0.666667,
           "reads": [
             "MeetingTriggered",
             "meeting row"
@@ -5669,13 +5669,13 @@
         "other_crewmate_seats_ejected": {
           "by_construction": null,
           "definition": "Seats of living crewmates other than the reporter that a report meeting ejected, over those seats at every report meeting.",
-          "denominator": 367,
+          "denominator": 375,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
           "not_evaluable": 0,
           "numerator": 5,
-          "rate": 0.013624,
+          "rate": 0.013333,
           "reads": [
             "MeetingTriggered",
             "state at the meeting",
@@ -5688,7 +5688,7 @@
         "other_crewmate_seats_ejected_with_vent_proof": {
           "by_construction": null,
           "definition": "Seats of living crewmates other than the reporter that a report meeting with vent proof ejected, over those seats at report meetings with vent proof.",
-          "denominator": 76,
+          "denominator": 73,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
@@ -5707,13 +5707,13 @@
         "other_crewmate_seats_ejected_without_vent_proof": {
           "by_construction": null,
           "definition": "Seats of living crewmates other than the reporter that a report meeting without vent proof ejected, over those seats at report meetings without vent proof.",
-          "denominator": 291,
+          "denominator": 302,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
           "not_evaluable": 0,
           "numerator": 5,
-          "rate": 0.017182,
+          "rate": 0.016556,
           "reads": [
             "MeetingTriggered",
             "state at the meeting",
@@ -5726,7 +5726,7 @@
         "own_kill_rows_breaching": {
           "by_construction": "ballot_kill_row_version = 1",
           "definition": "Served own-kill rows that name the holder's fellow impostor as the killer, whatever they cite, or that do not cite, by the holder's own observation id, a kill the named player made with the holder among its witnesses, over all served own-kill rows. A row citing nothing counts here, because the row is specified to cite its kill.",
-          "denominator": 23,
+          "denominator": 22,
           "guard": "ballot_kill_row_version = 1",
           "heading": "Ballots",
           "in_scope": true,
@@ -5743,13 +5743,13 @@
         "own_kill_rows_cited_by_holder": {
           "by_construction": null,
           "definition": "Served own-kill rows whose holder's ballot cites the row's observation, over all served own-kill rows.",
-          "denominator": 23,
+          "denominator": 22,
           "guard": null,
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 21,
-          "rate": 0.913043,
+          "numerator": 20,
+          "rate": 0.909091,
           "reads": [
             "recorded ballot prompt",
             "meeting row ballots"
@@ -5760,7 +5760,7 @@
         "play_resumes_with_corpse": {
           "by_construction": "meeting_reset = hub_with_grace",
           "definition": "Meetings after which play resumed with a corpse on the floor, over meetings after which play resumed.",
-          "denominator": 102,
+          "denominator": 104,
           "guard": "meeting_reset = hub_with_grace",
           "heading": "Corpses and the state play resumes in",
           "in_scope": true,
@@ -5776,7 +5776,7 @@
         "play_resumes_with_impostor_in_vent": {
           "by_construction": "meeting_reset = hub_with_grace",
           "definition": "Meetings after which play resumed with an impostor inside a vent, over meetings after which play resumed.",
-          "denominator": 102,
+          "denominator": 104,
           "guard": "meeting_reset = hub_with_grace",
           "heading": "Corpses and the state play resumes in",
           "in_scope": true,
@@ -5792,7 +5792,7 @@
         "post_meeting_kills_soon_after": {
           "by_construction": null,
           "definition": "Kills made at most 2 ticks after the previous meeting's tick, over all kills made after some meeting.",
-          "denominator": 109,
+          "denominator": 106,
           "guard": null,
           "heading": "Corpses and the state play resumes in",
           "in_scope": true,
@@ -5809,7 +5809,7 @@
         "prompts_missing_a_regroup_notice": {
           "by_construction": "meeting_reset = hub_with_grace",
           "definition": "Recorded meeting prompts of a player at a meeting after a regroup that lack the notice of some earlier regroup of the same game, in the wording the memory renders from that regroup's tick and room, over all such prompts.",
-          "denominator": 722,
+          "denominator": 745,
           "guard": "meeting_reset = hub_with_grace",
           "heading": "After a regroup",
           "in_scope": true,
@@ -5826,12 +5826,12 @@
         "rebuttal_accusations_against_earlier_speakers": {
           "by_construction": null,
           "definition": "Accusations in repeat-speaker turns naming a player who spoke earlier in the meeting, over all accusations in repeat-speaker turns.",
-          "denominator": 116,
+          "denominator": 119,
           "guard": null,
           "heading": "Rebuttals",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 116,
+          "numerator": 119,
           "rate": 1.0,
           "reads": [
             "meeting row turns"
@@ -5842,7 +5842,7 @@
         "rebuttals_differing_from_selector": {
           "by_construction": "bounded_rebuttal_version = 1",
           "definition": "Meetings whose first repeat-speaker turn has a speaker or answered turn different from the bounded-rebuttal selector's pick on the turns before it, over meetings with a repeat-speaker turn.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": "bounded_rebuttal_version = 1",
           "heading": "Rebuttals",
           "in_scope": true,
@@ -5858,13 +5858,13 @@
         "rebuttals_redirect_only": {
           "by_construction": null,
           "definition": "Repeat-speaker turns carrying an accusation and no alibi, whereabouts or sighting, over all repeat-speaker turns.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": null,
           "heading": "Rebuttals",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 27,
-          "rate": 0.230769,
+          "numerator": 25,
+          "rate": 0.210084,
           "reads": [
             "meeting row turns"
           ],
@@ -5874,13 +5874,13 @@
         "rebuttals_with_alibi": {
           "by_construction": null,
           "definition": "Repeat-speaker turns carrying an alibi about the speaker, over all repeat-speaker turns.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": null,
           "heading": "Rebuttals",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 89,
-          "rate": 0.760684,
+          "numerator": 94,
+          "rate": 0.789916,
           "reads": [
             "meeting row turns"
           ],
@@ -5890,13 +5890,13 @@
         "rebuttals_with_sighting": {
           "by_construction": null,
           "definition": "Repeat-speaker turns carrying a sighting (an observation naming a player seen in a room, venting, killing or moving, the speaker included), over all repeat-speaker turns.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": null,
           "heading": "Rebuttals",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 79,
-          "rate": 0.675214,
+          "numerator": 84,
+          "rate": 0.705882,
           "reads": [
             "meeting row turns"
           ],
@@ -5906,13 +5906,13 @@
         "rebuttals_with_whereabouts": {
           "by_construction": null,
           "definition": "Repeat-speaker turns carrying a whereabouts observation, over all repeat-speaker turns.",
-          "denominator": 117,
+          "denominator": 119,
           "guard": null,
           "heading": "Rebuttals",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 89,
-          "rate": 0.760684,
+          "numerator": 94,
+          "rate": 0.789916,
           "reads": [
             "meeting row turns"
           ],
@@ -5922,7 +5922,7 @@
         "recorded_teammate_ballot_targets": {
           "by_construction": "always",
           "definition": "Impostor ballots whose recorded target is a fellow impostor, over all impostor ballots.",
-          "denominator": 200,
+          "denominator": 198,
           "guard": "always",
           "heading": "Ballots",
           "in_scope": true,
@@ -5938,7 +5938,7 @@
         "report_corpses_older_than_last_close": {
           "by_construction": "meeting_reset = hub_with_grace",
           "definition": "Report meetings whose reported victim was killed on or before the previous meeting's tick, over report meetings whose previous meeting regrouped.",
-          "denominator": 64,
+          "denominator": 65,
           "guard": "meeting_reset = hub_with_grace",
           "heading": "After a regroup",
           "in_scope": true,
@@ -5956,7 +5956,7 @@
         "report_openings_with_kill_tick_handle": {
           "by_construction": "report_body_handle_version = 1",
           "definition": "Report meetings whose opener's first recorded prompt carries a body handle embedding the death tick, over report meetings with a recorded opener prompt.",
-          "denominator": 114,
+          "denominator": 115,
           "guard": "report_body_handle_version = 1",
           "heading": "Meeting structure",
           "in_scope": true,
@@ -5973,13 +5973,13 @@
         "reporter_seats_ejected": {
           "by_construction": null,
           "definition": "Report meetings that ejected their reporter, over the reporter's seats: one per report meeting, whatever the reporter's role.",
-          "denominator": 114,
+          "denominator": 115,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 17,
-          "rate": 0.149123,
+          "numerator": 10,
+          "rate": 0.086957,
           "reads": [
             "MeetingTriggered",
             "state at the meeting",
@@ -5992,7 +5992,7 @@
         "reporter_seats_ejected_with_vent_proof": {
           "by_construction": null,
           "definition": "Report meetings with vent proof that ejected their reporter, over the reporter's seats at report meetings with vent proof.",
-          "denominator": 21,
+          "denominator": 20,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
@@ -6011,13 +6011,13 @@
         "reporter_seats_ejected_without_vent_proof": {
           "by_construction": null,
           "definition": "Report meetings without vent proof that ejected their reporter, over the reporter's seats at report meetings without vent proof.",
-          "denominator": 93,
+          "denominator": 95,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 17,
-          "rate": 0.182796,
+          "numerator": 10,
+          "rate": 0.105263,
           "reads": [
             "MeetingTriggered",
             "state at the meeting",
@@ -6030,13 +6030,13 @@
         "reporters_among_crewmate_seats": {
           "by_construction": null,
           "definition": "Crewmate seats at report meetings that were the reporter's, over all crewmate seats at report meetings.",
-          "denominator": 481,
+          "denominator": 490,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 114,
-          "rate": 0.237006,
+          "numerator": 115,
+          "rate": 0.234694,
           "reads": [
             "MeetingTriggered",
             "state at the meeting",
@@ -6049,13 +6049,13 @@
         "reporters_among_ejected_crewmates": {
           "by_construction": null,
           "definition": "Crewmates a report meeting ejected who were its reporter, over all crewmates report meetings ejected.",
-          "denominator": 22,
+          "denominator": 15,
           "guard": null,
           "heading": "Ejections at report meetings, by seat",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 17,
-          "rate": 0.772727,
+          "numerator": 10,
+          "rate": 0.666667,
           "reads": [
             "MeetingTriggered",
             "state at the meeting",
@@ -6068,13 +6068,13 @@
         "role_correct_ejections": {
           "by_construction": null,
           "definition": "Impostor ejections, over all ejections. Reported, never a gate.",
-          "denominator": 66,
+          "denominator": 61,
           "guard": null,
           "heading": "Reported beside the counts",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 44,
-          "rate": 0.666667,
+          "numerator": 46,
+          "rate": 0.754098,
           "reads": [
             "meeting row"
           ],
@@ -6082,15 +6082,15 @@
           "title": "Ejections that removed an impostor"
         },
         "route_lines_false_to_the_map": {
-          "by_construction": null,
+          "by_construction": "route_lines_version = 1",
           "definition": "Steps of the route lines served on every ballot whose door count, reading or regroup tick disagrees with this census's own reading, over every step served. The census counts the fewest doors between the step's two rooms by its own search over the station's doors; walking fits when the doors are at most the ticks between, otherwise the step names the first public regroup tick after its earlier tick, up to its later one, and a change of room that neither allows is never served.",
-          "denominator": 0,
+          "denominator": 7956,
           "guard": "route_lines_version = 1",
           "heading": "Stated places the map or the regroup reconciles",
-          "in_scope": false,
+          "in_scope": true,
           "not_evaluable": 0,
           "numerator": 0,
-          "rate": null,
+          "rate": 0.0,
           "reads": [
             "recorded ballot prompt",
             "meeting row turns",
@@ -6101,15 +6101,15 @@
           "title": "Route steps false to the map"
         },
         "route_lines_off_the_table": {
-          "by_construction": null,
+          "by_construction": "route_lines_version = 1",
           "definition": "Route lines served on a ballot about a player who is not a living candidate of its voter, with a place the meeting never stated for that player, or a second line for one player on one ballot, over every line served.",
-          "denominator": 0,
+          "denominator": 2416,
           "guard": "route_lines_version = 1",
           "heading": "Stated places the map or the regroup reconciles",
-          "in_scope": false,
+          "in_scope": true,
           "not_evaluable": 0,
           "numerator": 0,
-          "rate": null,
+          "rate": 0.0,
           "reads": [
             "recorded ballot prompt",
             "meeting row turns",
@@ -6122,13 +6122,13 @@
         "sabotage_active_at_regroup": {
           "by_construction": null,
           "definition": "Regroup meetings that opened with a sabotage active, over all regroup meetings.",
-          "denominator": 102,
+          "denominator": 104,
           "guard": null,
           "heading": "After a regroup",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 5,
-          "rate": 0.04902,
+          "numerator": 6,
+          "rate": 0.057692,
           "reads": [
             "state at the meeting"
           ],
@@ -6138,13 +6138,13 @@
         "skipped_report_meetings": {
           "by_construction": null,
           "definition": "Report meetings that ejected no one, over all report meetings.",
-          "denominator": 114,
+          "denominator": 115,
           "guard": null,
           "heading": "Meeting structure",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 51,
-          "rate": 0.447368,
+          "numerator": 58,
+          "rate": 0.504348,
           "reads": [
             "MeetingTriggered",
             "meeting row"
@@ -6155,13 +6155,13 @@
         "skips_holding_nothing": {
           "by_construction": null,
           "definition": "SKIP ballots, whatever the voter's role, whose recorded grounding label says the voter stated outright that it held nothing that resolves the vote, over all SKIP ballots. The label restates the voter's own statement, and the holds-nothing check reads it against the lines the voter's own ballot prompt held.",
-          "denominator": 281,
+          "denominator": 305,
           "guard": null,
           "heading": "Ballots",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 214,
-          "rate": 0.761566,
+          "numerator": 235,
+          "rate": 0.770492,
           "reads": [
             "meeting row ballots"
           ],
@@ -6171,7 +6171,7 @@
         "stale_report_meetings": {
           "by_construction": "meeting_reset = hub_with_grace",
           "definition": "Report meetings whose reported corpse already lay on the floor when the previous meeting opened, over all report meetings.",
-          "denominator": 114,
+          "denominator": 115,
           "guard": "meeting_reset = hub_with_grace",
           "heading": "Corpses and the state play resumes in",
           "in_scope": true,
@@ -6188,7 +6188,7 @@
         "surfacings_before_cap_in_view": {
           "by_construction": "vent_exit_policy = look_and_wait",
           "definition": "Vent exits made before the in-vent cap while a living non-teammate stood, just before the exit tick, in a room the impostor infers it can see from inside the vent, over all vent exits.",
-          "denominator": 72,
+          "denominator": 70,
           "guard": "vent_exit_policy = look_and_wait",
           "heading": "Vent trips and surfacings",
           "in_scope": true,
@@ -6206,13 +6206,13 @@
         "task_wins_with_sabotage_in_play": {
           "by_construction": null,
           "definition": "Games the crew won on tasks in which a sabotage was active before at least one play tick, over games the crew won on tasks. This counts co-occurrence and measures no delay.",
-          "denominator": 13,
+          "denominator": 19,
           "guard": null,
           "heading": "The shape of a game",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 11,
-          "rate": 0.846154,
+          "numerator": 17,
+          "rate": 0.894737,
           "reads": [
             "game over row",
             "state before the tick"
@@ -6241,7 +6241,7 @@
         "trips_longer_than_cap": {
           "by_construction": "vent_exit_policy = look_and_wait",
           "definition": "Vent trips whose ticks inside exceed the in-vent cap, over vent trips that stayed inside for more than one tick.",
-          "denominator": 66,
+          "denominator": 70,
           "guard": "vent_exit_policy = look_and_wait",
           "heading": "Vent trips and surfacings",
           "in_scope": true,
@@ -6259,7 +6259,7 @@
         "vent_band_crew_ejections": {
           "by_construction": null,
           "definition": "Crewmate ejections whose ejected player a vent-sighting flag names, over all crewmate ejections.",
-          "denominator": 22,
+          "denominator": 15,
           "guard": null,
           "heading": "Vent proof at meetings",
           "in_scope": true,
@@ -6275,13 +6275,13 @@
         "vent_band_impostor_ejections": {
           "by_construction": null,
           "definition": "Impostor ejections whose ejected player a vent-sighting flag names, over all impostor ejections.",
-          "denominator": 44,
+          "denominator": 46,
           "guard": null,
           "heading": "Vent proof at meetings",
           "in_scope": true,
           "not_evaluable": 0,
           "numerator": 24,
-          "rate": 0.545455,
+          "rate": 0.521739,
           "reads": [
             "meeting row flags"
           ],
@@ -6332,8 +6332,8 @@
           "heading": "Witnesses",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 16,
-          "rate": 0.114286,
+          "numerator": 17,
+          "rate": 0.121429,
           "reads": [
             "VentEntered"
           ],
@@ -6343,7 +6343,7 @@
         "vent_exits_into_occupied_room": {
           "by_construction": null,
           "definition": "Vent exits whose destination room held a living crewmate just before the exit tick, over all vent exits.",
-          "denominator": 72,
+          "denominator": 70,
           "guard": null,
           "heading": "Vent trips and surfacings",
           "in_scope": true,
@@ -6360,7 +6360,7 @@
         "vent_exits_into_visibly_occupied_room": {
           "by_construction": null,
           "definition": "Vent exits whose destination room was among the impostor's inferred-visible rooms and held a living crewmate just before the exit tick, over all vent exits.",
-          "denominator": 72,
+          "denominator": 70,
           "guard": null,
           "heading": "Vent trips and surfacings",
           "in_scope": true,
@@ -6377,13 +6377,13 @@
         "vent_exits_seen_by_crew": {
           "by_construction": null,
           "definition": "Vent exits with a crewmate among either recorded witness list, over all vent exits.",
-          "denominator": 72,
+          "denominator": 70,
           "guard": null,
           "heading": "Witnesses",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 8,
-          "rate": 0.111111,
+          "numerator": 7,
+          "rate": 0.1,
           "reads": [
             "VentExited"
           ],
@@ -6393,13 +6393,13 @@
         "vent_exits_seen_from_exit_room": {
           "by_construction": null,
           "definition": "Vent exits with a crewmate among the witnesses in the room the impostor surfaced into, over all vent exits.",
-          "denominator": 72,
+          "denominator": 70,
           "guard": null,
           "heading": "Witnesses",
           "in_scope": true,
           "not_evaluable": 0,
-          "numerator": 8,
-          "rate": 0.111111,
+          "numerator": 7,
+          "rate": 0.1,
           "reads": [
             "VentExited"
           ],
@@ -6409,7 +6409,7 @@
         "vent_exits_seen_only_from_room_left": {
           "by_construction": "vent_witness_rule = physical",
           "definition": "Vent exits with a crewmate among the witnesses in the room the impostor left and none in the room it surfaced into, over all vent exits.",
-          "denominator": 72,
+          "denominator": 70,
           "guard": "vent_witness_rule = physical",
           "heading": "Witnesses",
           "in_scope": true,
@@ -6425,7 +6425,7 @@
         "vent_exits_while_room_left_occupied": {
           "by_construction": null,
           "definition": "Vent exits whose source room held a living crewmate just before the exit tick, over all vent exits.",
-          "denominator": 72,
+          "denominator": 70,
           "guard": null,
           "heading": "Vent trips and surfacings",
           "in_scope": true,
@@ -6442,13 +6442,13 @@
         "witness_meeting_ejections_charged_on_a_reconcilable_pair": {
           "by_construction": null,
           "definition": "The second of the two counts above at witness meetings only: ejections at witness meetings where some charge against the ejected player rested on a stated pair that reconciles, over ejections at witness meetings.",
-          "denominator": 12,
+          "denominator": 13,
           "guard": null,
           "heading": "Stated places the map or the regroup reconciles",
           "in_scope": true,
           "not_evaluable": 0,
           "numerator": 7,
-          "rate": 0.583333,
+          "rate": 0.538462,
           "reads": [
             "meeting row turns",
             "meeting row ballots",
@@ -6463,13 +6463,13 @@
         "witness_meeting_ejections_on_a_reconcilable_pair": {
           "by_construction": null,
           "definition": "The first of the two counts above at witness meetings only: ejections at witness meetings where the meeting stated a pair of the ejected player's places that reconciles, over ejections at witness meetings.",
-          "denominator": 12,
+          "denominator": 13,
           "guard": null,
           "heading": "Stated places the map or the regroup reconciles",
           "in_scope": true,
           "not_evaluable": 0,
           "numerator": 7,
-          "rate": 0.583333,
+          "rate": 0.538462,
           "reads": [
             "meeting row turns",
             "meeting row ballots",
@@ -6487,7 +6487,7 @@
           "accusation_round.qwen3_6_27b.v6",
           "crewmate_report.qwen3_6_27b.v6",
           "impostor_report.qwen3_6_27b.v6",
-          "vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1+vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1"
+          "vote_ballot.qwen3_6_27b.v8.ballot_kill_row_v1+vote_ballot.qwen3_6_27b.v8.impostor_ballot_v1+vote_ballot.qwen3_6_27b.v8.route_lines_v1"
         ],
         "settings": {
           "ballot_kill_row_version": 1,
@@ -6496,6 +6496,7 @@
           "kill_cooldown_ticks": 6,
           "meeting_reset": "hub_with_grace",
           "report_body_handle_version": 1,
+          "route_lines_version": 1,
           "vent_entry_policy": "own_fresh_kill",
           "vent_exit_policy": "look_and_wait",
           "vent_witness_rule": "physical"
@@ -6532,19 +6533,20 @@
       },
       "games": 50,
       "label": "samples/9p2i",
-      "meetings": 117,
+      "meetings": 119,
       "sources": [
         "replays/samples/9p2i"
       ],
       "tables": {
         "actions_thrown_away_on_trigger_ticks": {
           "counts": {
-            "do_task": 129,
+            "do_task": 135,
             "kill": 3,
-            "move": 134,
-            "report": 25,
+            "move": 133,
+            "report": 27,
+            "sabotage": 1,
             "vent": 11,
-            "wait": 156
+            "wait": 165
           },
           "definition": "Submitted actions the engine never ran because an earlier action on the same tick opened a meeting, by action type, read from the recorded dispositions; tick rows recorded without dispositions are not evaluable.",
           "heading": "Meeting structure",
@@ -6558,21 +6560,21 @@
         },
         "cited_placements_by_kind_and_verdict": {
           "counts": {
-            "company: false": 0,
-            "company: false, but true one tick before its window": 0,
-            "company: true": 34,
+            "company: false": 2,
+            "company: false, but true one tick before its window": 2,
+            "company: true": 47,
             "company: unverifiable": 0,
-            "saw_move: false": 3,
-            "saw_move: false, but true one tick before its window": 2,
-            "saw_move: true": 163,
+            "saw_move: false": 0,
+            "saw_move: false, but true one tick before its window": 0,
+            "saw_move: true": 134,
             "saw_move: unverifiable": 0,
-            "saw_player: false": 0,
+            "saw_player: false": 1,
             "saw_player: false, but true one tick before its window": 0,
-            "saw_player: true": 178,
-            "saw_player: unverifiable": 0,
+            "saw_player: true": 164,
+            "saw_player: unverifiable": 1,
             "whereabouts: false": 0,
             "whereabouts: false, but true one tick before its window": 0,
-            "whereabouts: true": 60,
+            "whereabouts: true": 53,
             "whereabouts: unverifiable": 0
           },
           "definition": "Every placement of the target in the cited turn of a supported EJECT, by its kind and by whether the engine route makes it true or false at its kind's own clock, or cannot verify it. A whereabouts claim for a tick is read at that tick and the one before it; a sighting at the two ticks before the tick it names. The edge row counts a false placement the route makes true one tick before its window, so a clock off by one shows there rather than widening either window. Every row is listed.",
@@ -6590,8 +6592,8 @@
         },
         "copresence_share_per_game": {
           "counts": {
-            "up to a half": 29,
-            "up to a quarter": 21
+            "up to a half": 28,
+            "up to a quarter": 22
           },
           "definition": "Games by the share of their player-ticks, each a living player standing in a room before a play tick, on which exactly one other living player stood in the same room. A player inside a vent stands in no room.",
           "heading": "The shape of a game",
@@ -6606,13 +6608,13 @@
         "corpse_age_at_report": {
           "counts": {
             "1": 19,
-            "10": 2,
+            "10": 1,
             "11": 1,
-            "2": 13,
-            "3": 33,
-            "4": 30,
+            "2": 14,
+            "3": 36,
+            "4": 29,
             "5": 6,
-            "6": 6,
+            "6": 5,
             "7": 2,
             "8": 2
           },
@@ -6629,9 +6631,9 @@
         },
         "games_by_ending": {
           "counts": {
-            "CREWMATE_EJECT": 13,
-            "CREWMATE_TASKS": 13,
-            "IMPOSTOR_PARITY": 24,
+            "CREWMATE_EJECT": 14,
+            "CREWMATE_TASKS": 19,
+            "IMPOSTOR_PARITY": 17,
             "IMPOSTOR_SABOTAGE": 0,
             "MEETING_PHASE_REACHED": 0,
             "TICK_BUDGET_REACHED": 0
@@ -6648,10 +6650,10 @@
         },
         "held_kill_next_meeting_outcomes": {
           "counts": {
-            "one living crew witness: a witness ejected": 5,
-            "one living crew witness: another player ejected": 1,
-            "one living crew witness: no one ejected": 2,
-            "one living crew witness: the killer ejected": 1,
+            "one living crew witness: a witness ejected": 6,
+            "one living crew witness: another player ejected": 0,
+            "one living crew witness: no one ejected": 1,
+            "one living crew witness: the killer ejected": 2,
             "two or more living crew witnesses: a witness ejected": 0,
             "two or more living crew witnesses: another player ejected": 0,
             "two or more living crew witnesses: no one ejected": 0,
@@ -6670,12 +6672,12 @@
         },
         "holds_nothing_skips_by_source": {
           "counts": {
-            "a flag": 22,
-            "a route line": 0,
-            "a spoken turn line": 214,
-            "a typed turn line": 214,
-            "an evidence row": 214,
-            "an observation row": 214,
+            "a flag": 39,
+            "a route line": 230,
+            "a spoken turn line": 234,
+            "a typed turn line": 235,
+            "an evidence row": 235,
+            "an observation row": 235,
             "an observation row perceived since the previous meeting": 166
           },
           "definition": "SKIP ballots labelled as holding nothing, by each place in the voter's own recorded ballot prompt that names a living candidate: an observation row; an observation row whose id was perceived after the previous meeting (after the game began, at its first meeting); an evidence row; a flag; a typed turn line; a spoken turn line; a route line. One SKIP can name a candidate in several places, so the rows overlap and do not add up to the cell. Every place is listed.",
@@ -6692,7 +6694,7 @@
         },
         "innocent_opener_ejections_by_trigger": {
           "counts": {
-            "report": 17
+            "report": 10
           },
           "definition": "Crewmate ejections that removed the opener, by what opened the meeting.",
           "heading": "Meeting structure",
@@ -6707,8 +6709,8 @@
         },
         "kill_cooldown_writes_by_writer": {
           "counts": {
-            "after_kill": 195,
-            "regroup": 152,
+            "after_kill": 192,
+            "regroup": 150,
             "round_start": 100
           },
           "definition": "The writes the kill cooldown cell checks, by the engine step that made them: round_start (the seeding), after_kill (the killer's own cooldown) and regroup (every living impostor at a regroup).",
@@ -6726,10 +6728,10 @@
         "kills_per_game": {
           "counts": {
             "2": 5,
-            "3": 12,
-            "4": 19,
-            "5": 11,
-            "6": 3
+            "3": 14,
+            "4": 17,
+            "5": 12,
+            "6": 2
           },
           "definition": "Games by how many kills they held.",
           "heading": "The shape of a game",
@@ -6745,14 +6747,14 @@
           "counts": {
             "CREWMATE_EJECT: 2 living": 3,
             "CREWMATE_EJECT: 3 living": 2,
-            "CREWMATE_EJECT: 4 living": 6,
+            "CREWMATE_EJECT: 4 living": 7,
             "CREWMATE_EJECT: 5 living": 2,
-            "CREWMATE_TASKS: 3 living": 2,
-            "CREWMATE_TASKS: 4 living": 2,
+            "CREWMATE_TASKS: 3 living": 4,
+            "CREWMATE_TASKS: 4 living": 5,
             "CREWMATE_TASKS: 5 living": 5,
-            "CREWMATE_TASKS: 6 living": 4,
-            "IMPOSTOR_PARITY: 2 living": 8,
-            "IMPOSTOR_PARITY: 4 living": 16
+            "CREWMATE_TASKS: 6 living": 5,
+            "IMPOSTOR_PARITY: 2 living": 4,
+            "IMPOSTOR_PARITY: 4 living": 13
           },
           "definition": "Games by their recorded ending and the players still alive when it ended: every player less those killed and those ejected.",
           "heading": "The shape of a game",
@@ -6768,8 +6770,8 @@
         },
         "meetings_by_trigger": {
           "counts": {
-            "emergency": 3,
-            "report": 114
+            "emergency": 4,
+            "report": 115
           },
           "definition": "Meetings by what opened them: a reported corpse or a button press.",
           "heading": "Meeting structure",
@@ -6783,11 +6785,10 @@
         },
         "rebuttal_beneficiaries": {
           "counts": {
-            "another crewmate, answering a crewmate": 1,
-            "another crewmate, answering an impostor": 1,
-            "another impostor, answering a crewmate": 28,
-            "the opener, answering a crewmate": 28,
-            "the opener, answering an impostor": 59
+            "another crewmate, answering a crewmate": 4,
+            "another impostor, answering a crewmate": 25,
+            "the opener, answering a crewmate": 30,
+            "the opener, answering an impostor": 60
           },
           "definition": "Repeat-speaker turns by the speaker's seat (the opener, or another crewmate or impostor) and the role of the speaker of the turn answered.",
           "heading": "Rebuttals",
@@ -6807,10 +6808,10 @@
             "opened by a witness of a kill since the last meeting, 6 to 10 ticks": 0,
             "opened by a witness of a kill since the last meeting, more than 20 ticks": 0,
             "opened by a witness of a kill since the last meeting, the same tick": 0,
-            "opened by another player, 1 to 2 ticks": 18,
+            "opened by another player, 1 to 2 ticks": 19,
             "opened by another player, 11 to 20 ticks": 1,
-            "opened by another player, 3 to 5 ticks": 69,
-            "opened by another player, 6 to 10 ticks": 12,
+            "opened by another player, 3 to 5 ticks": 71,
+            "opened by another player, 6 to 10 ticks": 10,
             "opened by another player, more than 20 ticks": 0,
             "opened by another player, the same tick": 0
           },
@@ -6828,14 +6829,12 @@
         "retally_outcome_changes": {
           "counts": {
             "impostor ballots as SKIP: an impostor ejected -> no one ejected": 1,
-            "impostor ballots as SKIP: another crewmate ejected -> no one ejected": 3,
-            "impostor ballots as SKIP: no one ejected -> someone ejected": 1,
+            "impostor ballots as SKIP: another crewmate ejected -> no one ejected": 2,
             "impostor ballots as SKIP: the reporter ejected -> a different player ejected": 1,
-            "impostor ballots as SKIP: the reporter ejected -> no one ejected": 9,
-            "impostor ballots removed: another crewmate ejected -> no one ejected": 1,
+            "impostor ballots as SKIP: the reporter ejected -> no one ejected": 4,
+            "impostor ballots removed: another crewmate ejected -> no one ejected": 2,
             "impostor ballots removed: no one ejected -> someone ejected": 3,
-            "impostor ballots removed: the reporter ejected -> a different player ejected": 1,
-            "impostor ballots removed: the reporter ejected -> no one ejected": 3
+            "impostor ballots removed: the reporter ejected -> a different player ejected": 1
           },
           "definition": "Meetings whose re-tally differs from the recorded outcome, by re-tally, by the recorded outcome (the reporter, another crewmate, an impostor or no one ejected) and by what the re-tally gives instead. Every other ballot is held fixed; real voters would have heard different speech.",
           "heading": "Ballots",
@@ -6849,10 +6848,15 @@
           "title": "Outcomes a re-tally changes"
         },
         "route_lines_per_meeting": {
-          "counts": {},
+          "counts": {
+            "0": 2,
+            "1": 21,
+            "2": 19,
+            "3 or more": 77
+          },
           "definition": "Meetings by how many players some ballot carried a route line about: 0, 1, 2, or 3 or more. Every row is listed.",
           "heading": "Stated places the map or the regroup reconciles",
-          "in_scope": false,
+          "in_scope": true,
           "not_evaluable": 0,
           "reads": [
             "recorded ballot prompt",
@@ -6864,10 +6868,13 @@
           "title": "Meetings by the players with a route line"
         },
         "route_steps_by_reading": {
-          "counts": {},
+          "counts": {
+            "regroup_between": 29,
+            "walking_fits": 1421
+          },
           "definition": "The steps of each meeting's distinct route lines by reading: walking fits, or the public regroup falls between, so walking cannot decide it. Every reading is listed.",
           "heading": "Stated places the map or the regroup reconciles",
-          "in_scope": false,
+          "in_scope": true,
           "not_evaluable": 0,
           "reads": [
             "recorded ballot prompt",
@@ -6880,9 +6887,9 @@
         },
         "sabotages_started_per_game": {
           "counts": {
-            "0": 20,
+            "0": 17,
             "1": 17,
-            "2": 13
+            "2": 16
           },
           "definition": "Games by how many times a sabotage went from inactive to active between one play tick and the next. A sabotage that stays active across a meeting is one start.",
           "heading": "The shape of a game",
@@ -6898,10 +6905,10 @@
           "counts": {
             "flag_only": 0,
             "invalid_citation": 0,
-            "none_held": 214,
-            "not_assessed": 17,
-            "off_target": 6,
-            "supported": 44,
+            "none_held": 235,
+            "not_assessed": 10,
+            "off_target": 12,
+            "supported": 48,
             "uncited": 0,
             "unlabelled": 0
           },
@@ -6917,9 +6924,9 @@
         },
         "supported_ejects_not_checkable_by_reason": {
           "counts": {
-            "every cited placement is unverifiable": 0,
-            "it cites no turn, only the voter's own observation": 29,
-            "the cited turn places the target nowhere checkable": 97
+            "every cited placement is unverifiable": 1,
+            "it cites no turn, only the voter's own observation": 26,
+            "the cited turn places the target nowhere checkable": 119
           },
           "definition": "EJECT ballots labelled supported that neither cell above counts: the ballot cites no turn, only the voter's own observation; the cited turn, if it is one of this meeting's, places the target nowhere checkable; or the route cannot verify any cited placement. Every row is listed.",
           "heading": "What a ballot held",
@@ -6936,11 +6943,11 @@
         },
         "tasks_left_at_game_over_by_ending": {
           "counts": {
-            "CREWMATE_EJECT: up to a half": 1,
+            "CREWMATE_EJECT: up to a half": 2,
             "CREWMATE_EJECT: up to a quarter": 12,
-            "CREWMATE_TASKS: none": 13,
-            "IMPOSTOR_PARITY: up to a half": 6,
-            "IMPOSTOR_PARITY: up to a quarter": 18
+            "CREWMATE_TASKS: none": 19,
+            "IMPOSTOR_PARITY: up to a half": 7,
+            "IMPOSTOR_PARITY: up to a quarter": 10
           },
           "definition": "Games by their recorded ending and the share of all task instances still unfinished on the final state.",
           "heading": "The shape of a game",
@@ -6956,11 +6963,11 @@
         "ticks_between_kills": {
           "counts": {
             "1 to 2 ticks": 25,
-            "11 to 20 ticks": 59,
+            "11 to 20 ticks": 56,
             "3 to 5 ticks": 13,
-            "6 to 10 ticks": 32,
-            "more than 20 ticks": 9,
-            "the same tick": 7
+            "6 to 10 ticks": 29,
+            "more than 20 ticks": 11,
+            "the same tick": 8
           },
           "definition": "Each kill after a game's first, by the ticks since the kill before it in the same game.",
           "heading": "The shape of a game",
@@ -6974,11 +6981,11 @@
         },
         "ticks_from_kill_to_report": {
           "counts": {
-            "1 to 2 ticks": 32,
+            "1 to 2 ticks": 33,
             "11 to 20 ticks": 1,
-            "3 to 5 ticks": 69,
-            "6 to 10 ticks": 12,
-            "its body never reported": 81,
+            "3 to 5 ticks": 71,
+            "6 to 10 ticks": 10,
+            "its body never reported": 77,
             "more than 20 ticks": 0,
             "the same tick": 0
           },
@@ -6995,7 +7002,7 @@
         },
         "ticks_inside_per_trip": {
           "counts": {
-            "1": 49,
+            "1": 47,
             "2": 3,
             "3": 15,
             "4": 5
@@ -7014,9 +7021,9 @@
         },
         "trigger_tick_events_dropped_by_regroup": {
           "counts": {
-            "Moved": 46,
+            "Moved": 50,
             "TaskCompleted": 10,
-            "TaskProgressed": 22
+            "TaskProgressed": 19
           },
           "definition": "Movement and task events on the trigger tick of every regroup meeting, by kind.",
           "heading": "After a regroup",
@@ -7032,8 +7039,8 @@
         },
         "vent_band_by_moment": {
           "counts": {
-            "entry only": 16,
-            "exit only": 8
+            "entry only": 17,
+            "exit only": 7
           },
           "definition": "Vent-band impostor ejections by whether a crewmate saw the ejected impostor's exit only, entry only, both, or neither before the meeting.",
           "heading": "Vent proof at meetings",

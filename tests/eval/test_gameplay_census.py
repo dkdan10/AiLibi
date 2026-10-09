@@ -1204,7 +1204,8 @@ def test_the_committed_sets_fall_in_their_registered_eras() -> None:
     """Each era publishes its own sets, settings and windows; one-set eras pool nothing."""
 
     payload = _published()
-    assert [era["era_id"] for era in payload["eras"]] == ["baseline-9", "stage-b-r2"]
+    # was ["baseline-9", "stage-b-r2"], before round 3's promotion
+    assert [era["era_id"] for era in payload["eras"]] == ["baseline-9", "stage-b-r3"]
     baseline_9, promoted = payload["eras"]
     assert baseline_9["sets"] == ["ml_corpus/9p2i", "ml_corpus/4p1i", "samples/4p1i"]
     assert promoted["sets"] == ["samples/9p2i"]
@@ -1222,13 +1223,14 @@ def test_the_committed_sets_fall_in_their_registered_eras() -> None:
 
 
 def test_on_baseline_9_every_scoped_cell_and_table_reads_n_a() -> None:
-    """No baseline-9 recording carries the in-vent cap, a regroup or a rebuttal.
+    """No baseline-9 recording carries the in-vent cap, a regroup, a rebuttal or
+    the route lines.
 
     So each cell and table counted only under one of those settings publishes
     nothing in every baseline-9 column, and the page shows n/a rather than a
-    measured 0. The promoted stage-b-r2 set records all three, so its column
-    counts them. No committed set records the route lines, so every cell and
-    table counted only under them reads n/a in every column.
+    measured 0. The promoted stage-b-r3 set records all four, so its column
+    counts them (was: no committed set recorded the route lines, and every cell
+    and table counted only under them read n/a in every column).
     """
 
     payload = _published()
@@ -1251,37 +1253,40 @@ def test_on_baseline_9_every_scoped_cell_and_table_reads_n_a() -> None:
             if scope is not None:
                 assert (view["counts"], view["not_evaluable"]) == ({}, 0), key
     promoted = _set_section(payload, "samples/9p2i")
-    route_lines = census.ROUTE_LINES.describe()
     for kind in ("cells", "tables"):
         for key, view in promoted[kind].items():
-            assert view["in_scope"] is (view["scope"] != route_lines), key
+            assert view["in_scope"] is True, key  # was False under the route lines
     page = (repo_root / "docs" / "gameplay-census.md").read_text(encoding="utf-8")
     four = " n/a |" * 4
-    five = " n/a |" * 5
-    for key, spec in CELLS.items():
-        if spec.scope is census.ROUTE_LINES:
-            assert f"| {spec.title} |{five}\n" in page, key
     # The shown set's column carries a measured cell where each baseline-9
-    # column reads n/a; its value is the census --check's to hold.
-    for title in ("Vent trips ended by a regroup", "Surfacings at the cap"):
+    # column reads n/a; its value is the census --check's to hold. The route
+    # lines cells are among them (they read n/a in all five columns before).
+    route_titles = [
+        spec.title for spec in CELLS.values() if spec.scope is census.ROUTE_LINES
+    ]
+    assert route_titles
+    for title in (
+        "Vent trips ended by a regroup",
+        "Surfacings at the cap",
+        *route_titles,
+    ):
         assert re.search(
-            rf"^\| {re.escape(title)} \|{re.escape(four)} \d+/\d+ \([\d.]+%\) \|$",
+            rf"^\| {re.escape(title)} \|{re.escape(four)} \d+/\d+ "
+            r"(\([\d.]+%\)|by construction) \|$",
             page,
             re.MULTILINE,
         ), title
     # Each scoped table lists the promoted set's rows, and every baseline-9
-    # column beside them reads n/a, never a measured 0.
-    # The two route lines tables have no row anywhere and read n/a in every
-    # column; every other scoped table lists the promoted set's rows.
-    assert page.count(f"| (none) |{four}") == page.count(f"| (none) |{five}") == 2
-    for row in ("the opener, answering an impostor", "Moved"):
+    # column beside them reads n/a, never a measured 0; no scoped table is
+    # empty any more (the two route lines tables read "(none)" before).
+    assert page.count(f"| (none) |{four}") == 0  # was 2
+    for row in ("the opener, answering an impostor", "Moved", "walking_fits"):
         assert re.search(
             rf"^\| {re.escape(row)} \|{re.escape(four)} \d+ \|$", page, re.MULTILINE
         ), row
     assert all(
         _set_section(payload, "samples/9p2i")["tables"][key]["counts"]
-        for key, scope in SCOPED_TABLES.items()
-        if scope is not census.ROUTE_LINES
+        for key in SCOPED_TABLES
     )
 
 
@@ -3236,7 +3241,8 @@ def test_each_era_pools_only_its_own_sets_and_names_its_windows() -> None:
     )
     published = census_from_inputs([four, promoted, corpus])
     baseline_9, stage = published.eras
-    assert (baseline_9.era_id, stage.era_id) == ("baseline-9", "stage-b-r2")
+    # was ("baseline-9", "stage-b-r2"), before round 3's promotion
+    assert (baseline_9.era_id, stage.era_id) == ("baseline-9", "stage-b-r3")
     assert baseline_9.sets == ("samples/4p1i", "ml_corpus/4p1i")
     assert baseline_9.pooled is not None and baseline_9.pooled.games == 2
     assert stage.sets == ("samples/9p2i",) and stage.pooled is None

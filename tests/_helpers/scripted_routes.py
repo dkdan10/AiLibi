@@ -36,6 +36,7 @@ from typing import Final, Literal
 
 from pydantic import BaseModel
 
+from eval.eras import STAGE_B_R2
 from llm.client import CallKind, LLMResponse
 from llm.fake_provider import FakeProvider
 from meetings.schemas import MeetingTurn, ModelAuthoredVoteBallot
@@ -254,13 +255,15 @@ ROUTES_EJECTIONS: Final[tuple[RouteEjection, ...]] = (
 
 
 def round_two_config(*, route_lines: bool) -> RecordedExperimentConfig:
-    """Round 2's declared config, with ``route_lines_version = 1`` when asked."""
+    """Round 2's declared config, with ``route_lines_version = 1`` when asked.
 
-    declared = json.loads(
-        (_REPO / "replays" / "samples" / "9p2i" / "experiment-config.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    Read where the era registry keeps it: round 2's candidate copy since round
+    3's promotion (was ``replays/samples/9p2i/experiment-config.json``).
+    """
+
+    kept = STAGE_B_R2.declared_config
+    assert kept is not None
+    declared = json.loads((_REPO / kept).read_text(encoding="utf-8"))
     if route_lines:
         declared["route_lines_version"] = 1
     return RecordedExperimentConfig.model_validate(declared)
