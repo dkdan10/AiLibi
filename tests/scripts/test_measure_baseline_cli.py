@@ -19,8 +19,6 @@ import pytest
 import measure_baseline
 from eval.evidence_honesty import (
     LIVE_POLICY_FOLD,
-    RATIFIED_BASELINE,
-    RATIFIED_I11_CELLS,
     RECORDED_ARM_POLICY_FOLD,
 )
 from tests._helpers.committed import report_9p2i
@@ -253,15 +251,13 @@ def test_honesty_human_rendering(capsys: pytest.CaptureFixture[str]) -> None:
     # I-11 labels the policy its fold re-decides with. The promoted set was
     # recorded with its era's tactical arms, so the fold re-invokes that recorded
     # arm policy and reproduces every recorded decision; on the baseline-9 bytes
-    # it was the live (20.32-repaired) policy. The ratified "before" is quoted
-    # from eval.evidence_honesty.RATIFIED_I11_CELLS.
+    # it was the live (20.32-repaired) policy.
     assert (  # was [live-policy-fold] 0.0388  (9/232)
         f"I-11 [{RECORDED_ARM_POLICY_FOLD}] free zero-witness kills declined: "
         "0.1852  (55/297)" in out
     )
-    # The label is what separates the modes on the human surface; neither the
-    # ratified "before" nor the live fold renders for this set.
-    assert f"I-11 [{RATIFIED_BASELINE}]" not in out
+    # The label is what separates the modes on the human surface; the live fold
+    # does not render for this set.
     assert f"I-11 [{LIVE_POLICY_FOLD}]" not in out
     assert "ghost-top decisions: 0.0015  (5/3230)" in out  # was 0.0029  (5/1754)
     assert "0 mismatches over 3230 decisions" in out  # was over 1754 decisions
@@ -297,11 +293,10 @@ def test_honesty_json_emits_array(capsys: pytest.CaptureFixture[str]) -> None:
     assert (contaminated["numerator"], contaminated["denominator"]) == (0, 1502)
     assert contaminated["rate"] == pytest.approx(0.0)
     assert contaminated["advisory"] is True
-    # The JSON block labels its own mode, so a reader can tell the fold it ran
-    # from the ratified baseline constants without knowing which sha produced it.
+    # The JSON block labels its own mode, so a reader can tell which fold it ran
+    # without knowing which sha produced it.
     # was LIVE_POLICY_FOLD on the baseline-9 bytes
     assert nine["impostor_targeting"]["policy_mode"] == RECORDED_ARM_POLICY_FOLD
-    assert RATIFIED_I11_CELLS["samples/9p2i"].policy_mode == RATIFIED_BASELINE
     # ZERO mismatches on the recorded bytes (baseline 6 read 419): the record was
     # made with its era's tactical arms, so the fold re-decides with the recorded
     # arm policy and the I-11 cells are a reproduction rather than a
