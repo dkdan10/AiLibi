@@ -1,6 +1,6 @@
 # The game-shape profile: rubric version 2
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
