@@ -120,10 +120,12 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   card). The config is not committed at P (a round directory without its set directory fails the candidate test);
   the delivery commit adds it with P's sha256. Until then each checkout holds an untracked copy at `CFG`, checked by
   `shasum -a 256` before the dry run and every gate (a mismatch stops the card), and no pytest or `check.sh` runs
-  beside that copy. Q quotes the owner, in their own words and dated, confirming four
+  beside that copy. Q quotes the owner, in their own words and dated, confirming five
   points: the ceilings; the pre-registration; the reporter flag's form and bar; the carrier of round 2's
   not-carried cells (resume perceptions by the helper plus the golden; the turn citation as the cell for ballots
-  citing a rebuttal, the counter slot beside it). An amendment lands as a new pre-registration commit (the old
+  citing a rebuttal, the counter slot beside it); and that the step rule may take the impostor win share as one of
+  its conditions. The owner confirmed all five as proposed on 2026-10-09, before P (decision memo 8.7); Q quotes
+  that confirmation. An amendment lands as a new pre-registration commit (the old
   section kept, the amendment dated) and is confirmed again; the recording checkout detaches at the commit holding
   the confirmed text, which this card calls P. `git merge-base --is-ancestor` exits 0 for F before P, P before Q, Q
   before the first `record:` checkpoint and P against the MANIFEST's one `git_sha`; Q's committer date precedes the
@@ -267,8 +269,9 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   tokens added to one call it projects 677,314 output and exits 1 on output; with 9,400 s of wall it projects
   10.88 h and exits 1 on wall (all three re-run at authoring with the `reproject.py` Validation quotes).
 - [ ] **The checkout never moves, a pause strands nothing, no key leaves, and the freeze held.** Mechanism: seeds
-  record in a checkout detached at P, in batches, each ending in gates, a count-only key scan (gzip decompressed)
-  and a pushed `record:` checkpoint; `git log --oneline F..HEAD` and `F..origin/main` print nothing over the frozen
+  record in a checkout detached at P, in batches, each ending in a count-only key scan (gzip decompressed) and a
+  pushed `record:` checkpoint, the gates running after the probe and after every second batch (the owner's process
+  amendment of 2026-10-09, decision memo 8.7); `git log --oneline F..HEAD` and `F..origin/main` print nothing over the frozen
   pathspec. Proof: the MANIFEST names one `git_sha`; each scan pattern fires on its planted key; with a planted pause
   file and the recorder replaced by `true` no batch starts; the pathspec over `76270d6c..F` is non-empty.
 - [ ] **The derived views and the registration are rebuilt, never hand-edited.** Mechanism: the recorder's
@@ -347,9 +350,12 @@ runs its gates and pushes its checkpoint before the pause takes effect; no batch
 the only kill). Before each batch the operator checks a pause file outside the repository; if it exists no batch
 starts, the key file is deleted, the last checkpoint is pushed and the operator log (outside the repository) names
 the seed reached and the next batch; the next sitting opens a new 18 h window, copies the key again and resumes
-there. After the probe and each batch, in the delivery checkout and a bare shell: the gate with `--expected-seeds
-0-N`, `verify_samples.sh`, the golden's walk, the census Conf. cells, the scorecard fold, `measure_baseline.py
---honesty`, `scan_recording_packets.py`, the tally, the re-projection, the key scan, then a pushed `record:` checkpoint.
+there. After every batch, in the delivery checkout and a bare shell: the tally, the re-projection, the key scan, then
+a pushed `record:` checkpoint. After the probe and after every second batch (10 seeds), before that checkpoint:
+the gate with `--expected-seeds 0-N`, `verify_samples.sh`, the golden's walk, the census Conf. cells, the scorecard
+fold, `measure_baseline.py --honesty` and `scan_recording_packets.py`; a gate failure stops the sitting and names the
+batches it covers (a checkpointed seed is never re-recorded). The gates every second batch and the checkpoint every
+batch are the owner's process amendment of 2026-10-09 (decision memo 8.7).
 
 **Checkouts, shells and the key.** Recording: a fresh worktree detached at P (`uv sync --frozen`, no `.env`) running
 only the recorder, never pytest, `check.sh` or a commit; no pytest or `check.sh` runs in any checkout beside its
@@ -512,7 +518,8 @@ uv run python scripts/check_doc_facts.py; uv run python scripts/validate_task_do
 uv run python scripts/verify_ml_evidence.py                     # offline; never --complete
 uv run pytest tests/meetings/test_prompt_byte_golden.py -k "retired_guard or stage-b-r3" -q
 uv run pytest -m campaign -q                                    # check.sh's default tier excludes it
-bash scripts/check.sh; echo "check.sh exit $?"                  # whole, in a clean worktree, run to its end
+# the house gate: CI's green run at the exact head stands as the gate record, cited by run id (memo 8.7);
+# no local check.sh at the final head and no card-only commit recording it
 ```
 
 `readings.py` is the round-3 readings command, quoted whole here and again at P, so it is reviewed before P

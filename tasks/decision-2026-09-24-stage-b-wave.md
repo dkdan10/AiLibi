@@ -1546,6 +1546,42 @@ counts here were measured at `76270d6c` by the design memo's count-only script (
 repository root with `.venv/bin/python`, 5 s), which is not committed; the profile card's publisher re-derives them
 with its `--check`, and the card restates them measured at its head.
 
+### 8.7 Process amendments and the round-3 confirmation (2026-10-09)
+
+The owner asked how long the project needs to reach its finalized state and which redundancies the remaining
+workflow carries, then ruled, verbatim: "Apply all five redundancy removals and confirm the five points as
+proposed". The five removals, in force from this date for every remaining card and for round 3's recording:
+
+1. **CI is the gate record.** The project gate (`bash scripts/check.sh`) is run by CI on every pushed head; its
+   green run at the exact head, cited by run id in the pull request and the card, stands as the gate record.
+   Workers no longer run it locally at the final head and no longer add a card-only commit to record it. AGENTS.md's
+   requirement that the gate passes is met by that run.
+2. **Message-argument survivors are nonblocking after the first fix round.** In the bounded review standard, a
+   mutation that replaces a message argument with a constant and survives is reported, and blocks only in the
+   first review round of a card; from the first fix round on it is nonblocking. The behavioural classes (a dropped
+   filter or wrapper, a swapped collection, a comparison made a None test, a role, kind, room or tick read made a
+   constant, a dropped tuple member, swapped branches, a loaded source read as its literal) stay blocking.
+3. **A promotion is one card.** If round 3 is promoted, the era-keyed promotion and the tour's re-curation are one
+   card, one pull request and one merge (the owner's, because it publishes), not two stacked cards.
+4. **Document-only changes get the documentation lens only.** A card or commit that changes only documents (a close
+   audit, a card closure, a planning document) is verified by the documentation lens alone.
+5. **Recording gates every second batch, checkpoints every batch.** In a recording sitting, each batch of five ends
+   with the tally, the re-projection, the count-only key scan and a pushed checkpoint; the full gate set runs after
+   the probe and after every second batch. A checkpointed seed is never re-recorded, so a later gate failure stops
+   the sitting and names the batches it covers. `tasks/work/stage-b-record-r3.md` carries the amendment in its
+   Acceptance, Constraints and Validation.
+
+**The round-3 confirmation, given before P.** The same ruling confirms, as proposed, the five points the record
+card reserves for the owner (8.5): the standing ceilings (2,800 calls; 17,500,000 input and 750,000 output tokens;
+a 12 h recording wall summed over sittings, each inside an 18 h window; $0.00 marginal; each with its stop at 90
+percent); the pre-registration as the card tables it; the reporter flag re-keyed by seat and vent proof with bar A,
+flagged above twice round 2's relative rate (21.28), non-gating and never read by the step rule; the carrier of round
+2's not-carried cells as the card states it (resume perceptions by the resume helper plus the golden's byte-equal
+re-render; the turn citation as the cell for ballots citing a rebuttal, with the counter slot beside it); and that
+the step rule may take the impostor win share as one of its conditions. The pre-registration commit P is written
+from the amended card; Q, the dated addendum, quotes this confirmation; the recording starts once P and Q are
+pushed and P is reviewed. The step after the round stays the owner's to take or override.
+
 ## Appendix: reproduction
 
 The scratch scripts named here are session aids and are not committed; the load-bearing counts are
