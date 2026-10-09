@@ -1088,3 +1088,283 @@ readings it rests on. The rule itself, its conditions and the table are
 unchanged; the rule never reads the reporter flag or a role-correct figure,
 and the step reads the pre-registered table and the census, never
 role-correctness.
+
+## 3. The pre-spend, at `F` and P, before the first seed
+
+Nothing in this section called a provider. No key was copied, read or
+referenced, and the recorder ran only as the dry run (3.6), with no seed.
+Every command ran in a bare shell (`env | grep -c '^AILIBI_'` printed 0)
+unless it names its own exports: 3.1 to 3.5 in this branch's worktree while
+it was still at `F` with a clean status, before P; 3.6 in a recording checkout
+detached at P; 3.7 in this worktree at Q. Scratch outputs lived outside the
+repository; every census here is count-only, and no prompt, transcript text or
+seed-band prefix was printed.
+
+### 3.1 The preflight
+
+- The declared file, made by inserting `, "route_lines_version": 1` before the
+  closing brace of `replays/samples/9p2i/experiment-config.json` (316 bytes,
+  `0c02fa61…5c192b`): 342 bytes, `a788b9eb…6d57d`, the card's figure (1.3).
+- Read through `scripts/_declared_experiment.py`'s own loader at `F`: ten
+  fields off their default, round 2's nine in their order and
+  `route_lines_version`; the nine equal round 2's file's off-default fields;
+  `FIELD_LAYER["route_lines_version"]` is `meeting`; `OMITTED_AT_DEFAULT`
+  holds it; `engine_arguments` returns `{'redistribution_policy': 'lowest_id',
+  'vent_witness_rule': 'physical', 'kill_cooldown_ticks': 6}`, equal to round
+  2's; `prompt_versions_for_set("qwen3_6_27b", env={}, experiment_config=...)`
+  serves the four stamps of 1.3; `self_report` False,
+  `evidence_reasoning_version` and `contextual_self_report_version` None.
+- Proof, two perturbations of the same payload: with one unknown key added
+  (`unknown_switch`), validation is refused with pydantic's
+  `extra_forbidden` message ("Extra inputs are not permitted") naming the key;
+  with `route_lines_version` removed, the config equals round 2's and the
+  re-serialized bytes equal round 2's declared file byte for byte.
+- The instruments take `r3`: `COLUMN_LABELS` is `("s9", "r1", "r2", "r3")`
+  in `experiments/lab/route_check_replay.py`, whose r3 column declares
+  `replays/candidates/stage-b-r3/experiment-config.json`, and the route-lines
+  instrument orders its columns by the same labels. The held-data and route
+  cells exist under their cards' keys: the readings command (1.13) read every
+  key it names from the round-1 and round-2 sections without a refusal.
+- The field card's refusals pass at `F`, in the run of 3.5:
+  `tests/orchestrator/test_experiment_arms.py::test_no_environment_sets_a_config_only_field`
+  (no environment switch sets the field) and
+  `::test_a_config_only_field_must_equal_the_runners_both_ways[route_lines_version]`
+  (a runner and a recorded config that disagree on it are refused both ways),
+  `tests/meetings/test_route_lines_arm.py::test_each_instrument_refuses_it_once_the_field_leaves_its_reads`
+  (7 cases) and `::test_the_golden_refuses_it_once_the_field_leaves_its_reads`
+  (an unthreaded reader refuses it), and
+  `::test_the_runner_refuses_it_beside_each_legacy_overlay` (4 cases).
+
+### 3.2 The before columns, computed
+
+```
+for d in replays/candidates/stage-b-r1/9p2i replays/samples/9p2i; do n=$(echo "$d" | tr / _)
+  .venv/bin/python scripts/publish_gameplay_census.py --set-dir "$d" --json-stdout > <scratch>/census-$n.json
+  .venv/bin/python scripts/publish_process_scorecard.py --set-dir "$d" --json-stdout > <scratch>/scorecard-$n.json
+  .venv/bin/python scripts/measure_baseline.py "$d" --honesty --json > <scratch>/honesty-$n.json; done
+.venv/bin/python -m experiments.lab.route_check_replay --set r1=<F>:replays/candidates/stage-b-r1/9p2i \
+  --set r2=<F>:replays/samples/9p2i --out-json <scratch>/route.json --out-report <scratch>/route.md
+```
+
+| check | result |
+|---|---|
+| the six production commands above, and the route-check replay | exit 0 each |
+| census `--set-dir replays/samples/9p2i` against the shipped `samples/9p2i` entry of `docs/gameplay-census.json`, leaf for leaf | 1,753 of 1,753 equal, 0 differing, exit 0 |
+| scorecard `--set-dir replays/samples/9p2i` against the shipped entry of `docs/process-scorecard.json` | 108 of 108 equal, 0 differing, exit 0 |
+| the route-check replay's r1 and r2 `rule_inputs` against the committed `experiments/lab/results-route-check-replay.json` | 24 of 24 leaves equal: r1 M 29, W 0, reach (a) 8, (b) 8, (c) 20, (c) over W 0; r2 M 40, W 7, reach 15, 16, 29, (c) over W 7 |
+| `uv run python -m experiments.lab.route_check_replay --check`; `uv run python -m experiments.lab.route_lines_replay --check` | exit 0 each, "reproduced" (47.1 s and 48.2 s) |
+| the tally (1.14) | `1556 9344346 433660 0.0` on round 1; `1502 9187880 418270 0.0` on round 2 |
+| `validity_gate.py` on each set with its own declared config, `--expected-model Qwen/Qwen3.6-27B --require-zero-cost`, the four prompt-version pairs, `--expected-seeds 0-49 --require-one-recording-sha` | exit 0 each, ten checks PASS; the betrayal check 0 over 717 ballots on round 1 and 0 over 691 on round 2 |
+| `python3 readings.py <census> <honesty> <route.json> --column r1 --after`, then `--column r2 --after` | exit 0 each; no Conf. miss; every reading as 1.8 states it |
+| a count-only comparison holding every round-1 and round-2 count that round 2's audit section 6 (6.1's scorecard rows, 6.2 to 6.5) and this card's Evidence and table state, read from the readings output, the scorecard and census sections, the gate's line, the tally and the route JSON | 245 of 245 equal, 0 differing, exit 0 |
+
+The 245 include the charged ejections equal to M (29 and 40) and their witness
+form equal to W (0 and 7); round 2's old reporter line, read from the census
+tables it was defined on (report-meeting ejections of reporters over report
+meetings: 11/118 and 17/114), which the readings command does not compute; and
+the route-check replay's r2 classes the Evidence names: (c) reaches 21 of 21
+misjudged innocent ejections and 5 of 5 ejected witnesses, leaves 11 impostor
+ejections unreached, and `evidence_reasoning_version = 2`'s offer holds 4,478
+regroup-crossing rows of which it keeps 0. The 9 of those 11 that rest on a
+vent sighting are the committed reports' count, reproduced by the two `--check`
+runs, not by the comparison. Of the cells the card marked "measured at F":
+`holds_nothing_skips_naming_no_candidate` 0/256 and 0/214;
+`cited_lines_true_to_the_route` 244/259 and 278/281;
+`cited_lines_false_to_the_route` 15/259 and 3/281;
+`witness_meeting_ejections_on_a_reconcilable_pair` 0/3 and 7/12. No round-1 or
+round-2 count moved.
+
+Proofs, each against a scratch copy with one cell edited:
+
+| copy | result |
+|---|---|
+| round 2's census section, `holds_nothing_skips_naming_no_candidate` denominator raised by one | `cells.holds_nothing_skips_naming_no_candidate.denominator: set-dir=215 shipped=214`; 1,752 of 1,753; exit 1 |
+| round 2's scorecard section, `grounded_skip` numerator raised by one | `grounded_skip.numerator: set-dir=45 shipped=44`; 107 of 108; exit 1 |
+| the scratch route JSON, r2 reach (c) set to 30 | `r2.R.c: scratch=30 committed=29`; 23 of 24; exit 1 |
+| round 1's census section, `impostor_cooldown_zero_at_open` numerator raised by one, through the readings command | `DIFF r1 impostor_cooldown_zero_at_open: re-measured (85, 203), stated (84, 203)`; 244 of 245; exit 1 |
+
+### 3.3 The readings, flag and re-projection proofs
+
+`readings.py` and `reproject.py` are the card's blocks as extracted at `F`
+(sha256 `9e22e40c…57abc` and `0cd632e0…6445c`), byte-equal to 1.13 and 1.14.
+The readings proofs run on scratch copies of round 2's census section at `F`
+with the route cells put in scope at 0 and presence 12, with round 2's honesty
+file, and on the committed route JSON with its r2 column copied as r3:
+
+| copy | command | result |
+|---|---|---|
+| unedited | `--column r3 --after --step` | exit 0; `step rule: names the era-keyed promotion of round 3 as the shown set, ... (Conf. misses 0; impostor wins 24/50; M 40 against round 2's 40)` |
+| presence 0 | the same | exit 1; `Conf.: BREACH (no route line served: the route field reads absent)`, `Conf. misses: route field presence 0` |
+| `route_lines_false_to_the_map` numerator 1 | the same | exit 1; `Conf. misses: route_lines_false_to_the_map` |
+| `stale_report_meetings` numerator 1 | the same | exit 1; `Conf. misses: stale_report_meetings` |
+| r3's M 41 | the same | exit 0; the step line names round 2 staying shown (M 41 against 40) |
+| `impostor_wins` 31/50 | the same | exit 0; the step line names round 2 staying shown (31/50) |
+| reporter numerator 60 (the flag forced on) | the same | exit 0; the flag reads `relative rate 37.5, flagged`; the `step rule:` line is byte-identical to the unedited run's (`cmp` equal) |
+| `role_correct_ejections` numerator 10 | the same | exit 0; the `step rule:` line byte-identical to the unedited run's |
+| k2 = 0, k1 = 1 | `--column r3 --after` | exit 0; `flagged, reporters alone` |
+| the r2 column's M set to 39 | `--column r3 --after --step` | exit 1; `the route JSON's r2 column reads M 39, not 40` |
+| round 2's section | `--column r2 --after --step` | exit 1; `--step reads round 3: pass --column r3 --after --step` |
+
+**The flag on the three sets** (1.9). On round 1 and round 2 the readings
+command prints `relative rate 17.0, not flagged` and `relative rate 10.6, not
+flagged` under bar A; under bar B it prints `17.0, flagged` on round 1 and
+`10.6, not flagged` on round 2; under bar C `not flagged (reporter rate
+11/98)` and `not flagged (reporter rate 17/93)`. The baseline-9 column is
+read from `d41c9006`'s `replays/samples/9p2i` bytes, extracted with
+`git archive d41c9006 replays/samples/9p2i` into scratch and folded by the
+census at `F` with `--set-dir` (exit 0; 50 games, 145 meetings; 7/75 against
+2/243): bar A `relative rate 11.3, not flagged`, bar B `11.3, flagged`, bar C
+`not flagged (reporter rate 7/75)`. Every reading in 1.9's table reproduces.
+
+**The re-projection**, on a scratch copy of round 1's seeds 0-11 against
+`replays/samples/9p2i`:
+
+| copy and wall | result |
+|---|---|
+| unedited, 4,000 s | exit 0; calls 1,619 (401 / 372 x round 2), input 9,978,176, output 470,463, wall 16,667 s = 4.63 h |
+| 50,000 output tokens added to one call of seed 0, 4,000 s | exit 1; output 677,314 (100.3% of the 675,000 stop) `STOP`, and `STOP: output` |
+| unedited, 9,400 s | exit 1; wall 39,167 s = 10.88 h `STOP`, and `STOP: wall` |
+| a copy of seed 0 as seed 77, which round 2 does not hold | exit 1; `every completed candidate seed must have round 2's seed beside it` |
+
+### 3.4 The field's rehearsals, at `F`
+
+The field card's rehearsals are its committed suites: the fake-provider
+inertness and the scripted presence.
+
+```
+.venv/bin/pytest -q -n 6 tests/meetings/test_route_lines_arm.py tests/meetings/test_route_lines.py \
+  tests/experiments/test_route_lines_replay.py
+```
+
+199 passed, exit 0. In `tests/meetings/test_route_lines_arm.py`, `-k
+'fake_rehearsal or scripted or rehearsal_game or refuse'` selects 40, all
+passed: among them
+`test_the_fake_rehearsal_is_inert` (round 2's declared file and the same plus
+the field record equal rows apart from the config key and the `vote_ballot`
+stamp, and serve no block),
+`test_the_scripted_rehearsal_serves_both_readings_and_no_step_for_the_left_out_change`,
+`test_each_scripted_on_ballot_minus_its_block_is_its_off_twin_and_the_tally_holds`,
+`test_every_rehearsal_game_verifies_and_reproduces_through_the_golden`, and the
+perturbed halves `test_the_scripted_on_game_walked_without_the_field_fails_at_every_block`
+and `test_the_manager_passing_no_lines_fails_the_scripted_on_golden`. CI at
+`F`: run 37892577802 (`CI`, push, head `e4fc6cbf`), conclusion success, its
+three jobs (project checks, frontend checks, frontend e2e) green.
+
+### 3.5 The planted proofs at `F`
+
+```
+.venv/bin/pytest -q -n 6 tests/orchestrator/test_experiment_arms.py tests/orchestrator/test_experiment_config.py \
+  tests/eval/test_gameplay_census.py tests/scripts/test_candidate_sets.py tests/meetings/test_ballot_arms.py \
+  tests/_helpers/test_scripted_meeting.py tests/eval/test_recorded_arm_readers.py
+```
+
+921 passed, exit 0. Among them: the census card's planted breach per guarded
+cell (`test_every_guarded_cell_has_a_planted_pair`) and its route conformance
+breach, `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter`,
+with `test_every_route_line_cell_and_table_reads_n_a_without_the_setting`; the
+record-plumbing card's planted round perturbations in
+`tests/scripts/test_candidate_sets.py`; and the field card's refusals of 3.1.
+The document gates at P, at Q and on the tree carrying this section: `scripts/verify_ml_evidence.py` offline,
+exit 0 (64 checks: 52 OK, 0 FAIL, 7 ABSENT, 5 INFO; the in-tree family
+inventory OK with the re-derived `audits/` row), `scripts/check_doc_facts.py`
+exit 0, `scripts/validate_task_docs.py` exit 0 (102 work cards), and
+`tests/scripts/test_verify_ml_evidence.py` with
+`tests/scripts/test_check_doc_facts.py` (415 passed on the tree carrying this
+section, among them
+`test_audits_index_ladder_tip_drift_detected` and
+`test_unindexed_audit_detected`).
+
+### 3.6 The dry run, in the recording checkout at P
+
+A worktree detached at P (`641b4254`), outside the repository's working tree,
+with `uv sync --frozen` (exit 0), no `.env`, and an untracked copy of the
+declared file at `replays/candidates/stage-b-r3/experiment-config.json` whose
+`shasum -a 256` printed
+`a788b9eba5e8f2f5d29033fece2d0dc0dbac7d3528ea93c7c7a93327dbc6d57d`. The
+recording shell's exports (1.7), and nothing else (`env -i` with only `HOME`,
+`PATH` and `TERM` beside them):
+
+```
+bash scripts/refresh_samples.sh --full --expect-levers "" \
+  --experiment-config replays/candidates/stage-b-r3/experiment-config.json --dry-run
+```
+
+Exit 0, and its resolved configuration (the seed list, the model-coupling,
+registry and lever-preflight lines, the per-seed stage lines and the full-mode
+clean-up line elided; the run printed them):
+
+```
+[dry-run] Experiment config: replays/candidates/stage-b-r3/experiment-config.json (sha256 a788b9eba5e8f2f5d29033fece2d0dc0dbac7d3528ea93c7c7a93327dbc6d57d)
+[dry-run] Experiment config settings: meeting_reset='hub_with_grace', vent_exit_policy='look_and_wait', bounded_rebuttal_version=1, vent_witness_rule='physical', vent_entry_policy='own_fresh_kill', report_body_handle_version=1, ballot_kill_row_version=1, impostor_ballot_version=1, kill_cooldown_ticks=6, route_lines_version=1
+[dry-run] Experiment switch exports: none
+[dry-run] mode: full
+[dry-run] roster: num_players=9 num_impostors=2 tasks_per_crewmate=2
+[dry-run] roster descriptor: would ensure replays/candidates/stage-b-r3/9p2i/roster.json = {num_players: 9, num_impostors: 2, tasks_per_crewmate: 2} (fails loud if an existing one disagrees)
+[dry-run] sample dir: replays/candidates/stage-b-r3/9p2i
+[dry-run] provider: featherless
+[dry-run] preflight: would require FEATHERLESS_API_KEY (hosted run; $0 provider-keyed cost)
+[dry-run] meeting model: Qwen/Qwen3.6-27B
+[dry-run] prompt set: qwen3_6_27b
+[dry-run] substrate flags: expected levers ON = (none — the bare slate: every live toggle OFF); every other live toggle OFF; the graduated levers unconditional ON
+[dry-run] seed workers: 2 parallel (each records one seed, then pulls the next available seed from the queue; Featherless: 2 units per 32B request → 4-unit cap)
+[dry-run] seed crash-retry: up to 8 attempt(s) per seed on a transport/crash error (recorded parse failures are non-fatal)
+[dry-run] experiment config: would copy replays/candidates/stage-b-r3/experiment-config.json into the stage directory once, if it still reads sha256 a788b9eba5e8f2f5d29033fece2d0dc0dbac7d3528ea93c7c7a93327dbc6d57d, and pass that copy to every seed
+[dry-run] manifest: replays/candidates/stage-b-r3/9p2i/MANIFEST.md
+[dry-run] eval report: would rebuild replays/candidates/stage-b-r3/9p2i/tournament-eval-report.json.gz from the refreshed replays (scripts/build_sample_report.py; $0, no provider)
+[dry-run] no API calls made; no files written.
+Substrate slate OK: expected levers ON = (none — the bare slate: every live toggle OFF); every other live toggle OFF; the graduated levers unconditional ON.
+```
+
+The porcelain status read the same one line before and after the dry run, the
+untracked declared copy (`?? replays/candidates/stage-b-r3/`), and with
+untracked files hidden it read 0 lines before and after: the dry run wrote
+nothing. Proof: the same dry run with a stray `AILIBI_BOUNDED_REBUTTAL=1`
+exported exits 1 with "Refused: the environment exports
+AILIBI_BOUNDED_REBUTTAL. A recording takes its experimental switches only from
+a declared config file (--experiment-config), so unset these variables before
+recording. Nothing was staged." The scratch checkout was removed afterwards;
+the recording phase opens its own, fresh, at P.
+
+### 3.7 The pre-registration gates
+
+In this worktree at Q (`bb13fbc7`):
+
+| gate | result |
+|---|---|
+| `git merge-base --is-ancestor e4fc6cbf 641b4254` (F before P); `git merge-base --is-ancestor 641b4254 bb13fbc7` (P before Q) | exit 0 each |
+| proof: Q in place of P (`--is-ancestor bb13fbc7 641b4254`); P in place of F (`--is-ancestor 641b4254 e4fc6cbf`) | exit 1 each |
+| `git diff --name-only e4fc6cbf 641b4254` | `audits/README.md`, `audits/audit-2026-10-09-stage-b-r3.md`, `docs/artifacts.md`: nothing else in P's tree differs from F's, and the config is not committed |
+| `git diff --name-only 641b4254 bb13fbc7` | the audit (section 2 appended) and the `audits/` row of `docs/artifacts.md` re-derived for its length |
+| section 1 at P (`git show 641b4254:audits/audit-2026-10-09-stage-b-r3.md`) against the head's | 951 lines each, 0 differing, exit 0. Proof: "0.30" edited to "0.31" in one reading of a scratch copy, 2 differing lines, exit 1 |
+| committer dates | P 2026-10-09T02:42:03-04:00, Q 2026-10-09T02:43:47-04:00 |
+| `git log --oneline e4fc6cbf..HEAD` and `e4fc6cbf..origin/main` over `engine agents meetings observation orchestrator eval api scripts llm experiments/lab/route_check_replay.py` | 0 commits each. Proof: the same pathspec over `76270d6c..e4fc6cbf` prints 12 commits |
+| `git diff --stat e4fc6cbf..HEAD` over the nothing-moves paths (the sample and corpus sets, round 1's directory, `tests/fixtures`, `training`, `api`, `frontend`, `experiments`, `audits/tactical-gameplay` and the census and scorecard documents) | empty |
+
+Q's committer date preceding the probe's start and every MANIFEST
+`refreshed_at`, Q before the first `record:` checkpoint, and P against the
+MANIFEST's one `git_sha` are checked by the recording phase, after its legs.
+
+**`main` after `F`.** After P was written, `main` moved from `e4fc6cbf` to
+`335cbdc9` by two document commits to the decision memo, which add its
+section 8.9 (2026-10-09): the owner ruled "Merge both when verified and retire
+the memo's D14 list", then, amending it, "Keep the comparison records". Memo
+D14's list is retired by its own card, whose merge waits for this record's
+merge; `replays/candidates/stage-b-r1/` stays; and a promotion of round 3
+keeps round 2's bytes as `replays/candidates/stage-b-r2`. Nothing moved under
+the frozen pathspec or the nothing-moves paths, so `main` was merged in
+(`d1221611`), as the card's freeze rule says. Section 1 is unchanged: its
+statement that nothing is retired on the strength of this record and that
+round 1's directory stays holds under 8.9, and 8.9's note on round 2's bytes
+is a follow-up for a promotion card, beside 1.12's list, not a change to the
+table, the bar, the step rule or the config.
+
+### 3.8 What the recording phase runs first
+
+Before the probe, in the recording phase the orchestrator dispatches after
+this phase is reviewed: the fake dress rehearsal of seeds 0-49 on the declared
+config into scratch through every instrument (it runs the recorder, which this
+phase ran only as the dry run); the scratch scripted game from the declared
+config and the tactical lab rows against
+`audits/tactical-gameplay/stage-b-r1-frozen-head.json`; a fresh recording
+checkout at P with its own dry run; the key's programmatic copy and the
+count-only key scan with each planted pattern; then the probe and its gates.
