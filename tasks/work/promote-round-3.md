@@ -146,6 +146,18 @@ is weakened, and a retired check is deleted with its mechanism and one history l
 goes through `SPECTATOR_COPY` or the picker data, with no task or audit ID, no unexplained jargon and no threshold
 arithmetic.
 
+- [x] Review correction (round 2): no test comment still states round 2's bytes as the shown set's. The three
+  the verifiers quoted are re-derived with the old value inline: the marker pin of `test_vote_tally_parity.py`
+  reads 10 teammate coercions and 0 invalid targets (was 16 and 1), seed 2 m0 of `test_transcript.py` 12 pairs
+  (was 9), and `test_validity_gate_cli.py` three `.v8` arm stamps (was two). The eleven present-tense headers they
+  listed now name round 3 since 2026-10-09, with round 2's dates and readings labelled. The re-run found more
+  round-2 readings stated as current in `test_beliefs.py`, `test_beliefs_hard_evidence_gate.py`,
+  `test_contradictions.py`, `test_deduction_metrics.py`, `test_evidence_honesty.py`, `test_absence_prior.py`,
+  `test_main.py` and `test_manager.py`; each is re-derived the same way, listed under "Review corrections,
+  round 2" in Results with the count-only command that reads it. Mechanism: the scan
+  `git grep -n -i -E 'candidate round 2|since 2026-10-02' -- tests/`, re-run at the fix head (16 hits, each
+  classified in Results); perturbed: the same scan at `18febe41` lists 31, the stale state. The seventeen edited
+  files pass (1397 passed).
 - [x] Review correction: the replaced-era check reads the shown set's era off the registry, never a fixed id.
   `test_the_replaced_era_check_reads_the_shown_sets_era_off_the_registry` files `samples/9p2i` under round 2 beside
   the grown before file (no error: round 2 shows baseline 9's block, the era it replaced) and then leaves round 2's
@@ -875,8 +887,10 @@ with the old value inline, or labelled as round 2's.
 | `tests/eval/test_funnel.py`, `test_funnel_pooling.py`, `test_meeting_quality.py`, `test_gameplay_census.py` | one sentence each | the promoted stage-b-r3 bytes | era registry; each test passes on them |
 | `tests/meetings/test_corroboration.py`, `test_prompt_byte_golden.py`, `tests/api/test_public_results.py` | one sentence each | round 3, promoted 2026-10-09 | era registry; each test passes on them |
 
-The remaining hits are already annotated with their round, labelled as baseline-9 or earlier history, or true of
-both rounds (for example "since 2026-10-02 the shown set sits in a later era").
+Correction (review round 2): this paragraph first said every remaining hit was annotated with its round,
+labelled as history or true of both rounds. That was wrong: fourteen test comments the round-2 verifiers named,
+and more the re-run found, still stated round 2's bytes or readings as the shown set's. "Review corrections,
+round 2" below re-derives them and lists what remains.
 
 **The GIF row (docs).** `docs/media/README.md` reads "640×400, 13 frames" again. `ffprobe -count_frames` on the
 committed GIF (sha256 `754e61b3...1cc8`, equal to `docs/media/provenance.json`) reads 640x400, 13 frames, 8.5 s,
@@ -908,3 +922,50 @@ diff of `scripts/check_doc_facts.py` was empty after each):
 31 passed. `check_doc_facts.py` exits 0. `ruff check` and `ruff format --check` are clean on the changed Python, and
 `eslint` is clean on the two changed TSX files. The fix dispatch asks for one local `bash scripts/check.sh` at the
 fix head. Its exit code and CI's run at the head are cited by run id in the PR body, and no commit records them.
+
+### Review corrections, round 2 (2026-10-09)
+
+Built on `work/promote-round-3` at `18febe41`, the head the verifier lenses read (CI run 37996822272 green there).
+One blocking finding (the documentation lens); no new Codex comment. The change is comment-only: no production
+line, no assertion and no recorded byte moves, and no test is weakened. Every census stayed count-only, no provider
+was called and the untracked `.env` was not read.
+
+**The finding.** The round-1 sweep stopped short. Test comments still stated round 2's bytes as the shown set's,
+three of them with round 2's numbers, and the round-1 paragraph above claimed the rest were labelled. Two scans
+found them: the verifiers' scan (`candidate round 2`, `since 2026-10-02`) and a second pass over every comment the
+round-2 promotion (`0e67f42a`, `59bbd1be`) or the retirement card wrote that survives unchanged here, plus the prose
+beside each re-pin this card made. Each sentence is re-derived on round 3's bytes with round 2's value inline, or
+labelled as round 2's.
+
+| file | sentence | now (was, on round 2's bytes) | read by |
+|---|---|---|---|
+| `tests/meetings/test_vote_tally_parity.py` | the set-list era comment; the marker pin | round 3 since 2026-10-09; `teammate_coerced` 10 and `invalid_target` 0 (16 and 1) | the marker loop of `test_committed_guard_marker_counts_are_pinned` over `_recorded_meetings` on `samples/9p2i` and `candidates/stage-b-r2/9p2i`: 119 meetings, 702 ballots (117, 691) |
+| `tests/meetings/test_transcript.py` | seed 2 m0's pairs; the strong-flag surface | 12 pairs (9; 5 on the baseline-9 bytes); 39 strong, all `vent_sighting`, 15 weak (40: 38 `vent_sighting` and 2 `alibi_vs_physical`, 13 weak) | `detect_corroborations` on seed 2's first meeting with the ballot roster; `is_weak_contradiction` over every recorded flag of each set |
+| `tests/scripts/test_validity_gate_cli.py` | the era-config comment; `_locked_pin`'s docstring | round 3, 2026-10-09; three `.v8` arm stamps (two) | `_locked_pin()` from that module: `ballot_kill_row_v1`, `impostor_ballot_v1` and `route_lines_v1` |
+| `tests/scripts/test_measure_baseline_cli.py` | module docstring | round 3, its own era since 2026-10-09; the pins are held to the recorded surfaces | era registry; the test's own derivations |
+| `tests/agents/test_absence_prior.py` | the era sentence; the emergency count twice | round 3 since 2026-10-09, cells derived; 4 emergency meetings (3) | `recorded_counts(...).applied_actions["emergency"]` on each set |
+| `tests/agents/test_beliefs.py` | the class docstring and seven census sentences | innocent-reporter census 10 of 57 report ejections (17 of 63); buckets 3 exculpated, 6 already sub-gate, 1 out of the damp's reach (7, 9, 1); 28 hard-backed ejections (31); none innocent | the class's own walks (`_innocent_reporter_meetings`, `_rederive`, `_is_hard_backed`) run as a scratch subclass with `_SET_DIR` and the funnel pointed at each set |
+| `tests/agents/test_beliefs_hard_evidence_gate.py` | five sentences | 57 report ejections (63); 28 soft-only (30); 29 hard-backed of 57 (33 of 63); sub-gate 11 crew + 4 impostor, over the gate 2 + 11 (16 + 1, 2 + 11); 119 meetings walked (117) | the class's `counterfactual` and `walk` fixtures, the same scratch subclass on each set |
+| `tests/meetings/test_contradictions.py` | the exemption census; seven meeting totals; the corridor class; the one-segment routes | {CREWMATE: 3, IMPOSTOR: 1} / {whereabouts: 4} / 5 flags on both rounds, none STRONG; 650 committed meetings (648); 1 STRONG and 43 WEAK `alibi_vs_sighting` (1 and 44); 73 of 1,112 alibi claims one-segment (74 of 1,091) | `_committed_lever_census()`; `_iter_alibis(include_whereabouts=False)` keyed by event id over the four sets, which reproduces 74 of 1,091 with round 2's copy in the shown set's place |
+| `tests/eval/test_deduction_metrics.py` | six sentences | impostor roll-call share 47.5% pooled and 46.5% macro (46.5%, 45.4%); role statements 1 on the sample set (0); 389 envelope quotations (415); 10 target rewrites (17); 192 kills, 14 crew-witnessed (195, 14); both partitions 37 (42) | `_committed()` on each set's report gz: `public_response_coverage`, `scaffold_leakage`, `witnessed_supply`, the two cross tabs, and the envelope loop of `test_the_pre_guard_body_is_the_parsed_field_not_the_raw_envelope` |
+| `tests/eval/test_evidence_honesty.py` | four sentences beside this card's re-pins | 664 of 665 claim ticks rendered (631 of 632, the seed-47 example kept as round 2's); a STRONG band of 11 reads 4 (9 read 4); 0 impostors among 10 subjects and none under the grounded lever (1 among 7; 2 crewmates); one sole-flag victim, a crewmate whose STRONG flag the slate strips (none) | the pins beside each sentence: `(664, 664)`, `(0, 2, 0, 11, 4)`, `(10, 0)` and `(0, 0)`, `(1, 0)` with both still-strong sums 0 |
+| `tests/_helpers/test_scripted_meeting.py`, `tests/eval/test_deception_instruments.py`, `tests/eval/test_off_menu.py`, `tests/training/test_conviction_model.py`, `tests/training/test_surrogate_dataset.py`, `tests/api/test_main.py`, `tests/meetings/test_manager.py` | one era sentence each | round 3 since 2026-10-09, round 2's dates labelled; the seed 3 m0 anchor holds on round 3's bytes | era registry; each test passes on the shown set |
+
+**What remains.** The verifiers' scan, re-run at the fix head, lists 16 hits, and none states round 2's bytes as the
+shown set's. Twelve are history with a date or a range: `_helpers/committed.py:739`, `test_eras.py:37`,
+`test_vote_correctness.py:1961`, `test_watchability.py:138` and `:727`, `test_counterfactual_phase21.py:133`,
+`test_refresh_samples.py:1927`, `test_surrogate_fidelity.py:67`, `test_corroboration.py:2609`,
+`test_evidence_mechanisms.py:312`, `test_gameplay_census.py:1028` and the re-anchor note at `test_manager.py:5505`.
+Four are true of both rounds: `test_impostor_policy.py:2310` (the recorded arm policy), `test_public_results.py:988`
+(the experimental factory), `test_gameplay_facts_genuine_class.py:19` (the refusal) and
+`test_surrogate_fidelity.py:429` (the corpus fold). A second scan for present-tense phrasings (`holds round 2`, `round 2 is shown`, `promoted
+set, round 2`) finds two hits, a scratch plant in `test_route_lines_arm.py` and a commit's tree in
+`test_route_check_replay.py`, both true. The `frontend/` comments name round 2's readings as round 2's.
+
+**Mutation (bounded).** No mutant. Every change is a comment or a docstring, and no listed operator class applies
+to prose. The spans the finding names are comments too, and the assertions beside them are unchanged.
+
+**Verification at the fix head.** `pytest` over the seventeen edited files: 1397 passed. `ruff check` and
+`ruff format --check` are clean, and `scripts/validate_task_docs.py` exits 0. The fix dispatch asks for one local
+`bash scripts/check.sh` at the fix head. Its exit code and CI's run at the head are cited by run id in the PR body,
+and no commit records them.
