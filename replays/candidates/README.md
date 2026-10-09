@@ -20,11 +20,12 @@ fixed before it started.
 
 - **Not canonical while it is here.** The committed sets under
   `replays/samples/` and `replays/ml_corpus/` are the canonical bytes, each in
-  its own era (`eval/eras.py`). A round becomes one only by promotion, the
-  owner's ruling, which moves its bytes into a committed set with its config
-  beside them as that era's declared config: candidate round 2 became
-  `replays/samples/9p2i` on 2026-10-02, recorded in section 9 of the round's own
-  record. The other three committed sets are recorded with every switch off.
+  its own era (`eval/eras.py`). A round becomes one only by promotion, which
+  moves its bytes into a committed set with its config beside them as that
+  era's declared config: candidate round 3 is `replays/samples/9p2i` since
+  2026-10-09, recorded in section 12 of the round's own record, and round 2's
+  directory here holds the bytes that set held before it, from 2026-10-02. The
+  other three committed sets are recorded with every switch off.
 - **Not served or published.** The spectator API looks for a set of recordings
   directly under `replays/` or `replays/samples/`, and the static demo reads
   `replays/samples/` alone. A candidate set sits at
@@ -32,10 +33,16 @@ fixed before it started.
   changes nothing a viewer sees.
 - **Not adopted by being here.** Adopting a switch is the owner's decision,
   made after the round is assessed. The adopting change either re-records the
-  committed sets with the switch on or promotes a candidate. A round whose bytes
-  become a committed set is deleted in the promoting change, and its record
-  cites the commit that held it; any other round stays until a later change
-  names its retirement. A later round lands in its own directory.
+  committed sets with the switch on or promotes a candidate. A promotion
+  deletes the promoted round's directory, whose bytes become the committed set,
+  and its record cites the commit that held it; the bytes the promotion
+  replaces stay here as their own round's directory, the comparison record that
+  isolates one change. Every other round stays. A later round lands in its own
+  directory.
+
+History (2026-10-09): the owner kept the comparison records, so round 1 stays,
+the earlier proposal that each new round deletes the one before it was
+declined, and round 3's promotion kept round 2's bytes here.
 
 ## Layout
 

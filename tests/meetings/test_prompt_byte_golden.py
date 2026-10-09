@@ -1380,12 +1380,14 @@ class _Counted:
 #: walks has its own key, and a walked set without one raises.
 #: History (2026-10-09): samples/9p2i's row is counted, no longer transcribed;
 #: it read (117, 691, 0, 0) on round 2's bytes, (145, 845, 0, 0) on
-#: baseline 9's and (151, 869, 23, 14) on baseline 8's.
+#: baseline 9's and (151, 869, 23, 14) on baseline 8's, and reads round 3's
+#: (119, 702, 0, 0) since its promotion, whose candidates/stage-b-r3/9p2i row
+#: left with that candidate copy.
 _RETIRED_GUARD_PINS: Final[Mapping[str, tuple[int, int, int, int] | _Counted]] = {
     "samples/9p2i": _Counted(moved_ballots=0, meetings_holding_one=0),
     "samples/4p1i": (39, 117, 0, 0),  # was (39, 117, 1, 1)
     "candidates/stage-b-r1/9p2i": (124, 717, 0, 0),
-    "candidates/stage-b-r3/9p2i": (119, 702, 0, 0),
+    "candidates/stage-b-r2/9p2i": (117, 691, 0, 0),
 }
 
 
@@ -1511,6 +1513,9 @@ def test_the_retired_guard_pins_are_keyed_by_the_path_under_replays() -> None:
     shown = recorded_counts(sample)
     assert _retired_guard_pin(sample) == (shown.meetings, shown.ballots, 0, 0)
     assert _retired_guard_pin(candidate) == (124, 717, 0, 0)
+    kept = replays / "candidates" / "stage-b-r2" / "9p2i"
+    assert _retired_guard_pin(kept) == (117, 691, 0, 0)
+    assert (recorded_counts(kept).meetings, recorded_counts(kept).ballots) == (117, 691)
     # The defect this keying removes: by base name, two rows collapse into one.
     by_base_name = {Path(key).name: pin for key, pin in _RETIRED_GUARD_PINS.items()}
     assert len(by_base_name) < len(_RETIRED_GUARD_PINS)
@@ -1521,7 +1526,10 @@ def test_the_retired_guard_pins_are_keyed_by_the_path_under_replays() -> None:
         _retired_guard_pin(replays / "candidates" / "round-2" / "9p2i")
 
 
-@pytest.mark.parametrize("dropped", ["samples/9p2i", "candidates/stage-b-r1/9p2i"])
+@pytest.mark.parametrize(
+    "dropped",
+    ["samples/9p2i", "candidates/stage-b-r1/9p2i", "candidates/stage-b-r2/9p2i"],
+)
 def test_a_walked_set_whose_row_is_deleted_raises(dropped: str) -> None:
     """Planted: a walked set's row deleted raises ``KeyError`` naming the set.
 
@@ -2675,11 +2683,13 @@ def test_the_kill_row_gate_forced_on_fails_the_golden_at_the_kill_holders(
 #: MEASURED at the route-lines card: for the frozen sample set, the ballots
 #: whose transcript states, for one of the voter's candidates, a change of room
 #: the station's doors or the public regroup reconcile, as their count and the
-#: sha256 of their sorted ``set:seed:meeting id:voter`` keys. Both sets recorded
-#: the route lines OFF, so these are the only ballots the gate moves, and the
+#: sha256 of their sorted ``set:seed:meeting id:voter`` keys. It recorded the
+#: route lines OFF, so these are the only ballots the gate moves, and the
 #: golden's OFF leg bites at exactly them. Pinned as digests so a failure prints
-#: no prompt. The shown 9p2i set is held to its own reconciled ballots rather
-#: than a digest (665 ballots on round 2's bytes).
+#: no prompt. Round 2's candidate copy, also recorded OFF, is held to its own
+#: reconciled ballots rather than a digest (665 ballots); the shown 9p2i set
+#: recorded the route lines ON since round 3's promotion, so forcing them moves
+#: none of its ballots (it moved round 2's 665 while round 2 was shown).
 _ROUTE_LINE_BALLOTS: Final[Mapping[str, tuple[int, str]]] = MappingProxyType(
     {
         "4p1i": (
@@ -2732,8 +2742,10 @@ def test_the_route_lines_forced_on_fail_the_golden_at_the_reconciled_ballots(
 
     With the field OFF the committed ballots re-render byte-identically (the
     golden above). Forcing the manager's own profile to the field moves exactly
-    the ballots whose voter's candidates hold a route line, and nothing else, so
-    the OFF gate is what keeps them identical and it is not vacuous.
+    the ballots whose voter's candidates hold a route line, and nothing else, on
+    each set recorded with it OFF (the 4p1i sample and round 2's candidate copy),
+    so the OFF gate is what keeps them identical and it is not vacuous. On the
+    shown set, recorded with it ON, it moves nothing.
     """
 
     import meetings.manager as manager_module
@@ -2747,7 +2759,8 @@ def test_the_route_lines_forced_on_fail_the_golden_at_the_reconciled_ballots(
         )
 
     monkeypatch.setattr(manager_module.MeetingManager, "__init__", _forced)
-    for set_dir in _SAMPLE_SETS:
+    recorded_off = (_SAMPLE_SETS[1], _CANDIDATES_ROOT / "stage-b-r2" / "9p2i")
+    for set_dir in recorded_off:
         failing = {
             (set_dir.name, prompt.seed, prompt.meeting_id, str(prompt.agent_id))
             for prompt in walk_directory(set_dir).prompts
@@ -2755,5 +2768,12 @@ def test_the_route_lines_forced_on_fail_the_golden_at_the_reconciled_ballots(
         }
         assert failing == _reconciled_ballots(set_dir)
         assert failing, set_dir.name
-        if set_dir.name in _ROUTE_LINE_BALLOTS:
+        if set_dir in _SAMPLE_SETS:
             assert _ballot_digest(failing) == _ROUTE_LINE_BALLOTS[set_dir.name]
+        else:
+            assert len(failing) == 665, set_dir
+    shown = _SAMPLE_SETS[0]
+    assert not any(not prompt.reproduced for prompt in walk_directory(shown).prompts), (
+        shown
+    )
+    assert _reconciled_ballots(shown)
