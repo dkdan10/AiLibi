@@ -113,6 +113,17 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
 `Q` is the later `coordination:` commit adding the owner's confirmation as a dated addendum. `C` is
 `replays/candidates/stage-b-r3/9p2i`, `R1` round 1's set, `R2` `replays/samples/9p2i`, `CFG` the round's config.
 
+- [x] Review correction: the route-lines card's committed-payload case asserts, at the strength it had, that every
+  committed payload, every listed set and every `experiment-config.json` under `replays/` reads `route_lines_version`
+  OFF, leaving out only a candidate round's declared config whose round recorded the field ON, enumerated from the
+  candidate declarations, never by a path (the record's one stop, audit 7.5, re-scoped test-only by the
+  orchestrator's assignment). Proven by
+  `tests/meetings/test_route_lines_arm.py::test_only_a_declared_round_recording_the_field_on_may_read_it_on` (ten
+  plants: an ON config under `samples/9p2i` or `ml_corpus/9p2i` and a listed set recorded ON are listed, and so is
+  the round's config when its declaration names other bytes, names no set or appears twice, or a declared seed is
+  missing or recorded OFF; the round as declared, on round 3's bytes, and a round still recording are not), by a
+  scratch ON config in `replays/samples/9p2i` turning the committed case red, and by CI run 37932710107 at
+  `368109f7`, green.
 - [x] **The pre-registration and the owner's confirmation precede the first seed, and neither is rewritten.**
   Mechanism: no provider call before Q is pushed. P holds the rulings and readings above verbatim and dated, the
   config bytes and sha256, Constraints' ceilings, stops and discipline, the table, the flag and the step rule below,
@@ -1204,3 +1215,71 @@ the sync, the count-only walk and Conf. check, the key scan, the date, section, 
 aids kept outside the repository; every count they read comes from committed bytes through a named production command.
 Recording wall and the per-leg times come from the recorder's logs and the operator log, outside the repository. The
 CI gate at the head is red until the stop is resolved.
+
+### Review corrections, round 1 (2026-10-09)
+
+Three review lenses over the head `fd9eef64` returned one blocking finding, the record's one stop (audit 7.5): CI
+run 37927577127 at `fd9eef64` read Project checks 1 failed, 10,850 passed, the one failure
+`tests/meetings/test_route_lines_arm.py::test_every_committed_payload_reads_the_field_off`, which walked every
+`replays/**/experiment-config.json` and found `replays/candidates/stage-b-r3/experiment-config.json`, the round's
+declared config, reading `route_lines_version` ON by design (audit 1.3). No other finding was returned.
+
+**The resolution, by the orchestrator's assignment.** The orchestrator ruled the case re-scoped, test-only, under
+the one-writer map: the route-lines card is done and merged, and this record carries the edit as directly necessary
+follow-through, as round 1's fourteen re-scopes did. `368109f7` (`test:`) makes the edit in that one file; no
+recorded byte, no production code and no other test moved.
+- *Old assertion.* `_committed_payloads_reading_the_field_on() == []`, the helper listing any committed
+  `experiment_config` payload under `audits/` or `tests/fixtures` reading the field ON, any
+  `replays/**/experiment-config.json` whose `route_lines_version` is not None, and any of the five listed sets
+  (`samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i`) whose first
+  replay recorded it.
+- *New assertion.* `_committed_payloads_reading_the_field_on(_REPO / "replays", _COMMITTED_SETS) == []`, the same
+  three walks: the payload walk unchanged (106 files, 1,193 payloads), the five sets unchanged, and every
+  `replays/**/experiment-config.json` still read (3 files) except a candidate round's declared config whose round
+  recorded the field ON. That exception is enumerated from the candidate declarations, never named by a path: a
+  round `candidate_rounds()` lists, whose README holds one `candidate-declaration` block (parsed, without a problem,
+  by `tests/scripts/test_candidate_sets.py`'s own `declaration_blocks` and `parse_declaration`) naming the file's
+  sha256, and every seed of every set it declares has a replay that recorded the field at the file's value. Only a
+  file directly inside a round directory under `candidates/` can be left out, so a file under `samples/` or
+  `ml_corpus/` never is. The walk takes its root and its sets, and refuses an empty set list. On the tree it leaves
+  out one file, round 3's declared config, and lists none.
+- *Strength kept.* On every committed payload, on `replays/samples/9p2i/experiment-config.json` and
+  `replays/candidates/stage-b-r1/experiment-config.json`, and on each of the five sets, the case asserts what it
+  asserted before; the one file it no longer asserts OFF is a declared config whose 50 recordings read the field ON,
+  which `test_every_committed_round_holds_its_declared_shape` already holds to its declaration.
+- *Planted.* `test_only_a_declared_round_recording_the_field_on_may_read_it_on` builds a scratch `replays/` from
+  round 2's declared file and the fake rehearsal's ON and OFF games, beside a round whose config is round 2's file
+  plus the field (342 bytes, sha256 `a788b9eb…6d57d`, round 3's declared bytes) declared for seeds 0-1. Ten plants:
+  as declared, 0 listed; a round still recording, holding no config yet, 0; an ON config under `samples/9p2i` (the
+  declared round beside it) lists exactly that file; one under `ml_corpus/9p2i` lists exactly it; a listed set
+  recorded ON lists `samples/9p2i`; a declaration naming round 2's bytes, naming no set or appearing twice, and a
+  declared seed recorded OFF or missing, each list exactly the round's config. `test_the_walk_refuses_to_read_no_set`
+  pins the refusal. In the tree, a scratch copy of the round's declared config at
+  `replays/samples/9p2i/scratch-plant/experiment-config.json` turned the committed case red listing exactly that file
+  (1 failed); deleted, with `git status --short` showing only the test edit, the case passed (1 passed).
+- *Mutation probe* (scratch, 23 mutants over the changed spans): 21 killed. Two survive: `== value` made
+  `is not None`, equivalent because the field validates only to 1 or None
+  (`test_a_value_other_than_one_or_none_is_refused`); and the committed case's set list narrowed to its first set,
+  the class the old inline loop carried too, since every committed set reads the field OFF.
+
+**Gates at `368109f7`** (bare shell, `env | grep -c '^AILIBI_'` 0, count-only). The targeted suites (the
+route-lines arm and field suites, `tests/eval/test_route_charges.py`, both route instruments' suites,
+`tests/scripts/test_candidate_sets.py`, `tests/eval/test_gameplay_census.py`, the arms and config suites): 1,023
+passed, 0 failed; the golden `-k "retired_guard or stage-b-r3"`: 12 passed; `check_doc_facts.py` and
+`validate_task_docs.py` exit 0; offline `verify_ml_evidence.py` exit 0 (never `--complete`); the scorecard and census
+`--check` exit 0; `route_check_replay --check` and `route_lines_replay --check` exit 0; `verify_samples.sh` bare and
+on each of the six set directories, and `build_sample_report.py --check` on each, exit 0; `pytest -m campaign`
+337 passed. The frozen pathspec over `e4fc6cbf..HEAD` and `e4fc6cbf..origin/main` prints 0 commits (12 over
+`76270d6c..e4fc6cbf`); the nothing-moves diff over `e4fc6cbf..HEAD` is empty, and `fd9eef64..HEAD` touches nothing
+under `replays/`, `audits/` or `docs/`. The house gate (memo 8.7 item 1): CI run 37932710107 at `368109f7`,
+success: Project checks 10,862 passed, 40 skipped, 3 xfailed, 0 failed (10,850 before, plus the re-scoped case and
+the eleven new cases); Frontend checks and Frontend e2e passed. The run at the head carrying this section is cited in
+the pull request.
+
+**The step (ruling 2) is not written here.** The orchestrator's text for the audit's section 11 is to be written
+verbatim only if nothing in the audit's readings contradicts it. Every reading it names reproduces from sections 6 to
+8, except two phrases, which do not read as section 7.2 states them: "one sitting of 3.34 h" (7.2: the sitting ran
+07:59:44Z to 11:32:31Z, 3 h 32 min 47 s; 3.34 h is the recording wall summed over the eleven legs) and "the spend at
+54 to 57 percent of each ceiling" (7.2: calls 54.4%, input 55.2% and output 56.8% of their ceilings, the recording
+wall 27.8% of its 12 h). The text is not edited and the section is not written; the question is the orchestrator's,
+and the pull request stays a draft until the step is written.
