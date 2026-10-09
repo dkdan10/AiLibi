@@ -288,6 +288,24 @@ def test_each_set_reads_the_block_of_the_era_its_bytes_replaced() -> None:
     assert before_column_of("replays/samples/4p1i", "baseline-9", blocks) is None
 
 
+def test_another_sets_block_never_shows_as_this_sets_before_column() -> None:
+    """A set reads only its own blocks: a later block of another set, appended
+    after this set's, is not this set's before column, and a set whose only
+    blocks belong to another set shows none."""
+
+    blocks = read_before_columns(ROOT)
+    foreign = blocks[-1].model_copy(
+        update={"set": "replays/samples/4p1i", "era_id": "stage-b-r9"}
+    )
+    grown = (*blocks, foreign)
+    shown = before_column_of("replays/samples/9p2i", "stage-b-r3", grown)
+    assert shown is not None
+    assert (shown.set, shown.era_id) == ("replays/samples/9p2i", "stage-b-r2")
+    own = before_column_of("replays/samples/4p1i", "stage-b-r10", grown)
+    assert own is not None and own.era_id == "stage-b-r9"
+    assert before_column_of("replays/ml_corpus/9p2i", "baseline-9", grown) is None
+
+
 def test_a_registry_filing_samples_9p2i_under_stage_b_r2_fails_the_pages_check() -> (
     None
 ):

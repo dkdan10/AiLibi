@@ -2049,6 +2049,22 @@ def test_the_scorecards_before_block_and_the_front_door_name_one_era(
     ]
 
 
+def test_a_shown_set_at_the_ladder_tip_reads_no_replaced_era(
+    doc_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The replaced-era check reads only a set a later era holds. With the shown
+    # 9-player set filed at the ladder tip, as it was before round 2's
+    # promotion, the check adds nothing and raises nothing: the tip's before
+    # cells are read from the record the tip replaced, never through
+    # replaced_era (which raises for the tip).
+    from eval.eras import LADDER_TIP_ERA
+
+    monkeypatch.setattr(check_doc_facts, "era_of", lambda path: LADDER_TIP_ERA)
+    errors: list[str] = []
+    check_doc_facts.check_replaced_era(doc_tree, errors)
+    assert errors == []
+
+
 def test_an_unreadable_before_file_is_named(doc_tree: Path) -> None:
     # One edited byte of the frozen before file fails its digest pin, and the
     # check says the column cannot be read rather than skipping it.
