@@ -1626,6 +1626,13 @@ dispatched, and its W0, W1 and W2 rows go with G27 into the retirement card; the
 card merges, and the card's Results give the basis. `retire-temporal-evidence-v1` stays `ready` and blocked: whether
 it waits or closes is the owner's D15 word, which neither 8.5 nor this section gives.
 
+**Orchestrator default of 2026-10-09 for the frozen before column (baselines memo D12).** A promotion of round 3
+keeps the scorecard's frozen before column in the grow form the promotion card contracts: the baseline-9 block
+stays byte for byte, round 2's block is appended as the era it replaced, the pin is re-pinned with a planted edit
+case, and each shown set reads the block of the era it replaced; nothing is re-scored and the reversal is stated.
+This is the orchestrator's default under memo 8.8 and 8.9, recorded here so `promote-round-3` may dispatch; the
+owner may replace it with a ruling at any time before that card merges.
+
 ## Appendix: reproduction
 
 The scratch scripts named here are session aids and are not committed; the load-bearing counts are
