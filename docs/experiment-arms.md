@@ -163,3 +163,10 @@ moves no default. The set carries one flag its record states: reporters ejected
 per report meeting read 17/114, above the pre-registered 0.104, so the round's
 own rule named no promotion step; the owner's ruling promotes it regardless. The
 ladder tip stands at baseline 9.
+
+## Candidate round 3
+
+[`replays/candidates/stage-b-r3/9p2i`](../replays/candidates/stage-b-r3/README.md)
+is candidate round 3, recorded with the shown set's rules and one more switch
+that gives each voter a plain line about the places stated at the table, as its
+README names; it adopts nothing and is not a canonical sample set.

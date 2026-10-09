@@ -13,10 +13,12 @@ rendered prompt or reads a recorded text into an assertion message.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import shutil
-from collections.abc import Callable, Iterator, Mapping
+import sys
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
@@ -90,6 +92,7 @@ from orchestrator.replay import (
     read_all_entries,
     recorded_experiment_config,
 )
+from tests._helpers.committed import candidate_rounds
 from tests._helpers.scripted_meeting import record_game
 from tests._helpers.scripted_routes import record_routes_game, round_two_config
 from tests.meetings._manager_helpers import (
@@ -220,9 +223,91 @@ _COMMITTED_SETS: Final[tuple[str, ...]] = (
 )
 
 
-def _committed_payloads_reading_the_field_on() -> list[str]:
-    """Each committed payload, config file or replay set that reads the field ON."""
+def _recorded_route_lines(replay: Path) -> int | None:
+    """The ``route_lines_version`` ``replay`` recorded; ``None`` when OFF or absent."""
 
+    if not replay.is_file():
+        return None
+    recorded = recorded_experiment_config(read_all_entries(replay))
+    return (recorded or RecordedExperimentConfig()).route_lines_version
+
+
+def _declared_configs_recording_the_field_on(candidates: Path) -> frozenset[Path]:
+    """The declared config of each candidate round whose own recording reads the field ON.
+
+    The rounds come from the candidate declarations, never from a path named
+    here: the round's README holds one ``candidate-declaration`` block, parsed by
+    the candidate-set test, whose first line names the config file's sha256, and
+    every replay of every seed it declares recorded the field at the file's value.
+    """
+
+    # The candidate-set test imports the bare ``scripts/`` modules.
+    scripts = str(_REPO / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    from tests.scripts.test_candidate_sets import (
+        declaration_blocks,
+        parse_declaration,
+    )
+
+    declared: set[Path] = set()
+    for round_dir in candidate_rounds(candidates):
+        config_path = round_dir / "experiment-config.json"
+        # A round still recording holds no config yet, so nothing to leave out.
+        if not config_path.is_file():
+            continue
+        data = config_path.read_bytes()
+        value = RecordedExperimentConfig.model_validate_json(data).route_lines_version
+        readme = (round_dir / "README.md").read_text(encoding="utf-8")
+        blocks = declaration_blocks(readme)
+        if value is None or len(blocks) != 1:
+            continue
+        declaration, problems = parse_declaration(blocks[0])
+        if problems or declaration.config_line != (
+            f"{hashlib.sha256(data).hexdigest()}  {config_path.name}"
+        ):
+            continue
+        if all(
+            _recorded_route_lines(round_dir / name / f"replay-seed-{seed}.jsonl")
+            == value
+            for name, seeds in declaration.sets.items()
+            for seed in seeds
+        ):
+            declared.add(config_path)
+    return frozenset(declared)
+
+
+def _config_files_reading_the_field_on(replays: Path) -> list[str]:
+    """Each ``experiment-config.json`` under ``replays`` that reads the field ON.
+
+    The one exception is a candidate round's declared config whose round
+    recorded the field ON; any other file reading it ON is listed, under
+    ``samples/`` or ``ml_corpus/`` always.
+    """
+
+    declared = _declared_configs_recording_the_field_on(replays / "candidates")
+    return [
+        path.relative_to(replays.parent).as_posix()
+        for path in sorted(replays.rglob("experiment-config.json"))
+        if path not in declared
+        and RecordedExperimentConfig.model_validate_json(
+            path.read_text(encoding="utf-8")
+        ).route_lines_version
+        is not None
+    ]
+
+
+def _committed_payloads_reading_the_field_on(
+    replays: Path, sets: Sequence[str]
+) -> list[str]:
+    """Each committed payload, config file under ``replays`` or set in ``sets`` reading it ON.
+
+    A candidate round's declared config whose round recorded the field ON is the
+    one file left out (:func:`_config_files_reading_the_field_on`).
+    """
+
+    if not sets:
+        raise ValueError("the walk names no replay set")
     found: list[str] = []
     for suffix in (".jsonl", ".json"):
         for path in arms_tests._committed_files(suffix):
@@ -238,14 +323,9 @@ def _committed_payloads_reading_the_field_on() -> list[str]:
                         payload
                     ).route_lines_version:
                         found.append(path.relative_to(_REPO).as_posix())
-    for path in sorted((_REPO / "replays").rglob("experiment-config.json")):
-        config = RecordedExperimentConfig.model_validate_json(
-            path.read_text(encoding="utf-8")
-        )
-        if config.route_lines_version is not None:
-            found.append(path.relative_to(_REPO).as_posix())
-    for name in _COMMITTED_SETS:
-        first = min((_REPO / "replays" / name).glob("replay-seed-*.jsonl"))
+    found += _config_files_reading_the_field_on(replays)
+    for name in sets:
+        first = min((replays / name).glob("replay-seed-*.jsonl"))
         recorded = recorded_experiment_config(read_all_entries(first))
         if (recorded or RecordedExperimentConfig()).route_lines_version is not None:
             found.append(name)
@@ -256,10 +336,138 @@ def test_every_committed_payload_reads_the_field_off() -> None:
     """A missing key means OFF: no committed payload, file or set reads the field ON.
 
     The byte test above cannot see a flipped default, since the omission keys on
-    the default and the bytes would still round-trip; this one can.
+    the default and the bytes would still round-trip; this one can. The one file
+    that may read it ON is a candidate round's declared config whose round
+    recorded it ON, enumerated from the candidate declarations.
     """
 
-    assert _committed_payloads_reading_the_field_on() == []
+    found = _committed_payloads_reading_the_field_on(_REPO / "replays", _COMMITTED_SETS)
+    assert found == []
+
+
+#: The planted round's directory name in a scratch ``replays/`` tree.
+_PLANTED_ROUND: Final[str] = "planted"
+#: Each plant, and the files it must list.
+_PLANTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        "as declared": (),
+        "samples on": ("replays/samples/9p2i/experiment-config.json",),
+        "corpus on": ("replays/ml_corpus/9p2i/experiment-config.json",),
+        "a set recorded on": ("samples/9p2i",),
+        "declares other bytes": (
+            f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
+        ),
+        "holds on bytes it does not declare": (
+            f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
+        ),
+        "declares the other on bytes it holds": (),
+        "declares another set": (),
+        "a second set recorded off": (
+            f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
+        ),
+        "declares no set": (
+            f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
+        ),
+        "declares twice": (
+            f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
+        ),
+        "a seed recorded off": (
+            f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
+        ),
+        "a seed missing": (
+            f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
+        ),
+        "a round still recording": (),
+    }
+)
+
+
+def _plant_replays(root: Path, games: _Games, plant: str) -> Path:
+    """A scratch ``replays/``: round 2's declared set, and a round declaring the field ON.
+
+    ``samples/9p2i`` holds round 2's declared file and the fake rehearsal's OFF
+    game. The round's config is round 2's file with the field added (round 3's
+    declared bytes), declared by its sha256 for two seeds of set ``9p2i`` whose
+    replays are the fake rehearsal's ON game; ``plant`` perturbs one part. Two
+    plants hold other ON bytes (the field's key first), so the sha256 compared is
+    the loaded file's, and two declare a set besides ``9p2i``, so each declared
+    set is read by its own name.
+    """
+
+    off = _round_two_file()
+    on = off.removesuffix("}\n") + ', "route_lines_version": 1}\n'
+    other_on = '{"route_lines_version": 1, ' + off.removeprefix("{")
+    replays = root / "replays"
+    samples = replays / "samples" / "9p2i"
+    samples.mkdir(parents=True)
+    (samples / "experiment-config.json").write_text(
+        on if plant == "samples on" else off, encoding="utf-8"
+    )
+    shown = games.fake_on if plant == "a set recorded on" else games.fake_off
+    shutil.copyfile(shown, samples / "replay-seed-0.jsonl")
+    if plant == "corpus on":
+        corpus = replays / "ml_corpus" / "9p2i"
+        corpus.mkdir(parents=True)
+        (corpus / "experiment-config.json").write_text(on, encoding="utf-8")
+    round_dir = replays / "candidates" / _PLANTED_ROUND
+    set_name = "4p1i" if plant == "declares another set" else "9p2i"
+    (round_dir / set_name).mkdir(parents=True)
+    # The bytes the round's config holds, and the bytes its declaration names.
+    held, named = {
+        "declares other bytes": (on, off),
+        "holds on bytes it does not declare": (other_on, on),
+        "declares the other on bytes it holds": (other_on, other_on),
+    }.get(plant, (on, on))
+    (round_dir / "experiment-config.json").write_text(held, encoding="utf-8")
+    lines = [f"{hashlib.sha256(named.encode()).hexdigest()}  experiment-config.json"]
+    if plant != "declares no set":
+        lines.append(
+            f"{set_name} seeds 0-2"
+            if plant == "a seed missing"
+            else f"{set_name} seeds 0-1"
+        )
+    if plant == "a second set recorded off":
+        lines.append("4p1i seeds 0-0")
+        (round_dir / "4p1i").mkdir()
+        shutil.copyfile(games.fake_off, round_dir / "4p1i" / "replay-seed-0.jsonl")
+    block = "```candidate-declaration\n" + "\n".join(lines) + "\n```\n"
+    (round_dir / "README.md").write_text(
+        "# Planted round\n\n" + block * (2 if plant == "declares twice" else 1),
+        encoding="utf-8",
+    )
+    shutil.copyfile(games.fake_on, round_dir / set_name / "replay-seed-0.jsonl")
+    second = games.fake_off if plant == "a seed recorded off" else games.fake_on
+    shutil.copyfile(second, round_dir / set_name / "replay-seed-1.jsonl")
+    if plant == "a round still recording":
+        recording = replays / "candidates" / "recording" / "9p2i"
+        recording.mkdir(parents=True)
+        shutil.copyfile(games.fake_on, recording / "replay-seed-0.jsonl")
+    return replays
+
+
+@pytest.mark.parametrize("plant", list(_PLANTS))
+def test_only_a_declared_round_recording_the_field_on_may_read_it_on(
+    games: _Games, tmp_path: Path, plant: str
+) -> None:
+    """Planted: the case's walk over a scratch ``replays/``, one part perturbed.
+
+    An ON file under ``samples/`` or ``ml_corpus/`` is listed, and so is a listed
+    set that recorded the field ON, and a round's ON file when its declaration
+    names other bytes than the file holds, names no set or appears twice, or a
+    declared seed (of any declared set) is missing or recorded the field OFF; the
+    round as declared is not, on round 3's bytes or on other ON bytes it declares,
+    nor a round declaring its seeds under another set name, nor a round that holds
+    no config yet.
+    """
+
+    replays = _plant_replays(tmp_path, games, plant)
+    found = _committed_payloads_reading_the_field_on(replays, ("samples/9p2i",))
+    assert found == list(_PLANTS[plant])
+
+
+def test_the_walk_refuses_to_read_no_set() -> None:
+    with pytest.raises(ValueError, match="names no replay set"):
+        _committed_payloads_reading_the_field_on(_REPO / "replays", ())
 
 
 def test_without_its_omission_the_committed_payloads_and_files_fail(
