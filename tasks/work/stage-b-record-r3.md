@@ -113,7 +113,38 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
 `Q` is the later `coordination:` commit adding the owner's confirmation as a dated addendum. `C` is
 `replays/candidates/stage-b-r3/9p2i`, `R1` round 1's set, `R2` `replays/samples/9p2i`, `CFG` the round's config.
 
-- [ ] **The pre-registration and the owner's confirmation precede the first seed, and neither is rewritten.**
+- [x] Review correction (round 2): the `audits/` row of `docs/artifacts.md` states the audit record's tracked bytes
+  at the head that carries it. `13370e5c` appended section 11 (2,549 bytes) and left the row at 31,571,362, so the
+  offline evidence check exited 1 and CI run 37937850895 at `13370e5c` read Project checks 2 failed; `6b014cba`
+  re-derives it to 31,573,911 / 335 files (`git ls-tree -r -l 13370e5c audits`), and `08362561` again to 31,574,099 /
+  335 files for its index edit. Proven by offline `scripts/verify_ml_evidence.py` (exit 0: OK 52, FAIL 0) and
+  `tests/scripts/test_verify_ml_evidence.py` (90 passed, among them `test_every_counted_registry_row_matches_the_index`
+  and `test_main_runs_the_cheap_legs_green_at_head`, the two red at `13370e5c`).
+- [x] Review correction (round 2): the declared-round walk compares the loaded config's own sha256 and reads each
+  declared set by its own name. Proven by
+  `tests/meetings/test_route_lines_arm.py::test_only_a_declared_round_recording_the_field_on_may_read_it_on`
+  (fourteen plants, `93ecd5f8`): a round holding other ON bytes than it declares is listed, and one declaring those
+  bytes is not; a round declaring its seeds under `4p1i` is not listed, and one declaring `9p2i` and `4p1i` with its
+  `4p1i` seed recorded OFF is. Both survivors of the review (the sha256 replaced by round 3's literal line; the set
+  name by the literal `9p2i`) now fail 2 cases each; scratch probe, 18 mutants, 13 killed, 5 equivalent.
+- [x] Review correction (round 2): the card, the audit index and the pull request body match the head. The step
+  subsection no longer claims CI green at a head whose run failed; the index row says section 11 records the step
+  (Codex 4230751225); the pull request body cites the green run at its pushed head by id and marks its draft and
+  step-not-written statements superseded by `13370e5c`. Proven by `scripts/validate_task_docs.py` and
+  `scripts/check_doc_facts.py` (exit 0 each), `copy_problems` 0 and the identifier scan 0 on the index row's prose,
+  and `gh run view` on the run the body cites (its `headSha` the pull request's head, conclusion success).
+- [x] Review correction: the route-lines card's committed-payload case asserts, at the strength it had, that every
+  committed payload, every listed set and every `experiment-config.json` under `replays/` reads `route_lines_version`
+  OFF, leaving out only a candidate round's declared config whose round recorded the field ON, enumerated from the
+  candidate declarations, never by a path (the record's one stop, audit 7.5, re-scoped test-only by the
+  orchestrator's assignment). Proven by
+  `tests/meetings/test_route_lines_arm.py::test_only_a_declared_round_recording_the_field_on_may_read_it_on` (ten
+  plants: an ON config under `samples/9p2i` or `ml_corpus/9p2i` and a listed set recorded ON are listed, and so is
+  the round's config when its declaration names other bytes, names no set or appears twice, or a declared seed is
+  missing or recorded OFF; the round as declared, on round 3's bytes, and a round still recording are not), by a
+  scratch ON config in `replays/samples/9p2i` turning the committed case red, and by CI run 37932710107 at
+  `368109f7`, green.
+- [x] **The pre-registration and the owner's confirmation precede the first seed, and neither is rewritten.**
   Mechanism: no provider call before Q is pushed. P holds the rulings and readings above verbatim and dated, the
   config bytes and sha256, Constraints' ceilings, stops and discipline, the table, the flag and the step rule below,
   and `readings.py` and `reproject.py` whole, as Validation quotes them (each with its sha256 as extracted from this
@@ -132,12 +163,12 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   probe's start in the operator log and every MANIFEST `refreshed_at`; P's section equals the PR head's. Proof: the
   head in place of P exits 1; a scratch MANIFEST with one `refreshed_at` before Q fails the date check; a
   one-character edit to a reading prints a diff.
-- [ ] **The before columns are computed, never typed.** Mechanism: at F the census and scorecard `--set-dir R2
+- [x] **The before columns are computed, never typed.** Mechanism: at F the census and scorecard `--set-dir R2
   --json-stdout` equal the shipped `samples/9p2i` entries leaf for leaf; on R1 and R2 the readings command prints
   every round-1 and round-2 count round 2's audit section 6 and Evidence state, 0 differing; the instrument's r1 and
   r2 columns at F equal the committed JSON's (M, W and each reach). A moved count stops the card. Proof: each
   comparison against a copy with one cell edited prints that cell and exits 1.
-- [ ] **The readings are pre-registered in three columns.** Mechanism: `readings.py CENSUS HONESTY ROUTE --column
+- [x] **The readings are pre-registered in three columns.** Mechanism: `readings.py CENSUS HONESTY ROUTE --column
   {r1,r2,r3} [--bar {A,B,C}] [--after] [--step]` (Validation, quoted whole) computes each reading from the keys
   named here; with `--after` it exits 1 on a Conf. miss, an empty cooldown writer and, on the r3 column, route
   cells out of scope or a route presence of 0 included. Conf. cells read exactly as built; a miss is a code defect
@@ -197,7 +228,7 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   name is a stop, never a silent edit. The name is corrected in both places, which changes `readings.py`'s sha256;
   the cell read is the same, so the owner's confirmation of 2026-10-09 (decision memo 8.7) covers it. Every other
   count the table states reproduced at F `7dfaa7f3` through the production path (the stopped operator's evidence).
-- [ ] **The reporter flag is re-keyed, with a proposed bar and its alternatives.** Mechanism: `readings.py` reads
+- [x] **The reporter flag is re-keyed, with a proposed bar and its alternatives.** Mechanism: `readings.py` reads
   `reporter_seats_ejected_without_vent_proof` (k1/n1) against `other_crewmate_seats_ejected_without_vent_proof`
   (k2/n2); the relative rate is (k1/n1)/(k2/n2), compared by cross-multiplication in exact fractions, so no zero is
   divided by. Proposed bar **A**: flagged above twice round 2's relative rate, 2 x 10.64 = 21.28. Its zero case:
@@ -215,7 +246,7 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   noise in a round that changed nothing; C reads the reporter seat alone, which the re-keying set aside. The flag
   gates nothing and the step rule never reads it. Proof: the command prints 17.0 and 10.6 on R1 and R2, not flagged
   under A; under B it flags R1; a scratch copy with k2 = 0 and k1 = 1 prints "flagged, reporters alone".
-- [ ] **The step rule after round 3 is pre-registered, reads no reporter line and no role-correct figure, and is the
+- [x] **The step rule after round 3 is pre-registered, reads no reporter line and no role-correct figure, and is the
   owner's to take or override.** Mechanism: `readings.py --step` prints one line by this sentence, carried whole:
 
   > **The step rule after round 3.** With every Conf. cell at 0, round 3's point share of impostor wins neither above
@@ -225,14 +256,14 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
 
   The rule gates no acceptance item. The witness subset, the reach of each check and M per ejection are printed
   beside M and not read. Proof: the planted copies of the readings item.
-- [ ] **The preflight holds at F.** Mechanism: `CFG`, read by `scripts/_declared_experiment.py`'s loader, validates
+- [x] **The preflight holds at F.** Mechanism: `CFG`, read by `scripts/_declared_experiment.py`'s loader, validates
   as a `RecordedExperimentConfig` whose non-default fields are round 2's nine and the route field;
   `OMITTED_AT_DEFAULT` holds it; `engine_arguments` returns round 2's keywords unchanged; `prompt_versions_for_set`
   serves the four stamps; `self_report` is False, `evidence_reasoning_version` and `contextual_self_report_version`
   None, the slate bare. The instrument takes `r3`; the held-data and route cells exist under their cards' keys.
   Proof: an unknown key is refused (`extra_forbidden`); without the route key the bytes equal R2's declared file;
   the field card's refusals (an env switch, an unthreaded reader) pass at F, named by test id.
-- [ ] **The fake dress rehearsal passes every instrument at F, at $0, and shows the field inert.** Mechanism: seeds
+- [x] **The fake dress rehearsal passes every instrument at F, at $0, and shows the field inert.** Mechanism: seeds
   0-49 record with `AILIBI_LLM_PROVIDER=fake` on `CFG` into scratch outside `replays/`; each exits 0 on it: the census
   `--set-dir` (every Conf. cell 0, and route presence exactly 0: `meetings_with_a_route_line` and
   `ballots_carrying_route_lines` read 0, since a fake turn states no place and so no block is served), the scorecard
@@ -245,7 +276,7 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   projection on round-2 bytes (`experiments/lab/results-route-lines-replay.json`, the r2 column's projected added
   input tokens beside round 2's 9,187,880), stated at P, gating nothing. Proof: gated against R2's declared file,
   the gate fails `cost_and_provenance_exact`.
-- [ ] **The scripted rehearsal and the lab still hold at F, and the field is served.** Mechanism: the field card's
+- [x] **The scripted rehearsal and the lab still hold at F, and the field is served.** Mechanism: the field card's
   planted cases (West Hall to Admin, 1 hop in 1 tick; Admin to Cafeteria, 2 hops in 2 ticks; across a regroup) and
   round 2's scripted and ballot-arm cases pass; a scratch scripted game from `CFG` (the field card's
   `tests/_helpers/scripted_routes.py`, whose turns state places) passes the loader, census, scorecard, gate and
@@ -256,12 +287,12 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   that card compares them (the field touches no tactical code); the field card's lab rows reproduce by its own
   command. Proof: dropping the recorded evidence profile leaves a scripted call unconsumed; one edited lab counter
   prints that field.
-- [ ] **The dry run and the probe pass before any batch.** Mechanism: the dry run echoes P's sha256, the ten fields
+- [x] **The dry run and the probe pass before any batch.** Mechanism: the dry run echoes P's sha256, the ten fields
   and the bare slate, with `git status --porcelain --untracked-files=no` at 0 lines. The probe records seeds 0-1 as
   one leg on two workers; the probe's gates (Constraints) run before any batch. Seeds 0-1 with no meeting or no
   served route line extend by seeds 2-3 only; seeds 0-3 with a ballot and no served route line stop the card.
   Proof: the dry run with a stray `AILIBI_BOUNDED_REBUTTAL=1` exits 1.
-- [ ] **The round is exactly the declaration, and every Conf. cell reads 0.** Mechanism: the validity gate on C
+- [x] **The round is exactly the declaration, and every Conf. cell reads 0.** Mechanism: the validity gate on C
   passes its ten checks, named, with `--expected-model Qwen/Qwen3.6-27B --require-zero-cost`, the four
   `--expected-prompt-versions` pairs, `--expected-experiment-config CFG`, `--expected-seeds 0-49` and
   `--require-one-recording-sha`; the MANIFEST's flags column equals R2's and its policy column reads
@@ -269,25 +300,25 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   meeting on a breach), the route cells included; the golden reproduces every call. Proof: the gate with
   `--expected-seeds 0-50` fails; R2 against `CFG` fails `cost_and_provenance_exact`; the census card's planted
   breaches (its route conformance cases among them) and the field card's pass at F, named by test id.
-- [ ] **The spend stays inside the ceilings.** Mechanism: the tally counts C's `llm_calls`; `reproject.py` applies
+- [x] **The spend stays inside the ceilings.** Mechanism: the tally counts C's `llm_calls`; `reproject.py` applies
   Constraints' re-projection, exiting 1 with a STOP line past a 90% stop. Proof (at `76270d6c`): the tally prints
   `1502 9187880 418270 0.0` on R2 and `1556 9344346 433660 0.0` on R1; on a scratch copy of R1's seeds 0-11 with
   4,000 s of wall it projects 1,619 calls, 9,978,176 input, 470,463 output and 4.63 h and exits 0; with 50,000 output
   tokens added to one call it projects 677,314 output and exits 1 on output; with 9,400 s of wall it projects
   10.88 h and exits 1 on wall (all three re-run at authoring with the `reproject.py` Validation quotes).
-- [ ] **The checkout never moves, a pause strands nothing, no key leaves, and the freeze held.** Mechanism: seeds
+- [x] **The checkout never moves, a pause strands nothing, no key leaves, and the freeze held.** Mechanism: seeds
   record in a checkout detached at P, in batches, each ending in a count-only key scan (gzip decompressed) and a
   pushed `record:` checkpoint, the gates running after the probe and after every second batch (the owner's process
   amendment of 2026-10-09, decision memo 8.7); `git log --oneline F..HEAD` and `F..origin/main` print nothing over the frozen
   pathspec. Proof: the MANIFEST names one `git_sha`; each scan pattern fires on its planted key; with a planted pause
   file and the recorder replaced by `true` no batch starts; the pathspec over `76270d6c..F` is non-empty.
-- [ ] **The derived views and the registration are rebuilt, never hand-edited.** Mechanism: the recorder's
+- [x] **The derived views and the registration are rebuilt, never hand-edited.** Mechanism: the recorder's
   post-step writes the report through `eval/report_io.py` and `build_sample_report.py --sample-dir C --check`
   passes; the round README's `candidate-declaration` block holds the sha256 line and `9p2i seeds 0-49`; the two
   `docs/artifacts.md` rows are re-derived with `git ls-files` (111 files under `replays/candidates/`) and offline
   `verify_ml_evidence.py` reads OK; the golden's `candidates/stage-b-r3/9p2i` row is what its production walk
   measures on C. Proof: the candidate test's planted perturbations pass; without the row the golden raises `KeyError`.
-- [ ] **The assessment is written as pre-registered.** Mechanism: round 3's column comes only from the census and
+- [x] **The assessment is written as pre-registered.** Mechanism: round 3's column comes only from the census and
   scorecard `--set-dir C --json-stdout`, `measure_baseline.py C --honesty --json`, the gate's betrayal check and the
   instrument run at the delivery head with r1, r2 and r3 columns into scratch, through `readings.py`. Order: the
   process cells; each Conf. cell and carried reading; the route cells; the cooldown cell; the envelope and the flag;
@@ -296,7 +327,7 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   new value, or keep round 2 shown; Conf. cells only for the other nine fields; with the promotion, its card's
   follow-ups (a public-results label for the route field, which `frontend/src/components/PublicResults.tsx` cannot
   name today; the era registry entry; the pin sweep). Proof: pooling C with R2 or R1 raises the census era refusal.
-- [ ] **Nothing publishes, nothing committed moves, and the copy is plain.** Mechanism: `git diff --stat F..HEAD`
+- [x] **Nothing publishes, nothing committed moves, and the copy is plain.** Mechanism: `git diff --stat F..HEAD`
   is empty over `replays/samples`, `replays/ml_corpus`, R1's round directory, `tests/fixtures`, `training`, `api`,
   `frontend`, `experiments` and the census and scorecard docs; `verify_samples.sh` and `build_sample_report.py
   --check` pass on every set and round; the scorecard and census `--check`, `check_doc_facts.py` and the instrument's
@@ -931,6 +962,425 @@ On macOS the evolution-strategy hash pin is Linux-only: gate in a clean worktree
 
 ## Results
 
-Filled at delivery: the commits and checkouts (F, P, Q, each checkpoint), the rulings and confirmation verbatim, each
-command's real exit code, the three columns, the flag, the route-check count, the step the rule names, the sections
-relied on (this card; round 2's audit 1 and 6; `docs/architecture.md`; `docs/experiment-arms.md`), decisions and limits.
+**This phase: P and Q only (2026-10-09).** The orchestrator dispatched the card in two phases. This one landed the
+pre-registration P, the owner's confirmation Q, the pre-spend evidence at `F` and P, and a draft pull request; no
+provider was called, no key was copied, read or referenced, and the recorder ran only as the dry run, with no seed.
+The fake dress rehearsal, the scripted game and lab, the probe, the sittings, the delivery and the assessment are
+phase 2, dispatched by the orchestrator after this phase is reviewed; every item they carry stays unchecked below,
+and this section gains their evidence then. Full evidence: `audits/audit-2026-10-09-stage-b-r3.md` sections 1 to 3.
+
+**Commits and checkouts.** `F` = `e4fc6cbf` (`main` after #500, #501, #502, #503 and #504, the cards flipped, memo
+8.7 and 8.8, and this card's amendment). On `work/stage-b-record-r3`: P = `641b4254` (`coordination:`, the audit's
+section 1, its index row, the `audits/` row of `docs/artifacts.md`); Q = `bb13fbc7` (`coordination:`, the audit's
+section 2 and the row re-derived for its length); `d1221611` (merge of `main` at `335cbdc9`, two document commits
+adding memo 8.9); `9a7cb992` (`coordination:`, the audit's section 3 and the row); then this Results commit. The dry
+run ran in a scratch worktree detached at `641b4254` outside the repository's working tree (removed after); the
+pre-spend ran in this worktree at `F` with a clean status; the gates of section 3.7 at Q.
+
+**Sections relied on.** This card; decision memo sections 0, 1, 3.1 to 3.3 and 3.4's brief, 8.1 to 8.8 (8.9 noted
+below); round 2's audit sections 1 and 6 and card (the template); `tasks/work/route-lines-field.md` and
+`tasks/work/census-held-data-cells.md` Results (the field, its rehearsals, stamp and instrument; the cells by key);
+`docs/gameplay-census.md`; `docs/architecture.md` "Determinism and the substrate ladder" (a candidate round is its
+own era and instruments never pool eras; the recording is the hosted run's reproducibility boundary) and
+"Explicit cleanup experiments" (the closed config, omitted at default, refused when unknown);
+`docs/experiment-arms.md` (the route field's row and its stamp).
+
+**Acceptance, item by item (this phase).**
+- *P and Q precede the first seed* (unchecked: its MANIFEST and probe-date checks run after the legs). Held now:
+  P holds the rulings (2026-09-24 to 2026-10-09) and memo 8.2 verbatim and dated, the config bytes and sha256, the
+  ceilings, stops and amended discipline, the table, flag and step rule, and `readings.py` and `reproject.py` whole
+  (sha256 `9e22e40c420e6082b05b55596b0073fbf53c0b5c7e0f22cb04ee76733d257abc` and
+  `0cd632e045dc06725df8bdc07a8320876a219a6af53fe64db5b494543496445c` as extracted from this card at `F`, byte-equal
+  in the audit); `git diff --name-only e4fc6cbf 641b4254` lists only the audit, its index row file and
+  `docs/artifacts.md`; the config is not committed. Q quotes the owner's words, memo 8.7 whole with each of the five
+  points against its confirming words, and memo 8.8 whole. `git merge-base --is-ancestor` exits 0 for F before P and
+  P before Q; with Q in place of P, and P in place of F, it exits 1. Section 1 at P against the head: 951 lines,
+  0 differing; with "0.30" edited to "0.31" in one reading of a scratch copy, 2 differing, exit 1. Waiting on phase
+  2: Q before the first `record:` checkpoint, Q's committer date (2026-10-09T02:43:47-04:00) before the probe's start
+  and every `refreshed_at`, P against the MANIFEST's one `git_sha`, and the scratch-MANIFEST date proof.
+- *The before columns are computed* (checked). Census and scorecard `--set-dir replays/samples/9p2i --json-stdout`
+  equal the shipped `samples/9p2i` entries in 1,753 of 1,753 and 108 of 108 leaves (the census grew from 1,324 by the
+  held-data and route cells); a count-only comparison of the 245 round-1 and round-2 counts that round 2's audit
+  section 6 and this card's Evidence and table state reads 245 equal, 0 differing; the route-check replay at `F`
+  with r1 and r2 equals the committed `rule_inputs` in 24 of 24 leaves (r1 29, 0, 8, 8, 20, 0; r2 40, 7, 15, 16, 29,
+  7). Proofs, each one cell edited: the census leaf compare prints
+  `cells.holds_nothing_skips_naming_no_candidate.denominator: set-dir=215 shipped=214`, exit 1; the scorecard
+  `grounded_skip.numerator: set-dir=45 shipped=44`, exit 1; the route compare `r2.R.c: scratch=30 committed=29`,
+  exit 1; the whole-table compare `DIFF r1 impostor_cooldown_zero_at_open: re-measured (85, 203), stated (84, 203)`,
+  exit 1.
+- *The readings are pre-registered in three columns* (checked). `readings.py --after` exits 0 on round 1 and round 2
+  with no Conf. miss; every key it names exists at `F`; the cells the table marked "measured at F" read 0/256 and
+  0/214; 244/259 and 278/281 true, 15/259 and 3/281 false; 0/3 and 7/12. The readings item's planted copies give
+  exactly the card's exits and lines (audit 3.3): unedited exit 0 naming the promotion (M 40, 24/50); presence 0 exit
+  1 naming the route field; `route_lines_false_to_the_map` then `stale_report_meetings` raised, exit 1 naming each;
+  M 41 or 31/50 name round 2 staying shown; the flag forced on (numerator 60) or `role_correct_ejections` edited
+  leave the `step rule:` line byte-identical (`cmp`). Also: an r2 column off 40 exits 1; `--step` off r3 exits 1.
+- *The amendment of 2026-10-09* (checked before this phase): the merged name `holds_nothing_skips_by_source` is the
+  one `readings.py` reads, and it reads at `F` without a refusal.
+- *The reporter flag* (checked). Bar A, as the owner confirmed: 17.0 on round 1 and 10.6 on round 2, not flagged;
+  under bar B round 1 flags; a scratch copy with k2 = 0 and k1 = 1 prints `flagged, reporters alone`. The baseline-9
+  column, folded by the census at `F` from `d41c9006`'s 9p2i bytes (`git archive` into scratch), reads 7/75 against
+  2/243: A 11.3 not flagged, B flagged, C not flagged. Every reading in the bar table reproduces.
+- *The step rule* (checked). The sentence is carried whole at P (1.11); its proofs are the readings item's; the
+  win-share condition is confirmed by the owner (memo 8.7) and the step itself is delegated to the orchestrator on
+  the owner's criteria (memo 8.8), both quoted in the audit's section 2.
+- *The preflight holds at F* (checked). The declared file (342 bytes,
+  `a788b9eba5e8f2f5d29033fece2d0dc0dbac7d3528ea93c7c7a93327dbc6d57d`, the card's figure) validates with ten fields
+  off default, the route field on the meeting layer, in `OMITTED_AT_DEFAULT`; `engine_arguments` equals round 2's;
+  the four stamps are served; `self_report` False, the two versions None; `COLUMN_LABELS` holds `r3`. Proofs: an
+  unknown key refused (`extra_forbidden`); without the route key the bytes equal round 2's declared file; the field
+  card's refusals pass at `F` (`test_no_environment_sets_a_config_only_field`,
+  `test_a_config_only_field_must_equal_the_runners_both_ways[route_lines_version]`,
+  `test_each_instrument_refuses_it_once_the_field_leaves_its_reads` (7), `test_the_golden_refuses_it_once_the_field_leaves_its_reads`).
+- *The fake dress rehearsal* and *the scripted rehearsal and the lab* (unchecked): they run the recorder or the lab
+  on the declared config, which phase 2 does before the probe. The field card's own rehearsal suites pass at `F`:
+  199 passed over its three suites, 40 of them the fake-inertness, scripted-presence and refusal cases; CI at `F`
+  is run 37892577802, success.
+- *The dry run and the probe* (unchecked: the probe is phase 2). The dry run at P exits 0, echoing the declared
+  file's sha256 `a788b9eb...6d57d`, the ten fields and the bare slate, with `git status --porcelain
+  --untracked-files=no` at 0 lines before and after; with a stray `AILIBI_BOUNDED_REBUTTAL=1` it exits 1 ("Refused:
+  the environment exports AILIBI_BOUNDED_REBUTTAL ... Nothing was staged.").
+- *The round is the declaration*, *the spend*, *the checkout and freeze*, *the derived views*, *the assessment* and
+  *nothing publishes* (unchecked): phase 2. Held so far: the re-projection proofs at `F` give the card's figures
+  (1,619 / 9,978,176 / 470,463 / 4.63 h, exit 0; 677,314 output, exit 1; 10.88 h, exit 1; an unmatched seed, exit
+  1); the frozen pathspec over `e4fc6cbf..HEAD` and `..origin/main` prints 0 commits (12 over `76270d6c..e4fc6cbf`);
+  the nothing-moves diff is empty; the index row's prose passes `copy_problems` with 0 and the identifier scan with 0.
+
+**Commands and exits** (bare shell, `env | grep -c '^AILIBI_'` 0; scratch outside the repository): census, scorecard
+and honesty `--set-dir` on round 1 and round 2, exit 0 each; the route-check replay with r1 and r2, exit 0;
+`route_check_replay --check` and `route_lines_replay --check`, exit 0 each (47.1 s, 48.2 s); the tally,
+`1556 9344346 433660 0.0` and `1502 9187880 418270 0.0`; `validity_gate.py` on both with their own declared
+configs, exit 0, ten checks PASS, betrayal 0 of 717 and 0 of 691; `pytest -n 6` over the field's three suites, 199
+passed; over the arms, config, census, candidate-set, ballot-arm, scripted-meeting and recorded-reader suites, 921
+passed; `scripts/verify_ml_evidence.py` offline (never `--complete`), exit 0 at P, Q and `9a7cb992` (64 checks: 52
+OK, 0 FAIL, 7 ABSENT, 5 INFO); `scripts/check_doc_facts.py` and `scripts/validate_task_docs.py`, exit 0 each at the
+same three heads; `tests/scripts/test_verify_ml_evidence.py` with `tests/scripts/test_check_doc_facts.py`, 415
+passed. The `audits/` row of `docs/artifacts.md`, re-derived with `git ls-files audits` and the files' sizes at each
+commit: 31,431,870 / 334 at `F`; 31,494,430 / 335 at P; 31,503,145 at Q; 31,523,225 at `9a7cb992`. The house gate
+is CI's green run at the pull request's pushed head (memo 8.7 item 1), cited by run id in the pull request body; this
+card cannot name the run of the commit that carries it, and no local `check.sh` ran at the head.
+
+**Decisions.**
+1. The orchestrator's rulings for this dispatch, recorded: the owner's words of 2026-10-06 and 2026-10-09 bind
+   (memo 8.1, 8.7, 8.8); memo D14's retirements were not ruled at `F`, so nothing is retired and
+   `replays/candidates/stage-b-r1/` stays. After P, `main` gained memo 8.9 (2026-10-09), which rules D14's list for
+   retirement by its own card after this record merges and keeps the comparison records: round 1's directory stays,
+   as section 1 states. 8.9 also keeps round 2's bytes as `replays/candidates/stage-b-r2` on a promotion; that is a
+   follow-up for a promotion card and changes nothing pre-registered.
+2. `main` moved only in the decision memo, outside the frozen pathspec, so it was merged in (`d1221611`), as the
+   freeze rule says; P and Q are unchanged and the recording checkout still detaches at P.
+3. Q also re-derives the `audits/` row of `docs/artifacts.md`, because the audit grew and the offline evidence check
+   pins the row's bytes; this is the only file besides the addendum that Q touches.
+4. The audit's section 1 carries the owner's words of 2026-10-09 beside the earlier rulings (the dispatch asked for
+   section 8's rulings verbatim and dated); section 2 quotes the confirmation and the delegation whole, point by point.
+5. The pull request is a draft in this phase; nothing merges until the round completes.
+
+**Limitations.** The scratch tools (leaf, route and whole-table comparisons, the planted copies, the section
+comparison) are session aids, not committed; each count they read comes from a committed source through a named
+command. The 9 of (c)'s 11 unreached cases resting on a vent sighting are the committed reports' count, reproduced
+by the instruments' `--check`, not re-derived by the comparison. The baseline-9 flag column is context only, folded
+from `d41c9006`'s bytes. Everything that needs a recorded seed waits on phase 2.
+
+**Phase 2: the recording (2026-10-09).** Round 3 is recorded: `replays/candidates/stage-b-r3/9p2i` holds seeds 0-49
+on the declared config (sha256 `a788b9eb…6d57d`), every gate passes on the round, every Conf. cell reads 0 (the
+cooldown cell at all three writers, the route cells included), and the step rule names **the era-keyed promotion of
+round 3 as the shown set**. The step itself is not taken here: memo 8.8 gives it to the orchestrator, who writes it
+into the audit after reading the round. One stop is open: after the declared config entered the tree, one test of the
+route-lines card turned red only because the round exists (below, and audit 7.5), so the pull request stays a draft
+and no green CI run at the head can be cited yet. Full evidence: `audits/audit-2026-10-09-stage-b-r3.md` sections 4
+to 10 (4 the rehearsals, dry run, pause and key; 5 the probe; 6 the batches and events; 7 the gates, spend, derived
+views, freeze and the stop; 8 the assessment; 9 the menu; 10 the limitations).
+
+**Commits and checkouts.** Recording: a worktree detached at P (`641b4254`) outside the repository's working tree
+(`uv sync --frozen`, no `.env`, the untracked declared copy checked by `shasum -a 256` before the dry run and every
+leg), which ran only the recorder. Verification: a worktree detached at `F` (`e4fc6cbf`, no declared copy) for the
+rehearsals, the lab and the planted suites, and a scratch clone at `F` (no remote) for the fake set's throwaway
+instrument commit, never pushed. Delivery: this branch's worktree. The eleven `record:` checkpoints, each pushed:
+`a09065cc` (the probe), `3800a6ce`, `d4ce0c6b`, `99950ebd`, `0d450119`, `d03a1a9d`, `48bdccbf`, `ddf45f4d`,
+`152c9bd0`, `502e70a8`, `97b68014`. Then `f35ff99c` (the delivery commit: the declared config with P's sha256, the
+round README), `e1d0c8d4` (the golden's pin row), `7bdb490d` (merge of `main` at `9775c9d6`, three document commits
+under `tasks/`), `45d28b68` (the candidate sentence), and the commits carrying the audit's sections 4 to 10 and this
+section.
+
+**Sections relied on.** This card; `AGENTS.md`; `docs/architecture.md` "Determinism and the substrate ladder" (a
+candidate round is its own era; byte-identical re-simulation within the recorded scope, which the verifier, the golden
+and the gate rely on) and "Explicit cleanup experiments" (the closed config, omitted at default, refused when
+unknown); `docs/experiment-arms.md` (the route field's row and stamp); decision memo sections 0, 1, 3.1 to 3.3 and
+3.4's brief, 8.1, 8.7, 8.8 and 8.9; round 2's audit sections 4 to 9 and card Results (the template for the spend, the
+gates, the readings and the assessment); `docs/workflow.md`.
+
+**Acceptance, item by item (phase 2).** Every count below is count-only, in a bare shell (`env | grep -c
+'^AILIBI_'` 0), and reproduces from the committed bytes with the command beside it.
+- *P and Q precede the first seed* (checked). `git merge-base --is-ancestor`: F before P, P before Q, Q before the
+  first `record:` checkpoint `a09065cc`, and P against the MANIFEST's one `git_sha` (`641b4254`), exit 0 each; the head
+  in place of P exits 1. Q's committer date (06:43:47Z) precedes the probe's start in the operator log (07:59:44Z)
+  and every MANIFEST `refreshed_at` (2026-10-09 on all 50 rows, a UTC date): exit 0; a scratch MANIFEST with seed 7 at
+  2026-10-08 exits 1 (1 row before), and a probe start of 06:40Z exits 1. Section 1 at P against the head: 951 lines
+  each, 0 differing; section 2 at Q against the head: 109 lines, 0 differing; with the first "0.30" of a scratch copy
+  edited to "0.31", 2 differing lines, exit 1.
+- *The fake dress rehearsal* (checked; audit 4.1). Seeds 0-49, `AILIBI_LLM_PROVIDER=fake`, scratch outside the tree,
+  at `F`: exit 0, 19 s, $0, 132 meetings. Gate (ten checks PASS), `verify_samples.sh` (50 clean), the golden's walk
+  (1,652 prompts, 0 not reproduced), census (20 Conf. cells 0; cooldown 0/591 at 100, 227 and 264; route presence
+  0/132 and 0/826 ballots: no block served), scorecard, honesty and the packet scan exit 0; both route instruments'
+  r3 columns on a throwaway commit of a scratch clone exit 0 (route-check r3 M 0; route-lines r3 served, 0 blocks).
+  The fake tally `1652 6409973 94990 0.0` equals the same rehearsal on round 2's file, and the two sets' 2,433 rows
+  are equal once the config key and the stamp suffix are removed. Proof: gated against round 2's file, exit 1 on
+  `cost_and_provenance_exact` alone (50 lines naming `route_lines_version`).
+- *The scripted rehearsal and the lab* (checked; audit 4.2). The route-lines card's scripted game recorded from the
+  declared file through its own loader: loader, census, scorecard, gate (ten checks) and golden (26 prompts) pass,
+  presence 2/2 meetings and 12/13 ballots, `route_lines_false_to_the_map` 0/15 and `route_lines_off_the_table` 0/15.
+  At `F`: 457 passed over the field's three suites and round 2's scripted, ballot-arm and recorded-reader suites
+  (among them `test_the_fake_rehearsal_is_inert`, `test_the_scripted_on_game_walked_without_the_field_fails_at_every_block`
+  and `test_the_manager_passing_no_lines_fails_the_scripted_on_golden`); the golden's scripted cases 4 passed. The
+  lab's ten round-1 arms equal `stage-b-r1-frozen-head.json` on its own keys: 160 rows, 13,622 fields, 0 differing;
+  `route_lines_replay --check` and `route_check_replay --check` reproduce. Proofs: dropping the recorded evidence
+  profile leaves 13 of 26 prompts not reproduced and 2 meetings miscounted; one edited lab counter prints
+  `stage_b_full/9p2i/1000: counts['applied:IMPOSTOR:kill']`, exit 1.
+- *The dry run and the probe* (checked; audit 4.3, 5). The dry run at P exits 0 echoing `a788b9eb…6d57d`, the ten
+  settings and the bare slate, porcelain with untracked hidden 0 lines before and after; with
+  `AILIBI_BOUNDED_REBUTTAL=1` it exits 1 ("Refused: ... Nothing was staged."). The probe, seeds 0-1 on two workers:
+  631 s, exit 0, 5 meetings, route lines served in 5/5 meetings, so no extension; its gates all exit 0.
+- *The round is the declaration* (checked; audit 7.1). The gate on the round: exit 0, ten checks PASS by name, with
+  `--expected-model Qwen/Qwen3.6-27B --require-zero-cost`, the four prompt-version pairs, the declared config,
+  `--expected-seeds 0-49 --require-one-recording-sha`; MANIFEST flags equal round 2's, policy `fsm-default`;
+  `grep -l deadline_default` 0; census `--set-dir` exit 0 with the route cells; the golden reproduces all 1,523 calls.
+  Proofs: `--expected-seeds 0-50` exit 1 ("missing [50]"); round 2 against the declared file exit 1 on
+  `cost_and_provenance_exact`; the census card's planted breaches (`test_every_guarded_cell_has_a_planted_pair`,
+  `test_a_route_line_breach_raises_naming_set_seed_meeting_and_voter`) and the field card's cases pass (the census
+  suite in the targeted run at the head; the field's suites at `F`).
+- *The spend* (checked; audit 6.3, 7.2). The tally `1523 9653306 426116 0.0`: 54.4%, 55.2% and 56.8% of the call,
+  input and output ceilings, 12,008 s = 3.34 h of recording wall (27.8%), $0, one sitting, no husk. Every
+  re-projection stayed inside its stop (the 10-seed one at seeds 0-11: 57.4%, 57.8%, 60.2%, 3.31 h); the probe's
+  projected wall 4.38 h puts the 1.5x line at 6.57 h, which nothing approached. The reprojection proofs are phase
+  1's at `F` (3.3).
+- *The checkout, the pause, the key and the freeze* (checked; audit 4.3, 7.4). One `git_sha`, P's; each of the seven
+  scan patterns fires on its planted file (exit 1) and the plants were deleted; the key scan read 0 at every push;
+  with a planted pause file and the recorder replaced by `true` the leg runner exits 3 and starts nothing.
+  `git log --oneline e4fc6cbf..HEAD` and `..origin/main` over the frozen pathspec: 0 commits each; over
+  `76270d6c..e4fc6cbf`, 12.
+- *The derived views and the registration* (checked; audit 7.3). The report is the recorder's rebuild and
+  `build_sample_report.py --check` passes on the round; the README's `candidate-declaration` block holds the sha256
+  line and `9p2i seeds 0-49`; the `replays/candidates/` row reads 72 MB / 111 files and the `audits/` row is
+  re-derived with `git ls-files` at the commit carrying this section; offline `verify_ml_evidence.py` reads OK; the
+  golden's row `candidates/stage-b-r3/9p2i` is (119, 702, 0, 0). Proofs: without the row, 2 failed (`KeyError: 'no
+  retired-guard pin for candidates/stage-b-r3/9p2i'`), with it 12 passed; the candidate test's planted perturbations
+  pass (`tests/scripts/test_candidate_sets.py` in the targeted run).
+- *The assessment* (checked; audit 8). Round 3's column comes only from the census, scorecard and honesty
+  `--set-dir`, the gate's betrayal check and the route-check replay at `45d28b68`, through `readings.py` unchanged
+  (`9e22e40c…57abc`), in the pre-registered order; the menu as 1.12 lists it. Proof: pooled with round 2 and with
+  round 1 through `fold_set` then `pool`, `GameplayCensusEraError` both times.
+- *Nothing publishes, and the copy is plain* (checked; audit 7.1, 7.4). The nothing-moves diff is empty;
+  `verify_samples.sh` (bare: four sets clean) and per set, and `build_sample_report.py --check` on all six
+  directories, exit 0; the scorecard and census `--check`, `check_doc_facts.py` and both instruments' `--check` exit
+  0; the demo bundle at `F` and at the head, 110 files each, `diff -r` exit 0 with the sample mtimes pinned. The README,
+  the candidate sentence and the index row's prose: `copy_problems` 0, 0, 0 and the identifier scan 0, 0, 0; "6/7"
+  in a copy of the README gives 1 problem, "R7" in a copy of the sentence 1 hit;
+  `test_audits_index_ladder_tip_drift_detected` and `test_unindexed_audit_detected` pass.
+
+**The readings** (audit 8). Every Conf. cell 0, the route cells 0/7,956 steps false to the map and 0/2,416 lines off
+the table, route presence 117/119 meetings (671/702 ballots); cooldown 0/442 against 6 at round start 100, after a
+kill 192, at a regroup 150. Look and wait **effective** (7/70); one reply **effective** (20/20 evaluable, redirect-only
+25/119); kill row **present** (22 rows); impostor ballot, **the wording holds** (0/101). Envelope: impostor win share
+**17/50 = 0.34 (0.22-0.48)**, inside 0.20-0.60; the re-keyed reporter flag under bar A, 10/95 against 5/302, relative
+rate **6.4, not flagged** (round 1 17.0, round 2 10.6). The route-check count: M **29** (round 1 29, round 2 40), W 7;
+reach over M (a) 8, (b) 15, (b-snapshot) 18, (c) 25, (c) over W 7; the field's served reach 26 of 29 and 7 of 7. The
+step line: `step rule: names the era-keyed promotion of round 3 as the shown set, the owner's to take or override
+(Conf. misses 0; impostor wins 17/50; M 29 against round 2's 40)`. Reported, gating nothing: role-correct ejections
+46/61, innocent ejections 15, kills 192, the win split 33 crew and 17 impostor.
+
+**Commands and exits at the head** (`45d28b68`, before the documentation commits): the battery of the Validation
+section, as audit 7.1 lists it, every exit 0, except the one case of the stop; CI run 37924867474 at `45d28b68`:
+Project checks 1 failed, 10,850 passed, 40 skipped, 3 xfailed; Frontend checks and Frontend e2e passed. Targeted
+suites (`tests/scripts/test_candidate_sets.py`, `tests/eval/test_gameplay_census.py`, the route-lines arm, field and
+instrument suites, `tests/orchestrator/test_experiment_arms.py`, `tests/orchestrator/test_experiment_config.py`): 1
+failed (the stop), 861 passed; `pytest -m campaign`: 337 passed; the golden `-k "retired_guard or stage-b-r3"`: 12
+passed. The document gates are re-run at the commit carrying this section and quoted in the pull request.
+
+**The stop (open).** `tests/meetings/test_route_lines_arm.py::test_every_committed_payload_reads_the_field_off`
+asserts that no `replays/**/experiment-config.json` reads `route_lines_version` ON, and so finds exactly one file,
+`replays/candidates/stage-b-r3/experiment-config.json`, the round's declared config, which reads it ON by design. This
+card's Constraints name that a stop ("Stop and ask ... if a test besides the golden pin turns red only because
+another round exists"); its one permitted test edit is the golden's pin row, and the file is the route-lines card's.
+So the case is not edited here, the pull request stays a draft, and the question is the orchestrator's: who edits the
+case, and how (for example, reading OFF every committed payload and file except a candidate round's declared config
+that its README declares, with a planted stray config under `replays/samples` that still fails), before this record
+can merge. Nothing recorded depends on it.
+
+**Decisions (phase 2).**
+1. The orchestrator's rulings for this dispatch, recorded: the owner's words of 2026-10-06 and 2026-10-09 bind (memo
+   8.1, 8.7, 8.8, 8.9); the comparison records are kept: round 1 stays, and if round 3 is promoted round 2's bytes
+   become `replays/candidates/stage-b-r2` by the promotion card, not this one. Under 8.9 the promotion's merge is the
+   orchestrator's; audit 3.7 gains a paragraph saying so and the index row reads it, while sections 1 and 2 stay as
+   quoted.
+2. The step rule's line is recorded and the step is not taken (memo 8.8 reserves it); nothing here merges.
+3. `route_lines_replay` takes its r1 and r2 columns at the commit the committed route-check JSON pins (`5877adb4`), as
+   the instrument requires; the card's Validation line names `F`, whose set bytes are the same. The route-check
+   replay's columns run at `F` as written.
+4. The 1.5x rule reads the probe's projected wall (4.38 h, so 6.57 h), applied to the summed wall and every
+   re-projection, as round 2 applied it.
+5. The candidates row of `docs/artifacts.md` is re-derived at every checkpoint, so the offline evidence check stays OK
+   at each; the declared config and README enter the tree after the last seed, as this card says (round 2 committed
+   them before seed 0), so the intermediate checkpoints' CI runs were red by design (the candidate shape check and the
+   golden's unpinned set) and are not gate records.
+6. `main` moved only under `tasks/` during the sitting and was merged in after the last seed (`7bdb490d`).
+7. The key file stayed mode 0600 outside every checkout until the last push, so that push's scan could count the exact
+   value, and was deleted right after it; the operator log outside the repository records the time.
+8. The card's Status line and `tasks/README.md`'s inventory sentence are the orchestrator's on `main` and are not
+   edited; the acceptance boxes are ticked on their evidence, and the stop keeps the card from being done.
+
+**Limitations (phase 2).** One hosted recording of 50 games per round: rounds 2 and 3 differ in one key, and their win
+shares' intervals (0.35-0.61 and 0.22-0.48) overlap, so each difference is the field's only within hosted-generation
+noise. M counts charged reconcilable pairs; a served line is shown, not proven read. The scratch tools (the leg runner,
+the sync, the count-only walk and Conf. check, the key scan, the date, section, pooling and copy checks) are session
+aids kept outside the repository; every count they read comes from committed bytes through a named production command.
+Recording wall and the per-leg times come from the recorder's logs and the operator log, outside the repository. The
+CI gate at the head is red until the stop is resolved.
+
+### Review corrections, round 1 (2026-10-09)
+
+Three review lenses over the head `fd9eef64` returned one blocking finding, the record's one stop (audit 7.5): CI
+run 37927577127 at `fd9eef64` read Project checks 1 failed, 10,850 passed, the one failure
+`tests/meetings/test_route_lines_arm.py::test_every_committed_payload_reads_the_field_off`, which walked every
+`replays/**/experiment-config.json` and found `replays/candidates/stage-b-r3/experiment-config.json`, the round's
+declared config, reading `route_lines_version` ON by design (audit 1.3). No other finding was returned.
+
+**The resolution, by the orchestrator's assignment.** The orchestrator ruled the case re-scoped, test-only, under
+the one-writer map: the route-lines card is done and merged, and this record carries the edit as directly necessary
+follow-through, as round 1's fourteen re-scopes did. `368109f7` (`test:`) makes the edit in that one file; no
+recorded byte, no production code and no other test moved.
+- *Old assertion.* `_committed_payloads_reading_the_field_on() == []`, the helper listing any committed
+  `experiment_config` payload under `audits/` or `tests/fixtures` reading the field ON, any
+  `replays/**/experiment-config.json` whose `route_lines_version` is not None, and any of the five listed sets
+  (`samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i`, `ml_corpus/4p1i`, `candidates/stage-b-r1/9p2i`) whose first
+  replay recorded it.
+- *New assertion.* `_committed_payloads_reading_the_field_on(_REPO / "replays", _COMMITTED_SETS) == []`, the same
+  three walks: the payload walk unchanged (106 files, 1,193 payloads), the five sets unchanged, and every
+  `replays/**/experiment-config.json` still read (3 files) except a candidate round's declared config whose round
+  recorded the field ON. That exception is enumerated from the candidate declarations, never named by a path: a
+  round `candidate_rounds()` lists, whose README holds one `candidate-declaration` block (parsed, without a problem,
+  by `tests/scripts/test_candidate_sets.py`'s own `declaration_blocks` and `parse_declaration`) naming the file's
+  sha256, and every seed of every set it declares has a replay that recorded the field at the file's value. Only a
+  file directly inside a round directory under `candidates/` can be left out, so a file under `samples/` or
+  `ml_corpus/` never is. The walk takes its root and its sets, and refuses an empty set list. On the tree it leaves
+  out one file, round 3's declared config, and lists none.
+- *Strength kept.* On every committed payload, on `replays/samples/9p2i/experiment-config.json` and
+  `replays/candidates/stage-b-r1/experiment-config.json`, and on each of the five sets, the case asserts what it
+  asserted before; the one file it no longer asserts OFF is a declared config whose 50 recordings read the field ON,
+  which `test_every_committed_round_holds_its_declared_shape` already holds to its declaration.
+- *Planted.* `test_only_a_declared_round_recording_the_field_on_may_read_it_on` builds a scratch `replays/` from
+  round 2's declared file and the fake rehearsal's ON and OFF games, beside a round whose config is round 2's file
+  plus the field (342 bytes, sha256 `a788b9eb…6d57d`, round 3's declared bytes) declared for seeds 0-1. Ten plants:
+  as declared, 0 listed; a round still recording, holding no config yet, 0; an ON config under `samples/9p2i` (the
+  declared round beside it) lists exactly that file; one under `ml_corpus/9p2i` lists exactly it; a listed set
+  recorded ON lists `samples/9p2i`; a declaration naming round 2's bytes, naming no set or appearing twice, and a
+  declared seed recorded OFF or missing, each list exactly the round's config. `test_the_walk_refuses_to_read_no_set`
+  pins the refusal. In the tree, a scratch copy of the round's declared config at
+  `replays/samples/9p2i/scratch-plant/experiment-config.json` turned the committed case red listing exactly that file
+  (1 failed); deleted, with `git status --short` showing only the test edit, the case passed (1 passed).
+- *Mutation probe* (scratch, 23 mutants over the changed spans): 21 killed. Two survive: `== value` made
+  `is not None`, equivalent because the field validates only to 1 or None
+  (`test_a_value_other_than_one_or_none_is_refused`); and the committed case's set list narrowed to its first set,
+  the class the old inline loop carried too, since every committed set reads the field OFF.
+
+**Gates at `368109f7`** (bare shell, `env | grep -c '^AILIBI_'` 0, count-only). The targeted suites (the
+route-lines arm and field suites, `tests/eval/test_route_charges.py`, both route instruments' suites,
+`tests/scripts/test_candidate_sets.py`, `tests/eval/test_gameplay_census.py`, the arms and config suites): 1,023
+passed, 0 failed; the golden `-k "retired_guard or stage-b-r3"`: 12 passed; `check_doc_facts.py` and
+`validate_task_docs.py` exit 0; offline `verify_ml_evidence.py` exit 0 (never `--complete`); the scorecard and census
+`--check` exit 0; `route_check_replay --check` and `route_lines_replay --check` exit 0; `verify_samples.sh` bare and
+on each of the six set directories, and `build_sample_report.py --check` on each, exit 0; `pytest -m campaign`
+337 passed. The frozen pathspec over `e4fc6cbf..HEAD` and `e4fc6cbf..origin/main` prints 0 commits (12 over
+`76270d6c..e4fc6cbf`); the nothing-moves diff over `e4fc6cbf..HEAD` is empty, and `fd9eef64..HEAD` touches nothing
+under `replays/`, `audits/` or `docs/`. The house gate (memo 8.7 item 1): CI run 37932710107 at `368109f7`,
+success: Project checks 10,862 passed, 40 skipped, 3 xfailed, 0 failed (10,850 before, plus the re-scoped case and
+the eleven new cases); Frontend checks and Frontend e2e passed. The run at the head carrying this section is cited in
+the pull request.
+
+**The step (ruling 2) is not written here.** The orchestrator's text for the audit's section 11 is to be written
+verbatim only if nothing in the audit's readings contradicts it. Every reading it names reproduces from sections 6 to
+8, except two phrases, which do not read as section 7.2 states them: "one sitting of 3.34 h" (7.2: the sitting ran
+07:59:44Z to 11:32:31Z, 3 h 32 min 47 s; 3.34 h is the recording wall summed over the eleven legs) and "the spend at
+54 to 57 percent of each ceiling" (7.2: calls 54.4%, input 55.2% and output 56.8% of their ceilings, the recording
+wall 27.8% of its 12 h). The text is not edited and the section is not written; the question is the orchestrator's,
+and the pull request stays a draft until the step is written.
+
+### The step taken (2026-10-09)
+
+The orchestrator took the step the rule names, under decision memo 8.8: round 3 is promoted as the shown set by the
+era-keyed path, in one card with the tour's re-curation, keeping round 2's bytes as a candidate copy. The decision
+and the readings it rests on are audit section 11; the one stop (audit 7.5) was resolved by the test-only re-scope
+recorded in review round 1 above, with CI green at `368109f7` (run 37932710107) and `002bb56b` (run 37935832774);
+the gate record is CI's green run at the pull request's head, cited by run id in its body (review round 2 below:
+the run at `13370e5c` itself was red on a stale `docs/artifacts.md` row). Nothing here moves a recorded byte.
+
+### Review corrections, round 2 (2026-10-09)
+
+Three lenses over `13370e5c` (the whole record, the re-scope and the orchestrator's step) returned seven blocking
+findings, three defects; Codex reviewed the same commit with four comments. The orchestrator's round-2 dispatch
+assigns each repair, including two outside a fix round's audit text, card and pull request body: `docs/artifacts.md`,
+whose two rows this card re-derives as the file's last writer in the round, and the route-lines card's test file, as
+it assigned `368109f7`. No recorded byte, no production code and no text of section 11 moved.
+
+1. *The `audits/` row of `docs/artifacts.md` is stale* (the correctness, integrity and documentation lenses; Codex
+   4230751203). `13370e5c` appended section 11 to the audit (138,669 bytes at `002bb56b`, 141,218 at `13370e5c`)
+   and left the row at 31,571,362, the `32b96529` value; offline `verify_ml_evidence.py` exited 1 (the in-tree family
+   inventory) and CI run 37937850895 at `13370e5c` read Project checks 2 failed
+   (`test_main_runs_the_cheap_legs_green_at_head`, `test_every_counted_registry_row_matches_the_index`), 10,860 passed.
+   `6b014cba` (`docs:`) re-derives the row from `git ls-tree -r -l 13370e5c audits`: 31,573,911 tracked bytes / 335
+   files; `08362561` re-derives it again for its index edit (finding 3): 31,574,099 / 335, the sum of
+   `git ls-files audits` sizes at the head. Offline `uv run python scripts/verify_ml_evidence.py` (never
+   `--complete`): exit 0 at both, 64 checks, OK 52, FAIL 0, ABSENT 7, INFO 5; `uv run pytest
+   tests/scripts/test_verify_ml_evidence.py -n 6`: 90 passed.
+2. *Two survivors of the class a loaded source read replaced by its literal* (the correctness and integrity lenses).
+   In `_declared_configs_recording_the_field_on`, the sha256 of the loaded config bytes replaced by round 3's literal
+   line and the declared set name replaced by the literal `9p2i` each survived every plant, since every plant held
+   round 3's 342 bytes and declared only `9p2i`; memo 8.7 item 2 keeps that class blocking. `93ecd5f8` (`test:`,
+   test-only) adds four plants to the ten: "holds on bytes it does not declare" (the round's config holds other ON
+   bytes, the field's key first, while its declaration names round 3's bytes: the config is listed); "declares the
+   other on bytes it holds" (nothing listed); "declares another set" (the round declares `4p1i seeds 0-1`, recorded
+   ON under `4p1i`: nothing listed); "a second set recorded off" (`9p2i seeds 0-1` and `4p1i seeds 0-0`, the `4p1i`
+   seed recorded OFF: the config is listed). The helper, the committed case and every other test are unchanged.
+   *Mutation probe* (scratch, 18 mutants over the helper and the listing it feeds, run by
+   `pytest tests/meetings/test_route_lines_arm.py -k "declared_round or walk_refuses or every_committed_payload"`,
+   the file restored after): 13 killed, both survivors among them (2 failed each), and the walk narrowed to the
+   first declared set (killed by the second-set plant). Five survive, each equivalent: the file name in the compared
+   line made the literal `experiment-config.json` (the helper reads only that name); `== value` made `is not None`
+   and the read value made the literal 1 (the field validates only to 1 or None,
+   `test_a_value_other_than_one_or_none_is_refused`, and an OFF file is never listed whether or not it is left out);
+   the `value is None` skip dropped (the same reason); `blocks[0]` made `blocks[-1]` (exactly one block is required
+   on the line before).
+3. *The card, the gate record and the pull request body did not match the head* (the integrity and documentation
+   lenses; Codex 4230751225 on the audit index). The step subsection said the stop was resolved "with CI green at
+   the head" while the run at `13370e5c` failed; the pull request body cited run 37935832774 (head `002bb56b`) as the
+   head's run and still said the step was not written and the pull request stayed a draft; the index row said the
+   audit gives no verdict and that the step is taken, with section 11 already written. The step subsection now names
+   the green runs at `368109f7` and `002bb56b` and leaves the head's run to the pull request body; `08362561` makes
+   the index row say its readings give no verdict and that its dated section 11 records the step (round 3 to be
+   promoted by a later card, which the orchestrator merges; the shown set stays `replays/samples/9p2i` until then),
+   with `copy_problems` 0 and the identifier scan 0 on its prose; the pull request body cites the green run at its
+   pushed head by id and marks its draft and step-not-written statements superseded by `13370e5c`.
+
+*Codex comments refuted, not edited.* 4230751212 (the MANIFEST's `git_sha` orphaned if the record lands squashed):
+the comment reviewed a squashed commit (`7471688`, whose one parent is `9775c9d6`); this record is delivered by merge
+commit or fast-forward, never a squash (`AGENTS.md` Delivery, this card's Constraints), a procedure the merger
+follows, since the repository's settings allow a squash; `git merge-base --is-ancestor 641b4254 HEAD` exits 0, so a
+merge keeps P and every checkpoint on `main`. 4230751233 (the card's `Status: ready`): the Status line and
+`tasks/README.md`'s inventory sentence are the orchestrator's on `main` (`AGENTS.md`, this card's Constraints), so
+they are not edited here; dispatch reads `tasks/README.md`, whose active ownership the orchestrator keeps.
+
+*Superseded statements, kept as dated history.* Phase 2's "The stop (open)" paragraph, its Limitations' "The CI gate
+at the head is red until the stop is resolved", its Decision 8's "the stop keeps the card from being done", and
+round 1's "The step (ruling 2) is not written here" with its "the pull request stays a draft until the step is
+written": the stop was resolved by `368109f7`, the step was written by `13370e5c` (audit section 11), and the pull
+request is ready. Audit 7.5 and the menu's last bullet are history of the same kind; section 11 records the
+resolution, so the audit file does not move.
+
+*Gates at this section's commit* (bare shell, `env | grep -c '^AILIBI_'` 0, count-only): the route-lines arm, field
+and instrument suites, `tests/scripts/test_candidate_sets.py`, `tests/eval/test_gameplay_census.py`,
+`tests/scripts/test_verify_ml_evidence.py`, `tests/scripts/test_check_doc_facts.py` and the arms and config suites,
+1,442 passed, 0 failed; the golden `-k "retired_guard or stage-b-r3"`, 12 passed; `check_doc_facts.py`,
+`validate_task_docs.py` and offline `verify_ml_evidence.py`, exit 0 each; the frozen pathspec over `e4fc6cbf..HEAD`
+and `e4fc6cbf..origin/main`, 0 commits; the nothing-moves diff over `e4fc6cbf..HEAD`, empty; `13370e5c..HEAD`
+touches only `docs/artifacts.md`, `audits/README.md`, `tests/meetings/test_route_lines_arm.py` and this card. The
+house gate (memo 8.7 item 1) is CI's green run at the pull request's head, cited by run id in its body; this card
+cannot name the run of the commit that carries it.
