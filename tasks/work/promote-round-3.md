@@ -837,8 +837,8 @@ stories (comments and stamps).
 
 ### Review corrections, round 1 (2026-10-09)
 
-Built on `work/promote-round-3` at `44546084`, which the three verifier lenses read with CI run 37986165157 at
-`7dfda292`. Five blocking findings and two Codex comments; each is repaired or refuted here, and no test is
+Built on `work/promote-round-3` at `44546084`, the head the three verifier lenses read (CI run 37988023512 green
+there). Five blocking findings and two Codex comments; each is repaired or refuted here, and no test is
 weakened. Every census stayed count-only, no provider was called and the untracked `.env` was not read.
 
 **The replaced-era read (correctness).** `check_replaced_era` picked the before block with `era.id`, but no test
