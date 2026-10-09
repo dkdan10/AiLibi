@@ -4,7 +4,7 @@ A literal transcribed from the shown set changes at every legitimate re-record a
 proves no defect. A pin that holds an instrument's reading against the raw recorded
 rows instead cross-checks two surfaces, and it survives a re-record. These folds
 read the rows' structure only (row kinds, list lengths, ballot targets, outcome
-labels, action types), never their text.
+labels, action types, flag kinds), never their text.
 """
 
 from __future__ import annotations
@@ -30,6 +30,10 @@ class RecordedCounts:
     prompts: int
     outcomes: Mapping[str, int]
     actions: Mapping[str, int]
+    applied_actions: Mapping[str, int]
+    dispositions: Mapping[str, int]
+    flag_kinds: Mapping[str, int]
+    meetings_with_flag_kind: Mapping[str, int]
 
     @property
     def eject_ballots(self) -> int:
@@ -53,6 +57,10 @@ def recorded_counts(set_dir: Path) -> RecordedCounts:
     tick_rows = meetings = turns = ballots = skip_ballots = prompts = 0
     outcomes: Counter[str] = Counter()
     actions: Counter[str] = Counter()
+    applied_actions: Counter[str] = Counter()
+    dispositions: Counter[str] = Counter()
+    flag_kinds: Counter[str] = Counter()
+    meetings_with_flag_kind: Counter[str] = Counter()
     for path in paths:
         with path.open(encoding="utf-8") as handle:
             for line in handle:
@@ -61,6 +69,14 @@ def recorded_counts(set_dir: Path) -> RecordedCounts:
                 if kind == "tick":
                     tick_rows += 1
                     actions.update(str(action["type"]) for action in row["actions"])
+                    dispositions.update(str(d) for d in row["action_dispositions"])
+                    applied_actions.update(
+                        str(action["type"])
+                        for action, disposition in zip(
+                            row["actions"], row["action_dispositions"], strict=True
+                        )
+                        if disposition == "applied"
+                    )
                 elif kind == "meeting":
                     meetings += 1
                     turns += len(row["transcript"]["turns"])
@@ -70,6 +86,9 @@ def recorded_counts(set_dir: Path) -> RecordedCounts:
                     )
                     prompts += sum(1 for call in row["llm_calls"] if call.get("prompt"))
                     outcomes[str(row["outcome"])] += 1
+                    kinds = [str(flag["kind"]) for flag in row["contradictions"]]
+                    flag_kinds.update(kinds)
+                    meetings_with_flag_kind.update(set(kinds))
     return RecordedCounts(
         games=len(paths),
         tick_rows=tick_rows,
@@ -80,4 +99,8 @@ def recorded_counts(set_dir: Path) -> RecordedCounts:
         prompts=prompts,
         outcomes=MappingProxyType(dict(outcomes)),
         actions=MappingProxyType(dict(actions)),
+        applied_actions=MappingProxyType(dict(applied_actions)),
+        dispositions=MappingProxyType(dict(dispositions)),
+        flag_kinds=MappingProxyType(dict(flag_kinds)),
+        meetings_with_flag_kind=MappingProxyType(dict(meetings_with_flag_kind)),
     )

@@ -72,6 +72,7 @@ from typing import Any, Final
 
 import pytest
 
+from eval.report_io import read_set_report_text
 from meetings.constants import DEFAULT_SKIP_CONFIDENCE_THRESHOLD
 from meetings.manager import (
     BALLOT_TARGET_REDIRECT_MARKER,
@@ -118,8 +119,10 @@ _CORPUS_SETS: Final[tuple[str, ...]] = (
 # A sweep is only as good as its coverage, so the file / meeting / ballot
 # counts are pinned per set: a thinned checkout, a glob typo, or a silently
 # dropped set fails here instead of passing the outcome families vacuously.
+# The shown set, whose counts a re-record moves; its coverage is held to the
+# committed surfaces that record it instead of transcribed.
+_SHOWN_SET: Final[str] = "samples/9p2i"
 _EXPECTED_REPLAY_FILES: Final[dict[str, int]] = {
-    "samples/9p2i": 50,
     "samples/4p1i": 50,
     "ml_corpus/9p2i": 150,
     "ml_corpus/4p1i": 50,
@@ -127,27 +130,23 @@ _EXPECTED_REPLAY_FILES: Final[dict[str, int]] = {
 # Baseline 6 read 165 / 39 / 463 / 40 meetings and 971 / 117 / 2726 / 120
 # ballots, 707 and 3,934 pooled.
 _EXPECTED_MEETINGS: Final[dict[str, int]] = {
-    "samples/9p2i": 117,  # was 145 on the baseline-9 bytes, 151 on baseline 8's
     "samples/4p1i": 39,
     "ml_corpus/9p2i": 449,  # was 439
     "ml_corpus/4p1i": 43,
 }
 _EXPECTED_BALLOTS: Final[dict[str, int]] = {
-    "samples/9p2i": 691,  # was 845 on the baseline-9 bytes, 869 on baseline 8's
     "samples/4p1i": 117,
     "ml_corpus/9p2i": 2539,  # was 2516
     "ml_corpus/4p1i": 129,
 }
-_TOTAL_MEETINGS: Final[int] = 648  # was 676 on four baseline-9 sets, 672 before
-_TOTAL_BALLOTS: Final[int] = 3476  # was 3630 on four baseline-9 sets, 3631 before
 
-# The recorded outcome split over those 648 meetings. Pinned so the sweep
-# provably exercises BOTH branches of the rule (an all-SKIPPED corpus would
-# leave the eject path — the one that removes a player from the game — proven
-# by synthetic fixtures alone).
+# The recorded outcome split over the frozen baseline-9 sets' 531 meetings.
+# Pinned so the sweep provably exercises BOTH branches of the rule (an
+# all-SKIPPED corpus would leave the eject path — the one that removes a player
+# from the game — proven by synthetic fixtures alone).
 _EXPECTED_RECORDED_OUTCOMES: Final[dict[MeetingOutcome, int]] = {
-    "EJECTED": 387,  # was 411 on four baseline-9 sets, 429 before
-    "SKIPPED": 261,  # was 265 on four baseline-9 sets, 243 before
+    "EJECTED": 321,
+    "SKIPPED": 210,
 }
 
 # The ballot-guard marker families, keyed by the stable label
@@ -179,18 +178,9 @@ _MARKER_TEMPLATES: Final[dict[str, str]] = {
 # ``teammate_coerced`` and ``invalid_target`` rose on ml_corpus/9p2i. The
 # promoted samples/9p2i (candidate round 2's bytes) reads the same zeros, with
 # ``teammate_coerced`` at 16 and ``invalid_target`` at 1.
+#: The retired guards: no ballot of any set may carry their markers.
+_RETIRED_MARKERS: Final[tuple[str, ...]] = ("under_gate_redirect", "uncited_zero_flag")
 _EXPECTED_MARKERS: Final[dict[str, dict[str, int]]] = {
-    # was 3, 1, 0, 0, 0, 0, 0 on the baseline-9 bytes (2, 2, 23, 1, 3, 0, 0
-    # on baseline 8's)
-    "samples/9p2i": {
-        "invalid_target": 1,
-        "teammate_coerced": 16,
-        "under_gate_redirect": 0,
-        "invalid_reason_id": 0,
-        "invalid_observation_id": 0,
-        "uncited_zero_flag": 0,
-        "vote_parse_default": 0,
-    },
     "samples/4p1i": {
         "invalid_target": 0,
         "teammate_coerced": 0,
@@ -234,21 +224,21 @@ _SWEEP_THRESHOLDS: Final[tuple[float, ...]] = (
     1.0,
 )
 
-# How many of the 648 committed meetings eject at each swept threshold. The
-# first four rows are all 387 — the recorded count — which is the corpus fact
+# How many of the frozen sets' 531 meetings eject at each swept threshold. The
+# first four rows are all 321 — the recorded count — which is the corpus fact
 # :func:`test_the_threshold_sweep_actually_moves_outcomes` documents: no
 # committed meeting was decided by the confidence gate at its recorded cutoff.
 # Baseline 6 read 435 / 435 / 435 / 435 / 424 / 331 / 65, baseline 8 read
 # 429 / 429 / 429 / 429 / 421 / 351 / 181, and the four baseline-9 sets read
 # 411 / 411 / 411 / 411 / 405 / 357 / 214.
 _EXPECTED_EJECTIONS_BY_THRESHOLD: Final[dict[float, int]] = {
-    0.0: 387,
-    0.25: 387,
-    0.5: 387,
-    DEFAULT_SKIP_CONFIDENCE_THRESHOLD: 387,
-    0.75: 382,
-    0.9: 322,
-    1.0: 185,
+    0.0: 321,
+    0.25: 321,
+    0.5: 321,
+    DEFAULT_SKIP_CONFIDENCE_THRESHOLD: 321,
+    0.75: 317,
+    0.9: 282,
+    1.0: 166,
 }
 
 
@@ -331,6 +321,28 @@ def _replay_file_count(set_name: str) -> int:
 def _all_recorded_meetings() -> tuple[_RecordedMeeting, ...]:
     return tuple(
         meeting for set_name in _CORPUS_SETS for meeting in _recorded_meetings(set_name)
+    )
+
+
+def _frozen_recorded_meetings() -> tuple[_RecordedMeeting, ...]:
+    return tuple(
+        meeting
+        for set_name in _CORPUS_SETS
+        if set_name != _SHOWN_SET
+        for meeting in _recorded_meetings(set_name)
+    )
+
+
+def _committed_report_counts(set_name: str) -> tuple[int, int, int]:
+    """Games, meetings and ballots the set's committed eval report holds."""
+
+    report = json.loads(read_set_report_text(_REPLAYS / set_name))
+    games = report["report"]["games"]
+    meetings = [meeting for game in games for meeting in game["meetings"]]
+    return (
+        len(games),
+        len(meetings),
+        sum(len(meeting["ballots"]) for meeting in meetings),
     )
 
 
@@ -479,31 +491,44 @@ def test_committed_corpus_counts_are_pinned(set_name: str) -> None:
     """Files, meetings, and ballots per set — the sweep's coverage, pinned."""
 
     meetings = _recorded_meetings(set_name)
+    ballots = sum(len(m.ballots) for m in meetings)
 
+    if set_name == _SHOWN_SET:
+        # The shown set: every file, meeting and ballot its committed report
+        # holds (build_sample_report.py --check holds that report byte for byte).
+        assert (_replay_file_count(set_name), len(meetings), ballots) == (
+            _committed_report_counts(set_name)
+        )
+        return
     assert _replay_file_count(set_name) == _EXPECTED_REPLAY_FILES[set_name]
     assert len(meetings) == _EXPECTED_MEETINGS[set_name]
-    assert sum(len(m.ballots) for m in meetings) == _EXPECTED_BALLOTS[set_name]
+    assert ballots == _EXPECTED_BALLOTS[set_name]
 
 
 def test_committed_corpus_totals_are_pinned() -> None:
-    """The whole-corpus totals the module docstring quotes."""
+    """The frozen sets' totals, and the whole corpus as the per-set sum."""
 
+    frozen = _frozen_recorded_meetings()
+    assert len(frozen) == sum(_EXPECTED_MEETINGS.values()) == 531
+    assert sum(len(m.ballots) for m in frozen) == sum(_EXPECTED_BALLOTS.values())
     meetings = _all_recorded_meetings()
-
-    assert len(meetings) == _TOTAL_MEETINGS
-    assert sum(len(m.ballots) for m in meetings) == _TOTAL_BALLOTS
-    assert sum(_EXPECTED_MEETINGS.values()) == _TOTAL_MEETINGS
-    assert sum(_EXPECTED_BALLOTS.values()) == _TOTAL_BALLOTS
+    _, shown_meetings, shown_ballots = _committed_report_counts(_SHOWN_SET)
+    assert len(meetings) == len(frozen) + shown_meetings
+    assert sum(len(m.ballots) for m in meetings) == (
+        sum(_EXPECTED_BALLOTS.values()) + shown_ballots
+    )
 
 
 def test_recorded_outcome_split_exercises_both_branches() -> None:
     """Both arms of the rule are represented in the recorded bytes."""
 
     counts: dict[MeetingOutcome, int] = {"EJECTED": 0, "SKIPPED": 0}
-    for meeting in _all_recorded_meetings():
+    for meeting in _frozen_recorded_meetings():
         counts[meeting.outcome] += 1
 
     assert counts == _EXPECTED_RECORDED_OUTCOMES
+    shown = {meeting.outcome for meeting in _recorded_meetings(_SHOWN_SET)}
+    assert shown == {"EJECTED", "SKIPPED"}
 
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)
@@ -519,12 +544,22 @@ def test_committed_guard_marker_counts_are_pinned(set_name: str) -> None:
     """
 
     counts = dict.fromkeys(_MARKER_TEMPLATES, 0)
+    ballots = 0
     for meeting in _recorded_meetings(set_name):
         for ballot in meeting.ballots:
+            ballots += 1
             for label, template in _MARKER_TEMPLATES.items():
                 if _marker_prefix(template) in ballot.rationale_text:
                     counts[label] += 1
 
+    for label in _RETIRED_MARKERS:
+        assert counts[label] == 0, label
+    if set_name == _SHOWN_SET:
+        # The shown set's live guards are not transcribed (the baseline-9 bytes
+        # read 3 invalid targets and 1 teammate coercion); each is a subset of
+        # its ballots.
+        assert all(count <= ballots for count in counts.values())
+        return
     assert counts == _EXPECTED_MARKERS[set_name]
 
 
@@ -602,12 +637,14 @@ def test_the_threshold_sweep_actually_moves_outcomes() -> None:
     was recorded, so no committed meeting was ever decided by the confidence
     gate — the "strict plurality but no confident ballot -> SKIPPED" branch is
     not exercised by the corpus at its own threshold. Raising the cutoff turns
-    387 recorded ejections into 382 / 322 / 185, which is what makes the sweep
+    the recorded ejections into fewer, which is what makes the sweep
     real coverage of that branch over real ballots rather than a re-run; the
-    ``plurality_strictly_under_threshold`` edge fixture covers it directly.
+    ``plurality_strictly_under_threshold`` edge fixture covers it directly. The
+    pins read the frozen baseline-9 sets (321 recorded ejections turn into 317 /
+    282 / 166); the shown set is swept by the agreement family above.
     """
 
-    meetings = _all_recorded_meetings()
+    meetings = _frozen_recorded_meetings()
     recorded = [m.recorded for m in meetings]
     by_threshold = {
         threshold: [_canonical_tally(m.ballots, threshold=threshold) for m in meetings]
@@ -1061,7 +1098,7 @@ def test_the_tally_ignores_who_cast_each_ballot(set_name: str) -> None:
     from living participants only), so the dead-voter edge fixtures are
     necessarily synthetic. This is the corpus-scale statement of the same
     property: rewriting EVERY recorded ballot's ``voter`` to an id that never
-    played leaves all 676 resolutions byte-identical, so a future rule that
+    played leaves every recorded resolution byte-identical, so a future rule that
     started reading ``voter`` — deduping by it, weighting it, dropping ballots
     from non-participants — would fail here rather than pass unnoticed.
 

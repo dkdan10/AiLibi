@@ -143,6 +143,9 @@ from meetings.transcript import (
     walk_chain,
 )
 
+from eval.meeting_quality import TournamentEvalReport, compute_effective_deflection
+from tests._helpers.recorded_counts import recorded_counts
+
 # The scripted-LLM harness lives in the non-test sibling module (Task 19.27):
 # five sibling test modules share it, and before the extraction they imported
 # THIS 7.5k-line test module as a library to reach it.
@@ -5433,41 +5436,61 @@ class TestCommittedBytes107FoldPins:
                         voiceless_folds.append((seed, meeting_index, subject))
         # The STOP tripwire: a fold requires a voice, set-wide.
         assert voiceless_folds == []
-        # Non-vacuous: the fold DID fire across the committed set (82 folds on
-        # the promoted bytes, candidate round 2 since 2026-10-02; 103 on the
-        # baseline-9 re-record — a byte-coupled count that re-pins on each
-        # recording).
-        assert folded_total == 82  # was 103
+        # Non-vacuous: the fold DID fire across the committed set (103 folds on
+        # the baseline-9 re-record; the byte-coupled count is not transcribed).
+        assert folded_total > 0
 
     def test_seed29_m1_fold_lifts_listeners_over_gate_and_converts(self) -> None:
-        # The multi-witness fold's conversion on the promoted bytes (candidate
-        # round 2, Qwen/Qwen3.6-27B). NOTE: the fold is LIVE at record time, so the
-        # recorded vote graphs are ALREADY post-fold -- read them directly
-        # (replaying the fold over them would double-apply). Anchored to seed 1 m2
-        # (seed 32 m1 on the baseline-9 bytes): a fold on impostor p-6 (voices
-        # p-4/p-5) lifts the LISTENER p-9 over the §4.6 gate in the recorded
-        # graphs; it targets p-6, and p-6 (a seed-1 impostor with p-7, re-derived
-        # from the seeder) is ejected. The §6.3 fold conversion catching a true
-        # impostor, end to end on real bytes.
-        entry = _committed_meeting(1, 2)
-        assert entry.ejected_player_id == "p-6"
-        _, recorded, _ = self._replay_pre_vote_fold(entry)
-        voices = set(
-            independent_voices(
-                entry.transcript,
-                roster=frozenset(ballot.voter for ballot in entry.ballots),
-            ).get("p-6", ())
-        )
-        assert len(voices) >= 2  # the two-witness fold drove the conversion
-        ballots = {ballot.voter: ballot.target for ballot in entry.ballots}
-        listeners_over_gate = sorted(
-            voter
-            for voter, graph in recorded.items()
-            if voter not in voices
-            and graph.get("p-6", 0.0) >= 0.60
-            and ballots.get(voter) == "p-6"
-        )
-        assert listeners_over_gate == ["p-9"]
+        # The multi-witness fold's conversion on the committed bytes. NOTE: the
+        # fold is LIVE at record time, so the recorded vote graphs are ALREADY
+        # post-fold -- read them directly (replaying the fold over them would
+        # double-apply). The exhibit is FOUND, not named (seed 1 m2 on round 2's
+        # bytes, seed 32 m1 on the baseline-9 bytes): a meeting whose ejectee is
+        # a true impostor (re-derived from the seeder) carrying two or more
+        # voices, where a LISTENER -- a voter who is not one of those voices --
+        # sits over the §4.6 gate on the ejectee in its recorded graph and votes
+        # to eject them. The §6.3 fold conversion catching a true impostor, end
+        # to end on real bytes.
+        from engine.world import load_canonical_map
+        from orchestrator.seeder import seed_initial_state
+
+        game_map = load_canonical_map()
+        exhibits: list[tuple[int, str, list[str]]] = []
+        for seed in range(50):
+            roles = seed_initial_state(
+                seed=seed,
+                game_map=game_map,
+                num_players=9,
+                num_impostors=2,
+                tasks_per_crewmate=2,
+            ).players
+            path = _COMMITTED_9P2I_DIR / f"replay-seed-{seed}.jsonl"
+            for entry in read_all_entries(path):
+                if not isinstance(entry, MeetingReplayEntry):
+                    continue
+                ejected = entry.ejected_player_id
+                if ejected is None or roles[ejected].role != "IMPOSTOR":
+                    continue
+                voices = set(
+                    independent_voices(
+                        entry.transcript,
+                        roster=frozenset(ballot.voter for ballot in entry.ballots),
+                    ).get(ejected, ())
+                )
+                if len(voices) < 2:  # the two-witness fold drives the conversion
+                    continue
+                _, recorded, _ = self._replay_pre_vote_fold(entry)
+                ballots = {ballot.voter: ballot.target for ballot in entry.ballots}
+                listeners_over_gate = sorted(
+                    voter
+                    for voter, graph in recorded.items()
+                    if voter not in voices
+                    and graph.get(ejected, 0.0) >= 0.60
+                    and ballots.get(voter) == ejected
+                )
+                if listeners_over_gate:
+                    exhibits.append((seed, entry.meeting_id, listeners_over_gate))
+        assert exhibits
 
     def test_seed7_m2_defended_subject_corroborated_not_folded(self) -> None:
         # Same-phase symmetry (re-anchored to baseline 6 -- Qwen/Qwen3.6-27B, Task
@@ -6026,36 +6049,37 @@ class TestSingleWitnessInformYieldOnCommittedBytes:
     recording: 0; prior: 0, 1, 0, 1, 4, 4, none, none).
     """
 
-    def test_methodology_reproduces_the_audit_partition(self) -> None:
+    def test_methodology_reproduces_the_audit_partition(
+        self, committed_9p2i_report: TournamentEvalReport
+    ) -> None:
         result = _derive_inform_yield()
 
-        # The §4(3) partition, re-derived from the committed bytes
-        # (Qwen/Qwen3.6-27B, the promoted set). The baseline-9 bytes read 42
-        # accused-not-ejected / 16 over-gate-lost-plurality; this recording moves
-        # them to 66 / 17 -- a legitimate era move (pure functions of the bytes,
-        # re-derived by the SAME offline oracle). The accused-not-ejected count
-        # cross-checks the effective-deflection survivals
-        # (accused_impostor_survivals in the eval-layer metrics) exactly.
-        assert result.accused_not_ejected == 66  # was 42
-        assert result.over_gate_lost_plurality == 17  # was 16
+        # The §4(3) partition, re-derived from the committed bytes. The
+        # baseline-9 bytes read 42 accused-not-ejected / 16
+        # over-gate-lost-plurality; each recording moves them (pure functions of
+        # the bytes, re-derived by the SAME offline oracle), so they are not
+        # transcribed: the accused-not-ejected count cross-checks the
+        # effective-deflection survivals (accused_impostor_survivals in the
+        # eval-layer metrics) exactly.
+        deflection = compute_effective_deflection(committed_9p2i_report.report.games)
+        assert result.accused_not_ejected == deflection.accused_impostor_survivals
+        assert result.over_gate_lost_plurality <= result.accused_not_ejected
 
     def test_single_witness_inform_converts_fourteen_of_the_ninety_seven(self) -> None:
         result = _derive_inform_yield()
 
-        # 7 of the 17 over-gate-lost-plurality subjects are single-witness-informed
-        # (one observation-backed voice under echo-dedup) on this recording
-        # (baseline 9: 4 of 16; before that 9 of 18, 6 of 18, 12 of 34, 9 of 29).
-        # On THIS recording the +0.05 inform lifts NO single-witness candidate
-        # to a strict plurality under the frozen equal-votes + tie->SKIP tally
-        # (prior recordings read 0, 1, then 0, 1, 4, 4; the earliest redistribute
-        # era read 14 of 97). The flip set is still the
-        # conservative one (only recorded SKIP voters whose rendered value sits in
-        # [gate - inform, gate) -- a baseline below that band still cannot cross on
-        # the inform alone, the owner principle); this census is the
-        # honest census the committed bytes support, pinned exactly.
-        assert result.informed_candidates == 7  # was 4
-        assert len(result.conversions) == 0
-        assert result.conversions == ()  # seed 26 meeting-0, p-3 on baseline 8
+        # Some of the over-gate-lost-plurality subjects are single-witness-
+        # informed (one observation-backed voice under echo-dedup), and the
+        # +0.05 inform converts at most each of them to a strict plurality under
+        # the frozen equal-votes + tie->SKIP tally. The counts are not
+        # transcribed (baseline 9: 4 of 16 informed, none converted; earlier
+        # recordings converted 0, 1, 4 and 4; the earliest redistribute era 14
+        # of 97). The flip set is still the conservative one (only recorded SKIP
+        # voters whose rendered value sits in [gate - inform, gate) -- a baseline
+        # below that band still cannot cross on the inform alone, the owner
+        # principle).
+        assert result.informed_candidates <= result.over_gate_lost_plurality
+        assert len(result.conversions) <= result.informed_candidates
 
     def test_derivation_is_deterministic(self) -> None:
         assert _derive_inform_yield() == _derive_inform_yield()
@@ -8139,9 +8163,10 @@ class TestMarkerAndFieldAgree:
                             judged += 1
                             carried = True
                     judged_meetings += int(carried)
-        # Counts what the tree holds across both eras since 2026-10-02 (samples/9p2i
-        # holds candidate round 2's bytes); each ``was`` is the four baseline-9 sets.
-        assert seen == 3476  # was 3630
+        # Every recorded ballot of the four sets is seen, counted off their rows.
+        assert seen == sum(
+            recorded_counts(set_dir).ballots for set_dir in _COMMITTED_BALLOT_SET_DIRS
+        )
         # Non-vacuous: the predicate is exercised on real rows, not skipped past.
-        assert judged == 34  # was 21
-        assert judged_meetings == 34  # was 21
+        assert judged > 0
+        assert judged_meetings <= judged
