@@ -2014,6 +2014,53 @@ def test_missing_replaced_record_cell_fails_loud(doc_tree: Path) -> None:
     assert any("conviction-partition cells cannot be located" in e for e in errors)
 
 
+def test_each_later_era_names_the_era_its_recording_replaced() -> None:
+    # The front door reads a later era's before cells from the record of the era
+    # its shown set replaced, named by id; an era with no name raises rather than
+    # falling back to the ladder tip's record.
+    from eval.eras import BASELINE_9, STAGE_B_R2, STAGE_B_R3
+
+    assert check_doc_facts.replaced_era(STAGE_B_R3) is STAGE_B_R2
+    assert check_doc_facts.replaced_era(STAGE_B_R2) is BASELINE_9
+    with pytest.raises(KeyError, match="no replaced era is named for the baseline-9"):
+        check_doc_facts.replaced_era(BASELINE_9)
+    assert check_doc_facts.proof_set_records() == (
+        _PROMOTION_AUDIT,
+        _REPLACED_AUDIT,
+    )
+
+
+def test_the_scorecards_before_block_and_the_front_door_name_one_era(
+    doc_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Planted: the scorecard's frozen before file holding only baseline 9's
+    # block, as it stood before round 3's promotion grew it. The scorecard would
+    # then show baseline 9's entry as the set's before column while the front
+    # door reads round 2's record, and the check names the disagreement.
+    blocks = check_doc_facts.read_before_columns(doc_tree)
+    assert [block.era_id for block in blocks] == ["baseline-9", "stage-b-r2"]
+    assert check_doc_facts.check_facts(doc_tree) == []
+    monkeypatch.setattr(check_doc_facts, "read_before_columns", lambda root: blocks[:1])
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        "scripts/check_doc_facts.py: the front door reads 9p2i's before cells "
+        "from the stage-b-r2 era's record, but the process scorecard's before "
+        "column for replays/samples/9p2i is the baseline-9 era's block."
+    ]
+
+
+def test_an_unreadable_before_file_is_named(doc_tree: Path) -> None:
+    # One edited byte of the frozen before file fails its digest pin, and the
+    # check says the column cannot be read rather than skipping it.
+    path = doc_tree / "docs/process-scorecard-before.json"
+    path.write_bytes(path.read_bytes().replace(b"stage-b-r2", b"stage-b-r9", 1))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "the process scorecard's before column cannot be read" in error
+        for error in errors
+    )
+
+
 def test_missing_promotion_record_cell_fails_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
