@@ -357,6 +357,14 @@ _PLANTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "declares other bytes": (
             f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
         ),
+        "holds on bytes it does not declare": (
+            f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
+        ),
+        "declares the other on bytes it holds": (),
+        "declares another set": (),
+        "a second set recorded off": (
+            f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
+        ),
         "declares no set": (
             f"replays/candidates/{_PLANTED_ROUND}/experiment-config.json",
         ),
@@ -379,12 +387,16 @@ def _plant_replays(root: Path, games: _Games, plant: str) -> Path:
 
     ``samples/9p2i`` holds round 2's declared file and the fake rehearsal's OFF
     game. The round's config is round 2's file with the field added (round 3's
-    declared bytes), declared by its sha256 for two seeds whose replays are the
-    fake rehearsal's ON game; ``plant`` perturbs one part.
+    declared bytes), declared by its sha256 for two seeds of set ``9p2i`` whose
+    replays are the fake rehearsal's ON game; ``plant`` perturbs one part. Two
+    plants hold other ON bytes (the field's key first), so the sha256 compared is
+    the loaded file's, and two declare a set besides ``9p2i``, so each declared
+    set is read by its own name.
     """
 
     off = _round_two_file()
     on = off.removesuffix("}\n") + ', "route_lines_version": 1}\n'
+    other_on = '{"route_lines_version": 1, ' + off.removeprefix("{")
     replays = root / "replays"
     samples = replays / "samples" / "9p2i"
     samples.mkdir(parents=True)
@@ -398,22 +410,34 @@ def _plant_replays(root: Path, games: _Games, plant: str) -> Path:
         corpus.mkdir(parents=True)
         (corpus / "experiment-config.json").write_text(on, encoding="utf-8")
     round_dir = replays / "candidates" / _PLANTED_ROUND
-    (round_dir / "9p2i").mkdir(parents=True)
-    (round_dir / "experiment-config.json").write_text(on, encoding="utf-8")
-    named = off if plant == "declares other bytes" else on
+    set_name = "4p1i" if plant == "declares another set" else "9p2i"
+    (round_dir / set_name).mkdir(parents=True)
+    # The bytes the round's config holds, and the bytes its declaration names.
+    held, named = {
+        "declares other bytes": (on, off),
+        "holds on bytes it does not declare": (other_on, on),
+        "declares the other on bytes it holds": (other_on, other_on),
+    }.get(plant, (on, on))
+    (round_dir / "experiment-config.json").write_text(held, encoding="utf-8")
     lines = [f"{hashlib.sha256(named.encode()).hexdigest()}  experiment-config.json"]
     if plant != "declares no set":
         lines.append(
-            "9p2i seeds 0-2" if plant == "a seed missing" else "9p2i seeds 0-1"
+            f"{set_name} seeds 0-2"
+            if plant == "a seed missing"
+            else f"{set_name} seeds 0-1"
         )
+    if plant == "a second set recorded off":
+        lines.append("4p1i seeds 0-0")
+        (round_dir / "4p1i").mkdir()
+        shutil.copyfile(games.fake_off, round_dir / "4p1i" / "replay-seed-0.jsonl")
     block = "```candidate-declaration\n" + "\n".join(lines) + "\n```\n"
     (round_dir / "README.md").write_text(
         "# Planted round\n\n" + block * (2 if plant == "declares twice" else 1),
         encoding="utf-8",
     )
-    shutil.copyfile(games.fake_on, round_dir / "9p2i" / "replay-seed-0.jsonl")
+    shutil.copyfile(games.fake_on, round_dir / set_name / "replay-seed-0.jsonl")
     second = games.fake_off if plant == "a seed recorded off" else games.fake_on
-    shutil.copyfile(second, round_dir / "9p2i" / "replay-seed-1.jsonl")
+    shutil.copyfile(second, round_dir / set_name / "replay-seed-1.jsonl")
     if plant == "a round still recording":
         recording = replays / "candidates" / "recording" / "9p2i"
         recording.mkdir(parents=True)
@@ -429,9 +453,11 @@ def test_only_a_declared_round_recording_the_field_on_may_read_it_on(
 
     An ON file under ``samples/`` or ``ml_corpus/`` is listed, and so is a listed
     set that recorded the field ON, and a round's ON file when its declaration
-    names other bytes, names no set or appears twice, or a declared seed is
-    missing or recorded the field OFF; the round as declared is not, nor a round
-    that holds no config yet.
+    names other bytes than the file holds, names no set or appears twice, or a
+    declared seed (of any declared set) is missing or recorded the field OFF; the
+    round as declared is not, on round 3's bytes or on other ON bytes it declares,
+    nor a round declaring its seeds under another set name, nor a round that holds
+    no config yet.
     """
 
     replays = _plant_replays(tmp_path, games, plant)
