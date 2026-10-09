@@ -83,8 +83,11 @@ npm run e2e
 ```
 
 Neither the script nor CI's per-change jobs run the campaign tier: the frozen
-ML-campaign test families, selected with `uv run pytest -m campaign`. Those run
-weekly against `main` from `.github/workflows/campaign-tier.yml`.
+ML-campaign test families and the ML pins that read role or outcome on a frozen
+record, selected with `uv run pytest -m campaign`. Those run from
+`.github/workflows/campaign-tier.yml`, weekly against `main` and on every pull
+request that changes `tests/training/**`; a change to a campaign-tier file
+records the campaign count as [the workflow](docs/workflow.md) says.
 
 Targeted `uv run ...` commands are fine while you are iterating, but a change is
 not done until the whole script is green.

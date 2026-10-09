@@ -73,6 +73,7 @@ from orchestrator.experiment_config import (
 )
 from orchestrator.replay import FailedCallReplayEntry, LLMCallRecord
 from orchestrator.replay_integrity import ReplayIntegrityError
+from tests._helpers.recorded_counts import recorded_counts
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -278,10 +279,11 @@ def test_all_games_reach_game_over_fails_on_forged_outcome() -> None:
 
 
 def test_meeting_rate_passes_on_committed(nine_report: TournamentReport) -> None:
+    # Every recorded meeting resolves; the counts are the recorded rows', not
+    # transcribed (145 on the baseline-9 bytes).
     check = check_meeting_rate_and_resolution(nine_report)
     assert check.passed
-    assert check.facts["meeting_rate"] == 1.0
-    assert check.facts["resolved_meetings"] == 117  # was 145
+    assert check.facts["resolved_meetings"] == recorded_counts(_NINE).meetings
 
 
 def test_meeting_rate_fails_below_floor(nine_report: TournamentReport) -> None:
@@ -325,7 +327,9 @@ def test_meeting_resolution_fails_on_unresolved_meeting(
 def test_no_duplicate_meeting_rows_passes(nine_report: TournamentReport) -> None:
     check = check_no_duplicate_meeting_rows(nine_report)
     assert check.passed
-    assert int(check.facts["meetings_total"]) == 117  # type: ignore[arg-type]  # was 145
+    meetings_total = check.facts["meetings_total"]
+    assert isinstance(meetings_total, int)
+    assert meetings_total == recorded_counts(_NINE).meetings
 
 
 def test_no_duplicate_meeting_rows_fails(nine_report: TournamentReport) -> None:
@@ -991,11 +995,11 @@ def test_seeds_on_disk_still_raises_on_a_mistyped_replay(tmp_path: Path) -> None
 def test_run_validity_gate_reproduces_9p2i_close() -> None:
     report = run_validity_gate(_NINE, expected_experiment_config=_NINE_ERA_CONFIG)
     assert report.passed
-    assert report.games_total == 50
+    rows = recorded_counts(_NINE)
+    assert report.games_total == rows.games
     assert report.failing_checks() == ()
     facts = {c.name: c.facts for c in report.checks}
-    assert facts["meeting_rate_and_resolution"]["meeting_rate"] == 1.0
-    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == 117  # was 145
+    assert facts["meeting_rate_and_resolution"]["resolved_meetings"] == rows.meetings
 
 
 def test_the_9p2i_gate_refuses_it_without_its_era_config() -> None:

@@ -1823,28 +1823,6 @@ def test_the_copy_scan_bites_an_identifier(planted: str) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_the_offline_counterfactual_still_refuses_any_recorded_setting(
-    recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import counterfactual_phase20
-
-    assert (
-        counterfactual_phase20.walk_set(recordings["plain"], set_name="plain").games
-        == 1
-    )
-    _refuse_every_advance(monkeypatch)
-    for arm, setting in (
-        ("workload", "redistribution_policy='least_remaining_work'"),
-        ("reset_rebuttal", "meeting_reset='hub_with_grace'"),
-    ):
-        with pytest.raises(ValueError) as refused:
-            counterfactual_phase20.walk_set(recordings[arm], set_name=arm)
-        assert str(refused.value).startswith(
-            f"the offline lever counterfactual does not read the recorded {setting}"
-        )
-        assert "only recordings made without experiment settings" in str(refused.value)
-
-
 def test_every_applied_meeting_reaches_the_meeting_concluded_hook(
     recordings: dict[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:

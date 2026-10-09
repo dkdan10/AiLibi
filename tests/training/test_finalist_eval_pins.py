@@ -582,6 +582,7 @@ def test_every_slate_arm_appears_exactly_once_in_the_pre_registered_order() -> N
     assert tuple(slate) == _SLATE_8_1_ORDER
 
 
+@pytest.mark.campaign
 def test_every_phase_18_row_records_the_same_substrate_and_roster() -> None:
     """One substrate, one roster, one price across the whole slate (§9).
 
@@ -651,6 +652,7 @@ def test_impostor_rows_name_the_artifact_they_loaded_on_every_game() -> None:
         assert "read back from the recording bytes" in row["stamp_source"]
 
 
+@pytest.mark.campaign
 def test_the_f13_arm_is_the_49_seed_arm_and_declares_the_missing_seed() -> None:
     """``7f73929d`` is scored at n=49, with seed 35 declared absent.
 
@@ -725,6 +727,7 @@ def test_the_comparator_row_proves_the_opponent_slot_was_empty() -> None:
     assert row["stamp_verified_games"] == 50
 
 
+@pytest.mark.campaign
 def test_the_comparator_is_the_slates_only_referee_pass() -> None:
     """One arm clears baseline-6, and it is the scripted one.
 
@@ -770,6 +773,7 @@ def test_the_comparator_is_the_slates_only_referee_pass() -> None:
     )
 
 
+@pytest.mark.campaign
 def test_every_arms_floors_are_the_baseline_6_pins_re_derived() -> None:
     """The floors are one baseline's arithmetic, per arm, not per-row literals.
 
@@ -932,6 +936,7 @@ def test_every_committed_digest_closes_on_the_artifact_bytes_on_disk() -> None:
 # -- the §12 deciding cell ----------------------------------------------------
 
 
+@pytest.mark.campaign
 def test_the_c1_rider_intersection_is_the_persisted_same_seed_deciding_cell() -> None:
     """The §12 cell 18.27 decides on, persisted in the row rather than recomputed.
 
@@ -1105,6 +1110,7 @@ def test_the_seed_mod5_splits_partition_each_arms_own_games() -> None:
     assert len(notes) == 1
 
 
+@pytest.mark.campaign
 def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
     """Each leg's wall clock, with the two arms that look wrong explained.
 
@@ -1269,6 +1275,7 @@ def test_the_leg_duration_blocks_price_the_campaign_honestly() -> None:
     )
 
 
+@pytest.mark.campaign
 def test_the_registered_nested_cells_block_is_persisted_on_every_arm() -> None:
     """The six registered rulings' nested sources, re-persisted per arm.
 
@@ -1358,6 +1365,7 @@ def test_the_registered_nested_cells_block_is_persisted_on_every_arm() -> None:
         assert starved["action_entropy"][role]["mean_conditional_entropy"] > 0.0
 
 
+@pytest.mark.campaign
 def test_the_comparator_carries_the_49_seed_cut_for_the_f13_axis() -> None:
     """The scripted anchor re-cut onto the F13 intersection, and only there.
 
@@ -1501,6 +1509,7 @@ def test_the_comparator_intersection_carries_its_own_mod5_splits() -> None:
         )
 
 
+@pytest.mark.campaign
 def test_the_f13_intersection_gauges_carry_their_own_split_half_read() -> None:
     """The intersection's split-half read is RE-COMPUTED, and provably so.
 
@@ -1612,6 +1621,7 @@ def test_the_f13_intersection_gauges_put_the_quartet_on_one_seed_set() -> None:
     assert str(_F13_EXCLUDED_SEED) in notes.pop()
 
 
+@pytest.mark.campaign
 def test_the_c1_paired_crew_win_table_is_the_49_seed_discordant_cut() -> None:
     """The c1 pair's per-seed win table, reconciled against both arms' totals.
 
@@ -1676,6 +1686,7 @@ def test_the_c1_paired_crew_win_table_is_the_49_seed_discordant_cut() -> None:
     assert gen0_wins_49 == gen0["core"]["crew_wins"]
 
 
+@pytest.mark.campaign
 def test_the_co_present_departure_cell_is_persisted_on_every_arm() -> None:
     """The registered co-present-departure cell, on all nine arms.
 
@@ -1742,6 +1753,7 @@ def test_the_co_present_departure_cell_is_persisted_on_every_arm() -> None:
 # -- honesty: the failing diagnostics say what failed -------------------------
 
 
+@pytest.mark.campaign
 def test_each_rows_validity_gate_reports_its_own_failures_by_name() -> None:
     """Pass and FAIL are pinned with equal precision, per arm.
 
@@ -1763,6 +1775,7 @@ def test_each_rows_validity_gate_reports_its_own_failures_by_name() -> None:
         assert gate["games_total"] == arm.games_total
 
 
+@pytest.mark.campaign
 def test_the_c2_diagnostics_report_the_stall_and_the_dead_meeting_economy() -> None:
     """The two failed crew rows name their own defects, in their own counters.
 
@@ -1819,6 +1832,7 @@ def test_the_c2_diagnostics_report_the_stall_and_the_dead_meeting_economy() -> N
 # -- headline values ----------------------------------------------------------
 
 
+@pytest.mark.campaign
 def test_the_headline_cells_match_the_committed_rows() -> None:
     """The numbers 18.27 rules on, pinned to the bytes that produced them.
 
@@ -1854,6 +1868,7 @@ def test_the_headline_cells_match_the_committed_rows() -> None:
         assert watchability["games_total"] == arm.games_total
 
 
+@pytest.mark.campaign
 def test_the_witnessed_event_rate_split_half_is_unresolvable_on_every_arm() -> None:
     """No arm can resolve ``witnessed_event_rate`` against its own noise.
 

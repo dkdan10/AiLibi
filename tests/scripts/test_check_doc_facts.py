@@ -953,7 +953,7 @@ def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:
     # The win-rate check and the vote-correctness provenance check both read
     # this manifest, so both lose their source and both must say so. (The corpus
     # disclosures' substrate reconciliation reads the baseline-9 era's sets
-    # only: S9 is history since the promotion, held to its d41c9006 values.)
+    # only.)
     _write(doc_tree, _MANIFEST_9P2I, "# Sample Replay Manifest\n\nno table here.\n")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
@@ -1349,8 +1349,8 @@ def test_eval_report_without_vote_correctness_block_fails_loud(
 ) -> None:
     # Format drift must not read as "nothing to check": a report with no
     # vote_correctness block leaves both the stamps and the README's
-    # real-report example sourceless. (The 9p2i sample report no longer feeds
-    # the corpus disclosures: its S9 cells are history, held to d41c9006.)
+    # real-report example sourceless. (The 9p2i sample report does not feed the
+    # corpus disclosures.)
     _write(doc_tree, _EVAL_REPORT_9P2I, "{}\n")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
@@ -2224,37 +2224,17 @@ def test_lessons_under_its_floor_detected(doc_tree: Path) -> None:
 def test_corpus_disclosure_coverage_cell_drift_detected(doc_tree: Path) -> None:
     # The exact drift A-15 found: a coverage cell left as recorded on the
     # previous substrate while the section was relabelled onto this one.
-    _substitute(doc_tree, _CORPUS_README, "crew S9 **635/635", "crew S9 **723/726")
-    errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert errors[0].startswith(f"{_CORPUS_README}:")
-    assert "'crew S9' cell reads 723/726" in errors[0]
-    assert "the S9 bytes gave at d41c9006 635/635" in errors[0]
-
-
-def test_one_s9_history_cell_moved_detected(doc_tree: Path) -> None:
-    # Planted: S9 is the baseline-9 bytes of samples/9p2i as of d41c9006, which
-    # left the tree at the promotion, so its cells are held to the values those
-    # bytes gave, named in the checker with that commit.
     _substitute(
-        doc_tree, _CORPUS_README, "impostor S9 **104/210", "impostor S9 **105/210"
+        doc_tree,
+        _CORPUS_README,
+        "crew C9\n   **1,888/1,888",
+        "crew C9\n   **1,888/1,890",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'impostor S9' cell reads 105/210" in errors[0]
-    assert "the S9 bytes gave at d41c9006 104/210" in errors[0]
-
-
-def test_s9_history_cells_are_the_d41c9006_values() -> None:
-    # The literal history block is the committed source of the S9 cells; these
-    # are the values the d41c9006 report of samples/9p2i gave (re-derived by
-    # read_disclosure_facts over that report, recorded in the card's Results).
-    tag, meetings, cells = check_doc_facts._DISCLOSURE_HISTORY
-    assert check_doc_facts._DISCLOSURE_HISTORY_COMMIT == "d41c9006"
-    assert tag == "S9"
-    assert meetings == (145, 145)
-    assert cells == (("crew", 635, 635), ("impostor", 104, 210))
-    assert "S9" not in {set_tag for set_tag, _ in check_doc_facts._DISCLOSURE_SETS}
+    assert errors[0].startswith(f"{_CORPUS_README}:")
+    assert "'crew C9' cell reads 1888/1890" in errors[0]
+    assert "the recorded reports give 1888/1888" in errors[0]
 
 
 def test_corpus_disclosure_stale_duplicate_cell_detected(doc_tree: Path) -> None:
@@ -2455,18 +2435,18 @@ def test_a_report_without_a_coverage_block_fails_loud(tmp_path: Path) -> None:
 
 
 def test_corpus_disclosure_meeting_total_drift_detected(doc_tree: Path) -> None:
-    # The meeting total is summed across all four reports, so it drifts
+    # The meeting total is summed across the three reports, so it drifts
     # independently of any one set's coverage pair.
     _substitute(
         doc_tree,
         _CORPUS_README,
-        "meetings crew-triggered **676/676**",
+        "meetings crew-triggered **531/531**",
         "meetings crew-triggered **707/707**",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'meetings crew-triggered' cell reads 707/707" in errors[0]
-    assert "give 676/676" in errors[0]
+    assert "give 531/531" in errors[0]
 
 
 # --------------------------------------------------------------------------- #

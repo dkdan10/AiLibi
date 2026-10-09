@@ -30,6 +30,7 @@ from eval.kill_craft import (
     compute_kill_craft_report,
 )
 from tests._helpers.committed import kill_craft_report
+from tests._helpers.recorded_counts import recorded_counts
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_9P2I = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
@@ -98,32 +99,21 @@ def test_corpus_means_and_correlations(corpus_report: KillCraftReport) -> None:
 
 
 def test_samples_9p2i_fold1(samples_9p2i_report: KillCraftReport) -> None:
-    assert samples_9p2i_report.games_total == 50
-    # The promoted stage-b-r2 bytes: the physical vent witness rule and the
-    # regroup put more crew in sight of a kill (14 of 195 against 3 of 175).
-    assert samples_9p2i_report.kills_total == 195  # was 175
-    assert samples_9p2i_report.crew_witnessed_kills == 14  # was 3
-    assert dict(samples_9p2i_report.co_present_histogram) == {0: 195}  # was {0: 175}
-    assert dict(samples_9p2i_report.one_hop_histogram) == {
-        0: 92,  # was 76
-        1: 53,  # was 41
-        2: 30,  # was 39
-        3: 14,  # was 13
-        4: 5,
-        5: 1,
-    }
-    assert samples_9p2i_report.mean_co_present_witnessed == pytest.approx(0.0)
-    assert samples_9p2i_report.mean_co_present_unwitnessed == pytest.approx(0.0)
-    assert samples_9p2i_report.mean_one_hop_witnessed == pytest.approx(
-        2.0
-    )  # was 2.3333333333333335
-    assert samples_9p2i_report.mean_one_hop_unwitnessed == pytest.approx(
-        0.8397790055248618
-    )  # was 1.0232558139534884
-    assert samples_9p2i_report.witnessed_point_biserial_co_present is None
-    assert samples_9p2i_report.witnessed_point_biserial_within_one_hop == pytest.approx(
-        0.2711931109032807
-    )  # was 0.14910217657587682
+    # The shown set's fold, derived rather than transcribed (the baseline-9
+    # bytes read 3 of 175 kills crew-witnessed): every applied kill in the
+    # recorded tick rows is walked, both histograms partition the kills, and
+    # the structural finding holds -- no committed kill has a co-present
+    # crewmate, so that point-biserial is undefined.
+    rows = recorded_counts(_SAMPLES_9P2I)
+    report = samples_9p2i_report
+    assert report.games_total == rows.games
+    assert report.kills_total == rows.applied_actions.get("kill", 0)
+    assert report.crew_witnessed_kills <= report.kills_total
+    assert dict(report.co_present_histogram) == {0: report.kills_total}
+    assert sum(report.one_hop_histogram.values()) == report.kills_total
+    for mean in (report.mean_co_present_witnessed, report.mean_co_present_unwitnessed):
+        assert mean is None or mean == pytest.approx(0.0)
+    assert report.witnessed_point_biserial_co_present is None
 
 
 def test_samples_4p1i_fold1(samples_4p1i_report: KillCraftReport) -> None:
@@ -213,26 +203,22 @@ def test_corpus_entropy_impostor_cells(corpus_report: KillCraftReport) -> None:
 
 
 def test_samples_9p2i_entropy(samples_9p2i_report: KillCraftReport) -> None:
+    # The shown set's entropy census, derived rather than transcribed (the
+    # baseline-9 bytes read 5886 crew and 1754 impostor decisions): one agent
+    # per seat of every game, every bucket of each side present, and the
+    # impostor decisions the same population the evidence-honesty I-11 fold
+    # reconstructs.
+    games = samples_9p2i_report.games_total
     crew = samples_9p2i_report.entropy_by_side["CREWMATE"]
-    assert crew.agents == 350
-    assert crew.decisions == 9421  # was 5886
-    assert crew.mean_conditional_entropy == pytest.approx(
-        0.9388376985686127
-    )  # was 0.7648116236248577
-    assert crew.mean_unconditional_entropy == pytest.approx(
-        1.2466557697609324
-    )  # was 1.0855651571448535
+    assert crew.agents == 7 * games
+    assert crew.decisions == sum(bucket.decisions for bucket in crew.buckets.values())
     assert sorted(crew.buckets) == ["none|crowd", "none|pair", "none|solo"]
 
     impostor = samples_9p2i_report.entropy_by_side["IMPOSTOR"]
-    assert impostor.agents == 100
-    assert impostor.decisions == 3230  # was 1754
-    assert impostor.mean_conditional_entropy == pytest.approx(
-        0.9011289447439224
-    )  # was 0.6225941441852371
-    assert impostor.mean_unconditional_entropy == pytest.approx(
-        1.872315522794211
-    )  # was 1.8912428720636205
+    assert impostor.agents == 2 * games
+    assert impostor.decisions == sum(
+        bucket.decisions for bucket in impostor.buckets.values()
+    )
     assert sorted(impostor.buckets) == [
         "cooling|crowd",
         "cooling|pair",

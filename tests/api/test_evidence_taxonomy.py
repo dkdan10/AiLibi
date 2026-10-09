@@ -48,8 +48,10 @@ from api.schemas import (
     UnclassifiableEvidenceError,
     classify_evidence,
 )
+from eval.report_io import read_set_report_text
 from meetings.schemas import ContradictionRef
 from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
+from orchestrator.replay import MeetingReplayEntry, read_all_entries
 
 _REPLAYS: Final[Path] = Path(__file__).resolve().parents[2] / "replays"
 _SAMPLES: Final[Path] = _REPLAYS / "samples"
@@ -71,10 +73,10 @@ _CORPUS_SETS: Final[tuple[str, ...]] = (
 # followed closed the cross-statement column (64 -> 2, 204 -> 10) and it stays
 # closed here (6 and 13 at baseline 9; the promoted samples/9p2i reads 2).
 _EXPECTED_COUNTS: Final[dict[str, dict[EvidenceCategory, int]]] = {
-    # was 90/7/50, 20/0/0, 315/8/126 and 28/0/1 on baseline 8. samples/9p2i
-    # read 90/6/11 on the baseline-9 bytes; since 2026-10-02 it holds candidate
-    # round 2's bytes.
-    "samples/9p2i": {"role_proof": 38, "cross_statement": 2, "weak_signal": 13},
+    # was 90/7/50, 20/0/0, 315/8/126 and 28/0/1 on baseline 8. The shown 9p2i
+    # set is not transcribed: its counts are held to the committed eval
+    # report's own taxonomy census (samples/9p2i read 90/6/11 on the baseline-9
+    # bytes).
     "samples/4p1i": {"role_proof": 20, "cross_statement": 0, "weak_signal": 0},
     "ml_corpus/9p2i": {"role_proof": 317, "cross_statement": 13, "weak_signal": 44},
     "ml_corpus/4p1i": {"role_proof": 28, "cross_statement": 0, "weak_signal": 0},
@@ -82,6 +84,7 @@ _EXPECTED_COUNTS: Final[dict[str, dict[EvidenceCategory, int]]] = {
 
 # The committed replay count per set, pinned so a thinned checkout cannot make
 # the counts above pass by walking fewer files.
+_SHOWN_SET: Final[str] = "samples/9p2i"
 _EXPECTED_REPLAY_COUNTS: Final[dict[str, int]] = {
     "samples/9p2i": 50,
     "samples/4p1i": 50,
@@ -260,10 +263,22 @@ def test_committed_set_classification_counts(set_name: str) -> None:
     for flag in flags:
         counts[_served(flag).category] += 1
 
-    expected = _EXPECTED_COUNTS[set_name]
+    expected = _EXPECTED_COUNTS.get(set_name) or _committed_census(set_name)
     assert dict(counts) == {k: v for k, v in expected.items() if v > 0}
     # Totality: every recorded flag landed in exactly one category.
     assert sum(counts.values()) == len(flags)
+
+
+def _committed_census(set_name: str) -> dict[EvidenceCategory, int]:
+    """The committed eval report's own taxonomy census of a set's flags."""
+
+    report = json.loads(read_set_report_text(_SAMPLES.parent / set_name))
+    census = report["deduction"]["evidence_taxonomy"]
+    return {
+        "role_proof": census["role_proof_flags"],
+        "cross_statement": census["cross_statement_flags"],
+        "weak_signal": census["weak_signal_flags"],
+    }
 
 
 def test_corpus_wide_totals() -> None:
@@ -279,19 +294,22 @@ def test_corpus_wide_totals() -> None:
     totals: Counter[EvidenceCategory] = Counter()
     flag_count = 0
     for set_name in _CORPUS_SETS:
+        if set_name == _SHOWN_SET:
+            continue
         flags, _ = _recorded_flags(set_name)
         flag_count += len(flags)
         for flag in flags:
             totals[_served(flag).category] += 1
 
-    # Counts what the tree holds, across both recorded eras. Was 455 / 55 / 19
-    # (529) with four baseline-9 sets, and 453 / 177 / 15 (645) on baseline 8.
+    # The frozen baseline-9 sets' corpus. Was 455 / 55 / 19 (529) with four
+    # baseline-9 sets, and 453 / 177 / 15 (645) on baseline 8; the shown set is
+    # held to its committed report above.
     assert dict(totals) == {
-        "role_proof": 403,
-        "weak_signal": 57,
-        "cross_statement": 15,
+        "role_proof": 365,
+        "weak_signal": 44,
+        "cross_statement": 13,
     }
-    assert sum(totals.values()) == flag_count == 475
+    assert sum(totals.values()) == flag_count == 422
 
 
 @pytest.mark.parametrize("set_name", _CORPUS_SETS)
@@ -340,17 +358,19 @@ def test_weak_category_matches_the_detector_stamp(set_name: str) -> None:
 def test_served_dto_carries_the_category() -> None:
     """The additive field arrives on a real served payload.
 
-    On baseline 6 this meeting carried all three shapes at once -- two
+    On baseline 6 the exhibit meeting carried all three shapes at once -- two
     cross-statement flags against a truthful witness plus the self-linked
     ``vent_sighting`` naming the actual venter -- and ejected the witness. The
     baseline-7 record closed the cross-statement pair: what is served now is the
-    role proof alone, and the ejection follows it. Seed 17 carried it through
-    the baseline-9 bytes; on the promoted set (candidate round 2) seed 7's first
-    meeting is the same shape.
+    role proof alone, and the ejection follows it. The meeting is FOUND, not
+    named (seed 17 on the baseline-9 bytes, seed 7's first meeting on round 2):
+    the shown set's first meeting whose one recorded flag is a vent sighting
+    naming the player it ejected.
     """
 
-    replay = ReplayLoader(_SAMPLES / "9p2i").load_replay("headless-seed-7")
-    meeting = replay.meetings[0]
+    seed, index = _first_role_proof_ejection()
+    replay = ReplayLoader(_SAMPLES / "9p2i").load_replay(f"headless-seed-{seed}")
+    meeting = replay.meetings[index]
     assert [flag.category for flag in meeting.contradictions] == ["role_proof"]
     (proof,) = meeting.contradictions
     assert proof.event_a_id == proof.event_b_id
@@ -402,6 +422,26 @@ def test_no_committed_flag_can_render_a_self_linked_pair(set_name: str) -> None:
     )
 
 
+def _first_role_proof_ejection() -> tuple[int, int]:
+    """The shown set's first meeting ejecting the subject of its one vent flag."""
+
+    for seed in range(50):
+        path = _SAMPLES / "9p2i" / f"replay-seed-{seed}.jsonl"
+        meetings = [
+            entry
+            for entry in read_all_entries(path)
+            if isinstance(entry, MeetingReplayEntry)
+        ]
+        for index, entry in enumerate(meetings):
+            if (
+                len(entry.contradictions) == 1
+                and entry.contradictions[0].kind == "vent_sighting"
+                and entry.ejected_player_id in entry.contradictions[0].subjects
+            ):
+                return seed, index
+    raise AssertionError("no meeting ejects the subject of its one vent flag")
+
+
 # The turn an event id belongs to, mirroring ``MeetingView.eventTurnId`` — the
 # SAME segment set (``claim`` / ``obs`` / ``whereabouts``, the last being Task
 # 16.7's roll-call self-placement). A flag whose two ids share a turn cannot be
@@ -433,16 +473,19 @@ def test_endpoint_render_classes() -> None:
     """
 
     counts: Counter[str] = Counter()
+    shown: Counter[str] = Counter()
     for set_name in _CORPUS_SETS:
         flags, _ = _recorded_flags(set_name)
         for flag in flags:
-            counts[_endpoint_class(flag)] += 1
+            (shown if set_name == _SHOWN_SET else counts)[_endpoint_class(flag)] += 1
 
-    # was {"self_linked": 453, "two_turns": 126, "same_turn": 66} (645) on
-    # baseline 8, and {"self_linked": 455, "two_turns": 70, "same_turn": 4} (529)
-    # with four baseline-9 sets; both eras since 2026-10-02.
-    assert dict(counts) == {"self_linked": 403, "two_turns": 64, "same_turn": 8}
-    assert sum(counts.values()) == 475
+    # The frozen baseline-9 sets. Was {"self_linked": 453, "two_turns": 126,
+    # "same_turn": 66} (645) on baseline 8, and {"self_linked": 455,
+    # "two_turns": 70, "same_turn": 4} (529) with four baseline-9 sets; the
+    # shown set adds its own, every one of them resolvable.
+    assert dict(counts) == {"self_linked": 365, "two_turns": 53, "same_turn": 4}
+    assert sum(counts.values()) == 422
+    assert set(shown) <= {"self_linked", "two_turns", "same_turn"}
     # Every self-linked flag is role proof; the same-turn class is the
     # self-stated pair the "within …" reading exists for.
     assert counts["unresolvable"] == 0

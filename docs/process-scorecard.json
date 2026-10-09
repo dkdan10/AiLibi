@@ -1,32 +1,4 @@
 {
-  "appendix": {
-    "archive": "audits/deduction-candidate/run-2026-09-16",
-    "arms": [
-      {
-        "arm": "combined_accounts",
-        "eject_ballots": 75,
-        "eject_ballots_cited": 73,
-        "meetings": 50,
-        "recordings": 50,
-        "skip_ballots": 75,
-        "skip_ballots_cited": 0
-      },
-      {
-        "arm": "repaired_clock",
-        "eject_ballots": 14,
-        "eject_ballots_cited": 14,
-        "meetings": 50,
-        "recordings": 50,
-        "skip_ballots": 136,
-        "skip_ballots_cited": 0
-      }
-    ],
-    "ballots_per_meeting": {
-      "3": 100
-    },
-    "label": "Appendix: the fifth run (2026-09-16), out of the headline",
-    "note": "OUT OF THE HEADLINE. The fifth run is a 3-ballot arena on a proof-free held-out band whose generator filters out the one evidence channel that reliably works, so neither arm is adoptable and neither arm's cells pool with the committed sets. It is reported because the two arms differ on the process measures the frozen outcome scored 0 and 2. Counts only: no prefix, prompt or transcript text is read into this artifact, and nothing under the archive is written."
-  },
   "before": [
     {
       "commit": "d41c9006",
@@ -380,7 +352,7 @@
     "unexplained_decision_rate": "Numerator: an EJECT whose citations do not resolve in the voter's own inputs, or a SKIP that names no player at all - empty considered_alternatives AND a MODEL-AUTHORED rationale carrying no whole-token player id. Model-authored means the remainder once the meeting layer's own audit markers are cut off BY PROVENANCE: the marker region eval.deduction_metrics._split_rationale establishes from that voter's OWN pre-guard vote response, scanned by _scan_marker_chain - the same cut api.replay_loader makes for rationale_text_clean. Shape is not provenance, so the whole record is never scanned: a model body that OPENS with marker-shaped prose sits at position 0 too, and scanning the record would credit the guard with the voter's own words. A guard marker preserves the coerced target's id and the teammate firewall then redacts the body, so reading the raw text would let the machinery's prose answer for a voter who named nothing. Denominator: all ballots. Not-evaluable: ballots whose voter has no recorded prompt. The two halves are reported separately because they are different defects: an EJECT with no basis, and an abstention that names nothing it weighed.",
     "wrong_but_believable_rate": "Numerator: EJECT ballots that are role-INCORRECT (the recorded target is a crewmate) AND grounded by row 1 AND not resting on a manufactured contradiction by row 3 (no manufactured flag in that meeting names the ballot's target). Denominator: all EJECT ballots. Not-evaluable: EJECT ballots whose voter has no recorded prompt, the same per-kind count row 1's EJECT cell carries. REPORTED, NEVER PENALISED: this is the owner's preferred case - a wrong decision on believable data - and the direction of this row is deliberately unstated."
   },
-  "schema_version": 2,
+  "schema_version": 3,
   "sets": [
     {
       "agent_authored_share": {

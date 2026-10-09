@@ -6,6 +6,10 @@
 // other single step. The planted rule below drops the config check and fails
 // the same assertions, which is what proves they read the config.
 
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { MAP_COPY } from "./copy";
@@ -13,6 +17,21 @@ import { isRegroupStep, type RegroupReplaySlice, regroupsAfterMeetings, shouldTw
 import { readSkeleton, skeletonSet } from "./skeleton.testkit";
 
 const SKELETON = readSkeleton();
+
+interface CensusSet {
+  readonly label: string;
+  readonly meetings: number;
+  readonly cells: Readonly<Record<string, { readonly numerator: number; readonly denominator: number }>>;
+}
+
+/** The published gameplay census's row for the shown set: the Python twin. */
+function shownCensus(): CensusSet {
+  const path = resolve(dirname(fileURLToPath(import.meta.url)), "../../../docs/gameplay-census.json");
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as { readonly sets: readonly CensusSet[] };
+  const found = parsed.sets.find((candidate) => candidate.label === "samples/9p2i");
+  if (found === undefined) throw new Error("the published census carries no samples/9p2i row");
+  return found;
+}
 
 /** Frames at ticks -1..6 with one meeting on tick 3 (frame index 4). */
 function replay(reset: "preserve" | "hub_with_grace" | null): RegroupReplaySlice {
@@ -112,9 +131,10 @@ describe("the regroup steps in the committed sets", () => {
       const last = game.replay.ticks[game.replay.ticks.length - 1]?.tick;
       return sum + game.replay.meetings.filter((meeting) => meeting.tick !== last).length;
     }, 0);
-    // 117 meetings, 102 of them outlived by their game: the census's
-    // "play resumes ..." cells read over the same 102.
-    expect(survived).toBe(102);
+    // The meetings outlived by their game are the population the census's
+    // "play resumes ..." cells read over (102 of 117 on round 2's bytes).
+    expect(survived).toBe(shownCensus().cells["play_resumes_with_corpse"]?.denominator);
+    expect(survived).toBeGreaterThan(0);
     expect(steps("9p2i")).toBe(survived);
     expect(steps("4p1i")).toBe(0);
   });
@@ -145,25 +165,27 @@ describe("the regroup note against the committed sets", () => {
 
   it("speaks only of the meetings play resumes from", () => {
     const ending = endingMeetings("9p2i");
-    // 117 meetings, 102 outlived (the step census above), 15 that end their
-    // game. The featured head's third meeting is one: its frame at tick 44 is
-    // the recording's last.
-    expect(ending).toHaveLength(15);
-    expect(ending).toContain("headless-seed-19:meeting-2");
-    const head = skeletonSet(SKELETON, "9p2i").games.find((game) => game.gameId === "headless-seed-19");
-    if (head === undefined) throw new Error("the featured head is not in the skeleton");
-    const third = head.replay.meetings.find((meeting) => meeting.meeting_id === "headless-seed-19:meeting-2");
-    expect(third?.tick).toBe(44);
-    expect(head.replay.ticks[head.replay.ticks.length - 1]?.tick).toBe(44);
-    expect(head.replay.ticks.filter((frame) => frame.tick > 44)).toHaveLength(0);
+    // Every meeting either is outlived (the step census above) or ends its
+    // game on the recording's last frame (15 of 117 on round 2's bytes, the
+    // featured head's third meeting among them).
+    const census = shownCensus();
+    expect(ending.length).toBeGreaterThan(0);
+    expect(ending).toHaveLength(census.meetings - (census.cells["play_resumes_with_corpse"]?.denominator ?? 0));
+    for (const game of skeletonSet(SKELETON, "9p2i").games) {
+      const last = game.replay.ticks[game.replay.ticks.length - 1]?.tick;
+      for (const meeting of game.replay.meetings) {
+        if (ending.includes(meeting.meeting_id)) expect(meeting.tick, meeting.meeting_id).toBe(last);
+      }
+    }
     assertNoteHolds(MAP_COPY.regroupNote, ending);
   });
 
   it("would refute the earlier note that every meeting ends gathered", () => {
-    // Planted: the note as first shipped, which the 15 game-ending meetings falsify.
+    // Planted: the note as first shipped, which the game-ending meetings falsify.
     const earlier =
       "On this recording every meeting ends with the survivors gathered in the meeting room and the bodies cleared, so the map jumps to where they stand on the next tick.";
-    expect(() => assertNoteHolds(earlier, endingMeetings("9p2i"))).toThrow(/claims every meeting, but 15 end/);
+    const ending = endingMeetings("9p2i");
+    expect(() => assertNoteHolds(earlier, ending)).toThrow(`claims every meeting, but ${ending.length} end`);
     // A recording with no game-ending meeting could not refute it on that count.
     expect(() => assertNoteHolds(earlier, [])).toThrow(/does not limit itself/);
   });

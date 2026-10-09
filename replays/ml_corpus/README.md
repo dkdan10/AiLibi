@@ -119,8 +119,11 @@ meetings, 3,630 transcript turns and 3,630 ballots.
 > 9-player set, a later era (`eval/eras.py`;
 > [its record](../../audits/audit-2026-10-01-stage-b-r2.md) section 9). Here, S9
 > means that path's baseline-9 bytes as of `d41c9006`, the last commit that held
-> them, and every S9 figure is a record of those bytes; `scripts/check_doc_facts.py`
-> holds the headline S9 cells to their `d41c9006` values. The corpus did not
+> them, and every
+> figure under that label is a record of those bytes. On 2026-10-09 the gate
+> stopped holding those cells to literals: in a checkout of `d41c9006`,
+> `uv run python scripts/check_doc_facts.py` re-derives them from that commit's
+> `replays/samples/9p2i` report. The corpus did not
 > move, and the one-rung and pairing notes above now hold, among the samples,
 > for `replays/samples/4p1i` alone.
 
@@ -160,11 +163,12 @@ print(c['turns'], c['ballots'], c['skips'], c['kill:applied'], c['kill:rejected'
 Which item comes from which. Fold (a) gives item 1's crew-triggered meeting
 cell, item 7's partner-naming, role-statement and crew-control counts (the
 report's `scaffold_leakage` block) and item 8's coverage cells and
-macro-average. `scripts/check_doc_facts.py` gates nine of those cells on *every*
-gate run, and only those nine: the meeting cell and item 8's eight crew and
-impostor coverage pairs. It reads the four eval reports, fails on disagreement,
+macro-average. `scripts/check_doc_facts.py` gates seven of those cells on *every*
+gate run, and only those seven: the meeting cell over the three sets in the tree
+and item 8's six crew and impostor coverage pairs of those sets. It reads their
+three eval reports, fails on disagreement,
 and holds this section's substrate label to the ladder tip, so the section
-cannot be relabelled onto a new recording while those nine cells stay as they
+cannot be relabelled onto a new recording while those seven cells stay as they
 were. No other figure here is gated. Item 2's rejection causes and resolved
 counts, item 4, item 8's truthfulness cells and item 9's kill census are fold
 (b), which reads the engine's own per-tick output rather than inferring it from
@@ -184,10 +188,11 @@ section does not currently publish one.
    impostor never files a body report and never calls a meeting — the COVER
    branch is explicit: "after the kill the body is in the room and the impostor
    must not file a report" (`agents/tactical/impostor_policy.py:39-40`).
-   Measured across all four sets: meetings crew-triggered **676/676**, opening
+   Measured across all four sets: opening
    turns crew-spoken **676/676**, and the tick streams carry **722/722**
    `report` and **69/69** `emergency` submissions by crew — zero
-   impostor-originated, anywhere. 100% of training examples therefore embed
+   impostor-originated, anywhere; over the three sets still in the tree,
+   meetings crew-triggered **531/531**. 100% of training examples therefore embed
    "the reporter is innocent" as an absolute prior. A crew model fitted here
    has never seen a lying reporter, and any learned impostor that self-reports
    instantly invalidates the crew's learned prior. The prior is disclosed, not
@@ -334,9 +339,9 @@ section does not currently publish one.
 
 8. **Role-correlated public response shape.** The share of a role's transcript
    turns carrying a structured `whereabouts` observation (the roll-call
-   answer), pooled over turns: crew S9 **635/635 = 100.0%**, crew C9
+   answer), pooled over turns: crew S9 635/635 = 100.0%, crew C9
    **1,888/1,888 = 100.0%**, crew S4 **78/78 = 100.0%** and crew C4 **86/86 =
-   100.0%**, versus impostor S9 **104/210 = 49.5%**, impostor C9 **298/651 =
+   100.0%**, versus impostor S9 104/210 = 49.5%, impostor C9 **298/651 =
    45.8%**, impostor S4 **2/39 = 5.1%** and impostor C4 **1/43 = 2.3%**. The
    estimator matters and is named: the *unweighted per-meeting macro-average*
    of the same bytes reads 46.6% (S9) and 41.6% (C9) for the impostor side

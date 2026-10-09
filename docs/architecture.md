@@ -62,8 +62,8 @@ actions and state hashes and owns the substrate registry.
 
 **`eval/`** — `balance_eval.py` strictly folds recordings into typed `GameReport`
 and `TournamentReport` data; analyzers consume these reports. Roles come from
-the privileged game result, never an agent packet. Determinism, leak and prompt
-regression checks also live here.
+the privileged game result, never an agent packet. Determinism and leak checks
+also live here.
 
 **`api/`** — FastAPI serves spectator DTOs from `schemas.py`. It is a privileged
 post-game reader: roles, attribution and vents are intentionally available.

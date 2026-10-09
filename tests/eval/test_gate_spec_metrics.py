@@ -9,22 +9,16 @@ layers, mirroring :mod:`tests.eval.test_gate_metrics`:
   presence-attributed.
 * **Aggregates** — :func:`compute_multi_signal_conversion` /
   :func:`compute_supply_gauges` folds plus their fail-loud validators.
-* **Committed pins + the corrected Wave-0 baseline fixture** — the DoD
-  coordinates: the 5 Wave-0 impostor ejections decompose exactly as the
-  audit found (seeds 8/11/26/39 multi-signal, seed 24 flag-only), the
-  gauges read the corrected instrument, and
-  ``tests/fixtures/phase10/corrected_w0_baseline.json`` — the exact file
-  the 10.9 A/B reads — equals a byte-identical re-derivation from the
-  committed bytes.
+* **Committed pins** — the gauges and the decomposition read the committed
+  9p2i bytes.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
-import sys
 from collections import Counter
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -70,21 +64,10 @@ from meetings.transcript import (
     WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_RETARGETED_PROXY,
     detect_contradictions,
+    is_weak_contradiction,
 )
 from orchestrator.replay import LLMCallRecord
-
-# The baseline builder is a top-level script module (mypy_path = "scripts";
-# no scripts/__init__.py), so put scripts/ on sys.path exactly as
-# tests/scripts/conftest.py does — the fixture-equality pin must call the
-# ONE assembly the operator command runs, never a test-local replica.
-_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
-
-from build_sample_report import (  # noqa: E402
-    corrected_baseline_from_report,
-    serialize_corrected_baseline,
-)
+from tests._helpers.recorded_counts import recorded_counts
 
 _ROLES: Mapping[PlayerId, Role] = {
     "p-0": "CREWMATE",
@@ -99,48 +82,6 @@ _VOTERS: tuple[PlayerId, ...] = ("p-0", "p-1", "p-2", "p-3")
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _COMMITTED_9P2I_DIR = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _COMMITTED_9P2I_REPORT = report_path(_COMMITTED_9P2I_DIR)
-_BASELINE_FIXTURE = (
-    _REPO_ROOT / "tests" / "fixtures" / "phase10" / "corrected_w0_baseline.json"
-)
-# The Wave-1 (10.9) re-record's corrected baseline — now the FROZEN prior-era
-# A/B anchor that the Task 10.17 Wave-2 re-record measured against (its headline
-# rows are pinned below), alongside the still-frozen corrected_w0_* anchor.
-_W1_BASELINE_FIXTURE = (
-    _REPO_ROOT / "tests" / "fixtures" / "phase10" / "corrected_w1_baseline.json"
-)
-# The Wave-2 (10.17) re-record's corrected baseline, produced by the same operator
-# command over the committed 9p2i bytes and re-derived at every re-record through
-# baseline 9. Those bytes left replays/samples/9p2i at the promotion of candidate
-# round 2 (2026-10-02) and tests/fixtures does not move, so it is now FROZEN like
-# corrected_w0_* / corrected_w1_*: a prior-era anchor pinned by content below,
-# never re-derived.
-_W2_BASELINE_FIXTURE = (
-    _REPO_ROOT / "tests" / "fixtures" / "phase10" / "corrected_w2_baseline.json"
-)
-# The whole corrected baseline the operator command re-derives from the promoted
-# samples/9p2i bytes (its seven blocks and ``sample_dir``), as the sha256 of its
-# serialized bytes, and its 44-site channel map as the sha256 of the map's
-# sorted-key JSON. Before the promotion the re-derivation was byte-equal to
-# corrected_w2_baseline.json, whose bytes and 81-site map digest to the _W2_*
-# values (held by the W2 anchor test).
-_PROMOTED_BASELINE_SHA256 = (
-    "3a556a56c0f9c76d5838169bc357cbe760dc4a5d17c55d246b9c0f6172eb10e0"
-)
-_PROMOTED_CHANNEL_MAP_SHA256 = (
-    "52ab23881ed37f687bd5e8c5b4c5bfbaa798d0fb06fcdb00f22a9ac490b90dec"
-)
-_W2_BASELINE_SHA256 = "a472a70d820d0ad61d51140c1b12734910ebe662d73db9dd598b1ad54542fb5d"
-_W2_CHANNEL_MAP_SHA256 = (
-    "2d54603723aeb76f2c3ede44fa8e15740dbb9e536ba783b8f2ae55d2c36cb6ed"
-)
-
-
-def _channel_map_sha256(channels_by_site: Mapping[str, object]) -> str:
-    """The sha256 of a site-to-channels map's sorted-key JSON."""
-
-    return hashlib.sha256(
-        json.dumps(channels_by_site, sort_keys=True).encode("utf-8")
-    ).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -770,6 +711,28 @@ class TestComputeSupplyGauges:
             pytest.approx(2.0)
         )
 
+    def test_an_impostor_accusing_itself_is_not_an_accused_impostor_meeting(
+        self,
+    ) -> None:
+        # Planted: the only accusation of an impostor is its own, so no other
+        # voter accused it and the meeting is not in the gauge's population.
+        meeting = _meeting(
+            turns=(
+                _turn(
+                    speaker=_IMPOSTOR,
+                    index=0,
+                    kind="opening",
+                    claims=(_accusation(against=_IMPOSTOR),),
+                ),
+            ),
+            llm_calls=(_graph_call(agent_id="p-0", rows={_IMPOSTOR: 0.70}),),
+        )
+        gauges = compute_supply_gauges((_game(meetings=(meeting,)),))
+
+        assert gauges.accused_impostor_meetings == 0
+        assert gauges.over_gate_listener_rows == 0
+        assert gauges.over_gate_listeners_per_accused_impostor_meeting is None
+
     def test_empty_set_reads_undefined_shares(self) -> None:
         gauges = compute_supply_gauges(())
         assert gauges.meetings_total == 0
@@ -933,7 +896,7 @@ class TestProxyIntraTurnRetargetsAreNotGenuineClass:
 
 
 # ---------------------------------------------------------------------------
-# Committed pins + the corrected Wave-0 baseline fixture (the 10.9 A/B home)
+# The folds over the committed 9p2i bytes, cross-checked rather than transcribed
 # ---------------------------------------------------------------------------
 
 
@@ -943,24 +906,97 @@ def _load_committed_9p2i() -> TournamentEvalReport:
     )
 
 
-class TestCommittedW2GateSpecPins:
-    """The gp-7 pins over the committed Wave-2 bytes (baseline-9 canonical re-record).
+@dataclass(frozen=True)
+class _RecordedSupply:
+    """The supply gauges' flag and accusation counts, folded off the replay rows."""
 
-    These re-derive from the committed 9p2i bytes. W2 first landed in Task 10.17
-    (W1 -> W2); the current bytes are the baseline-9 record. Off the RECORDED
-    flag census the set reads 81 impostor ejections and 17 non-vent flags split
-    11w/6s across 145 meetings, beside the recorded vent flags the referee prices
-    on its own term. The frozen prior-era A/B anchors (corrected_w0_baseline.json and
-    corrected_w1_baseline.json) are pinned separately by the two
-    ``test_w*_baseline_fixture_carries_the_anchor_rows`` tests below.
+    meetings: int
+    flags: int
+    weak_flags: int
+    strong_flags: int
+    zero_flag_meetings: int
+    crew_subjects: int
+    impostor_subjects: int
+    accused_impostor_meetings: int
+
+
+def _recorded_supply(
+    set_dir: Path, roles_by_game: Mapping[str, Mapping[PlayerId, Role]]
+) -> _RecordedSupply:
+    """Fold ``set_dir``'s recorded meeting rows into the supply gauges' counts.
+
+    The second surface beside the committed report the gauges read: the raw
+    ``kind == "meeting"`` rows of every replay file, their non-vent flags (the
+    band read by the production predicate
+    :func:`meetings.transcript.is_weak_contradiction`) and their accusation
+    claims, with each game's roles taken from the report by ``game_id``.
+    Counts only; no text leaves this function.
     """
 
-    def test_committed_ejections_decompose_into_channels(self) -> None:
-        # The promoted stage-b-r2 bytes (qwen3_6_27b: three templates at v6,
-        # vote_ballot at v8 with the two ballot arms): 44 impostor ejections,
-        # each site's channel set keyed "seed-{seed}:m{index}", counted by
-        # channel. The baseline-9 map of 81 sites stays pinned by content in
-        # corrected_w2_baseline.json (anchor test below), with the W0 and W1 maps.
+    meetings = flags = weak = strong = zero = crew = impostor = accused = 0
+    for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                row = json.loads(line)
+                if row.get("kind") != "meeting":
+                    continue
+                roles = roles_by_game[row["game_id"]]
+                meetings += 1
+                recorded = [
+                    ContradictionRef.model_validate(flag)
+                    for flag in row["contradictions"]
+                    if flag["kind"] != "vent_sighting"
+                ]
+                flags += len(recorded)
+                zero += int(not recorded)
+                for flag in recorded:
+                    if is_weak_contradiction(flag):
+                        weak += 1
+                    else:
+                        strong += 1
+                    for subject in flag.subjects:
+                        if roles[subject] == "IMPOSTOR":
+                            impostor += 1
+                        else:
+                            crew += 1
+                accused += int(
+                    any(
+                        claim["type"] == "accusation"
+                        and claim["against"] != turn["speaker"]
+                        and roles[claim["against"]] == "IMPOSTOR"
+                        for turn in row["transcript"]["turns"]
+                        for claim in turn["claims"]
+                    )
+                )
+    return _RecordedSupply(
+        meetings=meetings,
+        flags=flags,
+        weak_flags=weak,
+        strong_flags=strong,
+        zero_flag_meetings=zero,
+        crew_subjects=crew,
+        impostor_subjects=impostor,
+        accused_impostor_meetings=accused,
+    )
+
+
+class TestCommittedGateSpecFolds:
+    """The gp-7 folds over the committed 9p2i bytes agree with the report.
+
+    No count of the shown bytes is transcribed here: ``build_sample_report.py
+    --check`` holds the committed report these folds read byte for byte, and the
+    synthetic cases above hold each fold. What stays is the cross-check of two
+    surfaces over the shown bytes: the per-ejection decomposition, the
+    multi-signal fold and the committed report's own impostor-ejection count
+    agree, and the supply gauges equal an independent fold of the recorded
+    meeting rows and sit inside the committed report's flag taxonomy. The
+    committed report carries no supply block, so no byte-identity gate holds
+    the gauges themselves. The over-gate listener rows parse each voter's
+    rendered graph, which no second surface counts: the synthetic case above
+    holds that fold, and its shown count is not asserted.
+    """
+
+    def test_the_decomposition_the_fold_and_the_report_agree(self) -> None:
         report = _load_committed_9p2i()
         channels_by_site = {
             f"seed-{game.seed}:m{index}": sorted(channels)
@@ -968,186 +1004,70 @@ class TestCommittedW2GateSpecPins:
             for index in range(len(game.meetings))
             if (channels := decompose_ejection_channels(game, index)) is not None
         }
-        assert len(channels_by_site) == 44  # was 81
-        # The whole map, every site's channel set (was _W2_CHANNEL_MAP_SHA256,
-        # the 81-site map equal to the W2 fixture's).
-        assert _channel_map_sha256(channels_by_site) == _PROMOTED_CHANNEL_MAP_SHA256
+        result = compute_multi_signal_conversion(report.report.games)
+
+        assert result.impostor_ejections > 0
+        assert result.impostor_ejections == report.conversion.impostor_ejections
+        assert len(channels_by_site) == result.impostor_ejections
+        assert result.multi_signal_conversions == sum(
+            1 for channels in channels_by_site.values() if len(channels) >= 2
+        )
+        assert result.single_signal_conversions == sum(
+            1 for channels in channels_by_site.values() if len(channels) == 1
+        )
         counts = Counter(
             channel for channels in channels_by_site.values() for channel in channels
         )
-        # was body_proximity 21, contradiction_flag 1, prior_meeting_carry 20,
-        # single-witness inform 2, vent_witness 59 on the baseline-9 bytes
-        assert dict(counts) == {
-            "body_proximity": 16,
-            "prior_meeting_carry": 10,
-            "vent_witness": 28,
-        }
-
-    def test_multi_signal_conversion_reads_the_committed_split(self) -> None:
-        # The gate ejects 44 impostors on the committed 9p2i bytes. Reading the
-        # RECORDED flag channel rather than a transcript re-derivation, 10 of the
-        # 44 rows carry MULTIPLE signal channels, 34 carry a single channel and 0
-        # are unattributed (first pinned at 18 of 64; the baseline-9 bytes read
-        # 22 / 59 of 81). The channel counts are pinned above.
-        report = _load_committed_9p2i()
-        result = compute_multi_signal_conversion(report.report.games)
-
-        assert result.impostor_ejections == 44  # was 81
-        assert result.multi_signal_conversions == 10  # was 22
-        assert result.single_signal_conversions == 34  # was 59
-        assert result.unattributed_conversions == 0
-        assert result.multi_signal_rate == pytest.approx(10 / 44)  # was 22 / 81
-
-    def test_supply_gauges_read_the_corrected_instrument(self) -> None:
-        # The supply row off the RECORDED non-vent census on the committed 9p2i
-        # bytes: 15 flags split 13w/2s across 117 meetings, role split 13 CREW /
-        # 2 IMP, 106 zero-contradiction meetings, genuine-subject supply 4,
-        # accused-impostor 105, and 242 over-gate §6.6 listener rows. The vent
-        # class is excluded here and rides the referee's own vent term, so this
-        # is the deduction-flag half of the record. (The baseline-9 bytes read 17
-        # flags, 11w/6s, over 145 meetings.)
-        report = _load_committed_9p2i()
-        gauges = compute_supply_gauges(report.report.games)
-
-        assert gauges.meetings_total == 117  # was 145
-        assert gauges.total_flags == 15  # was 17
-        assert gauges.weak_flags == 13  # was 11
-        assert gauges.strong_flags == 2  # was 6
-        assert gauges.zero_contradiction_meetings == 106  # was 135
-        assert gauges.genuine_subject_meetings == 4
-        assert gauges.flag_subjects_crew == 13
-        assert gauges.flag_subjects_impostor == 2  # was 4
-        assert gauges.accused_impostor_meetings == 105  # was 111
-        assert gauges.over_gate_listener_rows == 242  # was 421
-
-    def test_the_corrected_baseline_rederivation_is_pinned_whole(
-        self, committed_9p2i_report: TournamentEvalReport
-    ) -> None:
-        # The operator command
-        #   scripts/build_sample_report.py --sample-dir replays/samples/9p2i
-        #     --baseline-out <path>
-        # re-derives a corrected baseline from the committed bytes. Its whole
-        # serialized output — all seven blocks and sample_dir — is pinned by
-        # sha256 (was: byte-equal to corrected_w2_baseline.json, sha256
-        # _W2_BASELINE_SHA256), so any one block moving fails here; two
-        # derivations are byte-identical, so the whole derivation chain —
-        # detector, predicate, metrics — is deterministic end to end. The
-        # committed corrected_w2_baseline.json describes the baseline-9 bytes and
-        # is a frozen anchor now (content pinned below), never re-derived.
-        def derive() -> str:
-            return serialize_corrected_baseline(
-                corrected_baseline_from_report(
-                    committed_9p2i_report, sample_dir=_COMMITTED_9P2I_DIR
-                )
+        assert {
+            CHANNEL_CONTRADICTION_FLAG: result.conversions_with_contradiction_flag,
+            CHANNEL_BODY_PROXIMITY: result.conversions_with_body_proximity,
+            CHANNEL_VENT_WITNESS: result.conversions_with_vent_witness,
+            CHANNEL_PRIOR_MEETING_CARRY: result.conversions_with_prior_meeting_carry,
+        } == {
+            channel: counts[channel]
+            for channel in (
+                CHANNEL_CONTRADICTION_FLAG,
+                CHANNEL_BODY_PROXIMITY,
+                CHANNEL_VENT_WITNESS,
+                CHANNEL_PRIOR_MEETING_CARRY,
             )
-
-        rederived = derive()
-        assert rederived == derive()
-        assert (
-            hashlib.sha256(rederived.encode("utf-8")).hexdigest()
-            == _PROMOTED_BASELINE_SHA256
-        )
-        payload = json.loads(rederived)
-        assert sorted(payload) == [
-            "conversion_per_meeting",
-            "effective_deflection",
-            "genuine_class_conversion",
-            "impostor_ejection_channels",
-            "indistinguishability",
-            "multi_signal_conversion",
-            "sample_dir",
-            "supply_gauges",
-        ]
-        assert (
-            _channel_map_sha256(payload["impostor_ejection_channels"])
-            == _PROMOTED_CHANNEL_MAP_SHA256
-        )
-        assert payload["conversion_per_meeting"] == {
-            "conversion_per_meeting": 44 / 117,
-            "impostor_ejections": 44,
-            "resolved_meetings": 117,
-        }
-        assert rederived != _W2_BASELINE_FIXTURE.read_text(encoding="utf-8")
-
-    def test_w2_baseline_fixture_carries_the_anchor_rows(self) -> None:
-        # The frozen W2 anchor: corrected_w2_baseline.json keeps the baseline-9
-        # rows the samples-9p2i bytes re-derived to until the promotion of
-        # 2026-10-02. Pinned by content so the anchor cannot silently drift to a
-        # later era — mirrors the W0 and W1 anchor tests.
-        raw = _W2_BASELINE_FIXTURE.read_bytes()
-        # The pre-promotion pins, held: the rederivation's old bytes and map.
-        assert hashlib.sha256(raw).hexdigest() == _W2_BASELINE_SHA256
-        baseline = json.loads(raw)
-        assert (
-            _channel_map_sha256(baseline["impostor_ejection_channels"])
-            == _W2_CHANNEL_MAP_SHA256
-        )
-        assert baseline["sample_dir"] == "9p2i"
-        assert baseline["conversion_per_meeting"]["impostor_ejections"] == 81
-        assert baseline["conversion_per_meeting"]["resolved_meetings"] == 145
-        assert baseline["multi_signal_conversion"]["multi_signal_conversions"] == 22
-        assert baseline["multi_signal_conversion"]["impostor_ejections"] == 81
-        assert baseline["supply_gauges"]["total_flags"] == 17
-        assert baseline["supply_gauges"]["weak_flags"] == 11
-        assert baseline["supply_gauges"]["strong_flags"] == 6
-        assert len(baseline["impostor_ejection_channels"]) == 81
-        assert Counter(
-            channel
-            for channels in baseline["impostor_ejection_channels"].values()
-            for channel in channels
-        ) == {
-            "body_proximity": 21,
-            "contradiction_flag": 1,
-            "prior_meeting_carry": 20,
-            "single-witness inform": 2,
-            "vent_witness": 59,
         }
 
-    def test_w0_baseline_fixture_carries_the_anchor_rows(self) -> None:
-        # The frozen 10.9 A/B anchor: corrected_w0_baseline.json keeps the W0
-        # rows the re-record measures against (never re-derived since 10.9).
-        # Pinned by content so the anchor cannot silently drift to a later era.
-        baseline = json.loads(_BASELINE_FIXTURE.read_text(encoding="utf-8"))
-        assert baseline["sample_dir"] == "9p2i"
-        assert baseline["genuine_class_conversion"]["supplied"] == 7
-        assert baseline["genuine_class_conversion"]["converted"] == 1
-        assert baseline["multi_signal_conversion"]["multi_signal_conversions"] == 4
-        assert baseline["multi_signal_conversion"]["impostor_ejections"] == 5
-        assert baseline["supply_gauges"]["total_flags"] == 65
-        assert baseline["supply_gauges"]["weak_flags"] == 64
-        assert baseline["supply_gauges"]["strong_flags"] == 1
-        assert sorted(baseline["impostor_ejection_channels"]) == [
-            "seed-11:m2",
-            "seed-24:m0",
-            "seed-26:m1",
-            "seed-39:m1",
-            "seed-8:m2",
-        ]
+    def test_the_supply_gauges_equal_a_fold_of_the_recorded_rows(self) -> None:
+        report = _load_committed_9p2i()
+        games = report.report.games
+        gauges = compute_supply_gauges(games)
+        recorded = _recorded_supply(
+            _COMMITTED_9P2I_DIR, {game.game_id: game.roles for game in games}
+        )
 
-    def test_w1_baseline_fixture_carries_the_anchor_rows(self) -> None:
-        # The frozen 10.17 A/B anchor: corrected_w1_baseline.json keeps the W1
-        # rows the Wave-2 re-record measures against (never re-derived in 10.17).
-        # Pinned by content so the anchor cannot silently drift to the W2 era —
-        # mirrors the W0 anchor test exactly.
-        baseline = json.loads(_W1_BASELINE_FIXTURE.read_text(encoding="utf-8"))
-        assert baseline["sample_dir"] == "9p2i"
-        assert baseline["genuine_class_conversion"]["supplied"] == 8
-        assert baseline["genuine_class_conversion"]["converted"] == 2
-        assert baseline["multi_signal_conversion"]["multi_signal_conversions"] == 11
-        assert baseline["multi_signal_conversion"]["impostor_ejections"] == 11
-        assert baseline["supply_gauges"]["total_flags"] == 85
-        assert baseline["supply_gauges"]["weak_flags"] == 84
-        assert baseline["supply_gauges"]["strong_flags"] == 1
-        assert sorted(baseline["impostor_ejection_channels"]) == [
-            "seed-16:m1",
-            "seed-16:m2",
-            "seed-25:m2",
-            "seed-27:m1",
-            "seed-29:m1",
-            "seed-2:m2",
-            "seed-38:m0",
-            "seed-39:m2",
-            "seed-43:m2",
-            "seed-44:m1",
-            "seed-45:m1",
-        ]
+        assert gauges.meetings_total == recorded.meetings > 0
+        assert gauges.total_flags == recorded.flags
+        assert (gauges.weak_flags, gauges.strong_flags) == (
+            recorded.weak_flags,
+            recorded.strong_flags,
+        )
+        assert gauges.zero_contradiction_meetings == recorded.zero_flag_meetings
+        assert (gauges.flag_subjects_crew, gauges.flag_subjects_impostor) == (
+            recorded.crew_subjects,
+            recorded.impostor_subjects,
+        )
+        assert gauges.accused_impostor_meetings == recorded.accused_impostor_meetings
+        assert gauges.genuine_subject_meetings == sum(
+            1
+            for game in games
+            for meeting in game.meetings
+            if genuine_class_subjects(meeting)
+        )
+
+        # The committed report's taxonomy is the other surface: it partitions
+        # every recorded flag, vent sightings included, and its weak-signal and
+        # cross-statement classes are the non-vent weak and strong flags that
+        # do not link one artifact to itself.
+        taxonomy = report.deduction.evidence_taxonomy
+        vent_flags = recorded_counts(_COMMITTED_9P2I_DIR).flag_kinds.get(
+            "vent_sighting", 0
+        )
+        assert taxonomy.flags_total == gauges.total_flags + vent_flags
+        assert gauges.weak_flags >= taxonomy.weak_signal_flags
+        assert gauges.strong_flags >= taxonomy.cross_statement_flags

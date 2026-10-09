@@ -291,20 +291,6 @@ def test_every_other_setting_the_readers_refused_is_still_refused(
     assert advances == []
 
 
-def test_the_offline_lever_counterfactual_keeps_refusing_the_reset(
-    reset_set: Path,
-) -> None:
-    import sys
-
-    scripts = Path(__file__).resolve().parents[2] / "scripts"
-    if str(scripts) not in sys.path:
-        sys.path.insert(0, str(scripts))
-    import counterfactual_phase20
-
-    with pytest.raises(ValueError, match="meeting_reset='hub_with_grace'"):
-        counterfactual_phase20.walk_set(reset_set, set_name="reset/9p2i")
-
-
 # --------------------------------------------------------------------------- #
 # The funnel's memory walk                                                    #
 # --------------------------------------------------------------------------- #

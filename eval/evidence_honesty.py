@@ -141,10 +141,12 @@ I-11 is the one cell family where that is no longer possible, and it says so rat
 than pretending otherwise. Its fold re-invokes the impostor policy over the frozen
 bytes, and the 20.32 mover repair deleted the policy those bytes were recorded
 with, so the fold now measures the REPAIRED mover's counterfactual and
-``reconstruction_mismatches`` counts the decisions the repair changed. The ratified
-"before" is frozen in :data:`RATIFIED_I11_CELLS` instead of recomputed, every block
+``reconstruction_mismatches`` counts the decisions the repair changed. Every block
 carries the ``policy_mode`` that produced it, and no ratified bar rides I-11 — it is
-a §5 secondary cell (memo §11 amendment, 2026-08-20).
+a §5 secondary cell (memo §11 amendment, 2026-08-20). Retired 2026-10-09: the
+frozen ratified I-11 "before" (``RATIFIED_I11_CELLS``) left this module; its last
+version is at ``09dab356`` and ``audits/audit-phase-20-preregistration.md`` §3.1
+records its values.
 
 By default the fold rebuilds each game's impostor decisions with the policy that
 game's recorded settings name (:func:`recorded_impostor_policy`). A recording
@@ -197,7 +199,6 @@ from collections import Counter, deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import MappingProxyType
 from typing import Final, NamedTuple, NoReturn
 
 from pydantic import BaseModel, ConfigDict
@@ -296,13 +297,10 @@ def live_impostor_policy(agent_id: PlayerId) -> ImpostorPolicy:
 
 
 # How an I-11 block was produced. The live fold re-invokes the policy in the tree
-# over the frozen baseline-6 bytes; the ratified baseline is the frozen measurement
-# of the policy those bytes were RECORDED with, which is no longer in the tree; a
-# custom fold re-invokes some other caller-supplied policy over the same bytes and
-# must never be read as either of the two named ones. A recorded-arm fold
+# over the frozen bytes; a custom fold re-invokes some other caller-supplied policy
+# over the same bytes and must never be read as the live one. A recorded-arm fold
 # re-invokes the experimental policy a recording's tactical settings name.
 LIVE_POLICY_FOLD: Final[str] = "live-policy-fold"
-RATIFIED_BASELINE: Final[str] = "ratified-baseline"
 CUSTOM_POLICY_FOLD: Final[str] = "custom-policy-fold"
 RECORDED_ARM_POLICY_FOLD: Final[str] = "recorded-arm-policy-fold"
 
@@ -812,8 +810,8 @@ class ImpostorTargetingCells(_FrozenModel):
     a lower-id target may dodge in the same tick.
 
     ``policy_mode`` names what produced the block: the live fold over the frozen
-    bytes, a caller-supplied policy's fold over them, or the frozen ratified
-    baseline (:data:`RATIFIED_I11_CELLS`).
+    bytes, the recorded arm policy's fold, or a caller-supplied policy's fold over
+    them.
     ``reconstruction_mismatches`` counts the decisions the folded policy does not
     reproduce against the recorded action stream — zero for the policy the bytes
     were recorded with, and the size of the behaviour change for any other.
@@ -842,74 +840,6 @@ class ImpostorTargetingCells(_FrozenModel):
     games_with_a_blocked_kill: int
     recorded_kill_decisions: int
     recorded_kills_reproduced: int
-
-
-class RatifiedTargetingBaseline(_FrozenModel):
-    """One set's I-11 cells as ratified, frozen at the pre-repair commit.
-
-    Nothing recomputes these: the policy the committed bytes were recorded with
-    left the tree with the 20.32 mover repair, so the live fold over those same
-    bytes is now the repair's counterfactual "after" rather than the baseline.
-    Every stated field is quoted from
-    ``audits/audit-phase-20-preregistration.md`` §3.1 and the pin class that memo
-    names; ``None`` marks a field the ratified set never stated for that roster.
-    ``kills_blocked_by_ghost_top`` is the one figure with no committed cell — it is
-    the 2026-08-19 review's own count (A/verdicts.md claim 12).
-    """
-
-    policy_mode: str = RATIFIED_BASELINE
-    decisions_reconstructed: int
-    free_kill_opportunities: int
-    free_kills_declined: int
-    ghost_top: int
-    in_vent_decisions: int | None = None
-    decline_reason_ranking: int | None = None
-    decline_reason_fellow_defer: int | None = None
-    decline_reason_cover: int | None = None
-    decline_reason_other: int | None = None
-    ghost_top_ejected: int | None = None
-    ghost_top_unseen_death: int | None = None
-    kills_blocked_by_ghost_top: int | None = None
-
-
-RATIFIED_I11_CELLS: Final[Mapping[str, RatifiedTargetingBaseline]] = MappingProxyType(
-    {
-        "samples/9p2i": RatifiedTargetingBaseline(
-            decisions_reconstructed=2461,
-            free_kill_opportunities=415,
-            free_kills_declined=190,
-            ghost_top=303,
-            in_vent_decisions=130,
-            decline_reason_ranking=168,
-            decline_reason_fellow_defer=15,
-            decline_reason_cover=7,
-            decline_reason_other=0,
-            ghost_top_ejected=222,
-            ghost_top_unseen_death=81,
-            kills_blocked_by_ghost_top=30,
-        ),
-        "ml_corpus/9p2i": RatifiedTargetingBaseline(
-            decisions_reconstructed=6663,
-            free_kill_opportunities=1053,
-            free_kills_declined=413,
-            ghost_top=555,
-        ),
-        "samples/4p1i": RatifiedTargetingBaseline(
-            decisions_reconstructed=632,
-            free_kill_opportunities=80,
-            free_kills_declined=16,
-            ghost_top=0,
-            ghost_top_ejected=0,
-        ),
-        "ml_corpus/4p1i": RatifiedTargetingBaseline(
-            decisions_reconstructed=579,
-            free_kill_opportunities=75,
-            free_kills_declined=18,
-            ghost_top=0,
-        ),
-    }
-)
-"""The ratified I-11 "before", keyed by replay-set directory under ``replays/``."""
 
 
 class RenderBudgetCells(_FrozenModel):
@@ -1148,9 +1078,8 @@ def compute_evidence_honesty(
     policy IS the recorded one gets a raise on the first disagreeing decision,
     and every other caller reads the disagreements as
     ``impostor_targeting.reconstruction_mismatches`` — the size of the
-    counterfactual. The ratified pre-repair I-11 cells live in
-    :data:`RATIFIED_I11_CELLS`; nothing recomputes them, because the policy that
-    produced them is deleted.
+    counterfactual. Nothing recomputes the ratified pre-repair I-11 cells, because
+    the policy that produced them is deleted.
     """
 
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(sample_dir)

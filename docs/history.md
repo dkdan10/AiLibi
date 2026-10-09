@@ -44,6 +44,8 @@ tournament dashboard, and the prompt-regression close gate that turns "change a
 prompt, watch a metric move, attributably" into a test. This is the MVP.
 [Contract](../tasks/phase-5.md) ·
 [close audit](../audits/audit-2026-05-30-0059-mvp-close.md).
+Retired on 2026-10-09: the close gate and its module, with the three-seed
+fixtures whose last version is at `4e5b6d6a`.
 
 ## Making the agents reason: phases 6–13.5
 
@@ -68,6 +70,9 @@ deciding anything. [Contract](../tasks/phase-8.md).
 **Phase 10 — the conviction engine.** Repair of the flag-to-ballot-to-tally
 pipeline, plus the crew's evidence economy — what the table is actually handed
 to reason with. [Contract](../tasks/phase-10.md).
+Retired on 2026-10-09: the three corrected-baseline fixtures with their anchor
+tests, the Wave-2 gate spec and the report builder's baseline derivation; the
+fixtures' last version is at `83148aa6`.
 
 **Phase 11 — the impostor's information economy.** Vents and sabotage became
 real impostor moves rather than decoration, then were balanced against the
@@ -172,6 +177,8 @@ the phase closed behind it that same day at `d8ec0a1c`
 ([close audit](../audits/audit-phase-20-close.md)).
 [Contract](../tasks/phase-20.md) ·
 [record](../audits/audit-phase-20-baseline-7.md).
+Retired on 2026-10-09: the offline lever counterfactual script, which refused to
+run once its levers graduated; its last version is at `a8a3db9b`.
 
 ---
 

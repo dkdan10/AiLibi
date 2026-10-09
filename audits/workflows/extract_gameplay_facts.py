@@ -670,115 +670,6 @@ def _length_distribution(samples: list[int]) -> dict[str, Any]:
     }
 
 
-def _cross_era_trajectory(
-    *,
-    w2_effective_deflection: Any,
-    w2_multi_signal: Any,
-    w2_genuine_supplied: int,
-    w2_genuine_converted: int,
-    w2_conversion_per_meeting: float | None,
-    w2_total_meetings: int,
-    w2_win_split: Mapping[str, int],
-    w2_eject_decided_wins: int,
-) -> dict[str, Any]:
-    """W0 -> W1 -> W2 comparison rows from the committed corrected-baseline fixtures.
-
-    Reads the committed ``tests/fixtures/phase10/corrected_w{0,1,2}_baseline.json``
-    fixtures (the one-home era baselines the 10.x A/B gates were written against)
-    so lenses B/E do not each re-read prior eras. The W2 row is the live
-    re-derivation from THIS extraction (cross-checked against the W2 fixture's own
-    numbers — a mismatch means the committed fixture and the current bytes
-    diverged). Each metric is the overshoot-vs-trend signal the close-gate names:
-    effective_deflection (the deception-skill subcount), genuine/multi conversion
-    (the detection pipeline), conversion_per_meeting + meetings/game (pacing), and
-    the impostor-win-rate / R1 eject-decided wins (the headline balance the gate
-    excludes as an A/B signal but the audit still reports).
-    """
-
-    fixtures_dir = REPO_ROOT / "tests" / "fixtures" / "phase10"
-    rows: dict[str, dict[str, Any]] = {}
-    for era in ("w0", "w1", "w2"):
-        fpath = fixtures_dir / f"corrected_{era}_baseline.json"
-        if not fpath.exists():
-            rows[era] = {"present": False}
-            continue
-        fx = json.loads(fpath.read_text(encoding="utf-8"))
-        ed = fx.get("effective_deflection") or {}
-        ms = fx.get("multi_signal") or fx.get("multi_signal_conversion") or {}
-        gc = fx.get("genuine_class_conversion") or {}
-        cpm = fx.get("conversion_per_meeting") or {}
-        rows[era] = {
-            "present": True,
-            "effective_deflections": ed.get("effective_deflections"),
-            "accused_impostor_survivals": ed.get("accused_impostor_survivals"),
-            "skip_saved_active_survivals": ed.get("skip_saved_active_survivals"),
-            "genuine_supplied": gc.get("supplied"),
-            "genuine_converted": gc.get("converted"),
-            "genuine_conversion_rate": gc.get("conversion_rate"),
-            "multi_signal_conversions": ms.get("multi_signal_conversions"),
-            "multi_signal_impostor_ejections": ms.get("impostor_ejections"),
-            "conversions_with_single_witness_inform": ms.get(
-                "conversions_with_single_witness_inform"
-            ),
-            "conversion_per_meeting": cpm.get("conversion_per_meeting"),
-            "resolved_meetings": cpm.get("resolved_meetings"),
-        }
-
-    # The live W2 row from THIS extraction (the oracle), cross-checked against the
-    # committed W2 fixture so a fixture/bytes drift is visible.
-    live_w2 = {
-        "effective_deflections": w2_effective_deflection.effective_deflections,
-        "accused_impostor_survivals": (
-            w2_effective_deflection.accused_impostor_survivals
-        ),
-        "skip_saved_active_survivals": (
-            w2_effective_deflection.skip_saved_active_survivals
-        ),
-        "genuine_supplied": w2_genuine_supplied,
-        "genuine_converted": w2_genuine_converted,
-        "genuine_conversion_rate": (
-            round(w2_genuine_converted / w2_genuine_supplied, 4)
-            if w2_genuine_supplied
-            else None
-        ),
-        "multi_signal_conversions": w2_multi_signal.multi_signal_conversions,
-        "multi_signal_impostor_ejections": w2_multi_signal.impostor_ejections,
-        "conversions_with_single_witness_inform": (
-            w2_multi_signal.conversions_with_single_witness_inform
-        ),
-        "conversion_per_meeting": w2_conversion_per_meeting,
-        "resolved_meetings": w2_total_meetings,
-        "win_split": dict(w2_win_split),
-        "impostor_win_rate": (
-            round(w2_win_split.get("IMPOSTORS", 0) / sum(w2_win_split.values()), 4)
-            if w2_win_split
-            else None
-        ),
-        "r1_eject_decided_wins": w2_eject_decided_wins,
-    }
-    return {
-        "note": (
-            "W0->W1->W2 from the committed corrected-baseline fixtures "
-            "(tests/fixtures/phase10) + the live W2 re-derivation. The "
-            "overshoot-vs-trend signal: effective_deflections and the conversion "
-            "channels across eras. live_w2 is THIS extraction; fixture_w2 is the "
-            "committed baseline (a divergence is flagged by w2_matches_fixture)."
-        ),
-        "fixture_w0": rows.get("w0"),
-        "fixture_w1": rows.get("w1"),
-        "fixture_w2": rows.get("w2"),
-        "live_w2": live_w2,
-        "w2_effective_deflection_matches_fixture": (
-            rows.get("w2", {}).get("effective_deflections")
-            == live_w2["effective_deflections"]
-        ),
-        "w2_genuine_matches_fixture": (
-            rows.get("w2", {}).get("genuine_converted") == w2_genuine_converted
-            and rows.get("w2", {}).get("genuine_supplied") == w2_genuine_supplied
-        ),
-    }
-
-
 def _git_head() -> str:
     out = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -3506,26 +3397,10 @@ def main() -> int:
     impostor_do_task_emissions = indistinguishability.impostor_do_task
     impostor_real_task_advances = len(impostor_task_advances)
 
-    # --- CROSS-ERA TRAJECTORY (point 6f) over the committed fixtures ---
-    # The live W2 conversion_per_meeting (impostor ejections / resolved meetings)
-    # and eject-decided win count, fed alongside the imported W2 folds so the
-    # W0->W1->W2 row is built once (lenses B/E read it instead of re-reading the
-    # prior-era fixtures).
-    w2_conversion_per_meeting = (
-        round(ejections_impostor / total_meetings, 4) if total_meetings else None
-    )
+    # The walk-derived eject-decided win count, which the counterfactual oracle
+    # self-check below holds against the recorded report.
     w2_eject_decided_wins = sum(
         1 for r in win_decision_records if r["was_eject_decided"]
-    )
-    cross_era_trajectory = _cross_era_trajectory(
-        w2_effective_deflection=effective_deflection,
-        w2_multi_signal=multi_signal,
-        w2_genuine_supplied=genuine_supplied_rederived,
-        w2_genuine_converted=genuine_converted_rederived,
-        w2_conversion_per_meeting=w2_conversion_per_meeting,
-        w2_total_meetings=total_meetings,
-        w2_win_split=win_split,
-        w2_eject_decided_wins=w2_eject_decided_wins,
     )
 
     # --- COUNTERFACTUAL ORACLE self-check (point 7) ---
@@ -3818,13 +3693,12 @@ def main() -> int:
     )
     # The effective-deflection fold IS the shipped one-home source; surface its
     # headline subcount so the oracle's deflection reproduction is visible in the
-    # self-check block (cross-checked against the committed W2 fixture below).
+    # self-check block.
     self_checks.append(
         "effective-deflection fold (the oracle's deflection input): "
         f"effective={effective_deflection.effective_deflections}, "
         f"skip_saved={effective_deflection.skip_saved_active_survivals}, "
-        f"active={effective_deflection.active_survivals} (W2 fixture match: "
-        f"{cross_era_trajectory['w2_effective_deflection_matches_fixture']})"
+        f"active={effective_deflection.active_survivals}"
     )
 
     for line in self_checks:
@@ -4545,7 +4419,6 @@ def main() -> int:
                 ),
                 "records": win_decision_records,
             },
-            "cross_era_trajectory": cross_era_trajectory,
             # rubric_scorecard is patched in AFTER the aggregates dict is built
             # (it folds the assembled facts through experiments/lab/rubric_score),
             # so lens C can name the highest-leverage R-item the retune should move.

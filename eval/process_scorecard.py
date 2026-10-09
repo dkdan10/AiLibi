@@ -168,13 +168,13 @@ from meetings.schemas import (
 )
 from meetings.transcript import maximal_stays
 from orchestrator.experiment_config import ConfigLayer
-from orchestrator.replay import MeetingReplayEntry, read_all_entries
 
 #: Bumped only when the published JSON changes shape in a way an older reader
 #: cannot interpret. Version 1 is the first publication (2026-09-19); version 2
 #: groups the sets by recorded era and carries a frozen before column
-#: (2026-10-02).
-SCHEMA_VERSION: Final[int] = 2
+#: (2026-10-02); version 3 drops the fifth run's appendix, the key a version-2
+#: reader expects (2026-10-09).
+SCHEMA_VERSION: Final[int] = 3
 
 #: The date D1 was accepted, stamped into every artifact so the demotion is
 #: dated wherever the scorecard is read.
@@ -575,28 +575,6 @@ class SetScorecard(_FrozenModel):
     context: ContextCells
 
 
-class FifthRunArm(_FrozenModel):
-    """One arm of the fifth run's archive, counts only."""
-
-    arm: str
-    recordings: int
-    meetings: int
-    eject_ballots: int
-    eject_ballots_cited: int
-    skip_ballots: int
-    skip_ballots_cited: int
-
-
-class FifthRunAppendix(_FrozenModel):
-    """The closing appendix — labelled OUT of the headline, read and never written."""
-
-    label: str
-    archive: str
-    note: str
-    arms: tuple[FifthRunArm, ...]
-    ballots_per_meeting: Mapping[str, int]
-
-
 class EraScorecard(_FrozenModel):
     """One recorded era of the committed sets, as the era registry names it.
 
@@ -621,7 +599,7 @@ class BeforeColumn(_FrozenModel):
 
 
 class ProcessScorecard(_FrozenModel):
-    """The published fold: per-era groups, per-set rows, before columns, appendix."""
+    """The published fold: per-era groups, per-set rows and the before columns."""
 
     schema_version: int
     decision_date: str
@@ -635,7 +613,6 @@ class ProcessScorecard(_FrozenModel):
     eras: tuple[EraScorecard, ...]
     sets: tuple[SetScorecard, ...]
     before: tuple[BeforeColumn, ...]
-    appendix: FifthRunAppendix
 
     @model_validator(mode="after")
     def _role_correctness_stays_demoted(self) -> ProcessScorecard:
@@ -1859,88 +1836,6 @@ def pool(
 
 
 # ---------------------------------------------------------------------------
-# The fifth run's archive — a closing appendix, read and never written
-# ---------------------------------------------------------------------------
-
-#: What the appendix says about itself wherever it is published.
-APPENDIX_NOTE: Final[str] = (
-    "OUT OF THE HEADLINE. The fifth run is a 3-ballot arena on a proof-free "
-    "held-out band whose generator filters out the one evidence channel that "
-    "reliably works, so neither arm is adoptable and neither arm's cells pool "
-    "with the committed sets. It is reported because the two arms differ on the "
-    "process measures the frozen outcome scored 0 and 2. Counts only: no prefix, "
-    "prompt or transcript text is read into this artifact, and nothing under the "
-    "archive is written."
-)
-
-
-def fold_fifth_run(archive: Path) -> FifthRunAppendix:
-    """Fold the fifth run's per-arm recordings into counts. Read-only."""
-
-    arms: dict[str, dict[str, int]] = {}
-    per_meeting: dict[int, int] = {}
-    for path in sorted(archive.glob("*-seed-*.jsonl")):
-        arm = path.name.split("-seed-", 1)[0]
-        cells = arms.setdefault(
-            arm,
-            {
-                "recordings": 0,
-                "meetings": 0,
-                "eject": 0,
-                "eject_cited": 0,
-                "skip": 0,
-                "skip_cited": 0,
-            },
-        )
-        cells["recordings"] += 1
-        for entry in read_all_entries(path):
-            if not isinstance(entry, MeetingReplayEntry):
-                continue
-            cells["meetings"] += 1
-            per_meeting[len(entry.ballots)] = per_meeting.get(len(entry.ballots), 0) + 1
-            for ballot in entry.ballots:
-                key = "skip" if ballot.target == "SKIP" else "eject"
-                cells[key] += 1
-                if (
-                    ballot.primary_reason_id is not None
-                    or ballot.primary_reason_observation_id is not None
-                ):
-                    cells[f"{key}_cited"] += 1
-    if not arms:
-        raise ValueError(
-            f"{archive}: no arm recordings found — refusing to publish an empty "
-            "appendix as a measurement"
-        )
-    return FifthRunAppendix(
-        label="Appendix: the fifth run (2026-09-16), out of the headline",
-        archive=_relative_to_repo(archive),
-        note=APPENDIX_NOTE,
-        arms=tuple(
-            FifthRunArm(
-                arm=arm,
-                recordings=cells["recordings"],
-                meetings=cells["meetings"],
-                eject_ballots=cells["eject"],
-                eject_ballots_cited=cells["eject_cited"],
-                skip_ballots=cells["skip"],
-                skip_ballots_cited=cells["skip_cited"],
-            )
-            for arm, cells in sorted(arms.items())
-        ),
-        ballots_per_meeting={
-            str(size): count for size, count in sorted(per_meeting.items())
-        },
-    )
-
-
-def _relative_to_repo(path: Path) -> str:
-    """A repo-relative posix path, so the artifact names no machine's layout."""
-
-    root = Path(__file__).resolve().parents[1]
-    return path.resolve().relative_to(root).as_posix()
-
-
-# ---------------------------------------------------------------------------
 # The published fold
 # ---------------------------------------------------------------------------
 
@@ -1950,9 +1845,6 @@ RECORDINGS_ROOT: Final[str] = "replays"
 
 #: The four committed sets, in publication order, from the era registry.
 COMMITTED_SETS: Final[tuple[str, ...]] = tuple(entry.path for entry in REGISTERED_SETS)
-
-#: The fifth run's archive, bound by the card: read, never written, never moved.
-FIFTH_RUN_ARCHIVE: Final[str] = "audits/deduction-candidate/run-2026-09-16"
 
 #: The frozen before columns: each replaced set's entry of
 #: ``docs/process-scorecard.json`` as published before its bytes moved. Today one
@@ -1998,7 +1890,7 @@ def scorecard_source_paths(root: Path) -> tuple[Path, ...]:
 
     paths = [
         path
-        for name in (*COMMITTED_SETS, FIFTH_RUN_ARCHIVE)
+        for name in COMMITTED_SETS
         for path in (root / name).rglob("*")
         if path.is_file()
     ]
@@ -2006,7 +1898,7 @@ def scorecard_source_paths(root: Path) -> tuple[Path, ...]:
 
 
 def compute_process_scorecard(root: Path) -> ProcessScorecard:
-    """Fold the four committed sets plus the fifth run's archive into the suite.
+    """Fold the four committed sets into the suite.
 
     Zero model calls, on every path. The engine walk is state-hash-verified, the
     roles come from the seeder, and nothing is written anywhere. The sets are
@@ -2063,7 +1955,6 @@ def compute_process_scorecard(root: Path) -> ProcessScorecard:
         eras=eras,
         sets=sets,
         before=before,
-        appendix=fold_fifth_run(root / FIFTH_RUN_ARCHIVE),
     )
 
 
@@ -2084,13 +1975,11 @@ def serialize_scorecard(scorecard: ProcessScorecard) -> str:
 __all__ = [
     "AGENT_CLOCK_OFFSET",
     "ALIBI_FLAG_KINDS",
-    "APPENDIX_NOTE",
     "BEFORE_COLUMNS_PATH",
     "BEFORE_COLUMNS_SHA256",
     "COMMITTED_SETS",
     "DECISION_DATE",
     "FAITHFULNESS_LIMITS",
-    "FIFTH_RUN_ARCHIVE",
     "NO_CONSUMER_NOTE",
     "RECORDINGS_ROOT",
     "ROLE_CORRECTNESS_NOTE",
@@ -2104,8 +1993,6 @@ __all__ = [
     "ContextCells",
     "EraScorecard",
     "EvidenceQualityMixRow",
-    "FifthRunAppendix",
-    "FifthRunArm",
     "ManufacturedContradictionRow",
     "ProcessScorecard",
     "ProcessScorecardReconstructionError",
@@ -2116,7 +2003,6 @@ __all__ = [
     "SetScorecard",
     "UnexplainedDecisionRow",
     "compute_process_scorecard",
-    "fold_fifth_run",
     "fold_set",
     "load_set_inputs",
     "pool",

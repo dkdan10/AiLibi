@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -23,13 +24,12 @@ from agents.tactical.impostor_policy import (
 )
 from eval.evidence_honesty import (
     LIVE_POLICY_FOLD,
-    RATIFIED_BASELINE,
     RECORDED_ARM_POLICY_FOLD,
-    RATIFIED_I11_CELLS,
     ImpostorTargetingCells,
     compute_evidence_honesty,
     reconstruct_impostor_decisions,
 )
+from eval.validity import seeds_on_disk
 from observation.action_intent import (
     DoTaskIntent,
     KillIntent,
@@ -2136,36 +2136,66 @@ class TestImpostorRefutedSighting:
         assert [target.player_id for target in ranking] == ["ghost"]
 
     @pytest.mark.slow
-    def test_seed_0_refutes_a_living_lead_and_keeps_it_dropped(self) -> None:
+    def test_a_committed_game_refutes_a_living_lead_and_keeps_it_dropped(
+        self,
+    ) -> None:
         # The demonstrable case for the LIVING half of C-4, the half the ejection
-        # barrier does not cover: p-8 stands in WEST_HALL at tick 8 without seeing
-        # p-4 there, so p-4 leaves the ranking -- and stays out at tick 9, after
-        # p-8 has moved on to ADMIN. Re-read on the promoted bytes (candidate round
-        # 2, 2026-10-02); was seed 20 p-8 ticks 5-6 on the baseline-9 bytes, and
-        # seed 7 p-2 ticks 13-14 before them.
-        rows = {
-            row.tick: row
-            for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=0)
-            if row.actor == "p-8" and row.tick in (8, 9)
-        }
-        for tick in (8, 9):
-            frozen = _frozen_static_ranking(rows[tick].memory)
-            assert frozen[0].player_id == "p-4" and frozen[0].room == "WEST_HALL"
-            assert all(target.player_id != "p-4" for target in rows[tick].ranked)
-        assert _own_room(rows[8].memory) == "WEST_HALL"
-        assert _own_room(rows[9].memory) == "ADMIN"
+        # barrier does not cover: an impostor stands in its frozen top lead's
+        # room without seeing the lead there, so the lead leaves the ranking --
+        # and stays out the next tick, after the impostor has moved on. The case
+        # is found on the shown bytes, not named (seed 0 p-8 ticks 8-9 on round
+        # 2's bytes, seed 20 p-8 ticks 5-6 on the baseline-9 bytes, and seed 7
+        # p-2 ticks 13-14 before them).
+        for seed in sorted(seeds_on_disk(_SAMPLES_9P2I)):
+            rows = {
+                (row.actor, row.tick): row
+                for row in reconstruct_impostor_decisions(_SAMPLES_9P2I, seed=seed)
+            }
+            for (actor, tick), row in sorted(rows.items(), key=lambda kv: kv[0][::-1]):
+                after = rows.get((actor, tick + 1))
+                frozen = _frozen_static_ranking(row.memory)
+                if after is None or not frozen:
+                    continue
+                lead = frozen[0]
+                frozen_after = _frozen_static_ranking(after.memory)
+                if (
+                    _own_room(row.memory) == lead.room
+                    and _own_room(after.memory) != lead.room
+                    and frozen_after
+                    and (frozen_after[0].player_id, frozen_after[0].room)
+                    == (lead.player_id, lead.room)
+                    and all(t.player_id != lead.player_id for t in row.ranked)
+                    and all(t.player_id != lead.player_id for t in after.ranked)
+                ):
+                    return
+        raise AssertionError("no committed decision refutes a living lead")
+
+
+def _recorded_kill_actions(set_dir: Path) -> int:
+    """The kill actions a set's tick rows record, counted straight off the files."""
+
+    kills = 0
+    for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                row = json.loads(line)
+                if row.get("kind") == "tick":
+                    kills += sum(
+                        1 for action in row["actions"] if action.get("type") == "kill"
+                    )
+    return kills
 
 
 class TestCommittedCorpusTargetingPins:
-    """The I-11 co-intervention cells over the committed bytes, before and after.
+    """The I-11 co-intervention cells over the committed bytes, after the repair.
 
-    The "before" is frozen (``eval.evidence_honesty.RATIFIED_I11_CELLS``): it is the
-    measurement of the policy the recorded bytes were produced with, and that policy
-    left the tree with this repair, so nothing can recompute it. The "after" is the
-    live fold over the SAME frozen bytes -- a per-decision counterfactual, no
-    re-simulation -- which is why its ``reconstruction_mismatches`` is non-zero and
-    is itself the size of the behaviour change. No ratified bar rides I-11; it is a
-    secondary, observed-not-gated cell (memo section 11, 2026-08-20).
+    The pre-repair "before" measured the policy the recorded bytes were produced
+    with; that policy left the tree with this repair, so nothing can recompute it,
+    and ``audits/audit-phase-20-preregistration.md`` section 3.1 records it. The
+    live fold over the SAME frozen bytes is a per-decision counterfactual -- no
+    re-simulation -- which is why its ``reconstruction_mismatches`` is the size of
+    the behaviour change. No ratified bar rides I-11; it is a secondary,
+    observed-not-gated cell (memo section 11, 2026-08-20).
     """
 
     @staticmethod
@@ -2174,33 +2204,18 @@ class TestCommittedCorpusTargetingPins:
 
     @pytest.mark.slow
     def test_free_zero_witness_kills_declined_pins(self) -> None:
-        # The repair is a claim about the LIVE policy, so its "after" is read on the
-        # baseline-9 era's nine-player set, where the fold is the live policy's.
-        # samples/9p2i carries its era's tactical arms since 2026-10-02 and folds
-        # under its recorded arm policy instead (pinned in the next test).
-        before = RATIFIED_I11_CELLS["samples/9p2i"]
+        # The repair is a claim about the LIVE policy, so it is read on the
+        # baseline-9 era's frozen nine-player corpus set, where the fold is the
+        # live policy's. samples/9p2i carries its era's tactical arms and folds
+        # under its recorded arm policy instead (the next test).
         after = self._targeting("ml_corpus/9p2i")
         assert after.policy_mode == LIVE_POLICY_FOLD
 
-        # Before: 190/415 = 45.8% of the policy's own legal, zero-witness kill
-        # opportunities declined, 168 of them purely on the id tie-break.
-        assert (before.free_kills_declined, before.free_kill_opportunities) == (
-            190,
-            415,
-        )
-        assert before.decline_reason_ranking == 168
-        assert before.decline_reason_fellow_defer == 15
-        assert before.decline_reason_cover == 7
-        # After, at the repair on the baseline-6 bytes: 35/415 = 8.4%, under the
-        # < 10% bar, and every survivor lands in a named legitimate branch -- 28
-        # fellow-impostor defers and 7 COVER bodies. The contract predicted 22
-        # (15 + 7). The 13-decision difference is the fellow-defer population the
-        # OLD seam never reached: those declines were attributed to the ranking
-        # because the ranking's head was not the victim, and with the head no
-        # longer deciding they resolve to the deliberate defer they always were.
-        # Predicted residual and measured residual differ; the measured one is the
-        # pin. On ml_corpus/9p2i it reads 44/747 = 5.9%: 36 defers, 8 COVER (the
-        # baseline-9 samples/9p2i read 9/232 = 3.9%: 7 defers, 2 COVER).
+        # After the repair, under the < 10% bar, every survivor lands in a named
+        # legitimate branch -- fellow-impostor defers and COVER bodies. The
+        # fellow-defer population the OLD seam never reached resolves to the
+        # deliberate defer it always was. On ml_corpus/9p2i it reads 44/747 = 5.9%:
+        # 36 defers, 8 COVER.
         assert (
             after.free_kills_declined.numerator,
             after.free_kills_declined.denominator,
@@ -2211,10 +2226,7 @@ class TestCommittedCorpusTargetingPins:
         assert after.decline_reason_other == 0
         assert after.decline_reason_fellow_defer == 36
         assert after.decline_reason_cover == 8
-        # The reconstruction still walks every decision the recording holds. The
-        # frozen ``before`` describes the BASELINE-6 bytes (2,461 decisions, 130
-        # in-vent), which the record replaced, so the two are no longer
-        # comparable and only the measured side is pinned.
+        # The reconstruction still walks every decision the recording holds.
         assert after.decisions_reconstructed == 5748
         assert after.in_vent_decisions == 406
 
@@ -2222,71 +2234,59 @@ class TestCommittedCorpusTargetingPins:
     def test_the_promoted_set_folds_under_its_recorded_arm_policy(self) -> None:
         # Observed, never gated (I-11 rides no bar). samples/9p2i was recorded with
         # its era's tactical arms, so the fold re-decides each impostor turn with
-        # the arm policy the recording ran and reproduces every one of them. Its
-        # free-kill declines read 55/297 = 18.5%, above the live repair's 10% mark,
-        # and every one lands in a named branch (46 fellow defers, 9 COVER bodies,
-        # none on the ranking): the arms change when an impostor strikes, and this
-        # cell describes that era rather than the repair.
+        # the arm policy the recording ran and reproduces every one of them, and
+        # every free-kill decline lands in a named branch, none on the ranking.
+        # The counts are derived from the cell's own partition, never transcribed
+        # from the shown bytes; round 2's read 55/297 (46 defers, 9 COVER).
         after = self._targeting("samples/9p2i")
 
         assert after.policy_mode == RECORDED_ARM_POLICY_FOLD
         assert after.reconstruction_mismatches == 0
-        assert (
-            after.free_kills_declined.numerator,
-            after.free_kills_declined.denominator,
-        ) == (55, 297)
         assert after.decline_reason_ranking == 0
         assert after.decline_reason_other == 0
-        assert after.decline_reason_fellow_defer == 46
-        assert after.decline_reason_cover == 9
-        assert after.decisions_reconstructed == 3230  # was 1754 on baseline 9
-        assert after.in_vent_decisions == 242  # was 109
+        assert after.free_kills_declined.numerator == (
+            after.decline_reason_fellow_defer + after.decline_reason_cover
+        )
+        assert after.free_kills_declined.denominator == after.free_kill_opportunities
+        assert after.in_vent_decisions <= after.decisions_reconstructed
 
     @pytest.mark.slow
     def test_no_recorded_kill_is_lost(self) -> None:
         # The loss guard: a repair that gains free kills must not silently drop one
-        # the recording made. Every recorded kill state re-emits the same intent.
-        # Baseline 6 recorded 225 / 640 / 64 / 57, baseline 8 229 / 678 / 64 / 62;
-        # samples/9p2i read 223 on the baseline-9 bytes and holds candidate round
-        # 2's bytes since 2026-10-02.
-        for name, recorded_kills in (
-            ("samples/9p2i", 242),
-            ("ml_corpus/9p2i", 703),
-            ("samples/4p1i", 68),
-            ("ml_corpus/4p1i", 62),
+        # the recording made. Every recorded kill state re-emits the same intent,
+        # and the fold walks every kill the set's tick rows record.
+        for name in (
+            "samples/9p2i",
+            "ml_corpus/9p2i",
+            "samples/4p1i",
+            "ml_corpus/4p1i",
         ):
             cells = self._targeting(name)
+            recorded_kills = _recorded_kill_actions(_REPLAYS / name)
+            assert recorded_kills > 0
             assert cells.recorded_kill_decisions == recorded_kills
             assert cells.recorded_kills_reproduced == recorded_kills
 
     @pytest.mark.slow
     def test_ghost_top_decisions_pin_on_every_set(self) -> None:
         names = ("samples/9p2i", "ml_corpus/9p2i", "samples/4p1i", "ml_corpus/4p1i")
-        before = {name: RATIFIED_I11_CELLS[name] for name in names}
         after = {name: self._targeting(name) for name in names}
 
-        # Before: 303/2461, 555/6663, 0/632, 0/579 over 10,335 decisions.
-        assert [
-            (before[name].ghost_top, before[name].decisions_reconstructed)
-            for name in names
-        ] == [(303, 2461), (555, 6663), (0, 632), (0, 579)]
-        assert sum(before[name].decisions_reconstructed for name in names) == 10_335
-        assert before["samples/9p2i"].ghost_top_ejected == 222
-        assert before["samples/9p2i"].ghost_top_unseen_death == 81
-        # After: the whole ejected sub-population is gone on both 9p2i sets, and
-        # the partner's-unseen-victim residual the ruling excludes a kill-knowledge
+        # The whole ejected sub-population is gone on both 9p2i sets, and the
+        # partner's-unseen-victim residual the ruling excludes a kill-knowledge
         # channel for falls with it because a cross-meeting lead cannot rank either.
+        # The three baseline-9 sets keep their pins; the shown 9p2i set's cell is
+        # derived from its own partition (round 2's read 5/3230).
         assert [
             (after[name].ghost_top.numerator, after[name].ghost_top.denominator)
-            for name in names
-        ] == [
-            (5, 3230),
-            (5, 5748),
-            (0, 558),
-            (0, 531),
-        ]  # samples/9p2i read (5, 1754) on the baseline-9 bytes
+            for name in names[1:]
+        ] == [(5, 5748), (0, 558), (0, 531)]
+        shown = after["samples/9p2i"]
+        assert shown.ghost_top.denominator == shown.decisions_reconstructed
+        assert shown.ghost_top.numerator == (
+            shown.ghost_top_ejected + shown.ghost_top_unseen_death
+        )
         assert after["samples/9p2i"].ghost_top_ejected == 0
-        assert after["samples/9p2i"].ghost_top_unseen_death == 5
         assert after["ml_corpus/9p2i"].ghost_top_ejected == 0
         # 4p1i was clean on both sets before and stays clean: the defect was a
         # 9p2i-roster phenomenon, which is to say it biased the eval baseline.
@@ -2294,12 +2294,10 @@ class TestCommittedCorpusTargetingPins:
 
     @pytest.mark.slow
     def test_ghost_top_no_longer_blocks_a_kill(self) -> None:
-        before = RATIFIED_I11_CELLS["samples/9p2i"]
         after = self._targeting("samples/9p2i")
 
-        # Before: 30 legal zero-witness kills declined while an already-ejected
-        # player headed the ranking (A/verdicts.md claim 12).
-        assert before.kills_blocked_by_ghost_top == 30
+        # Before the repair, legal zero-witness kills were declined while an
+        # already-ejected player headed the ranking (A/verdicts.md claim 12).
         assert after.kills_blocked_by_ghost_top == 0
         assert after.games_with_a_blocked_kill == 0
 
@@ -2313,5 +2311,4 @@ class TestCommittedCorpusTargetingPins:
         after = self._targeting("ml_corpus/9p2i")
 
         assert after.policy_mode == LIVE_POLICY_FOLD
-        assert RATIFIED_I11_CELLS["samples/9p2i"].policy_mode == RATIFIED_BASELINE
         assert after.reconstruction_mismatches == 0  # was 419

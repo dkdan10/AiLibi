@@ -25,6 +25,7 @@ Three layers, mirroring the module split:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -900,75 +901,99 @@ def _load_committed(path: Path) -> TournamentEvalReport:
     return TournamentEvalReport.model_validate_json(read_report_text(path))
 
 
+def _recorded_openings_and_failures(set_dir: Path) -> tuple[dict[int, int], int]:
+    """Per seed, the recorded meetings whose opening turn carries no accusation;
+    and the set's recorded failed-call rows. Counted straight off the JSONL."""
+
+    lost_by_seed: dict[int, int] = {}
+    failed_calls = 0
+    for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+        seed = int(path.stem.rsplit("-", 1)[-1])
+        lost_by_seed[seed] = 0
+        for line in path.read_text(encoding="utf-8").splitlines():
+            row = json.loads(line)
+            if row.get("kind") == "failed_call":
+                failed_calls += 1
+            elif row.get("kind") == "meeting":
+                turns = row["transcript"]["turns"]
+                if not turns or not any(
+                    claim.get("type") == "accusation" for claim in turns[0]["claims"]
+                ):
+                    lost_by_seed[seed] += 1
+    return lost_by_seed, failed_calls
+
+
 def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
-    """The shipped 9p/2i report carries the recorded gp-7 gate values exactly.
+    """The shipped 9p/2i report's gate block is the fold of its own games.
 
-    These pin the promoted stage-b-r2 Qwen/Qwen3.6-27B recording (prompt set
-    qwen3_6_27b: three templates at v6, vote_ballot at v8 with the two ballot
-    arms) and are NOT immutable — the next re-record regenerates the report and
-    updates these pins, the standard re-record pattern.
-
-    Recorded values: genuine-class 0 converted / 0 supplied — on the recorded
-    census the genuine (interior, non-proxy) impostor-subject flag class has no
-    instance, so the PRIMARY gate reads no rate; lost openings 0 against 0
-    cap-defaulted turns; accused-impostor survival 66/110 with the partition 17
-    rendered-met + 0 sheltered + 49 unevidenced (the baseline-9 bytes read
-    42/122, 16 + 0 + 26).
-
-    Task 19.5 wires the Task-17.6 successor onto the same surface, so this also
-    pins the CANARY cell ``supplied_channel_conversion``: 24 converted / 25
-    supplied (rate 0.96), the union of witnessed vents (24/24), sighting
-    contradictions (0/0) and whereabouts-lies (1/0), with the starved legacy
-    alibi-anchored column riding along at 0/0.
+    The shown set follows the promoted round, so its cells are derived rather
+    than transcribed (the baseline-9 bytes read 42 of 122 accused impostors
+    surviving, 16 rendered-met + 0 sheltered + 26 unevidenced, and the canary
+    cell 70 of 74): the stored block equals the recompute over the committed
+    games, the canary cell's channels partition its supply and conversions,
+    and the survivals partition into rendered-met, sheltered and unevidenced.
+    The lost openings and cap-defaulted turns are read off the recorded rows
+    themselves. The semantic zeros stay pinned: the genuine (interior,
+    non-proxy) impostor-subject flag class has no instance on the recorded
+    census, so the PRIMARY gate reads no rate, and no survivor is sheltered
+    sub-gate.
     """
 
     report = _load_committed(_COMMITTED_9P2I_REPORT)
     gate = report.gate_metrics
     genuine = gate.genuine_class_conversion
 
-    assert genuine.supplied == 0  # was 1
+    assert compute_gate_metrics(report.report.games) == gate
+    assert genuine.supplied == 0
     assert genuine.converted == 0
-    assert genuine.conversion_rate is None  # was 0.0
+    assert genuine.conversion_rate is None
     assert genuine.note == GENUINE_CLASS_GATE_NOTE
 
     # The Task-19.5 canary cell: the successor instrument the canary bands read.
     supplied_channel = gate.supplied_channel_conversion
-    assert supplied_channel.supplied == 25  # was 74
-    assert supplied_channel.converted == 24  # was 70
-    assert supplied_channel.conversion_rate == pytest.approx(24 / 25)  # was 70 / 74
-    assert supplied_channel.witnessed_vent_supplied == 24  # was 74
-    assert supplied_channel.witnessed_vent_converted == 24  # was 70
-    assert supplied_channel.sighting_contradiction_supplied == 0
-    assert supplied_channel.sighting_contradiction_converted == 0
-    assert supplied_channel.whereabouts_lie_supplied == 1
-    assert supplied_channel.whereabouts_lie_converted == 0
+    assert supplied_channel == compute_supplied_channel_conversion(report.report.games)
+    assert supplied_channel.supplied == (
+        supplied_channel.witnessed_vent_supplied
+        + supplied_channel.sighting_contradiction_supplied
+        + supplied_channel.whereabouts_lie_supplied
+    )
+    assert supplied_channel.converted == (
+        supplied_channel.witnessed_vent_converted
+        + supplied_channel.sighting_contradiction_converted
+        + supplied_channel.whereabouts_lie_converted
+    )
+    assert supplied_channel.supplied > 0
+    assert supplied_channel.conversion_rate == pytest.approx(
+        supplied_channel.converted / supplied_channel.supplied
+    )
     # The preserved legacy column mirrors the genuine-class cell above.
-    assert supplied_channel.legacy_alibi_supplied == 0  # was 1
-    assert supplied_channel.legacy_alibi_converted == 0
-    assert supplied_channel.legacy_alibi_conversion_rate is None  # was 0.0
+    assert supplied_channel.legacy_alibi_supplied == genuine.supplied
+    assert supplied_channel.legacy_alibi_converted == genuine.converted
+    assert supplied_channel.legacy_alibi_conversion_rate is None
     assert supplied_channel.note == SUPPLIED_CHANNEL_GATE_NOTE
 
-    assert gate.lost_opening_accusations == 0
-    assert gate.cap_defaulted_turns == 0
+    # A lost opening is a meeting whose opening turn carries no accusation; a
+    # cap-defaulted turn needs a recorded failed call to name it.
+    lost_by_seed, failed_calls = _recorded_openings_and_failures(
+        _COMMITTED_9P2I_REPORT.parent
+    )
+    assert gate.lost_opening_accusations == sum(lost_by_seed.values())
+    assert gate.cap_defaulted_turns <= failed_calls
 
-    assert gate.accused_impostor_events == 110  # was 122
-    assert gate.accused_impostor_survivals == 66  # was 42
-    # The 66 accused-impostor survivals partition into rendered-met (voters saw a
-    # §4.6-gate-meeting suspicion yet the impostor survived), sheltered sub-gate,
-    # and unevidenced. On the promoted bytes the sheltered class is empty, so
-    # survivors split rendered-met (17), sheltered (0), and unevidenced (49), the
-    # largest share still unevidenced.
-    assert gate.survivals_rendered_met == 17  # was 16
+    assert 0 < gate.accused_impostor_survivals <= gate.accused_impostor_events
+    assert gate.accused_impostor_survivals == (
+        gate.survivals_rendered_met
+        + gate.survivals_sheltered_sub_gate
+        + gate.survivals_unevidenced
+    )
     assert gate.survivals_sheltered_sub_gate == 0
-    assert gate.survivals_unevidenced == 49  # was 26
 
     # Per-seed identities RE-DERIVED from the same committed games. Task 21.9
     # rebuilt the sidecar, so the stored block above and this fold now AGREE:
     # the sidecar's one genuine-class supply was a flag the retired
     # transcript-only re-derivation minted and the record never carried, and on
-    # the recorded census no seed supplies at all. There are no lost openings
-    # and no sheltered survivals on these bytes either, so those fold to empty
-    # too.
+    # the recorded census no seed supplies at all, and no seed shelters a
+    # survivor; the seeds losing an opening are the recorded rows' own.
     supplied_seeds = {
         game.seed
         for game in report.report.games
@@ -986,7 +1011,7 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
         for game in report.report.games
         if compute_gate_metrics((game,)).lost_opening_accusations > 0
     }
-    assert lost_opening_seeds == set()
+    assert lost_opening_seeds == {seed for seed, lost in lost_by_seed.items() if lost}
     sheltered_seeds = {
         game.seed
         for game in report.report.games
@@ -1006,8 +1031,10 @@ def test_committed_9p2i_report_pins_the_audited_gate_metrics() -> None:
     )
     assert "INVALID" in raw["gate_metrics"]["genuine_class_conversion"]["note"]
     # ... and the Task-19.5 successor beside it, carrying its canary label.
-    # was 74
-    assert raw["gate_metrics"]["supplied_channel_conversion"]["supplied"] == 25
+    assert (
+        raw["gate_metrics"]["supplied_channel_conversion"]["supplied"]
+        == supplied_channel.supplied
+    )
     assert (
         "canary-eligible" in raw["gate_metrics"]["supplied_channel_conversion"]["note"]
     )

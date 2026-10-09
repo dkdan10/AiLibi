@@ -38,6 +38,7 @@ from typing import Any
 import pytest
 
 from eval.validity import resolve_roster_knobs, roles_by_seed
+from tests._helpers.recorded_counts import recorded_counts
 
 from eval.reporter_justice import (
     EXCULPATORY_HINGE_TERMS,
@@ -85,31 +86,27 @@ def test_the_pool_refuses_two_eras(promoted: ReporterJusticeCells) -> None:
 
 #: The promoted set's in-tree declared config (its era's, eval/eras.py).
 _ERA_CONFIG = _SETS[0] / "experiment-config.json"
+
+
 #: That config's nine settings off their default, sorted by field: the era
 #: identity every promoted game records (``format_version`` 1 is the default).
-_ERA_SETTINGS: tuple[tuple[str, object], ...] = (
-    ("ballot_kill_row_version", 1),
-    ("bounded_rebuttal_version", 1),
-    ("impostor_ballot_version", 1),
-    ("kill_cooldown_ticks", 6),
-    ("meeting_reset", "hub_with_grace"),
-    ("report_body_handle_version", 1),
-    ("vent_entry_policy", "own_fresh_kill"),
-    ("vent_exit_policy", "look_and_wait"),
-    ("vent_witness_rule", "physical"),
-)
+def _era_settings() -> tuple[tuple[str, object], ...]:
+    """The shown era's switched-on settings, read from its declared file."""
+
+    declared = json.loads(_ERA_CONFIG.read_text(encoding="utf-8"))
+    assert declared.pop("format_version") == 1
+    return tuple(sorted(declared.items()))
 
 
 def test_the_promoted_set_records_exactly_its_eras_off_default_settings(
     promoted: ReporterJusticeCells,
 ) -> None:
-    # The literal is the declared file's switched-on settings, read here from the
-    # file itself; the fold must return exactly those nine, no default-valued
-    # field beside them and none missing.
-    declared = json.loads(_ERA_CONFIG.read_text(encoding="utf-8"))
-    assert declared.pop("format_version") == 1
-    assert tuple(sorted(declared.items())) == _ERA_SETTINGS
-    assert promoted.recorded_settings == _ERA_SETTINGS
+    # The declared file's switched-on settings, read from the file itself; the
+    # fold must return exactly those, no default-valued field beside them and
+    # none missing, and the vent exit the planted cases below move is one of
+    # them.
+    assert promoted.recorded_settings == _era_settings()
+    assert "vent_exit_policy" in dict(_era_settings())
 
 
 def _promoted_copy(
@@ -151,22 +148,22 @@ def _promoted_copy(
 
 def test_the_pool_refuses_two_eras_that_switch_the_same_fields(tmp_path: Path) -> None:
     # Planted: one game of the promoted set, and the same game recorded with the
-    # vent exit moved to another switched-on value. Both switch on the same nine
+    # vent exit moved to another switched-on value. Both switch on the same
     # fields, so only the VALUE tells the eras apart; the pool must refuse them.
     era = compute_reporter_justice(_promoted_copy(tmp_path / "era"))
     moved = compute_reporter_justice(
         _promoted_copy(tmp_path / "moved", vent_exit_policy=("observed_risk",))
     )
-    assert era.recorded_settings == _ERA_SETTINGS
+    assert era.recorded_settings == _era_settings()
     # The identity follows the recorded source: the moved value, nothing else.
     assert moved.recorded_settings == tuple(
-        sorted({**dict(_ERA_SETTINGS), "vent_exit_policy": "observed_risk"}.items())
+        sorted({**dict(_era_settings()), "vent_exit_policy": "observed_risk"}.items())
     )
     with pytest.raises(ReporterJusticeError, match="never pool across eras"):
         pool_reporter_justice([era, moved])
     # Control: the same era pools, and keeps its identity.
     again = compute_reporter_justice(_promoted_copy(tmp_path / "again"))
-    assert pool_reporter_justice([era, again]).recorded_settings == _ERA_SETTINGS
+    assert pool_reporter_justice([era, again]).recorded_settings == _era_settings()
 
 
 def test_a_set_whose_games_recorded_two_configs_fails_loud(tmp_path: Path) -> None:
@@ -181,7 +178,7 @@ def test_a_set_whose_games_recorded_two_configs_fails_loud(tmp_path: Path) -> No
         compute_reporter_justice(mixed)
     # Control: the same two games, unmoved, fold as one era.
     same = compute_reporter_justice(_promoted_copy(tmp_path / "same", games=2))
-    assert same.recorded_settings == _ERA_SETTINGS
+    assert same.recorded_settings == _era_settings()
 
 
 class TestCorpusShape:
@@ -193,8 +190,11 @@ class TestCorpusShape:
         assert pooled.meetings == 531  # was 676 over all four sets
         assert pooled.body_report_meetings == 488  # was 623 over all four sets
         assert pooled.emergency_meetings == 43  # was 53 over all four sets
-        assert (promoted.games, promoted.meetings) == (50, 117)
-        assert (promoted.body_report_meetings, promoted.emergency_meetings) == (114, 3)
+        shown_rows = recorded_counts(_SETS[0])
+        assert (promoted.games, promoted.meetings) == (
+            shown_rows.games,
+            shown_rows.meetings,
+        )
         for cells in (pooled, promoted):
             assert (
                 cells.body_report_meetings + cells.emergency_meetings == cells.meetings
@@ -209,19 +209,19 @@ class TestCorpusShape:
         for cells in (pooled, promoted):
             assert cells.reporter_impostor_meetings == 0
         assert pooled.reporter_crewmate_meetings == pooled.body_report_meetings == 488
-        assert promoted.reporter_crewmate_meetings == 114
+        assert promoted.reporter_crewmate_meetings == promoted.body_report_meetings
 
     def test_the_ejection_ledger_reproduces_the_records_published_totals(
         self, pooled: ReporterJusticeCells, promoted: ReporterJusticeCells
     ) -> None:
         # Independent arrivals at the cells each era's record published, read off
         # the recorded bytes here and never off the documents: 33 innocent of the
-        # baseline-9 sets' ejections (32 + 0 + 1, audit-2026-09-22 §6.2), and 22
-        # innocent of the promoted set's 66 (audit-2026-10-01-stage-b-r2 §9).
+        # baseline-9 sets' ejections (32 + 0 + 1, audit-2026-09-22 §6.2); the
+        # shown set's ledger is its recorded ejections, not transcribed.
         assert pooled.ejections == 321  # was 411 over all four sets
         assert pooled.innocent_ejections == 33  # was 42 over all four sets
         assert pooled.impostor_ejections == 288  # was 369 over all four sets
-        assert (promoted.ejections, promoted.innocent_ejections) == (66, 22)
+        assert promoted.ejections == recorded_counts(_SETS[0]).ejections
         for cells in (pooled, promoted):
             assert (
                 cells.ejections == cells.innocent_ejections + cells.impostor_ejections
@@ -242,9 +242,12 @@ class TestReporterExposure:
         assert pooled.reporter_share_of_innocent_ejections == pytest.approx(
             30 / 33, abs=1e-9
         )  # was 37 / 42 over all four sets
-        assert promoted.reporter_innocent_ejections == promoted.reporter_ejections == 17
+        # The shown set, derived: every reporter is a crewmate while impostors
+        # never report, and the share divides by the innocent ejections.
+        assert promoted.reporter_innocent_ejections == promoted.reporter_ejections
         assert promoted.reporter_share_of_innocent_ejections == pytest.approx(
-            17 / 22, abs=1e-9
+            promoted.reporter_innocent_ejections / promoted.innocent_ejections,
+            abs=1e-9,
         )
 
     def test_the_per_slot_rates_and_the_relative_risk(
@@ -269,14 +272,15 @@ class TestReporterExposure:
         assert pooled.reporter_relative_risk == pytest.approx(
             42.725, abs=5e-3
         )  # was 27.334 over all four sets
-        assert (promoted.reporter_ejections, promoted.reporter_slots) == (17, 114)
-        assert (
-            promoted.innocent_non_reporter_ejections,
-            promoted.innocent_non_reporter_slots,
-        ) == (5, 367)
-        assert (promoted.impostor_slot_ejections, promoted.impostor_slots) == (41, 195)
+        # The shown set, derived from its own cells.
+        assert promoted.reporter_slots == promoted.body_report_meetings
         assert promoted.reporter_relative_risk == pytest.approx(
-            (17 / 114) / (5 / 367), abs=1e-9
+            (promoted.reporter_ejections / promoted.reporter_slots)
+            / (
+                promoted.innocent_non_reporter_ejections
+                / promoted.innocent_non_reporter_slots
+            ),
+            abs=1e-9,
         )
 
     def test_an_undefined_relative_risk_is_never_reported_as_zero(self) -> None:
@@ -336,13 +340,13 @@ class TestAimAtTheReporter:
         assert pooled.crew_accusation_at_reporter_share == pytest.approx(
             436 / 1707, abs=1e-9
         )
-        assert (
-            promoted.impostor_accusations_at_reporter,
-            promoted.impostor_accusations,
-        ) == (130, 197)
-        assert (promoted.crew_accusations_at_reporter, promoted.crew_accusations) == (
-            134,
-            517,
+        assert promoted.impostor_accusation_at_reporter_share == pytest.approx(
+            promoted.impostor_accusations_at_reporter / promoted.impostor_accusations,
+            abs=1e-9,
+        )
+        assert promoted.crew_accusation_at_reporter_share == pytest.approx(
+            promoted.crew_accusations_at_reporter / promoted.crew_accusations,
+            abs=1e-9,
         )
 
     def test_ballot_shares(
@@ -364,11 +368,13 @@ class TestAimAtTheReporter:
         assert pooled.impostor_ballot_at_reporter_share == pytest.approx(
             82 / 669, abs=1e-9
         )
-        assert (promoted.crew_ballots_at_reporter, promoted.crew_ballots) == (59, 481)
-        assert (
-            promoted.impostor_ballots_at_reporter,
-            promoted.impostor_ballots,
-        ) == (71, 195)
+        assert promoted.crew_ballot_at_reporter_share == pytest.approx(
+            promoted.crew_ballots_at_reporter / promoted.crew_ballots, abs=1e-9
+        )
+        assert promoted.impostor_ballot_at_reporter_share == pytest.approx(
+            promoted.impostor_ballots_at_reporter / promoted.impostor_ballots,
+            abs=1e-9,
+        )
 
 
 class TestInvocation:
@@ -386,18 +392,15 @@ class TestInvocation:
         assert pooled.speech_turns_mentioning_report == 233  # was 296
         assert pooled.speech_turns_with_hinge == 6  # was 8
         assert pooled.speech_turns_with_hinge_by_reporter == 0
-        # The promoted set: the one reply adds speech turns, so its turns
-        # outnumber its ballot rationales.
-        assert (promoted.ballot_rationales, promoted.speech_turns) == (676, 790)
+        # The shown set, derived: the one reply adds speech turns, so its turns
+        # outnumber its ballot rationales, and both sit inside the recorded rows.
+        shown_rows = recorded_counts(_SETS[0])
+        assert promoted.ballot_rationales <= shown_rows.ballots
+        assert promoted.ballot_rationales < promoted.speech_turns <= shown_rows.turns
         assert (
-            promoted.ballot_rationales_mentioning_report,
-            promoted.ballot_rationales_with_hinge,
-        ) == (22, 4)
-        assert (
-            promoted.speech_turns_mentioning_report,
-            promoted.speech_turns_with_hinge,
-            promoted.speech_turns_with_hinge_by_reporter,
-        ) == (55, 1, 1)
+            promoted.speech_turns_with_hinge_by_reporter
+            <= promoted.speech_turns_with_hinge
+        )
 
     def test_the_hinge_list_is_stated_data_and_a_hinge_is_a_ceiling(self) -> None:
         # The register's own filing was off fourfold because its hinge list was
@@ -443,12 +446,12 @@ class TestCoDiscovery:
         assert pooled.co_discoverer_slots == 108
         assert pooled.co_discoverer_impostor_share == pytest.approx(54 / 108, abs=1e-9)
         assert pooled.co_discoverer_impostor_share > 0.45
-        # The promoted set, on its own.
-        assert promoted.meetings_with_co_discoverer == 33
-        assert (
-            promoted.co_discoverer_slots_crewmate,
-            promoted.co_discoverer_slots_impostor,
-        ) == (23, 18)
+        # The shown set, on its own and derived: the slots split by role.
+        assert promoted.co_discoverer_slots == (
+            promoted.co_discoverer_slots_crewmate
+            + promoted.co_discoverer_slots_impostor
+        )
+        assert promoted.meetings_with_co_discoverer <= promoted.body_report_meetings
 
 
 class TestPerSetShape:

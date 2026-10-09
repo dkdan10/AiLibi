@@ -36,8 +36,9 @@ from eval.solvability import (
     candidate_set_for_body_meeting,
     compute_solvability_report,
 )
-from eval.validity import resolve_roster_knobs, roles_by_seed
-from tests._helpers.committed import solvability_report
+from eval.validity import resolve_roster_knobs, roles_by_seed, seeds_on_disk
+from tests._helpers.committed import funnel_report, solvability_report
+from tests._helpers.recorded_counts import recorded_counts
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES_9P2I = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -388,22 +389,41 @@ def test_the_profile_rejects_a_doubled_meeting_row(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_emergency_meetings_are_excluded_from_the_census() -> None:
-    """Seed 37 of samples/9p2i holds 2 body meetings and 1 emergency meeting.
+def _first_game_with_an_emergency() -> int:
+    """The shown set's lowest seed whose tick rows apply an emergency call."""
 
-    (Seed 0 held that shape on the baseline-9 bytes; on the promoted bytes its
-    four meetings are all body reports.)
+    for seed in sorted(seeds_on_disk(_SAMPLES_9P2I)):
+        path = _SAMPLES_9P2I / f"replay-seed-{seed}.jsonl"
+        for line in path.read_text(encoding="utf-8").splitlines():
+            row = json.loads(line)
+            if row.get("kind") == "tick" and any(
+                action.get("type") == "emergency" and disposition == "applied"
+                for action, disposition in zip(
+                    row["actions"], row["action_dispositions"], strict=True
+                )
+            ):
+                return seed
+    raise AssertionError("no game of the shown set calls an emergency meeting")
+
+
+def test_emergency_meetings_are_excluded_from_the_census() -> None:
+    """A game holding body meetings beside an emergency meeting folds only the bodies.
+
+    The game is found, not named (seed 37 on round 2's bytes, seed 0 on the
+    baseline-9 bytes): the shown set's first game whose tick rows apply an
+    emergency call.
     """
 
     num_players, num_impostors, tasks_per_crewmate = resolve_roster_knobs(_SAMPLES_9P2I)
     game_map = load_canonical_map()
-    replay_path = _SAMPLES_9P2I / "replay-seed-37.jsonl"
+    seed = _first_game_with_an_emergency()
+    replay_path = _SAMPLES_9P2I / f"replay-seed-{seed}.jsonl"
 
     opened = [
         event
         for event in walk_replay(
             replay_path,
-            seed=37,
+            seed=seed,
             num_players=num_players,
             num_impostors=num_impostors,
             tasks_per_crewmate=tasks_per_crewmate,
@@ -413,8 +433,8 @@ def test_emergency_meetings_are_excluded_from_the_census() -> None:
         if isinstance(event, MeetingOpened)
     ]
     # Non-vacuity: the game really does carry a meeting with no reported body.
-    assert sum(1 for event in opened if event.body_id is None) == 1
-    assert sum(1 for event in opened if event.body_id is not None) == 2
+    body_meetings = sum(1 for event in opened if event.body_id is not None)
+    assert sum(1 for event in opened if event.body_id is None) >= 1
 
     roles = roles_by_seed(
         _SAMPLES_9P2I,
@@ -422,10 +442,10 @@ def test_emergency_meetings_are_excluded_from_the_census() -> None:
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
         game_map=game_map,
-    )[37]
+    )[seed]
     fold = _walk_game(
         replay_path,
-        seed=37,
+        seed=seed,
         num_players=num_players,
         num_impostors=num_impostors,
         tasks_per_crewmate=tasks_per_crewmate,
@@ -433,7 +453,7 @@ def test_emergency_meetings_are_excluded_from_the_census() -> None:
         game_map=game_map,
     )
 
-    assert len(fold.rows) == 2
+    assert len(fold.rows) == body_meetings
 
 
 # --------------------------------------------------------------------------- #
@@ -480,20 +500,30 @@ def _counts(report: SolvabilityReport) -> dict[str, tuple[int, int]]:
 
 
 def test_samples_9p2i_cells(samples_9p2i: SolvabilityReport) -> None:
-    assert samples_9p2i.games_total == 50
-    # The promoted stage-b-r2 bytes: with no stale report (the regroup clears
-    # every corpse), every reported body's killer sits in the candidate set.
-    assert samples_9p2i.body_meetings == 114  # of 117 recorded meetings  # was 135
-    assert samples_9p2i.ejections_at_body_meetings == 63  # was 80
-    assert _counts(samples_9p2i) == {
-        "killer_in_set": (114, 114),  # was (120, 135)
-        "singleton_sets": (23, 114),  # was (21, 135)
-        "singleton_correct": (23, 23),  # was (16, 21)
-        "at_most_two_sets": (38, 114),  # was (46, 135)
-        "at_most_two_contains_killer": (38, 38),  # was (39, 46)
-        "cleared_player_ejections": (11, 63),  # was (12, 80)
-        "killer_in_set_last_kill_anchor": (114, 114),  # was (129, 135)
-    }
+    # The shown set's cells, derived rather than transcribed (the baseline-9
+    # bytes read 135 body meetings, 80 ejections at them, killer-in-set
+    # 120/135): the body meetings are the funnel's own report meetings, each
+    # cell divides by the population its definition names, and the nested
+    # sets nest.
+    assert samples_9p2i.games_total == recorded_counts(_SAMPLES_9P2I).games
+    assert samples_9p2i.body_meetings == funnel_report(_SAMPLES_9P2I).report_meetings
+    cells = _counts(samples_9p2i)
+    body = samples_9p2i.body_meetings
+    for name in (
+        "killer_in_set",
+        "singleton_sets",
+        "at_most_two_sets",
+        "killer_in_set_last_kill_anchor",
+    ):
+        assert cells[name][1] == body, name
+    assert cells["singleton_correct"][1] == cells["singleton_sets"][0]
+    assert cells["at_most_two_contains_killer"][1] == cells["at_most_two_sets"][0]
+    assert cells["singleton_sets"][0] <= cells["at_most_two_sets"][0]
+    assert cells["cleared_player_ejections"][1] == (
+        samples_9p2i.ejections_at_body_meetings
+    )
+    for name, (numerator, denominator) in cells.items():
+        assert 0 <= numerator <= denominator, name
 
 
 def test_samples_4p1i_cells(samples_4p1i: SolvabilityReport) -> None:

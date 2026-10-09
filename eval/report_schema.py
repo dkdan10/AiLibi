@@ -2,11 +2,11 @@
 
 This module is the Phase 5 hub. Every metric module (vote correctness,
 accusation calibration, alibi fabrication, cost dashboard), the tournament
-integration, the dashboard, and the prompt-regression suite consume this one
-typed artifact instead of re-scraping raw replay JSONL ad hoc (DESIGN.md
-§11.3). Its field names and nesting are load-bearing: a rename after the
-downstream metric modules ship forces a multi-way edit, which is why the
-schema carries an explicit :data:`CURRENT_FORMAT_VERSION` marker from day one.
+integration and the dashboard consume this one typed artifact instead of
+re-scraping raw replay JSONL ad hoc (DESIGN.md §11.3). Its field names and
+nesting are load-bearing: a rename after the downstream metric modules ship
+forces a multi-way edit, which is why the schema carries an explicit
+:data:`CURRENT_FORMAT_VERSION` marker from day one.
 
 The report is an **aggregation layer**, not a from-scratch data model. The
 data it carries already exists as typed per-game replay records written during

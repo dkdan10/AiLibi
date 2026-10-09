@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final, get_args
 
@@ -58,6 +58,7 @@ from meetings.schemas import (
 from meetings.transcript import WEAK_CONTRADICTION_MARKER_PREFIX
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
 from orchestrator.seeder import seed_initial_state
+from tests._helpers.recorded_counts import recorded_counts
 from training.surrogate.ballots import (
     MASKED_IS_REPORTER,
     _target_was_rewritten,
@@ -85,6 +86,20 @@ _COMMITTED_SETS: Final[tuple[Path, ...]] = (
     Path("replays/samples/4p1i"),
     Path("replays/ml_corpus/4p1i"),
 )
+
+
+@dataclass(frozen=True)
+class _MarkerCensus:
+    """One committed set's ballot audit-marker census (counts only)."""
+
+    games: int
+    ballots: int
+    annotations: int
+    marked_games: int
+    kinds: dict[str, int]
+    rewritten: int
+    guard_recorded: int
+
 
 #: Any bracketed annotation, whatever produced it — the census denominator, so
 #: the marker parser cannot define away a kind by failing to recognise it.
@@ -1203,9 +1218,10 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
     redaction is a replacement BODY rather than a prefix, so the census counts it
     and the parser does not claim it.
 
-    The two totals agree at this head: 65 bracketed annotations, 65 claimed
-    labels over the four sets across their two eras (39 and 39 while all four
-    held the baseline-9 bytes). On the baseline-8 bytes they once read 127
+    The two totals agree on every set. The three frozen baseline-9 sets are
+    pinned; the shown samples/9p2i set follows the promoted round and is held to
+    the same reconciliation instead (the four baseline-9 sets read 39 and 39).
+    On the baseline-8 bytes they once read 127
     against 120, because every ballot in that 7-annotation gap carried a
     citation-nulling marker (``invalid_reason_id`` / ``invalid_observation_id``)
     BEHIND the target-guard marker named by the recorded ``guard_rewrite_reason``
@@ -1216,14 +1232,11 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
     ``TARGET_REWRITE_LABELS``, so the bound moved no fit-side exclusion.
     """
 
-    ballots: list[VoteBallot] = []
-    games = 0
-    marked_games = 0
-    annotations = 0
-    kinds: Counter[str] = Counter()
-    per_set_rewritten: list[int] = []
+    census: dict[Path, _MarkerCensus] = {}
     for set_dir in _COMMITTED_SETS:
-        rewritten = 0
+        games = marked_games = annotations = rewritten = guard_recorded = 0
+        ballot_count = 0
+        kinds: Counter[str] = Counter()
         for path in sorted(set_dir.rglob("*.jsonl")):
             games += 1
             game_marked = False
@@ -1231,7 +1244,7 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
                 if not isinstance(entry, MeetingReplayEntry):
                     continue
                 for ballot in entry.ballots:
-                    ballots.append(ballot)
+                    ballot_count += 1
                     brackets = _BRACKETED.findall(ballot.rationale_text)
                     annotations += len(brackets)
                     game_marked = game_marked or bool(brackets)
@@ -1242,34 +1255,53 @@ def test_the_ballot_audit_marker_census_over_the_four_committed_sets() -> None:
                     )
                     if TARGET_REWRITE_LABELS.intersection(labels):
                         rewritten += 1
+                    guard_recorded += ballot.guard_rewrite_reason is not None
             marked_games += int(game_marked)
-        per_set_rewritten.append(rewritten)
+        census[set_dir] = _MarkerCensus(
+            games=games,
+            ballots=ballot_count,
+            annotations=annotations,
+            marked_games=marked_games,
+            kinds={kind: count for kind, count in kinds.items() if count},
+            rewritten=rewritten,
+            guard_recorded=guard_recorded,
+        )
 
-    # Counts what the tree holds across both eras since 2026-10-02 (samples/9p2i
-    # holds candidate round 2's bytes); each ``was`` is the four baseline-9 sets.
-    # was (300, 3630, 39, 26), and (300, 3631, 127, 70) on baseline 8
-    assert (games, len(ballots), annotations, marked_games) == (300, 3476, 65, 37)
+    for set_dir, row in census.items():
+        # Every bracketed annotation is a claimed label or the redaction body,
+        # and Task 21.2 wired the structured field, so every target rewrite
+        # records its own reason -- the marker table stays load-bearing because
+        # the field holds ONE reason per ballot while the chain can carry more.
+        assert sum(row.kinds.values()) == row.annotations, set_dir
+        assert row.guard_recorded == row.rewritten, set_dir
+        # None of the rewrites carries the J2 marker, so the J2-only rule would
+        # have let every one ride into the fit as the voter's own choice before
+        # this rule widened.
+        assert "uncited_coerced" not in row.kinds, set_dir
+
+    shown = census[_COMMITTED_SETS[0]]
+    assert shown.ballots == recorded_counts(_COMMITTED_SETS[0]).ballots
+    frozen = [census[set_dir] for set_dir in _COMMITTED_SETS[1:]]
+    # The three frozen sets: ml_corpus-9p2i, samples-4p1i, ml_corpus-4p1i. The
+    # four baseline-9 sets read (300, 3630, 39, 26), and (300, 3631, 127, 70)
+    # on baseline 8; the shown set's baseline-9 rewrites were 4.
+    assert [
+        (row.games, row.ballots, row.annotations, row.marked_games) for row in frozen
+    ] == [(150, 2539, 32, 20), (50, 117, 0, 0), (50, 129, 0, 0)]
     # under_gate_redirect (83 on baseline 8), invalid_reason_id (5) and
     # uncited_coerced (6) no longer occur on these bytes.
-    assert dict(kinds) == {
-        "invalid_observation_id": 1,  # was 1
-        "teammate_coerced": 28,  # was 13
-        "rationale_redaction": 28,  # was 13
-        "invalid_counter_reason_id": 2,  # was 4
-        "invalid_target": 6,  # was 8
-    }
-    # Reconciled with the annotation total above: 65 == 65 (see the docstring).
-    assert sum(kinds.values()) == annotations == 65  # was 39
-    # samples-9p2i, ml_corpus-9p2i, samples-4p1i, ml_corpus-4p1i.
-    assert per_set_rewritten == [17, 17, 0, 0]  # was [4, 17, 0, 0]
-    assert sum(per_set_rewritten) == 34  # was 21
-    # None of those 34 carries the J2 marker, so the J2-only rule would have let
-    # all 34 ride into the fit as the voter's own choice before this rule widened.
-    assert kinds["uncited_coerced"] == 0
-    # Task 21.2 wired the structured field, so every target rewrite now records
-    # its own reason — the marker table above stays load-bearing because the
-    # field holds ONE reason per ballot while the chain can carry more.
-    assert sum(b.guard_rewrite_reason is not None for b in ballots) == 34  # was 21
+    assert [row.kinds for row in frozen] == [
+        {
+            "rationale_redaction": 12,
+            "teammate_coerced": 12,
+            "invalid_counter_reason_id": 2,
+            "invalid_observation_id": 1,
+            "invalid_target": 5,
+        },
+        {},
+        {},
+    ]
+    assert [row.rewritten for row in frozen] == [17, 0, 0]
 
 
 @pytest.mark.slow

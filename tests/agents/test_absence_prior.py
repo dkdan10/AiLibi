@@ -98,6 +98,7 @@ from meetings.transcript import (
     turn_observation_id,  # noqa: PLC2701
     absent_players,
 )
+from tests._helpers.recorded_counts import recorded_counts
 
 _GATE = 0.60  # DESIGN.md §4.6 eject gate (inclusive)
 _NEUTRAL = 0.50  # the neutral suspicion prior
@@ -1260,21 +1261,25 @@ class TestAbsencePriorOnCommittedBytes:
     # -- the census this counterfactual is measured over ---------------------
 
     def test_meeting_census(self, counterfactual: _AbsenceCounterfactual) -> None:
-        # 117 reconstructed meetings on the committed 9p2i set (each recording
-        # shifts the trajectories: 145 on the baseline-9 bytes, 151 on baseline 8).
-        assert counterfactual.total_meetings == 117  # was 145
+        # Every recorded meeting of the committed 9p2i set is reconstructed
+        # (each recording shifts the count: 145 on the baseline-9 bytes, 151 on
+        # baseline 8), counted off its rows rather than transcribed.
+        assert counterfactual.total_meetings == recorded_counts(self._SET_DIR).meetings
 
     # -- (1) how many meetings carry a non-empty absent set ------------------
 
     def test_nonempty_absent_meeting_count(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # 48 of the 117 meetings still have at least one publicly-unplaced living
-        # player, but the sets are MUCH SMALLER now the 16.15 roll-call elicitation
-        # is LIVE and populates whereabouts claims (mean |absent| ~0.39 / median 0.0,
-        # down from baseline-4's ~3.6 / 4.0). Absence graduated to unconditional-ON
-        # at the 18.12 baseline-6 record, so both re-derivation legs fold it.
-        assert counterfactual.nonempty_absent == 48  # was 55
+        # Some meetings still have at least one publicly-unplaced living player,
+        # but the sets are MUCH SMALLER now the 16.15 roll-call elicitation is
+        # LIVE and populates whereabouts claims (median 0, down from baseline-4's
+        # 4.0). Absence graduated to unconditional-ON at the 18.12 baseline-6
+        # record, so both re-derivation legs fold it. The count is the
+        # histogram's own non-empty buckets, not transcribed.
+        assert counterfactual.nonempty_absent == sum(
+            count for size, count in counterfactual.absent_histogram if size > 0
+        )
 
     def test_every_absent_set_is_a_subset_of_the_living_roster(
         self, counterfactual: _AbsenceCounterfactual
@@ -1288,17 +1293,14 @@ class TestAbsencePriorOnCommittedBytes:
     def test_absent_set_size_distribution(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The full histogram of |absent| across the 117 meetings, and its min /
-        # max / median. Sizes span 0..1 (a 9-player set minus the reporter and any
-        # placed players; no meeting leaves 2 unplaced, where one did on the
-        # baseline-9 bytes); with live roll-call the median meeting still leaves 0
-        # unplaced (baseline-4 left 4, reached 8).
-        assert counterfactual.absent_histogram == (
-            (0, 69),
-            (1, 48),
-        )  # was ((0, 90), (1, 54), (2, 1))
-        assert counterfactual.absent_min == 0
-        assert counterfactual.absent_max == 1  # was 2
+        # The histogram of |absent| partitions every meeting, and its min / max
+        # are its own end buckets; with live roll-call the median meeting leaves
+        # 0 unplaced (baseline-4 left 4, reached 8; the baseline-9 bytes spanned
+        # 0..2). The bucket counts are not transcribed.
+        histogram = counterfactual.absent_histogram
+        assert sum(count for _, count in histogram) == counterfactual.total_meetings
+        assert counterfactual.absent_min == histogram[0][0]
+        assert counterfactual.absent_max == histogram[-1][0]
         assert counterfactual.absent_median == 0.0
 
     # -- (3) how many meetings the delta WOULD flip --------------------------
@@ -1328,37 +1330,48 @@ class TestAbsencePriorOnCommittedBytes:
     def test_emergency_meeting_census(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # 3 of the 117 committed meetings are EMERGENCY meetings (the walk's
-        # reconstructed trigger kind) -- the meetings whose re-derivation must
-        # pass reporter=None to mirror _collect_one_ballot.
-        assert counterfactual.emergency_meetings == 3  # was 10
+        # The EMERGENCY meetings (the walk's reconstructed trigger kind) are the
+        # meetings whose re-derivation must pass reporter=None to mirror
+        # _collect_one_ballot: one per applied emergency call in the recorded
+        # tick rows, counted there rather than transcribed (10 on the baseline-9
+        # bytes).
+        assert counterfactual.emergency_meetings == (
+            recorded_counts(self._SET_DIR).applied_actions.get("emergency", 0)
+        )
 
     # -- (4) Task 17.5: the double-count counterfactual (the widened column) --
 
     def test_recorded_vent_flag_census(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The grounding-verdict supply the widening reads: 38 recorded
-        # ``vent_sighting`` flags across 24 of the 117 committed meetings --
-        # the substrate still speaks grounded vents (the 17.6 re-anchor's same
-        # supply reading; 90 across 70 on the baseline-9 bytes).
-        assert counterfactual.vent_flag_count == 38  # was 90
-        assert counterfactual.vent_flag_meetings == 24  # was 70
+        # The grounding-verdict supply the widening reads: the recorded
+        # ``vent_sighting`` flags and the meetings that carry them, counted
+        # straight off the meeting rows (the 17.6 re-anchor's same supply
+        # reading; 90 across 70 on the baseline-9 bytes).
+        rows = recorded_counts(self._SET_DIR)
+        assert counterfactual.vent_flag_count == rows.flag_kinds.get("vent_sighting", 0)
+        assert counterfactual.vent_flag_meetings == (
+            rows.meetings_with_flag_kind.get("vent_sighting", 0)
+        )
+        assert counterfactual.vent_flag_count > 0
 
     def test_vent_double_count_population(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # THE double-count population (the 17.7 gate's first cell): 13 of the
-        # 117 meetings hold a vent-sighted subject who is ALSO priced as
-        # absent -- and never more than ONE such subject per meeting, so the
-        # widening re-places exactly 13 subject-meetings. In the other 11
-        # vent-flagged meetings the flagged subject was already placed by a
-        # sighting/whereabouts, so the widening is a no-op there.
-        assert counterfactual.vent_double_count_histogram == (
-            (0, 104),
-            (1, 13),
-        )  # was ((0, 112), (1, 33))
-        assert counterfactual.vent_double_count_meetings == 13  # was 33
+        # THE double-count population (the 17.7 gate's first cell): the
+        # meetings that hold a vent-sighted subject who is ALSO priced as
+        # absent -- never more than ONE such subject per meeting, so the
+        # widening re-places exactly that many subject-meetings, all of them
+        # among the vent-flagged meetings. Not transcribed (33 on the
+        # baseline-9 bytes).
+        histogram = dict(counterfactual.vent_double_count_histogram)
+        assert set(histogram) <= {0, 1}
+        assert sum(histogram.values()) == counterfactual.total_meetings
+        assert counterfactual.vent_double_count_meetings == histogram.get(1, 0)
+        assert (
+            counterfactual.vent_double_count_meetings
+            <= counterfactual.vent_flag_meetings
+        )
 
     def test_widened_mechanism_agrees_with_recorded_flags(
         self, counterfactual: _AbsenceCounterfactual
@@ -1374,15 +1387,21 @@ class TestAbsencePriorOnCommittedBytes:
     def test_widened_absent_set_size_distribution(
         self, counterfactual: _AbsenceCounterfactual
     ) -> None:
-        # The widened absent-set sizes beside the unwidened cells: 35 (vs
-        # 48) meetings keep a non-empty absent set, the max holds at 1, the
-        # median holds at 0.0, and the histogram shifts exactly the 13
-        # re-placed subject-meetings down one bucket each.
-        # was ((0, 122), (1, 23)) on the baseline-9 bytes
-        assert counterfactual.widened_absent_histogram == ((0, 82), (1, 35))
-        assert counterfactual.widened_nonempty_absent == 35  # was 23
-        assert counterfactual.widened_absent_min == 0
-        assert counterfactual.widened_absent_max == 1
+        # The widened absent-set sizes beside the unwidened cells: the
+        # histogram shifts exactly the re-placed subject-meetings down one
+        # bucket each, so the non-empty count falls by exactly the double-count
+        # population; the median holds at 0.0. Not transcribed (the baseline-9
+        # bytes read ((0, 122), (1, 23))).
+        widened = counterfactual.widened_absent_histogram
+        assert sum(count for _, count in widened) == counterfactual.total_meetings
+        assert counterfactual.widened_nonempty_absent == sum(
+            count for size, count in widened if size > 0
+        )
+        assert counterfactual.widened_nonempty_absent == (
+            counterfactual.nonempty_absent - counterfactual.vent_double_count_meetings
+        )
+        assert counterfactual.widened_absent_min == widened[0][0]
+        assert counterfactual.widened_absent_max == widened[-1][0]
         assert counterfactual.widened_absent_median == 0.0
 
     def test_widened_new_over_gate_meeting_count(

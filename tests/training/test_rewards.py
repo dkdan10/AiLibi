@@ -45,6 +45,13 @@ from training.rollout import (
     MeetingRecord,
 )
 
+# Campaign tier since 2026-10-09: these pin the committed fitness objective,
+# whose terms read role (training/README.md section 7; the seed-0 reward pin
+# stays until a reopening), and the default gate carries no role or outcome ML
+# pin while the ML hold stands (training/README.md section 2). Runs weekly, on
+# every pull request that changes tests/training/**, and via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 _NUM_PLAYERS = 9
 _NUM_IMPOSTORS = 2
 _TASKS = 2

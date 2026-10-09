@@ -170,6 +170,7 @@ def test_eval_seeds_are_the_frozen_corpus_test_split() -> None:
 # --------------------------------------------------------------------------- #
 
 
+@pytest.mark.campaign
 def test_selection_bar_and_the_three_probe_defaults_pin_one_baseline() -> None:
     """The bake-off selects on the baseline the ML fits are ground on, and every
     probe entry point defaults to the same id.
@@ -713,6 +714,7 @@ def test_rerun_rows_are_the_four_canonical_entrants() -> None:
     assert len(set(entrants)) == len(_CANONICAL_ENTRANTS)
 
 
+@pytest.mark.campaign
 def test_rerun_rows_pin_the_baseline_5_protocol() -> None:
     frozen_eval_seeds = load_eval_seeds()
     for row in _committed_bakeoff_rows():
@@ -732,6 +734,7 @@ def test_rerun_rows_pin_the_baseline_5_protocol() -> None:
         assert all(seed % 5 == 4 for seed in eval_seeds)
 
 
+@pytest.mark.campaign
 def test_rerun_rows_carry_the_baseline_5_supply_floors() -> None:
     for row in _committed_bakeoff_rows():
         gauges = _supply_gauges_by_name(row)

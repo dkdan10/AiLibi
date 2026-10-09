@@ -77,6 +77,7 @@ from engine.tick import advance_tick
 from engine.world import WorldState, load_canonical_map
 from orchestrator import replay as replay_module
 from orchestrator.action_ordering import order_actions_for_tick
+from tests._helpers.recorded_counts import recorded_counts
 from tests._helpers.world_state import scripted_initial_world_state
 
 _ACTION_ADAPTER: Final[TypeAdapter[Action]] = TypeAdapter(Action)
@@ -2034,10 +2035,13 @@ class TestReplayEntryDispositionField:
                     assert all(
                         isinstance(d, str) and d for d in entry.action_dispositions
                     )
-        # Counts the four committed sets' tick rows across their two eras since
-        # 2026-10-02 (samples/9p2i holds candidate round 2's bytes): was 6110 on the
-        # baseline-9 bytes, and 6064 before them.
-        assert rows == 6941
+        # Every tick row of the four committed sets is read: the count is the
+        # recorded rows' own, not a transcription (6110 on the baseline-9 bytes,
+        # and 6064 before them).
+        assert rows == sum(
+            recorded_counts(set_dir).tick_rows for set_dir in _COMMITTED_SET_DIRS
+        )
+        assert rows > 0
 
 
 class TestRecordTickEventsKeyword:

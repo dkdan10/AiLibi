@@ -25,23 +25,11 @@ boundaries, and terminal outcomes before any report is published.
 Usage::
 
     python scripts/build_sample_report.py [--sample-dir DIR] [--check]
-    python scripts/build_sample_report.py --sample-dir DIR --baseline-out PATH
 
 The default writes the report and prints a one-line summary;
 ``refresh_samples.sh`` invokes it after every real refresh. ``--check`` rebuilds
 in memory and diffs against the committed report, exiting non-zero on drift (the
 consistency gate that ``tests/scripts/test_build_sample_report.py`` and CI use).
-
-``--baseline-out`` (Task 10.6; audit gp-7) derives the CORRECTED Wave-0
-baseline from the committed bytes WITHOUT touching the committed
-``tournament-eval-report.json`` (the sample dir stays single-era): the
-re-derived flag census plus the Task 10.6 gate-spec metrics
-(:func:`eval.meeting_quality.compute_multi_signal_conversion` /
-``compute_supply_gauges``) and the per-ejection channel decomposition,
-written as deterministic JSON. The committed home is
-``tests/fixtures/phase10/corrected_w0_baseline.json`` — the exact file the
-10.9 A/B reads as its baseline; a fixture test pins it byte-identical to a
-re-derivation, so the artifact cannot drift from the committed bytes.
 """
 
 from __future__ import annotations
@@ -78,7 +66,6 @@ from eval.meeting_quality import (  # noqa: E402
     compute_indistinguishability,
     compute_multi_signal_conversion,
     compute_supply_gauges,
-    decompose_ejection_channels,
 )
 from orchestrator.seeder import seed_initial_state  # noqa: E402
 from orchestrator.replay import (  # noqa: E402
@@ -352,7 +339,7 @@ def _summary(report: TournamentEvalReport, sample_dir: Path) -> str:
     # conversion KPI, the active-deflection subcount, the inform-channel
     # attribution, and the "never-tasks" indistinguishability fingerprint. The
     # impostor win RATE prints with an explicit GUARDRAIL label (the Wave-2
-    # outcome split is confounded — see eval.meeting_quality.WAVE2_GATE_SPEC).
+    # outcome split was confounded by two adversarial changes in one record).
     cpm = compute_conversion_per_meeting(games)
     deflection = compute_effective_deflection(games)
     tally = tally_actions_by_role(sample_dir, games)
@@ -478,58 +465,6 @@ def write_report(sample_dir: Path) -> TournamentEvalReport:
     return report
 
 
-def corrected_baseline_from_report(
-    report: TournamentEvalReport, *, sample_dir: Path
-) -> dict[str, object]:
-    """Derive the corrected baseline table from a rebuilt report (10.6, 10.16).
-
-    The A/B baseline (read by 10.9 for the W0 anchor, by 10.17 for the W1
-    set): the 10.4 re-deriver (the eval analyzers, which re-run the one-home
-    repaired detector per meeting) plus the Task 10.6 gate-spec metrics AND
-    the Task 10.16 Wave-2 metrics, folded over the committed replays WITHOUT
-    touching the committed report. Every number is produced by its owning
-    ``compute_*`` analyzer (the flag census and role split live on the supply
-    gauges; the indistinguishability tally reads the per-tick action stream
-    via :func:`eval.action_ingest.tally_actions_by_role`, roles from the
-    seeder), plus the per-ejection channel decomposition keyed
-    ``"seed-{seed}:m{index}"``. Pure and deterministic over a fixed sample
-    dir: re-running over the same bytes is byte-identical, which the fixture
-    test pins.
-    """
-
-    games = report.report.games
-    genuine = report.gate_metrics.genuine_class_conversion
-    multi = compute_multi_signal_conversion(games)
-    gauges = compute_supply_gauges(games)
-    conversion_per_meeting = compute_conversion_per_meeting(games)
-    effective_deflection = compute_effective_deflection(games)
-    indistinguishability = compute_indistinguishability(
-        tally_actions_by_role(sample_dir, games)
-    )
-    ejection_channels = {
-        f"seed-{game.seed}:m{meeting_index}": sorted(channels)
-        for game in games
-        for meeting_index in range(len(game.meetings))
-        if (channels := decompose_ejection_channels(game, meeting_index)) is not None
-    }
-    return {
-        "sample_dir": sample_dir.name,
-        "genuine_class_conversion": genuine.model_dump(mode="json"),
-        "multi_signal_conversion": multi.model_dump(mode="json"),
-        "supply_gauges": gauges.model_dump(mode="json"),
-        "conversion_per_meeting": conversion_per_meeting.model_dump(mode="json"),
-        "effective_deflection": effective_deflection.model_dump(mode="json"),
-        "indistinguishability": indistinguishability.model_dump(mode="json"),
-        "impostor_ejection_channels": ejection_channels,
-    }
-
-
-def serialize_corrected_baseline(baseline: dict[str, object]) -> str:
-    """Deterministic baseline JSON: sorted keys, 2-space indent, newline."""
-
-    return json.dumps(baseline, indent=2, sort_keys=True) + "\n"
-
-
 def check_report(sample_dir: Path) -> int:
     """Diff a rebuild against the committed report; 0 if consistent, 1 if not."""
 
@@ -584,30 +519,11 @@ def main() -> int:
         action="store_true",
         help="Rebuild and diff against the committed report; exit 1 on drift.",
     )
-    parser.add_argument(
-        "--baseline-out",
-        type=Path,
-        default=None,
-        help=(
-            "Derive the Task 10.6 corrected baseline from the committed bytes "
-            "and write it to this path (the committed report is NOT touched)."
-        ),
-    )
     args = parser.parse_args()
     sample_dir: Path = args.sample_dir
 
     if args.check:
         return check_report(sample_dir)
-    if args.baseline_out is not None:
-        report = build_report(sample_dir)
-        baseline = corrected_baseline_from_report(report, sample_dir=sample_dir)
-        baseline_out: Path = args.baseline_out
-        baseline_out.parent.mkdir(parents=True, exist_ok=True)
-        baseline_out.write_text(
-            serialize_corrected_baseline(baseline), encoding="utf-8"
-        )
-        print(f"Wrote {baseline_out}: {_summary(report, sample_dir)}")
-        return 0
     report = write_report(sample_dir)
     print(f"Wrote {sample_dir / _REPORT_FILENAME}: {_summary(report, sample_dir)}")
     return 0

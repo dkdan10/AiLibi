@@ -47,7 +47,6 @@ from pydantic import ValidationError
 from engine.entities import Role
 from eval.meeting_quality import (
     ConversionReport,
-    ThresholdInversionRecount,
     TournamentEvalReport,
     _parse_suspicion_graph,
     compute_conversion_report,
@@ -74,6 +73,7 @@ from meetings.schemas import (
     VoteBallot,
 )
 from orchestrator.replay import LLMCallRecord
+from tests._helpers.recorded_counts import recorded_counts
 
 # Default roster: p-3 is the impostor, the rest crewmates.
 _ROLES: Mapping[PlayerId, Role] = {
@@ -556,32 +556,29 @@ def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
         read_report_text(_COMMITTED_9P2I_REPORT)
     )
 
-    # STORED block: the regenerated partition (divert already applied).
+    # STORED block: the regenerated partition (divert already applied); the
+    # retired coercion leaves its bucket empty.
     assert report.conversion.citation_coerced_skip_ballots == 0
-    assert report.conversion.missed_skip_ballots == 44  # was 77
-    assert report.conversion.threshold_inversions == 29  # was 27
-    assert report.conversion.missed_skip_impostor_voters == 14  # was 48
 
-    # RECOMPUTE: the divert populates the coerced bucket, matching the STORED block.
+    # RECOMPUTE: the divert populates the coerced bucket, matching the STORED
+    # block cell for cell. The role-reading cells are not transcribed (the
+    # report is held byte for byte by build_sample_report.py --check); the
+    # semantic zeros and the SKIP partition stay. History: the role literals
+    # left this test on 2026-10-09 (the baseline-9 bytes read 81 of 90).
     result = compute_conversion_report(report.report.games)
 
-    assert result.total_ejections == 66  # was 90
-    assert result.impostor_ejections == 44  # was 81
-    assert result.ejection_accuracy == pytest.approx(44 / 66)  # was 81 / 90
-    assert result.impostor_accused_meetings == 105  # was 111
-    assert result.impostor_accused_conversions == 44  # was 81
-    assert result.impostor_accused_conversion_rate == pytest.approx(
-        44 / 105
-    )  # was 81 / 111
-    assert result.skip_ballots == 281  # was 349
-    assert result.correct_skip_ballots == 237  # was 272
-    assert result.missed_skip_ballots == 44  # was 77
+    assert result == report.conversion
+    assert (
+        result.skip_ballots
+        == recorded_counts(_COMMITTED_9P2I_REPORT.parent).skip_ballots
+    )
     assert result.unclassified_skip_ballots == 0
     assert result.citation_coerced_skip_ballots == 0
-    assert result.missed_skip_impostor_voters == 14  # was 48
-    assert result.missed_skip_teammate_coerced == 5  # was 1
-    assert result.missed_skip_invalid_target == 1  # was 2
-    assert result.threshold_inversions == 29  # was 27
+    assert result.skip_ballots == (
+        result.correct_skip_ballots
+        + result.missed_skip_ballots
+        + result.unclassified_skip_ballots
+    )
 
     # No ballot carries the marker head: the committed bytes have no coerced
     # SKIP, so the divert scan yields nothing.
@@ -597,23 +594,25 @@ def test_committed_9p2i_recompute_pins_the_coerced_bucket() -> None:
 
 
 def test_committed_4p1i_recompute_has_no_coerced_and_is_unchanged() -> None:
-    """The 4p1i bytes carry no coercion marker; every bucket reads as before."""
+    """The 4p1i bytes carry no coercion marker; the recompute is the stored block.
+
+    The role-reading cells are not transcribed (the report is held byte for byte
+    by build_sample_report.py --check). History: the role literals left this
+    test on 2026-10-09 (baseline 8 read 20 impostor ejections of 24).
+    """
 
     report = TournamentEvalReport.model_validate_json(
         read_report_text(_COMMITTED_4P1I_REPORT)
     )
     result = compute_conversion_report(report.report.games)
 
+    assert result == report.conversion
     assert result.citation_coerced_skip_ballots == 0
-    assert result.skip_ballots == 68  # was 66
-    assert result.correct_skip_ballots == 54  # was 53
-    assert result.missed_skip_ballots == 14  # was 13
     assert result.unclassified_skip_ballots == 0
-    assert result.missed_skip_impostor_voters == 8  # was 10
-    assert result.missed_skip_invalid_target == 0
-    assert result.threshold_inversions == 6  # was 3
-    assert result.total_ejections == 20  # was 24
-    assert result.impostor_ejections == 20
+    assert (
+        result.skip_ballots
+        == recorded_counts(_COMMITTED_4P1I_REPORT.parent).skip_ballots
+    )
 
 
 @pytest.mark.parametrize(
@@ -646,52 +645,17 @@ def test_extended_invariant_holds_over_every_committed_meeting(
 # The Task-19.5 by-cause recount (the fixture behind the re-doctrine)
 # ---------------------------------------------------------------------------
 
-# The recount tables over the two committed sample sets, measured from the
-# committed bytes. The ml_corpus tables are recorded in the PR rather than
-# pinned here (this file's committed-bytes pins are the samples sets).
-_EXPECTED_RECOUNTS: Mapping[str, ThresholdInversionRecount] = {
-    # Baseline 7 read 46 / 46 / 7 / 40 / 6 / 0 / 39 / 1 / 6 on 9p2i and an empty
-    # table on 4p1i (baseline 6 read 87 / 87 / 36 / 81 / 5 / 1 / 78 / 8 / 1 and a
-    # single 4p1i inversion). Baseline 8 read 37 / 37 / 5 / 30 / 7 / 0 / 28 / 1 / 8
-    # on 9p2i and 3 / 3 / 0 / 3 / 0 / 0 / 3 / 0 / 0 on 4p1i. At baseline 9 the
-    # 9p2i remainder shrank again (27 / 27 / 9 / 22 / 5 / 0 / 26 / 0 / 1) and the
-    # 4p1i class grew. The 9p2i row now reads the promoted stage-b-r2 bytes.
-    "9p2i": ThresholdInversionRecount(
-        threshold_inversions=29,  # was 27
-        marker_free=29,  # was 27
-        rendered_at_threshold=15,  # was 9
-        rendered_below_0_70=26,  # was 22
-        rendered_0_70_to_0_80=3,  # was 5
-        rendered_at_or_above_0_80=0,
-        in_skipped_meetings=23,  # was 26
-        in_crew_ejected_meetings=5,  # was 0
-        in_impostor_ejected_meetings=1,
-    ),
-    "4p1i": ThresholdInversionRecount(
-        threshold_inversions=6,  # was 3
-        marker_free=6,  # was 3
-        rendered_at_threshold=0,
-        rendered_below_0_70=4,  # was 3
-        rendered_0_70_to_0_80=2,  # was 0
-        rendered_at_or_above_0_80=0,
-        in_skipped_meetings=6,  # was 3
-        in_crew_ejected_meetings=0,
-        in_impostor_ejected_meetings=0,
-    ),
-}
+# History: the recount tables were pinned here as whole literals until
+# 2026-10-09 (baseline 9 read 27 / 27 / 9 / 22 / 5 / 0 / 26 / 0 / 1 on 9p2i);
+# their role-reading meeting split left with the dashboard's role literals.
 
 
 @pytest.mark.parametrize(
-    ("path", "expected"),
-    [
-        (_COMMITTED_9P2I_REPORT, _EXPECTED_RECOUNTS["9p2i"]),
-        (_COMMITTED_4P1I_REPORT, _EXPECTED_RECOUNTS["4p1i"]),
-    ],
+    "path",
+    [_COMMITTED_9P2I_REPORT, _COMMITTED_4P1I_REPORT],
     ids=["9p2i", "4p1i"],
 )
-def test_committed_recount_pins_the_by_cause_table(
-    path: Path, expected: ThresholdInversionRecount
-) -> None:
+def test_committed_recount_pins_the_by_cause_table(path: Path) -> None:
     """The Task-19.5 by-cause table over committed bytes — the pinned fixture
     behind the ``threshold_inversions`` re-doctrine.
 
@@ -701,21 +665,28 @@ def test_committed_recount_pins_the_by_cause_table(
     cell: it pins that NO by-design rewrite (invalid target, teammate coercion,
     parse default, ballot redirect, citation gate) leaks into the remainder, so
     what is left is genuinely the voter's own decision. The rendered bands then
-    say what kind of decision it was — on samples/9p2i the mass still sits below
-    the advisory line (26 of 29 below 0.70, 15 of those exactly at the 0.60
-    reference), which is a conservatism reading, not a disobedience reading.
-    The two ml_corpus tables are recorded in the PR.
-
-    Equality against a whole :class:`ThresholdInversionRecount` literal (not
-    field-by-field asserts) makes a new cell a loud failure rather than a
-    silently unpinned one.
+    say what kind of decision it was. The bands and the meeting split each
+    partition the remainder; their sizes are not transcribed.
     """
 
     report = TournamentEvalReport.model_validate_json(read_report_text(path))
 
     recount = recount_threshold_inversions(report.report.games)
 
-    assert recount == expected
+    assert recount.marker_free == recount.threshold_inversions
+    assert (
+        recount.rendered_below_0_70
+        + recount.rendered_0_70_to_0_80
+        + recount.rendered_at_or_above_0_80
+        == recount.threshold_inversions
+    )
+    assert recount.rendered_at_threshold <= recount.rendered_below_0_70
+    assert (
+        recount.in_skipped_meetings
+        + recount.in_crew_ejected_meetings
+        + recount.in_impostor_ejected_meetings
+        == recount.threshold_inversions
+    )
     # Cross-pin: the recount folds the SAME per-ballot classification the
     # published census folds, so its total cannot drift from the stored block.
     assert recount.threshold_inversions == report.conversion.threshold_inversions

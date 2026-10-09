@@ -118,7 +118,7 @@ from types import MappingProxyType
 from typing import Any, Final, TextIO
 
 # Allow `uv run python scripts/counterfactual_phase21.py ...` to find top-level
-# packages (mirrors scripts/counterfactual_phase20.py).
+# packages (mirrors scripts/measure_baseline.py).
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))

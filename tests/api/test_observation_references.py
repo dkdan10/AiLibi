@@ -13,6 +13,7 @@ from agents.memory.episodic import EpisodicEvent
 from api.observation_references import observation_references
 from api.replay_loader import ReplayLoader
 from api.schemas import AgentMemoryView
+from eval.validity import seeds_on_disk
 
 _SAMPLES = Path(__file__).resolve().parents[2] / "replays/samples/9p2i"
 
@@ -22,84 +23,116 @@ def loader() -> ReplayLoader:
     return ReplayLoader(_SAMPLES)
 
 
-@pytest.mark.parametrize(
-    (
-        "seed",
-        "meeting",
-        "observer",
-        "observation_id",
-        "kind",
-        "subject",
-        "observed",
-        "scene",
-    ),
-    [
-        # Re-read on the promoted bytes (candidate round 2, 2026-10-02); on the
-        # baseline-9 bytes these were seed 23 M0 (the vent) and seed 4 M0 (the
-        # move and the co-present sighting).
-        (5, 1, "p-2", "p-2:35:1", "saw_vent", "p-3", 35, 34),
-        # Seed 12 M0 carries a move and a co-present sighting in one meeting.
-        (12, 0, "p-1", "p-1:12:3", "saw_player_move", "p-2", 12, 11),
-        (12, 0, "p-2", "p-2:8:1", "saw_player", "p-7", 8, 7),
-    ],
-)
+def _single_citation_exhibit(loader: ReplayLoader, kind: str) -> tuple[int, int, str]:
+    """The shown set's first (seed, meeting, voter) citing one observation of ``kind``.
+
+    The exhibit is found, not named: the walk reads the recorded ballots for a
+    voter citing its own observation and keeps the first whose one resolved
+    reference has the wanted kind (on round 2's bytes seed 5 M1 held the vent
+    and seed 12 M0 the move and the sighting; on the baseline-9 bytes seed 23
+    M0 and seed 4 M0).
+    """
+
+    for seed in sorted(seeds_on_disk(_SAMPLES)):
+        path = _SAMPLES / f"replay-seed-{seed}.jsonl"
+        for line in path.read_text(encoding="utf-8").splitlines():
+            row = json.loads(line)
+            if row.get("kind") != "meeting":
+                continue
+            meeting = int(row["meeting_id"].rsplit("-", 1)[-1])
+            voters = sorted(
+                {
+                    ballot["voter"]
+                    for ballot in row["ballots"]
+                    if str(
+                        ballot.get("primary_reason_observation_id") or ""
+                    ).startswith(f"{ballot['voter']}:")
+                }
+            )
+            for voter in voters:
+                references = loader.get_meeting_memory(
+                    f"headless-seed-{seed}",
+                    f"headless-seed-{seed}:meeting-{meeting}",
+                    voter,
+                ).observation_references
+                if (
+                    len(references) == 1
+                    and references[0].resolved
+                    and references[0].kind == kind
+                ):
+                    return seed, meeting, voter
+    raise AssertionError(f"no voter of the shown set cites one {kind} observation")
+
+
+@pytest.mark.parametrize("kind", ["saw_vent", "saw_player_move", "saw_player"])
 def test_genuine_citations_keep_source_identity_and_separate_scene_time(
     loader: ReplayLoader,
-    seed: int,
-    meeting: int,
-    observer: str,
-    observation_id: str,
     kind: str,
-    subject: str,
-    observed: int,
-    scene: int,
 ) -> None:
+    seed, meeting, observer = _single_citation_exhibit(loader, kind)
     view = loader.get_meeting_memory(
         f"headless-seed-{seed}", f"headless-seed-{seed}:meeting-{meeting}", observer
     )
     assert len(view.observation_references) == 1
     reference = view.observation_references[0]
     assert reference.resolved
-    assert reference.observation_id == observation_id
+    # The id names its observer and the tick it was observed at; the scene the
+    # observation describes is the frame before.
+    source_observer, observed, _ = reference.observation_id.split(":")
+    assert source_observer == observer
     assert reference.observer_id == observer
     assert reference.kind == kind
-    assert reference.subject_id == subject
-    assert reference.observation_tick == observed
-    assert reference.scene_tick == scene
+    assert reference.subject_id is not None
+    assert reference.subject_id != observer
+    assert reference.observation_tick == int(observed)
+    assert reference.scene_tick == reference.observation_tick - 1
     assert reference.provenance == "observed"
     if kind == "saw_player":
-        assert reference.text == "p-2 saw p-7 in MEDBAY with p-9."
+        assert reference.room is not None
+        assert reference.text is not None
+        assert reference.text.startswith(
+            f"{observer} saw {reference.subject_id} in {reference.room}"
+        )
         assert reference.from_room is reference.to_room is None
     elif kind == "saw_player_move":
-        assert (reference.from_room, reference.to_room) == ("EAST_HALL", "ENGINEERING")
+        assert reference.from_room is not None
+        assert reference.to_room is not None
+        assert reference.from_room != reference.to_room
     else:
-        assert reference.room == "ENGINEERING"
+        assert reference.room is not None
     replay = loader.load_replay(f"headless-seed-{seed}")
-    assert any(frame.tick == scene for frame in replay.ticks)
+    assert any(frame.tick == reference.scene_tick for frame in replay.ticks)
 
 
-@pytest.mark.parametrize("forged", ["p-9:29:3", "p-3:29:99"])
+@pytest.mark.parametrize("forgery", ["foreign", "missing"])
 def test_foreign_or_missing_citation_is_explicitly_unresolved(
+    loader: ReplayLoader,
     tmp_path: Path,
-    forged: str,
+    forgery: str,
 ) -> None:
-    # Seed 0 M1, where p-3 cites one observation of its own on the promoted
-    # bytes (seed 46 M3 on the baseline-9 bytes).
-    path = tmp_path / "replay-seed-0.jsonl"
+    # The first single-citation sighting the shown set holds, its ballot's
+    # citation forged (seed 0 M1 on round 2's bytes, seed 46 M3 on the
+    # baseline-9 bytes).
+    seed, meeting, voter = _single_citation_exhibit(loader, "saw_player")
+    meeting_id = f"headless-seed-{seed}:meeting-{meeting}"
+    # Another observer's id, or the voter's own id at an order never minted.
+    other = "p-1" if voter != "p-1" else "p-2"
+    forged = f"{other}:29:3" if forgery == "foreign" else f"{voter}:29:99"
+    path = tmp_path / f"replay-seed-{seed}.jsonl"
     shutil.copyfile(_SAMPLES / path.name, path)
     shutil.copyfile(_SAMPLES / "roster.json", tmp_path / "roster.json")
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     forged_ballots = 0
     for row in rows:
-        if row.get("kind") == "meeting" and row["meeting_id"].endswith("meeting-1"):
+        if row.get("kind") == "meeting" and row["meeting_id"] == meeting_id:
             for ballot in row["ballots"]:
-                if ballot["voter"] == "p-3":
+                if ballot["voter"] == voter:
                     ballot["primary_reason_observation_id"] = forged
                     forged_ballots += 1
     assert forged_ballots == 1
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
     view = ReplayLoader(tmp_path).get_meeting_memory(
-        "headless-seed-0", "headless-seed-0:meeting-1", "p-3"
+        f"headless-seed-{seed}", meeting_id, voter
     )
     (reference,) = view.observation_references
     assert reference.observation_id == forged

@@ -96,9 +96,8 @@ thirteen one-tick legs, moved ``total_impostor_alibis`` from 2 to 3 and
 ``survival_rate`` from 0.5 to 0.667 -- a published figure the ACCUSED was
 choosing. ``survival_rate`` and ``total_impostor_alibis`` reach
 :mod:`eval.process_scorecard`, :mod:`eval.meeting_quality`,
-:mod:`eval.deception_instruments`, :mod:`eval.prompt_regression`,
-``api/routes/eval.py`` and the tournament dashboard, so the dial was a long
-one.
+:mod:`eval.deception_instruments`, ``api/routes/eval.py`` and the
+tournament dashboard, so the dial was a long one.
 
 Rate convention
 ---------------
@@ -110,14 +109,12 @@ None-iff-undefined convention, shared with
 :class:`eval.meeting_quality.ConversionReport`.
 
 The pre-19.5 ``0.0`` is RETIRED (Task 19.5; audits/audit-phase-19-triage.md §7
-item 6). It was chosen as a vacuous, division-safe value so Task 5.7 rendering
-and the Task 5.8 regression suite need not special-case it, and that trade
-inverted: a ``0.0`` here reads as "impostors filed alibis and NONE survived" —
-the strongest possible detector result — when it actually means no impostor
-filed an alibi at all. The dashboard's null-safe formatter renders ``None`` as
-``n/a`` with no special case (so the papering-over is deleted, not moved), and
-:class:`eval.prompt_regression.PromptRegressionMetrics` widens its
-``alibi_survival_rate`` with it.
+item 6). It was chosen as a vacuous, division-safe value so dashboard rendering
+need not special-case it, and that trade inverted: a ``0.0`` here reads as
+"impostors filed alibis and NONE survived" — the strongest possible detector
+result — when it actually means no impostor filed an alibi at all. The
+dashboard's null-safe formatter renders ``None`` as ``n/a`` with no special case
+(so the papering-over is deleted, not moved).
 
 Partial-replay robustness: meetings with no alibis, no contradictions, or no
 impostor participants contribute zero without raising, and a game with no
