@@ -15,8 +15,10 @@ layers, mirroring :mod:`tests.eval.test_gate_metrics`:
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -62,8 +64,10 @@ from meetings.transcript import (
     WEAK_REASON_PROXY_INTRA_TURN,
     WEAK_REASON_RETARGETED_PROXY,
     detect_contradictions,
+    is_weak_contradiction,
 )
 from orchestrator.replay import LLMCallRecord
+from tests._helpers.recorded_counts import recorded_counts
 
 _ROLES: Mapping[PlayerId, Role] = {
     "p-0": "CREWMATE",
@@ -707,6 +711,28 @@ class TestComputeSupplyGauges:
             pytest.approx(2.0)
         )
 
+    def test_an_impostor_accusing_itself_is_not_an_accused_impostor_meeting(
+        self,
+    ) -> None:
+        # Planted: the only accusation of an impostor is its own, so no other
+        # voter accused it and the meeting is not in the gauge's population.
+        meeting = _meeting(
+            turns=(
+                _turn(
+                    speaker=_IMPOSTOR,
+                    index=0,
+                    kind="opening",
+                    claims=(_accusation(against=_IMPOSTOR),),
+                ),
+            ),
+            llm_calls=(_graph_call(agent_id="p-0", rows={_IMPOSTOR: 0.70}),),
+        )
+        gauges = compute_supply_gauges((_game(meetings=(meeting,)),))
+
+        assert gauges.accused_impostor_meetings == 0
+        assert gauges.over_gate_listener_rows == 0
+        assert gauges.over_gate_listeners_per_accused_impostor_meeting is None
+
     def test_empty_set_reads_undefined_shares(self) -> None:
         gauges = compute_supply_gauges(())
         assert gauges.meetings_total == 0
@@ -880,6 +906,80 @@ def _load_committed_9p2i() -> TournamentEvalReport:
     )
 
 
+@dataclass(frozen=True)
+class _RecordedSupply:
+    """The supply gauges' flag and accusation counts, folded off the replay rows."""
+
+    meetings: int
+    flags: int
+    weak_flags: int
+    strong_flags: int
+    zero_flag_meetings: int
+    crew_subjects: int
+    impostor_subjects: int
+    accused_impostor_meetings: int
+
+
+def _recorded_supply(
+    set_dir: Path, roles_by_game: Mapping[str, Mapping[PlayerId, Role]]
+) -> _RecordedSupply:
+    """Fold ``set_dir``'s recorded meeting rows into the supply gauges' counts.
+
+    The second surface beside the committed report the gauges read: the raw
+    ``kind == "meeting"`` rows of every replay file, their non-vent flags (the
+    band read by the production predicate
+    :func:`meetings.transcript.is_weak_contradiction`) and their accusation
+    claims, with each game's roles taken from the report by ``game_id``.
+    Counts only; no text leaves this function.
+    """
+
+    meetings = flags = weak = strong = zero = crew = impostor = accused = 0
+    for path in sorted(set_dir.glob("replay-seed-*.jsonl")):
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                row = json.loads(line)
+                if row.get("kind") != "meeting":
+                    continue
+                roles = roles_by_game[row["game_id"]]
+                meetings += 1
+                recorded = [
+                    ContradictionRef.model_validate(flag)
+                    for flag in row["contradictions"]
+                    if flag["kind"] != "vent_sighting"
+                ]
+                flags += len(recorded)
+                zero += int(not recorded)
+                for flag in recorded:
+                    if is_weak_contradiction(flag):
+                        weak += 1
+                    else:
+                        strong += 1
+                    for subject in flag.subjects:
+                        if roles[subject] == "IMPOSTOR":
+                            impostor += 1
+                        else:
+                            crew += 1
+                accused += int(
+                    any(
+                        claim["type"] == "accusation"
+                        and claim["against"] != turn["speaker"]
+                        and roles[claim["against"]] == "IMPOSTOR"
+                        for turn in row["transcript"]["turns"]
+                        for claim in turn["claims"]
+                    )
+                )
+    return _RecordedSupply(
+        meetings=meetings,
+        flags=flags,
+        weak_flags=weak,
+        strong_flags=strong,
+        zero_flag_meetings=zero,
+        crew_subjects=crew,
+        impostor_subjects=impostor,
+        accused_impostor_meetings=accused,
+    )
+
+
 class TestCommittedGateSpecFolds:
     """The gp-7 folds over the committed 9p2i bytes agree with the report.
 
@@ -888,7 +988,12 @@ class TestCommittedGateSpecFolds:
     synthetic cases above hold each fold. What stays is the cross-check of two
     surfaces over the shown bytes: the per-ejection decomposition, the
     multi-signal fold and the committed report's own impostor-ejection count
-    agree, and the supply gauges count every recorded meeting.
+    agree, and the supply gauges equal an independent fold of the recorded
+    meeting rows and sit inside the committed report's flag taxonomy. The
+    committed report carries no supply block, so no byte-identity gate holds
+    the gauges themselves. The over-gate listener rows parse each voter's
+    rendered graph, which no second surface counts: the synthetic case above
+    holds that fold, and its shown count is not asserted.
     """
 
     def test_the_decomposition_the_fold_and_the_report_agree(self) -> None:
@@ -928,13 +1033,41 @@ class TestCommittedGateSpecFolds:
             )
         }
 
-    def test_the_supply_gauges_count_every_recorded_meeting(self) -> None:
+    def test_the_supply_gauges_equal_a_fold_of_the_recorded_rows(self) -> None:
         report = _load_committed_9p2i()
-        gauges = compute_supply_gauges(report.report.games)
-
-        assert gauges.meetings_total == sum(
-            len(game.meetings) for game in report.report.games
+        games = report.report.games
+        gauges = compute_supply_gauges(games)
+        recorded = _recorded_supply(
+            _COMMITTED_9P2I_DIR, {game.game_id: game.roles for game in games}
         )
-        assert gauges.meetings_total > 0
-        assert gauges.zero_contradiction_meetings <= gauges.meetings_total
-        assert gauges.genuine_subject_meetings <= gauges.meetings_total
+
+        assert gauges.meetings_total == recorded.meetings > 0
+        assert gauges.total_flags == recorded.flags
+        assert (gauges.weak_flags, gauges.strong_flags) == (
+            recorded.weak_flags,
+            recorded.strong_flags,
+        )
+        assert gauges.zero_contradiction_meetings == recorded.zero_flag_meetings
+        assert (gauges.flag_subjects_crew, gauges.flag_subjects_impostor) == (
+            recorded.crew_subjects,
+            recorded.impostor_subjects,
+        )
+        assert gauges.accused_impostor_meetings == recorded.accused_impostor_meetings
+        assert gauges.genuine_subject_meetings == sum(
+            1
+            for game in games
+            for meeting in game.meetings
+            if genuine_class_subjects(meeting)
+        )
+
+        # The committed report's taxonomy is the other surface: it partitions
+        # every recorded flag, vent sightings included, and its weak-signal and
+        # cross-statement classes are the non-vent weak and strong flags that
+        # do not link one artifact to itself.
+        taxonomy = report.deduction.evidence_taxonomy
+        vent_flags = recorded_counts(_COMMITTED_9P2I_DIR).flag_kinds.get(
+            "vent_sighting", 0
+        )
+        assert taxonomy.flags_total == gauges.total_flags + vent_flags
+        assert gauges.weak_flags >= taxonomy.weak_signal_flags
+        assert gauges.strong_flags >= taxonomy.cross_statement_flags
