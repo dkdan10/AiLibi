@@ -2661,93 +2661,22 @@ def _members(shelves: Sequence[Mapping[str, Any]]) -> dict[str, list[int]]:
     }
 
 
-def test_the_served_file_reads_the_shown_sets_numbers() -> None:
+def test_the_served_file_keeps_its_shelf_order_and_benches_tripped_games() -> None:
+    # The shown set's shelf sizes, members and readings are not transcribed:
+    # publish_game_profile.py --check holds the served file byte for byte. What
+    # stays is structural: the shelves come in the candidates' order, and a game
+    # that trips the guard sits on no shelf. History: the shelf literals left
+    # this test on 2026-10-09 (round 2's bytes read 14 games on the reporter
+    # shelf and one tripped game, seed 26).
     served = _committed()
     pre = _members(served["pre_reveal"]["shelves"])
-    assert {name: len(seeds) for name, seeds in pre.items()} == {
-        gp.REPORTER_SAW_IT: 14,
-        gp.DOUBLE_KILL: 7,
-        gp.SLOW_BURN: 11,
-        gp.TWO_KILLS_AFTER_ONE_REGROUP: 6,
-        gp.CLOSE_CALL: 16,
-        gp.SUSPICION_MOVED: 16,
-        gp.THIRD_ROUND: 19,
-    }
-    assert list(pre) == [name for name in gp.CANDIDATES if name in pre]
-    assert pre[gp.REPORTER_SAW_IT] == [
-        0,
-        1,
-        7,
-        9,
-        16,
-        19,
-        23,
-        28,
-        29,
-        30,
-        32,
-        35,
-        38,
-        43,
-    ]
-    assert pre[gp.TWO_KILLS_AFTER_ONE_REGROUP] == [0, 4, 12, 13, 16, 36]
     reveal = _members(served["reveal"]["shelves"])
-    assert {name: len(seeds) for name, seeds in reveal.items()} == {
-        gp.CAUGHT_VENTING: 19,
-        gp.ONE_LINE_TWO_READINGS: 20,
-        gp.ONE_VOTE_EJECTION: 10,
-        gp.NOBODY_VOTED_OUT: 4,
-        gp.DOWN_TO_THE_WIRE: 12,
-        gp.RUNAWAY: 14,
-        gp.DECIDED_AT_A_MEETING: 14,
-    }
-    pair = served["reveal"]["decided_without_proof"]
-    assert (
-        len(pair["right"]["members"]),
-        sum(len(m["meetings"]) for m in pair["right"]["members"]),
-    ) == (18, 19)
-    assert (
-        len(pair["wrong"]["members"]),
-        sum(len(m["meetings"]) for m in pair["wrong"]["members"]),
-    ) == (20, 21)
-    readings = {
-        reading["name"]: [
-            (entry["seed"], entry["meeting"]) for entry in reading["entries"]
-        ]
-        for reading in served["pre_reveal"]["tripwires"]["readings"]
-    }
-    assert readings == {
-        "decisive": [(26, 2)],
-        "decisive_read_as_skip": [(26, 2)],
-        "decisive_all_ungrounded_removed": [(26, 2)],
-        "every": [],
-        "any": [(26, 2), (41, 0)],
-        "manufactured": [],
-    }
-    tripwires = served["pre_reveal"]["tripwires"]
-    assert (tripwires["alibi_flags"], tripwires["alibi_flags_evaluable"]) == (15, 1)
-    chip = served["pre_reveal"]["chips"][0]["members"]
-    assert (len(chip), sum(len(member["meetings"]) for member in chip)) == (14, 15)
-    assert next(member for member in chip if member["seed"] == 19)["meetings"] == [2]
-    every_shelf = {**pre, **reveal, **_members((pair["right"], pair["wrong"]))}
-    on = {
-        seed: sorted(name for name, seeds in every_shelf.items() if seed in seeds)
-        for seed in (14, 19)
-    }
-    assert on[19] == sorted(
-        [
-            gp.REPORTER_SAW_IT,
-            gp.SLOW_BURN,
-            gp.THIRD_ROUND,
-            gp.CAUGHT_VENTING,
-            gp.ONE_LINE_TWO_READINGS,
-            gp.DECIDED_AT_A_MEETING,
-            gp.RIGHT_WITHOUT_PROOF,
-        ]
-    )
-    assert on[14] == sorted([gp.RUNAWAY, gp.RIGHT_WITHOUT_PROOF])
+    assert pre and reveal
+    assert list(pre) == [name for name in gp.CANDIDATES if name in pre]
     tripped = [
         game["seed"] for game in served["pre_reveal"]["games"] if game["tripped"]
     ]
-    assert tripped == [26]
-    assert all(26 not in seeds for seeds in (*pre.values(), *reveal.values()))
+    for seed in tripped:
+        assert all(seed not in seeds for seeds in (*pre.values(), *reveal.values()))
+    for member in served["pre_reveal"]["chips"][0]["members"]:
+        assert member["meetings"], member["seed"]

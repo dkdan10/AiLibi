@@ -417,10 +417,12 @@ def test_an_eyewitness_chip_past_the_last_meeting_fails_naming_seed_and_chip(
     meeting_ids, replays = served_replays
     planted = _committed()
     chip = planted["pre_reveal"]["chips"][0]
-    member = next(item for item in chip["members"] if item["seed"] == 19)
-    member["meetings"] = [len(meeting_ids[19])]
+    # The chip's first member, whichever game it is (seed 19 on round 2's bytes).
+    member = chip["members"][0]
+    seed = member["seed"]
+    member["meetings"] = [len(meeting_ids[seed])]
     assert pointer_failures(planted, meeting_ids, replays) == [
-        f"seed 19, chip {gp.EYEWITNESS_CHIP}: meeting index {len(meeting_ids[19])}"
+        f"seed {seed}, chip {gp.EYEWITNESS_CHIP}: meeting index {len(meeting_ids[seed])}"
     ]
 
 
