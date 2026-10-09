@@ -2123,3 +2123,12 @@ era-keyed path, in one card with the tour's re-curation (decision memo 8.7 item 
 
 The promotion card `promote-round-3` dispatches after this record merges and after `retire-era-locked-pins` merges;
 its merge is the orchestrator's under memo 8.9.
+
+**Amendment of 2026-10-09 to section 11 (the orchestrator), after the verify-only round.** Two phrases above are
+corrected without changing the decision. (1) The figure "wrong-but-believable ejections 177 of 397" is scorecard row
+8, which counts role-incorrect grounded EJECT ballots over all 397 EJECT ballots (8.1); it is a role-derived row,
+reported and never a gate, and it is quoted here as a reported row beside round 2's 189 of 410, not as a criterion:
+no criterion of this decision reads role-correctness. (2) "Every gate and count-only key scan at every checkpoint
+passed" reads, under the amended discipline (1.7, 6.1): the full gate set passed after the probe and after every
+second batch, six of the eleven checkpoints, and the count-only key scan read 0 at all eleven. The readings the
+decision rests on are otherwise as sections 7 and 8 state them, and the step stands: round 3 is promoted.
