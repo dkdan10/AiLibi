@@ -6,6 +6,8 @@ Nine measures of whether a decision rested on data the agent actually held, comp
 
 This page is GENERATED. Do not edit it by hand: run `uv run python scripts/publish_process_scorecard.py` and commit the result. `uv run python scripts/publish_process_scorecard.py --check` recomputes both files from the recordings and fails on drift.
 
+History (2026-10-09): the fifth run's appendix, folded from `audits/deduction-candidate/run-2026-09-16`, left this page; `e75780b7` is the last commit that published it, and the archive keeps its bytes.
+
 ## Why rows 2 and 3 are the point
 
 Without **argmax-independence** the headline certifies an arithmetic aggregator as a reasoner: on the shipped corpus most crew EJECT ballots simply name the voter's own rendered suspicion argmax, and every departing ballot still carries a valid citation — so a "cited and on-target" measure scores the two alike. Without the **manufactured-contradiction rate** it certifies the seed-41 failure: the alibi schema compresses a truthfully-moving player into a single-room envelope, the detectors flag the envelope, and a right-looking process convicts an innocent on evidence the schema invented.
@@ -19,7 +21,7 @@ The four sets span 2 recorded eras, grouped by the era registry (`eval/eras.py`)
 
 The baseline-9 sets are the process re-record made after the substrate wave (the route claim, the grounded SKIP with its labelling guards, and the weighing channel); the column on the recordings made before that wave is committed in that record's section 1, the SKIP row read 0 there by instruction, and row 3's claims became routes across the same line, so no row pools with that column. A set whose bytes replaced an earlier recording carries that recording's published rows as a dated before column, read from [`process-scorecard-before.json`](process-scorecard-before.json) and never recomputed.
 
-Report format version 2; scorecard schema version 2; decision date 2026-09-19.
+Report format version 2; scorecard schema version 3; decision date 2026-09-19.
 
 ## Pooled within an era
 
@@ -223,18 +225,5 @@ Context: impostor alibis 1/1 survived contradiction detection; reporter slots 0/
 **wrong_but_believable_rate.** Numerator: EJECT ballots that are role-INCORRECT (the recorded target is a crewmate) AND grounded by row 1 AND not resting on a manufactured contradiction by row 3 (no manufactured flag in that meeting names the ballot's target). Denominator: all EJECT ballots. Not-evaluable: EJECT ballots whose voter has no recorded prompt, the same per-kind count row 1's EJECT cell carries. REPORTED, NEVER PENALISED: this is the owner's preferred case - a wrong decision on believable data - and the direction of this row is deliberately unstated.
 
 **role_correct_ejection_rate.** Numerator: ejections whose ejected player was an IMPOSTOR. Denominator: all ejections. REPORTED BESIDE the suite, NEVER A GATE (decision D1, 2026-09-19). It is published last on purpose.
-
-## Appendix: the fifth run (2026-09-16), out of the headline
-
-OUT OF THE HEADLINE. The fifth run is a 3-ballot arena on a proof-free held-out band whose generator filters out the one evidence channel that reliably works, so neither arm is adoptable and neither arm's cells pool with the committed sets. It is reported because the two arms differ on the process measures the frozen outcome scored 0 and 2. Counts only: no prefix, prompt or transcript text is read into this artifact, and nothing under the archive is written.
-
-Archive: `audits/deduction-candidate/run-2026-09-16` (read, never written).
-
-| arm | recordings | meetings | EJECT | EJECT cited | SKIP | SKIP cited |
-| --- | --- | --- | --- | --- | --- | --- |
-| combined_accounts | 50 | 50 | 75 | 73 | 75 | 0 |
-| repaired_clock | 50 | 50 | 14 | 14 | 136 | 0 |
-
-Ballots per meeting: 3 ballots in 100 meetings.
 
 No component reads this file yet. It is published beside the markdown so a spectator surface can load it later; today its only consumer is scripts/publish_process_scorecard.py --check, which recomputes both files from the committed recordings and fails on drift.

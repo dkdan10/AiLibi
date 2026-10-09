@@ -44,7 +44,6 @@ from _report_output import atomic_write_report, preflight_report_output  # noqa:
 from eval.process_scorecard import (  # noqa: E402
     BEFORE_COLUMNS_PATH,
     COMMITTED_SETS,
-    FIFTH_RUN_ARCHIVE,
     RECORDINGS_ROOT,
     BeforeColumn,
     BeforeColumnsError,
@@ -67,6 +66,10 @@ JSON_PATH = Path("docs/process-scorecard.json")
 #: The one command a reader — or a red ``--check`` — is told to run.
 REGENERATE_COMMAND = "uv run python scripts/publish_process_scorecard.py"
 
+#: Recorded archives outside ``replays/`` this writer must never write into. The
+#: fifth run's archive is one: the page no longer reads it, and it keeps its bytes.
+PROTECTED_ARCHIVES: tuple[str, ...] = ("audits/deduction-candidate/run-2026-09-16",)
+
 
 def protected_inputs(root: Path) -> list[Path]:
     """Every recording location this command must never be able to write into.
@@ -78,7 +81,7 @@ def protected_inputs(root: Path) -> list[Path]:
     including a HARD LINK placed outside the recording tree, which resolves to
     its own path and is caught only by ``_check_destination``'s ``samefile``
     probe against the recording itself. The DIRECTORIES are the recording roots
-    themselves — ``replays/``, each committed set and the fifth run's archive —
+    themselves — ``replays/``, each committed set and each protected archive —
     which is what refuses a destination that does not exist YET:
     ``_report_output._check_destination`` asks whether a protected path is among
     the destination's parents, so a root on the list refuses everything beneath
@@ -89,12 +92,18 @@ def protected_inputs(root: Path) -> list[Path]:
 
     directories = {
         root / name
-        for name in (RECORDINGS_ROOT, *COMMITTED_SETS, FIFTH_RUN_ARCHIVE)
+        for name in (RECORDINGS_ROOT, *COMMITTED_SETS, *PROTECTED_ARCHIVES)
         if (root / name).is_dir()
     }
     return [
         *sorted(directories),
         *(path for path in root.glob(f"{RECORDINGS_ROOT}/**/*") if path.is_file()),
+        *(
+            path
+            for name in PROTECTED_ARCHIVES
+            for path in sorted((root / name).rglob("*"))
+            if path.is_file()
+        ),
         *scorecard_source_paths(root),
         root / BEFORE_COLUMNS_PATH,
     ]
@@ -311,7 +320,7 @@ def _era_lines(era: EraScorecard) -> list[str]:
 
 
 def render_markdown(scorecard: ProcessScorecard) -> str:
-    """The published page: the demotion first, the nine rows, then the appendix."""
+    """The published page: the demotion first, then the nine rows."""
 
     lines = [
         "# The process scorecard",
@@ -332,6 +341,10 @@ def render_markdown(scorecard: ProcessScorecard) -> str:
         f"`{REGENERATE_COMMAND}` and commit the result. "
         f"`{REGENERATE_COMMAND} --check` recomputes both files from the "
         "recordings and fails on drift.",
+        "",
+        "History (2026-10-09): the fifth run's appendix, folded from "
+        f"`{PROTECTED_ARCHIVES[0]}`, left this page; `e75780b7` is the last "
+        "commit that published it, and the archive keeps its bytes.",
         "",
         "## Why rows 2 and 3 are the point",
         "",
@@ -396,38 +409,7 @@ def render_markdown(scorecard: ProcessScorecard) -> str:
     lines.extend(["## Row definitions", ""])
     for name, definition in scorecard.row_definitions.items():
         lines.extend([f"**{name}.** {definition}", ""])
-    appendix = scorecard.appendix
-    lines.extend(
-        [
-            f"## {appendix.label}",
-            "",
-            appendix.note,
-            "",
-            f"Archive: `{appendix.archive}` (read, never written).",
-            "",
-            "| arm | recordings | meetings | EJECT | EJECT cited | SKIP | SKIP cited |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
-        ]
-    )
-    lines.extend(
-        f"| {arm.arm} | {arm.recordings} | {arm.meetings} | {arm.eject_ballots} | "
-        f"{arm.eject_ballots_cited} | {arm.skip_ballots} | {arm.skip_ballots_cited} |"
-        for arm in appendix.arms
-    )
-    lines.extend(
-        [
-            "",
-            "Ballots per meeting: "
-            + ", ".join(
-                f"{size} ballots in {count} meetings"
-                for size, count in sorted(appendix.ballots_per_meeting.items())
-            )
-            + ".",
-            "",
-            f"{scorecard.no_consumer_note}",
-            "",
-        ]
-    )
+    lines.extend([f"{scorecard.no_consumer_note}", ""])
     return "\n".join(lines)
 
 

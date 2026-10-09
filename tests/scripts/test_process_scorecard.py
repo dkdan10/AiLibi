@@ -34,7 +34,6 @@ from eval import process_scorecard as scorecard_module
 from eval.process_scorecard import (
     BEFORE_COLUMNS_PATH,
     DECISION_DATE,
-    FIFTH_RUN_ARCHIVE,
     NO_CONSUMER_NOTE,
     RECORDINGS_ROOT,
     ROLE_CORRECTNESS_NOTE,
@@ -42,8 +41,6 @@ from eval.process_scorecard import (
     SCHEMA_VERSION,
     BeforeColumnsError,
     EraScorecard,
-    FifthRunAppendix,
-    FifthRunArm,
     ProcessScorecard,
     ProcessTally,
     compute_process_scorecard,
@@ -86,23 +83,6 @@ def _planted_scorecard() -> ProcessScorecard:
         label="planted",
         sources=("planted",),
     )
-    appendix = FifthRunAppendix(
-        label="planted appendix",
-        archive="planted",
-        note="planted",
-        arms=(
-            FifthRunArm(
-                arm="planted",
-                recordings=1,
-                meetings=1,
-                eject_ballots=1,
-                eject_ballots_cited=1,
-                skip_ballots=1,
-                skip_ballots_cited=0,
-            ),
-        ),
-        ballots_per_meeting={"3": 1},
-    )
     return ProcessScorecard(
         schema_version=SCHEMA_VERSION,
         decision_date=DECISION_DATE,
@@ -124,7 +104,6 @@ def _planted_scorecard() -> ProcessScorecard:
         ),
         sets=(card,),
         before=(),
-        appendix=appendix,
     )
 
 
@@ -152,6 +131,34 @@ def test_one_edited_cell_turns_check_red(
     message = capsys.readouterr().out
     assert str(command.JSON_PATH) in message
     assert command.REGENERATE_COMMAND in message
+
+
+def test_a_published_json_carrying_the_retired_appendix_turns_check_red(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Schema 3 carries no appendix: a restored ``appendix`` key is drift.
+
+    A version-2 reader expects the key; the version bump and the recomputation
+    are what keep a stale page from passing as the current one.
+    """
+
+    planted = _planted_scorecard()
+    monkeypatch.setattr(command, "compute_process_scorecard", lambda _root: planted)
+    root = tmp_path / "tree"
+    (root / "docs").mkdir(parents=True)
+    command.publish(root)
+    assert command.check_report(root) == 0
+    assert SCHEMA_VERSION == 3
+
+    published = root / command.JSON_PATH
+    payload = json.loads(published.read_text(encoding="utf-8"))
+    assert "appendix" not in payload
+    payload["appendix"] = {"label": "Appendix: the fifth run (2026-09-16)"}
+    published.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    assert command.check_report(root) == 1
 
 
 def test_main_prints_one_line_per_era(
@@ -348,7 +355,8 @@ def test_the_recording_roots_are_protected_by_containment() -> None:
     protected = command.protected_inputs(ROOT)
     roots = {path.resolve() for path in protected if path.is_dir()}
     assert (ROOT / RECORDINGS_ROOT).resolve() in roots
-    assert (ROOT / FIFTH_RUN_ARCHIVE).resolve() in roots
+    for archive in command.PROTECTED_ARCHIVES:
+        assert (ROOT / archive).resolve() in roots
 
     destination = ROOT / RECORDINGS_ROOT / "samples" / "9p2i" / "new-scorecard.md"
     assert not destination.exists()
@@ -359,7 +367,11 @@ def test_the_recording_roots_are_protected_by_containment() -> None:
 
 
 def test_the_fifth_run_archive_is_protected_from_the_writer() -> None:
-    """Every archive byte the appendix reads is on the protected list."""
+    """Every byte of the fifth run's archive stays on the protected list.
+
+    The page stopped folding the archive on 2026-10-09; the archive keeps its
+    bytes, so the writer still refuses to write there.
+    """
 
     protected = {path.resolve() for path in command.protected_inputs(ROOT)}
     archive = ROOT / "audits" / "deduction-candidate" / "run-2026-09-16"
