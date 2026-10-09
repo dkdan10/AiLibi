@@ -11,8 +11,8 @@ the structure so it cannot rot silently:
   silently return every campaign family to the default gate;
 * the ALWAYS-ON families the contract names (champion acceptance, ES,
   determinism, artifact-digest, train/serve parity, the leak property sweep,
-  the prompt byte-golden, the prompt-regression close gate — the tier map's
-  un-marked list, training/README.md §2) carry NO campaign mark;
+  the prompt byte-golden — the tier map's un-marked list, training/README.md
+  §2) carry NO campaign mark;
 * the campaign families the tier map's FREEZE column drives behind the
   marker ARE marked, module-level, in every file;
 * the one MIXED-tier file keeps its split: ``training/conviction/fidelity.py``
@@ -44,7 +44,6 @@ _ALWAYS_ON_FAMILIES: Final[dict[str, tuple[str, ...]]] = {
     "train/serve parity": ("tests/agents/test_learned_policy.py",),
     "leak property sweep": ("tests/observation/test_leak_property.py",),
     "prompt byte-golden": ("tests/meetings/test_prompt_byte_golden.py",),
-    "prompt-regression close gate": ("tests/eval/test_prompt_regression.py",),
 }
 
 #: The FREEZE-column families behind the campaign marker (training/README.md

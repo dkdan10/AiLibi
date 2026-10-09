@@ -44,6 +44,8 @@ tournament dashboard, and the prompt-regression close gate that turns "change a
 prompt, watch a metric move, attributably" into a test. This is the MVP.
 [Contract](../tasks/phase-5.md) ·
 [close audit](../audits/audit-2026-05-30-0059-mvp-close.md).
+Retired on 2026-10-09: the close gate, its module and its three-seed fixtures,
+whose last version is at `4e5b6d6a`.
 
 ## Making the agents reason: phases 6–13.5
 

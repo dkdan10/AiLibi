@@ -612,8 +612,8 @@ def load_historical_tournament_report(
 ) -> TournamentReport:
     """Fold frozen evidence without certifying it under the current engine.
 
-    This compatibility path preserves historical prompt-regression and validity
-    analyses whose contracts own their reconstruction checks separately. It
+    This compatibility path preserves historical validity analyses whose
+    contracts own their reconstruction checks separately. It
     parses recorded outcomes and costs, with no derived kill-gift metrics or
     current setup validation. It must not publish a newly certified outcome.
     """

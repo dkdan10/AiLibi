@@ -778,8 +778,8 @@ class TestReCuttingARestatementDoesNotMoveTheRate:
     verbatim was deduped, and the same impostor restating it with one extra
     full stop was counted twice. ``total_impostor_alibis`` and
     ``survival_rate`` are published -- they reach the process scorecard, the
-    prompt-regression metrics, the served eval routes and the tournament
-    dashboard -- so that was a figure the ACCUSED was choosing.
+    served eval routes and the tournament dashboard -- so that was a figure
+    the ACCUSED was choosing.
 
     Exhaustive over every ``2 ** (n - 1)`` narration of each stay, with the
     account stated once as a single continuous stay and once as a route with a

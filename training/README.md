@@ -136,7 +136,7 @@ Recorded here so the tier map preserves results, not just machinery:
 
 Always-on test families this map keeps un-marked (triage §7 item 19): champion
 acceptance, ES, determinism, artifact-digest, train/serve-parity, the leak
-property sweep, prompt byte-golden, and the prompt-regression close gate.
+property sweep, and prompt byte-golden.
 Campaign-only test families go behind opt-in markers in **19.27**, driven by
 the FREEZE column below.
 

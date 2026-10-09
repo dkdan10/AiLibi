@@ -318,8 +318,9 @@ _UNCITED_ZERO_FLAG_MARKER_PATTERN: Final[re.Pattern[str]] = re.compile(
 # prompt set (Task 14.7): "## Your suspicion of each player" replaces the legacy
 # qwen3.5:9b "## Your suspicion graph". Both emit the identical row shape below,
 # so the parser accepts either header (newest first) and only the header string
-# alternates. Recognizing both keeps the frozen 9B-era prompt_regression
-# fixtures parsing while the canonical set is on the new header.
+# alternates. Recognizing both keeps the legacy header parsing, because the
+# qwen3_5_9b prompt set still emits it, while the canonical set is on the new
+# header.
 # FROZEN (Phase 19 tier map, training/README.md): rendered-prose scrape —
 # unreliable under prompt-shape change. Bug fixes and evidence readers only; no
 # new search. (The suspicion-graph read below regex-parses rendered prompt
