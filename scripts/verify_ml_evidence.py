@@ -2801,6 +2801,7 @@ _IN_TREE_PROBES: Final[dict[str, tuple[str, ...]]] = {
         "docs/gameplay-census.md",
         "docs/gameplay-census.json",
     ),
+    "docs/game-profile.md": ("docs/game-profile.md",),
     "design/phase-12/": ("design/phase-12",),
     "experiments/lab/": ("experiments/lab", "experiments/model_probe"),
     "replays/*.jsonl": (),
@@ -2871,6 +2872,7 @@ _IN_TREE_INVENTORY: Final[dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = 
         ("docs/gameplay-census.md", "docs/gameplay-census.json"),
         (),
     ),
+    "docs/game-profile.md": (("docs/game-profile.md",), ()),
     "design/phase-12/": (("design/phase-12",), ()),
     "experiments/lab/": (("experiments/lab", "experiments/model_probe"), ()),
 }

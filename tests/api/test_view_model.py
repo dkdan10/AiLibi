@@ -2,7 +2,7 @@
 
 Covers every additive Phase-12 loader projection (DESIGN.md §7), the versioned
 contract stamp, the Playful identity palette swap (firewall-neutral), the
-per-set rubric surface + staleness guard + its regen producer, and the
+per-set game-shape profile's staleness guard and its publisher's stamp, and the
 Pydantic→TS codegen drift gate. The two HARD gates from the task's Definition of
 Done get dedicated tests:
 
@@ -18,7 +18,6 @@ Done get dedicated tests:
 
 from __future__ import annotations
 
-import importlib
 import json
 import sys
 from collections.abc import Iterator, Sequence
@@ -38,7 +37,7 @@ from api.replay_loader import (
     _gate_view,
     _manifest_git_sha,
     _parse_rewrite_reasons,
-    _rubric_is_stale,
+    _provenance_is_stale,
     ReplayLoader,
     get_replay_loader,
 )
@@ -82,13 +81,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 import gen_frontend_types  # noqa: E402
-
-# The rubric regen producer is a top-level lab module (experiments/lab is not on
-# mypy_path); import it dynamically so mypy does not try to resolve it by name.
-_LAB_DIR = _REPO_ROOT / "experiments" / "lab"
-if str(_LAB_DIR) not in sys.path:
-    sys.path.insert(0, str(_LAB_DIR))
-_rubric_score: Any = importlib.import_module("rubric_score")
+import publish_game_profile  # noqa: E402
 
 # The committed Playful identity palette (tokens-seed.md identity[]); the SAME
 # nine hues 12.1 transcribes into tokens.ts. Pinned here so the loader palette
@@ -193,11 +186,14 @@ def test_contract_version_and_action_set_move_in_lockstep() -> None:
     # carrying an unsupported one, reading the value from the generated module. The
     # assertions above compare each side to itself and so cannot see a Python
     # bump that never reached the generated file; these pin the literal.
-    assert VIEW_MODEL_VERSION == "5"
+    assert VIEW_MODEL_VERSION == "6"
     generated = gen_frontend_types._OUT_TYPES.read_text(encoding="utf-8")
     assert f'export const VIEW_MODEL_VERSION = "{VIEW_MODEL_VERSION}";' in generated
+    # Version 6 replaces the version-1 rubric's views with the profile's.
+    assert "export interface GameProfileView {" in generated
+    assert "RubricView" not in generated and "RubricGameView" not in generated
 
-    # Version 5 preserves v2's action vocabulary and v4's spoken account kind.
+    # Versions 5 and 6 preserve v2's action vocabulary and v4's spoken account kind.
     assert get_args(CurrentAction) == (
         "IDLE",
         "MOVING",
@@ -253,6 +249,8 @@ def test_an_optional_alibi_surface_forces_the_contract_stamp_past_four() -> None
         gen_frontend_types._REPO_ROOT / "frontend" / "src" / "api" / "client.ts"
     ).read_text(encoding="utf-8")
     assert 'received === "4"' in client
+    # Version 6 changed only the eval surface, so a version-5 replay still reads.
+    assert 'received === "5"' in client
 
 
 def test_player_color_serves_playful_identity_palette(
@@ -1345,7 +1343,7 @@ def _assert_reporters_keep_their_bodies(loader: ReplayLoader, set_name: str) -> 
 
 
 # ---------------------------------------------------------------------------
-# Endpoints: /replays/{id}/beliefs and /eval/rubric
+# Endpoints: /replays/{id}/beliefs and /eval/game-profile
 # ---------------------------------------------------------------------------
 
 
@@ -1365,13 +1363,14 @@ def test_beliefs_endpoint_serves_frames(client: TestClient) -> None:
     assert missing.status_code == 404
 
 
-def test_rubric_endpoint_404_without_rubric_file(client: TestClient) -> None:
-    # The meeting fixture dir ships no results-rubric-score.json -> empty state.
+def test_game_profile_endpoint_404_without_a_profile_file(client: TestClient) -> None:
+    # The meeting fixture dir ships no results-game-profile.json -> empty state.
+    assert client.get("/eval/game-profile").status_code == 404
     assert client.get("/eval/rubric").status_code == 404
 
 
 # ---------------------------------------------------------------------------
-# Per-set rubric surface: staleness guard + regen producer
+# Per-set profile surface: staleness guard + the publisher's stamp
 # ---------------------------------------------------------------------------
 
 
@@ -1405,37 +1404,37 @@ def _write_manifest_flags(
     )
 
 
-def _facts(replay_dir: Path) -> dict[str, object]:
+def _write_set(replay_dir: Path) -> None:
+    """A recording and a 9-player roster, so the set has bytes to fingerprint."""
+
+    (replay_dir / "replay-seed-5.jsonl").write_text("synthetic recording\n")
+    (replay_dir / "roster.json").write_text(
+        json.dumps({"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2}),
+        encoding="utf-8",
+    )
+
+
+def _write_profile(
+    replay_dir: Path, *, manifest_key: str | None, seedset: str = "9p2i"
+) -> None:
+    """The committed profile, stamped against ``replay_dir``'s recordings."""
+
     from orchestrator.recording_fingerprint import recording_fingerprint
 
-    (replay_dir / "replay-seed-5.jsonl").write_text("synthetic scorer input\n")
-    return {
-        "source_fingerprint": recording_fingerprint(replay_dir),
-        "seedset": "9p2i",
-        "git_head": "ignored-rest-stamped",
-        "games": [
+    served = json.loads(
+        (_NINE_P_TWO_I / "results-game-profile.json").read_text(encoding="utf-8")
+    )
+    (replay_dir / "results-game-profile.json").write_text(
+        json.dumps(
             {
-                "seed": 5,
-                "reason": "CREWMATE_EJECT",
-                "roles": {"p-1": "IMPOSTOR", "p-2": "CREWMATE"},
-                "deaths": [],
-                "meetings": [
-                    {
-                        "ejected_player_id": "p-1",
-                        "ejected_role": "IMPOSTOR",
-                        "n_contradictions": 1,
-                        "accusations": [{"speaker": "p-2", "accused": "p-1"}],
-                        "contradictions_by_subject": {},
-                    },
-                    {
-                        "ejected_player_id": None,
-                        "n_contradictions": 0,
-                        "accusations": [],
-                    },
-                ],
+                **served,
+                "manifest_key": manifest_key,
+                "seedset": seedset,
+                "source_fingerprint": recording_fingerprint(replay_dir),
             }
-        ],
-    }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_manifest_git_sha_parses_uniform_set(tmp_path: Path) -> None:
@@ -1450,106 +1449,92 @@ def test_manifest_git_sha_reads_git_sha_from_8col_flags_manifest(
     # Regression (Task 14.7 flags column, PR #209 review): with the 8-column
     # layout the reader must return git_sha, NOT the refreshed_at date that sits
     # at the old head-index 5 — else same-day re-records read as fresh against
-    # stale rubric bytes.
+    # stale derived bytes.
     _write_manifest_flags(tmp_path, "1e48c40", refreshed_at="2026-06-30")
     assert _manifest_git_sha(tmp_path) == "1e48c40"
     assert _manifest_git_sha(tmp_path) != "2026-06-30"
 
 
-def test_rubric_stamps_git_sha_from_8col_flags_manifest(tmp_path: Path) -> None:
-    # The rubric producer's _set_manifest_sha must likewise read git_sha (not the
-    # date) from the 8-column manifest, so the freshness guard stays meaningful.
+def test_the_profile_stamp_reads_git_sha_from_an_8col_flags_manifest(
+    tmp_path: Path,
+) -> None:
+    # The publisher's stamp reads git_sha (not the date) from the 8-column
+    # manifest, so the freshness guard stays meaningful. Was the same pin on the
+    # version-1 producer's stamp.
     _write_manifest_flags(tmp_path, "1e48c40", refreshed_at="2026-06-30")
-    _rubric_score.regen_for_set(
-        _facts(tmp_path), tmp_path
-    )  # no git_head -> stamps set sha
-    view = ReplayLoader(replay_dir=tmp_path).rubric()
-    assert view.git_head == "1e48c40"
-    assert view.manifest_sha == "1e48c40"
+    _write_set(tmp_path)
+    stamp = publish_game_profile.read_stamp(tmp_path, _REPO_ROOT)
+    assert stamp.manifest_key == "1e48c40"
+    _write_profile(tmp_path, manifest_key=stamp.manifest_key)
+    view = ReplayLoader(replay_dir=tmp_path).game_profile()
+    assert view.manifest_key == "1e48c40"
     assert view.stale is False
 
 
-def test_rubric_is_stale_prefix_logic() -> None:
-    # Manifest stores a short sha; the rubric a full one -> prefix match = fresh.
-    assert _rubric_is_stale("1e48c40deadbeef", "1e48c40") is False
-    assert _rubric_is_stale("deadbeefcafe", "1e48c40") is True
-    assert _rubric_is_stale(None, "1e48c40") is True
-    assert _rubric_is_stale("1e48c40", None) is True
+def test_provenance_is_stale_prefix_logic() -> None:
+    # Manifest stores a short sha; a derived file a full one -> prefix = fresh.
+    assert _provenance_is_stale("1e48c40deadbeef", "1e48c40") is False
+    assert _provenance_is_stale("deadbeefcafe", "1e48c40") is True
+    assert _provenance_is_stale(None, "1e48c40") is True
+    assert _provenance_is_stale("1e48c40", None) is True
 
 
-def test_rubric_regen_producer_and_staleness(tmp_path: Path) -> None:
-    # The PRODUCER co-locates the rubric, stamped with a chosen git_head.
-    fresh_head = "1e48c40aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+def test_the_profile_reads_fresh_on_its_key_and_stale_on_another(
+    tmp_path: Path,
+) -> None:
+    # A profile stamped at the set's commit (a full sha prefixing the manifest's
+    # short one) is served fresh with its members; one stamped at another commit
+    # reads STALE and withholds them.
     _write_manifest(tmp_path, "1e48c40")
-    dest = _rubric_score.regen_for_set(_facts(tmp_path), tmp_path, git_head=fresh_head)
-    assert dest == tmp_path / "results-rubric-score.json"
-
-    # The loader SERVES it and reports FRESH when the rubric commit prefixes the
-    # set's MANIFEST sha.
-    _write_manifest(tmp_path, "1e48c40")
-    loader = ReplayLoader(replay_dir=tmp_path)
-    view = loader.rubric()
+    _write_set(tmp_path)
+    _write_profile(tmp_path, manifest_key="1e48c40aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    view = ReplayLoader(replay_dir=tmp_path).game_profile()
     assert view.seedset == "9p2i"
-    assert view.git_head == fresh_head
-    assert view.manifest_sha == "1e48c40"
     assert view.stale is False
-    assert view.per_game and view.per_game[0].seed == 5
-    assert view.per_game[0].win_shape == "eject-decided"
+    assert view.pre_reveal.games and view.pre_reveal.games[0].seed == 0
+    _write_profile(tmp_path, manifest_key="deadbeefdeadbeef")
+    stale = ReplayLoader(replay_dir=tmp_path).game_profile()
+    assert stale.stale is True
+    assert stale.pre_reveal.games == ()
 
-    # A rubric scored at a different commit reads STALE.
-    _rubric_score.regen_for_set(_facts(tmp_path), tmp_path, git_head="deadbeefdeadbeef")
-    assert ReplayLoader(replay_dir=tmp_path).rubric().stale is True
 
-
-def test_rubric_regen_defaults_to_set_manifest_sha(tmp_path: Path) -> None:
-    # With no explicit git_head, the producer stamps the SET's MANIFEST sha (the
-    # replay version it scored), so a co-located rubric is fresh-by-construction
-    # and the stamp is independent of cwd / git HEAD (review fixes for the
-    # refresh-path + committed-artifact staleness).
+def test_the_publisher_stamps_the_sets_manifest_key(tmp_path: Path) -> None:
+    # The stamp is the SET's MANIFEST key (the recording version it profiled),
+    # independent of cwd and git HEAD, so a published profile is fresh by
+    # construction.
     _write_manifest(tmp_path, "1e48c40")
-    _rubric_score.regen_for_set(_facts(tmp_path), tmp_path)
-    view = ReplayLoader(replay_dir=tmp_path).rubric()
-    assert view.git_head == "1e48c40"
-    assert view.stale is False
+    _write_set(tmp_path)
+    stamp = publish_game_profile.read_stamp(tmp_path, _REPO_ROOT)
+    assert (stamp.manifest_key, stamp.seedset, stamp.era) == ("1e48c40", "9p2i", None)
+    _write_profile(tmp_path, manifest_key=stamp.manifest_key)
+    assert ReplayLoader(replay_dir=tmp_path).game_profile().stale is False
 
 
-def test_rubric_rejects_present_but_malformed_file(tmp_path: Path) -> None:
-    # A PRESENT-but-malformed rubric must fail loud, not masquerade as an empty
-    # "no highlights" state (the 404 path is reserved for an ABSENT rubric).
-    rubric_path = tmp_path / "results-rubric-score.json"
+def test_a_present_but_malformed_profile_fails_loud(tmp_path: Path) -> None:
+    # A PRESENT-but-malformed profile must fail loud, not masquerade as the empty
+    # no-profile state (the 404 path is reserved for an ABSENT file).
+    path = tmp_path / "results-game-profile.json"
     loader = ReplayLoader(replay_dir=tmp_path)
-
-    rubric_path.write_text(json.dumps({"seedset": "9p2i"}), encoding="utf-8")
-    with pytest.raises(ValueError, match="interestingness"):
-        loader.rubric()
-
-    rubric_path.write_text(
-        json.dumps({"seedset": "9p2i", "interestingness": {"per_game": "nope"}}),
-        encoding="utf-8",
-    )
-    with pytest.raises(ValueError, match="per_game"):
-        loader.rubric()
+    path.write_text(json.dumps({"seedset": "9p2i"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="Field required"):
+        loader.game_profile()
+    path.write_text(json.dumps([1, 2]), encoding="utf-8")
+    with pytest.raises(ValueError, match="expected a JSON object"):
+        loader.game_profile()
 
 
-def test_rubric_set_mismatch_is_stale(tmp_path: Path) -> None:
-    # A rubric from a DIFFERENT set co-located here (seedset 4p1i) with a
-    # matching git_head must still read STALE — the set identity (from the set's
-    # roster.json) is part of the guard (DESIGN.md §7 "set or sha mismatch"), so
-    # wrong-set highlights are never served as fresh.
-    (tmp_path / "roster.json").write_text(
-        json.dumps({"num_players": 9, "num_impostors": 2, "tasks_per_crewmate": 2}),
-        encoding="utf-8",
-    )
+def test_a_profile_of_another_set_reads_stale(tmp_path: Path) -> None:
+    # A profile from a DIFFERENT set co-located here (seedset 4p1i) with a
+    # matching key must still read STALE — the set identity (from the set's
+    # roster.json) is part of the guard (DESIGN.md §7 "set or sha mismatch").
     _write_manifest(tmp_path, "1e48c40")
-    facts = {**_facts(tmp_path), "seedset": "4p1i"}
-    _rubric_score.regen_for_set(facts, tmp_path, git_head="1e48c40")
-    view = ReplayLoader(replay_dir=tmp_path).rubric()
+    _write_set(tmp_path)
+    _write_profile(tmp_path, manifest_key="1e48c40", seedset="4p1i")
+    view = ReplayLoader(replay_dir=tmp_path).game_profile()
     assert view.seedset == "4p1i"
-    assert view.stale is True  # set mismatch, despite the matching sha
-
-    # The right-set rubric (seedset 9p2i) over the same roster reads FRESH.
-    _rubric_score.regen_for_set(_facts(tmp_path), tmp_path, git_head="1e48c40")
-    assert ReplayLoader(replay_dir=tmp_path).rubric().stale is False
+    assert view.stale is True  # set mismatch, despite the matching key
+    _write_profile(tmp_path, manifest_key="1e48c40")
+    assert ReplayLoader(replay_dir=tmp_path).game_profile().stale is False
 
 
 # ---------------------------------------------------------------------------

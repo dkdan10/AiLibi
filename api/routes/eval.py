@@ -44,9 +44,9 @@ from api.public_results import build_public_results
 from api.schemas import (
     EvalCostSummaryView,
     FailedCallEvalView,
+    GameProfileView,
     PublicResultsView,
     ReportProvenanceGroupView,
-    RubricView,
 )
 from engine.entities import Role
 from eval.accusation_calibration import AccusationCalibrationReport
@@ -225,23 +225,18 @@ def get_cost_summary(loader: _LoaderDep) -> EvalCostSummaryView:
     return loader.cost_summary()
 
 
-@router.get("/rubric", response_model=RubricView)
-def get_rubric(loader: _LoaderDep) -> RubricView:
-    # Per-set interestingness rubric, staleness-guarded against the set's
-    # MANIFEST git sha (DESIGN.md §3.1, §7). A set with no co-located
-    # ``results-rubric-score.json`` → 404, which the frontend renders as a
-    # first-class empty/zero-rubric state. Task 19.14 sweep: that used to read
-    # "(the 4p1i default)", which Task 19.9's flip to the curated 9p2i default
-    # (``api.replay_loader.DEFAULT_SET``) falsified. Since 2026-10-02 no
-    # committed set ships a rubric (the extractor does not read the promoted
-    # 9p2i set's era), so the 404 branch is reached by every committed set,
-    # the default included.
+@router.get("/game-profile", response_model=GameProfileView)
+def get_game_profile(loader: _LoaderDep) -> GameProfileView:
+    # The set's game-shape profile, staleness-guarded against its MANIFEST key,
+    # roster and source bytes. A set with no ``results-game-profile.json`` (the
+    # four-player set ships none) answers 404, which the viewer renders as its
+    # set-neutral no-profile state.
     try:
-        return loader.rubric()
+        return loader.game_profile()
     except FileNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail="no results-rubric-score.json in the configured eval dir",
+            detail="no results-game-profile.json in the configured replay dir",
         )
 
 

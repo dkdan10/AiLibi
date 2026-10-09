@@ -122,8 +122,10 @@ pre-rendered ANSWERS, not a query surface. It ships:
 
 * the hand-curated featured replays only (`FEATURED_GAMES` in
   `frontend/src/components/ReplayPicker.tsx`), not the 100-replay corpus;
-* verified, current rubric rows for those games when available; obsolete or
-  unverified scores are suppressed, while the curated games remain playable;
+* those games' own entries in the 9-player set's game-shape profile (their
+  shelves, chip and facets) with the profile's provenance and catalogue, and no
+  set-level size, table or count; a stale profile ships no entry, while the
+  curated games remain playable;
 * no `tournament-eval-report.json` (the 9p2i one is 33 MB — that is the corpus,
   not a demo), so the Dashboard tab renders a card written for this artifact:
   what the demo ships, and where the eval report lives. That card renders no

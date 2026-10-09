@@ -96,3 +96,5 @@ A game's bytes can be narrated: who suspected whom, why, and what turned the vot
 Scoring discipline: reports cite items as R1..R7; rubric is versioned per measurement era
 (this is v1, pre-fresh-10.9); changes to the rubric are owner decisions, recorded here
 with dates.
+
+2026-10-06: version 1 is retired for the `stage-b-r2` era by the owner's ruling "Profile as recommended, decisive, and ship the shelf", superseded there by rubric version 2, the role-blind game-shape profile (`docs/game-profile.md`); this text and the baseline-9 lab results stay as history.

@@ -5,99 +5,70 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 import build_demo_bundle as bdb
+import publish_game_profile
 from api.replay_loader import ReplayLoader
-from api.schemas import AccusationClaimView, ReplayView
-from experiments.lab.rubric_score import regen_for_set
+from api.schemas import AccusationClaimView, GameProfileView, ReplayView
 from orchestrator.recording_fingerprint import recording_fingerprint
-from orchestrator.replay import GameEndReplayEntry, MeetingReplayEntry, read_all_entries
-from tests.orchestrator.test_replay_integrity import (
-    completed_recording as completed_recording,
-)
+
+
+_SHOWN_SET = Path(__file__).resolve().parents[2] / "replays/samples/9p2i"
+_PROFILE = "results-game-profile.json"
 
 
 @pytest.fixture
-def scored_set(
-    completed_recording: Path, tmp_path: Path
-) -> tuple[Path, dict[str, Any]]:
-    directory = tmp_path / "7p1i"
-    directory.mkdir()
-    replay = directory / completed_recording.name
-    replay.write_bytes(completed_recording.read_bytes())
-    (directory / "roster.json").write_text(
-        json.dumps(
-            {
-                "num_players": 7,
-                "num_impostors": 1,
-                "tasks_per_crewmate": 1,
-            }
+def profiled_set(tmp_path: Path) -> Path:
+    """A copy of the shown set, its served profile stamped for these bytes."""
+
+    directory = tmp_path / "9p2i"
+    shutil.copytree(_SHOWN_SET, directory)
+    return directory
+
+
+def _baked_members(view: GameProfileView, seeds: frozenset[int]) -> list[int]:
+    """Every seed the bake ships a member, game or entry for."""
+
+    baked = json.loads(bdb._trimmed_profile(view, seeds))
+    pre, reveal = baked["pre_reveal"], baked["reveal"]
+    pair = reveal["decided_without_proof"]
+    return sorted(
+        item["seed"]
+        for items in (
+            *(shelf["members"] for shelf in pre["shelves"]),
+            *(chip["members"] for chip in pre["chips"]),
+            pre["games"],
+            *(reading["entries"] for reading in pre["tripwires"]["readings"]),
+            *(shelf["members"] for shelf in reveal["shelves"]),
+            pair["right"]["members"],
+            pair["wrong"]["members"],
+            reveal["games"],
         )
+        for item in items
     )
-    (directory / "MANIFEST.md").write_text(
-        "| seed | model | prompt_versions | refreshed_at | git_sha | cost_usd | winner |\n"
-        "| 1 | fake | fake.v1 | 2026-09-05 | abcdef12 | 0 | CREWMATES |\n"
-    )
-    rows = read_all_entries(replay)
-    end = rows[-1]
-    assert isinstance(end, GameEndReplayEntry)
-    facts: dict[str, Any] = {
-        "seedset": "7p1i",
-        "source_fingerprint": recording_fingerprint(directory),
-        "games": [
-            {
-                "seed": 1,
-                "reason": end.reason,
-                "roles": {},
-                "deaths": [],
-                "meetings": [
-                    {
-                        "ejected_player_id": row.ejected_player_id,
-                        "n_contradictions": len(row.contradictions),
-                        "accusations": [],
-                    }
-                    for row in rows
-                    if isinstance(row, MeetingReplayEntry)
-                ],
-            }
-        ],
-    }
-    regen_for_set(facts, directory)
-    return directory, facts
 
 
-def test_fresh_source_is_published_and_baked(
-    scored_set: tuple[Path, dict[str, Any]],
-) -> None:
-    directory, _ = scored_set
-    view = ReplayLoader(directory).rubric()
+def test_fresh_source_is_published_and_baked(profiled_set: Path) -> None:
+    view = ReplayLoader(profiled_set).game_profile()
     assert not view.stale
-    assert len(view.per_game) == 1
-    assert view.per_game[0].n_meetings == 2
-    assert json.loads(bdb._trimmed_rubric(view, frozenset({1})))["per_game"]
+    assert len(view.pre_reveal.games) == 50
+    assert 19 in _baked_members(view, frozenset({19}))
+    assert set(_baked_members(view, frozenset({19}))) == {19}
 
 
-@pytest.mark.parametrize(
-    "source", ["replay", "roster", "manifest", "added_replay", "missing_stamp"]
-)
-def test_changed_inputs_suppress_scores_and_cannot_be_restamped(
-    scored_set: tuple[Path, dict[str, Any]],
-    source: str,
+@pytest.mark.parametrize("source", ["replay", "roster", "manifest", "added_replay"])
+def test_changed_inputs_withhold_members_and_the_stamp_follows_the_bytes(
+    profiled_set: Path, source: str
 ) -> None:
-    directory, facts = scored_set
-    artifact = directory / "results-rubric-score.json"
-    if source == "missing_stamp":
-        raw = json.loads(artifact.read_text())
-        del raw["source_fingerprint"]
-        artifact.write_text(json.dumps(raw))
-        del facts["source_fingerprint"]
-    elif source == "added_replay":
-        (directory / "replay-seed-99.jsonl").write_bytes(
-            (directory / "replay-seed-1.jsonl").read_bytes()
+    artifact = profiled_set / _PROFILE
+    if source == "added_replay":
+        (profiled_set / "replay-seed-99.jsonl").write_bytes(
+            (profiled_set / "replay-seed-1.jsonl").read_bytes()
         )
     else:
         name = {
@@ -105,36 +76,43 @@ def test_changed_inputs_suppress_scores_and_cannot_be_restamped(
             "roster": "roster.json",
             "manifest": "MANIFEST.md",
         }[source]
-        path = directory / name
+        path = profiled_set / name
         path.write_bytes(path.read_bytes() + b"\n")
     before = artifact.read_bytes()
-    view = ReplayLoader(directory).rubric()
+    view = ReplayLoader(profiled_set).game_profile()
     assert view.stale
-    assert view.per_game == ()
-    assert json.loads(bdb._trimmed_rubric(view, frozenset({1})))["per_game"] == []
-    with pytest.raises(ValueError, match="re-extract"):
-        regen_for_set(facts, directory)
+    assert view.pre_reveal.games == ()
+    assert _baked_members(view, frozenset({19})) == []
     assert artifact.read_bytes() == before
+    root = Path(__file__).resolve().parents[2]
+    stamp = publish_game_profile.read_stamp(profiled_set, root)
+    assert stamp.source_fingerprint != json.loads(before)["source_fingerprint"]
+
+
+def test_a_missing_stamp_fails_loud(profiled_set: Path) -> None:
+    artifact = profiled_set / _PROFILE
+    raw = json.loads(artifact.read_text())
+    del raw["source_fingerprint"]
+    artifact.write_text(json.dumps(raw))
+    with pytest.raises(ValueError, match="source_fingerprint"):
+        ReplayLoader(profiled_set).game_profile()
 
 
 def test_audits_and_derived_files_do_not_change_source_identity(
-    scored_set: tuple[Path, dict[str, Any]],
+    profiled_set: Path,
 ) -> None:
-    directory, facts = scored_set
+    stamped = json.loads((profiled_set / _PROFILE).read_text())["source_fingerprint"]
     for name in ("replay-seed-1.audit.jsonl", "tournament-eval-report.json"):
-        (directory / name).write_text("derived data\n")
-    assert recording_fingerprint(directory) == facts["source_fingerprint"]
-    assert not ReplayLoader(directory).rubric().stale
+        (profiled_set / name).write_text("derived data\n")
+    assert recording_fingerprint(profiled_set) == stamped
+    assert not ReplayLoader(profiled_set).game_profile().stale
 
 
-def test_bundle_suppresses_legacy_stale_rows(
-    scored_set: tuple[Path, dict[str, Any]],
-) -> None:
-    directory, _ = scored_set
-    view = ReplayLoader(directory).rubric()
-    assert view.per_game
+def test_bundle_bakes_no_member_of_a_stale_profile(profiled_set: Path) -> None:
+    view = ReplayLoader(profiled_set).game_profile()
+    assert view.pre_reveal.games
     stale = view.model_copy(update={"stale": True})
-    assert json.loads(bdb._trimmed_rubric(stale, frozenset({1})))["per_game"] == []
+    assert _baked_members(stale, frozenset({19})) == []
 
 
 def _asset_mismatches(directory: Path) -> list[str]:

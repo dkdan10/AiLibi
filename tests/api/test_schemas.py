@@ -9,7 +9,9 @@ claims) so the discriminator round-trips correctly.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Final
 
 import pydantic
@@ -51,8 +53,7 @@ from api.schemas import (
     ReportBodyEventView,
     ReportProvenanceGroupView,
     RoomView,
-    RubricGameView,
-    RubricView,
+    GameProfileView,
     SabotageDetailView,
     SabotageEventView,
     SawPlayerView,
@@ -504,29 +505,17 @@ def _belief_frame_view() -> BeliefFrameView:
     )
 
 
-def _rubric_view() -> RubricView:
-    return RubricView(
-        seedset="9p2i",
-        git_head="d8cb869c0bea65fdb0b1864b5d89f1249a58c5ed",
-        manifest_sha="1e48c40",
-        stale=True,
-        per_game=(
-            RubricGameView(
-                seed=5,
-                score=80.0,
-                reason="CREWMATE_EJECT",
-                n_meetings=3,
-                win_shape="eject-decided",
-                ejected_impostors=1,
-                accused_impostors=2,
-                survived_accused=0,
-                r1_decisive=1.0,
-                r2_deception=0.6,
-                r3_arcs=1.0,
-                r7_legible=1.0,
-            ),
-        ),
+def _game_profile_view() -> GameProfileView:
+    served = json.loads(
+        (
+            Path(__file__).resolve().parents[2]
+            / "replays"
+            / "samples"
+            / "9p2i"
+            / "results-game-profile.json"
+        ).read_text(encoding="utf-8")
     )
+    return GameProfileView.model_validate({**served, "stale": False})
 
 
 def _suspicion_graph_view() -> SuspicionGraphView:
@@ -558,7 +547,7 @@ _TOP_LEVEL_FIXTURES: tuple[pydantic.BaseModel, ...] = (
     _replay_metadata_view(),
     _suspicion_graph_view(),
     _belief_frame_view(),
-    _rubric_view(),
+    _game_profile_view(),
     _game_finale(),
 )
 

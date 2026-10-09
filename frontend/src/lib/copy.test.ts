@@ -28,14 +28,12 @@ import {
   DASHBOARD_COPY,
   MAP_COPY,
   PICKER_COPY,
-  RUBRIC_SPOKES,
+  PROFILE_COPY,
   SPECTATOR_COPY,
   TRANSPORT_COPY,
   dialectHits,
   expandSetName,
   fmt,
-  rubricLegendLine,
-  rubricSpokeTitle,
   setOptionLabel,
   showsBallotCorrectness,
 } from "./copy";
@@ -55,7 +53,7 @@ const IN_SCOPE_SOURCES: readonly { readonly file: string; readonly rendered: str
     { file: "MeetingView.tsx", rendered: "Resolution" },
     { file: "BallotCard.tsx", rendered: "no rationale recorded" },
     { file: "ReplayPicker.tsx", rendered: "Clear filters" },
-    { file: "HighlightCard.tsx", rendered: "No score available for this recording" },
+    { file: "HighlightCard.tsx", rendered: "Outcome hidden" },
     { file: "ReplayControls.tsx", rendered: "Next key moment" },
     { file: "MetricCaveat.tsx", rendered: "note" },
     { file: "TurnCard.tsx", rendered: "accuses" },
@@ -220,11 +218,7 @@ describe("SPECTATOR_COPY", () => {
   );
 
   it("keeps the derived strings clean too", () => {
-    expect(dialectHits(rubricLegendLine())).toEqual([]);
     expect(dialectHits(setOptionLabel("9p2i"))).toEqual([]);
-    for (const spoke of RUBRIC_SPOKES) {
-      expect(dialectHits(rubricSpokeTitle(spoke, 0.62))).toEqual([]);
-    }
   });
 
   // A template still carries its words here, so the walk above already checked
@@ -281,10 +275,10 @@ describe("the in-scope surfaces on disk", () => {
       "// Provenance in a comment is fine: Task 19.5, audits/audit-x.md, DESIGN.md §11.3.",
       "/* Also fine in a block: a sentinel, not a KPI. */",
       "const url = { href: 'https://example.test/a//b' };",
-      'const shown = "Ordered by the rubric.";',
+      'const shown = "Browse by moment.";',
     ].join("\n");
     const stripped = stripComments(synthetic);
-    expect(stripped).toContain("Ordered by the rubric.");
+    expect(stripped).toContain("Browse by moment.");
     expect(stripped).toContain("https://example.test/a//b");
     expect(dialectHits(stripped)).toEqual([]);
   });
@@ -463,32 +457,69 @@ describe("the public results card's copy-ownership claim", () => {
   });
 });
 
-// ── the rubric legend, on both tabs and on the bars ──────────────────────────
+// ── the game-shape profile's words ───────────────────────────────────────────
 
-describe("the rubric legend table", () => {
-  it("names all four spokes and the field each one reads", () => {
-    expect(RUBRIC_SPOKES).toEqual([
-      { key: "R1", word: "deduction", field: "r1_decisive" },
-      { key: "R2", word: "deception", field: "r2_deception" },
-      { key: "R3", word: "suspicion arcs", field: "r3_arcs" },
-      { key: "R7", word: "legibility", field: "r7_legible" },
-    ]);
-  });
+/** A digit in a profile string that is not a filled-in fact: a threshold. */
+function thresholdHits(text: string): readonly string[] {
+  const unfilled = text.replace(/\{\w+\}/g, "");
+  return /\d/.test(unfilled) ? [unfilled] : [];
+}
 
-  it("builds the header legend from that table, so the two cannot drift", () => {
-    expect(rubricLegendLine()).toBe(
-      "Score bars: deduction (R1), deception (R2), suspicion arcs (R3), legibility (R7).",
-    );
-    for (const spoke of RUBRIC_SPOKES) {
-      expect(rubricLegendLine()).toContain(spoke.key);
-      expect(rubricLegendLine()).toContain(spoke.word);
+describe("the game-shape profile's copy", () => {
+  const leaves = stringLeaves(PROFILE_COPY, "PROFILE_COPY");
+
+  it("states no threshold in any shelf, chip, facet or tripwire string", () => {
+    expect(leaves.length).toBeGreaterThan(40);
+    for (const leaf of leaves) {
+      expect(thresholdHits(leaf.text), leaf.path).toEqual([]);
+      expect(dialectHits(leaf.text), leaf.path).toEqual([]);
     }
   });
 
-  it("puts a spoke's meaning in its hover text, not only its key", () => {
-    expect(rubricSpokeTitle({ key: "R3", word: "suspicion arcs", field: "r3_arcs" }, 0.5)).toBe(
-      "R3 suspicion arcs: 0.50 on a 0–1 scale",
+  it("a description carrying a threshold fails (planted)", () => {
+    expect(thresholdHits("A stretch of 20 ticks passed with no kill.")).not.toEqual([]);
+    expect(thresholdHits("A meeting settled by at most 1 ballot.")).not.toEqual([]);
+    expect(thresholdHits("{count} games")).toEqual([]);
+  });
+
+  it("names every shelf the profile can serve, in plain words", () => {
+    expect(Object.keys(PROFILE_COPY.shelves)).toEqual([
+      "the_reporter_saw_it_happen",
+      "double_kill",
+      "slow_burn",
+      "two_kills_after_one_regroup",
+      "a_close_call",
+      "suspicion_moved",
+      "a_third_round",
+      "caught_venting",
+      "one_line_two_readings",
+      "struck_after_the_regroup",
+      "one_vote_ejection",
+      "nobody_voted_out",
+      "down_to_the_wire",
+      "runaway",
+      "decided_at_a_meeting",
+      "decided_without_proof_right",
+      "decided_without_proof_wrong",
+    ]);
+  });
+
+  it("says the wrong half is the voters' held lines pointing the wrong way, as the game", () => {
+    const wrong = PROFILE_COPY.shelves.decided_without_proof_wrong.description;
+    expect(wrong).toContain("cited lines they held and it pointed the wrong way");
+    expect(wrong).toContain("A wrong call on believable evidence is part of the game");
+    expect(PROFILE_COPY.shelves.decided_without_proof_right.description).toContain(
+      "the table was right",
     );
+    expect(PROFILE_COPY.pair.note).toContain("always show together");
+  });
+
+  it("names no score, rank or order anywhere a viewer reads the profile", () => {
+    for (const leaf of leaves) {
+      expect(leaf.text, leaf.path).not.toMatch(/\bscore|\branks?\b|\bbest\b|\btop\b/i);
+    }
+    expect(PICKER_COPY.highlightsIntro).toContain("Nothing here ranks or scores a game.");
+    expect(DASHBOARD_COPY.momentsDescription).toContain("nothing is averaged");
   });
 });
 

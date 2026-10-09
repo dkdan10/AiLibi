@@ -1,10 +1,10 @@
 import { PublicResults } from "./PublicResults";
 // The Tournament view: the merged `TournamentEvalReport` rendered as balance
 // outcome, vote correctness, the conversion + gate surface, the
-// proof-vs-inference deduction instrument, calibration, alibi fabrication, an
-// interestingness histogram (from `/eval/rubric`, whose buckets deep-link into
-// the Highlights reel through the SHARED `view` · `set` · `scoreBucket` filter
-// keys) and the cost roll-up.
+// proof-vs-inference deduction instrument, calibration, alibi fabrication, the
+// moments of the game-shape profile (from `/eval/game-profile`: shelf sizes and
+// facet counts per value, with no mean, no bucket and no link) and the cost
+// roll-up.
 //
 // BINDING HONESTY RULE ("no false precision"): an under-powered or
 // narrowly-scoped number is never shown bare — its caveat renders ATTACHED to
@@ -23,25 +23,26 @@ import { PublicResults } from "./PublicResults";
 // numbers at a visitor.
 //
 // Split (mirrors the sibling chrome slices): `TournamentDashboard` is the
-// connected component (store + rubric fetch); `TournamentDashboardView` is the
+// connected component (store + profile fetch); `TournamentDashboardView` is the
 // pure presentational surface the Storybook story drives.
 
 import { useCallback, useEffect, useState } from "react";
 import { balanceCounts } from "../lib/completion";
 import type { ReactNode } from "react";
 
-import { ApiError, getRubric } from "../api/client";
+import { ApiError, getGameProfile } from "../api/client";
 import { DASHBOARD_COPY, fmt } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { useTournamentStore } from "../store/tournamentStore";
 import type {
   CostDashboard,
+  GameProfileView,
   GameReport,
-  RubricView,
   TournamentEvalReport,
   WilsonRateCell,
 } from "../types/api";
 import { CalibrationCurve } from "./CalibrationCurve";
+import { shelfTitle } from "./HighlightCard";
 import { MetricCaveat } from "./MetricCaveat";
 import { SetSelector } from "./ReplayPicker";
 import { StatTile } from "./StatTile";
@@ -80,62 +81,53 @@ function formatInt(value: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Interestingness score (0–100) → the SHARED `scoreBucket` filter key 12.9 reads
-// (low/med/high). Even thirds — a neutral split (see the PR ## Decisions). The
-// histogram's buckets ARE the deep-link units, so they map 1:1 onto `scoreBucket`.
+// Profile fetch state (the `/eval/game-profile` surface; staleness-guarded per
+// set). `absent` is the 404 a set with no profile answers with (the four-player
+// set ships none) → a first-class empty panel, not an error.
 // ---------------------------------------------------------------------------
 
-export type ScoreBucket = "low" | "med" | "high";
-
-const SCORE_BUCKET_LOW_MAX = 100 / 3; // < 33.3 → low
-const SCORE_BUCKET_HIGH_MIN = 200 / 3; // >= 66.7 → high
-
-function scoreBucketOf(score: number): ScoreBucket {
-  if (score < SCORE_BUCKET_LOW_MAX) return "low";
-  if (score < SCORE_BUCKET_HIGH_MIN) return "med";
-  return "high";
-}
-
-const BUCKET_ORDER: readonly ScoreBucket[] = ["low", "med", "high"];
-const BUCKET_LABEL: Record<ScoreBucket, string> = {
-  low: DASHBOARD_COPY.bucketLabelLow,
-  med: DASHBOARD_COPY.bucketLabelMed,
-  high: DASHBOARD_COPY.bucketLabelHigh,
-};
-const BUCKET_RANGE: Record<ScoreBucket, string> = {
-  low: DASHBOARD_COPY.bucketRangeLow,
-  med: DASHBOARD_COPY.bucketRangeMed,
-  high: DASHBOARD_COPY.bucketRangeHigh,
-};
-
-// Deep-link to the Highlights reel built from the SHARED query keys 12.9 reads —
-// `view=highlights` + the current `set` + `scoreBucket` — NOT an invented
-// `?bucket=`. It targets the shell ROUTE (present since the 12.4 shell), so it
-// degrades gracefully to an unfiltered reel if 12.9 lands second (the route still
-// resolves; only the filter no-ops until 12.9 reads `scoreBucket`).
-function highlightsHref(set: string, bucket: ScoreBucket): string {
-  const params = new URLSearchParams();
-  params.set("view", "highlights");
-  if (set !== "") {
-    params.set("set", set);
-  }
-  params.set("scoreBucket", bucket);
-  const base = typeof window !== "undefined" ? window.location.pathname : "/";
-  return `${base}?${params.toString()}`;
-}
-
-// ---------------------------------------------------------------------------
-// Rubric fetch state (the `/eval/rubric` surface; staleness-guarded per set).
-// `absent` is the 404 an UNSCORED set answers with (no rubric → first-class
-// empty histogram). Since 2026-10-02 no committed set ships a rubric, so the
-// served default answers 404 as well as every explicit `?set=`.
-// ---------------------------------------------------------------------------
-
-export type RubricState =
+export type ProfileState =
   | { readonly status: "loading" }
-  | { readonly status: "ready"; readonly view: RubricView }
+  | { readonly status: "ready"; readonly view: GameProfileView }
   | { readonly status: "absent" }
   | { readonly status: "error"; readonly message: string };
+
+/** A settled moments request, tagged with the request it answers. */
+export interface MomentsLoad {
+  readonly request: string;
+  readonly state: ProfileState;
+}
+
+/** The panel's state: loading until the current request settles, so a set
+ *  switch or a refresh never shows the previous request's counts. */
+export function activeMoments(settled: MomentsLoad | null, request: string): ProfileState {
+  return settled !== null && settled.request === request ? settled.state : { status: "loading" };
+}
+
+/** What the set's profile request settles to, for the moments panel. */
+export async function momentsState(request: Promise<GameProfileView>): Promise<ProfileState> {
+  try {
+    return { status: "ready", view: await request };
+  } catch (cause: unknown) {
+    // A set that ships no profile is a first-class empty state, not an error
+    // — the same 404 read `ReplayPicker` uses for the Highlights tab.
+    if (cause instanceof ApiError && cause.status === 404) {
+      return { status: "absent" };
+    }
+    // An HTTP failure is reported by STATUS, never by `ApiError.message`:
+    // that folds the response BODY in, and a file server answers with its
+    // own HTML error page — the same reason the no-report panel below
+    // refuses to print a transport error. Any other error (a view-model
+    // contract mismatch) is app-authored and says something useful.
+    const message =
+      cause instanceof ApiError
+        ? `profile request failed (status ${cause.status})`
+        : cause instanceof Error
+          ? cause.message
+          : String(cause);
+    return { status: "error", message };
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Presentational section primitives
@@ -857,115 +849,138 @@ function AlibiFabrication({
 }
 
 // ---------------------------------------------------------------------------
-// Interestingness histogram (from /eval/rubric) — buckets deep-link to Highlights
+// The moments of the game-shape profile: shelf sizes and facet counts per value.
+// No mean, no bucket and no link: nothing here orders or scores a game.
 // ---------------------------------------------------------------------------
 
-function InterestingnessHistogram({ rubric }: { rubric: RubricState }) {
+export function MomentsPanel({
+  profile,
+  reveal,
+}: {
+  profile: ProfileState;
+  reveal: boolean;
+}) {
   const staleAction =
-    rubric.status === "ready" && rubric.view.stale ? (
-      <MetricCaveat
-        tone="warn"
-        title={DASHBOARD_COPY.interestingnessStaleCaveatTitle}
-      >
-        {DASHBOARD_COPY.interestingnessStaleCaveat}
+    profile.status === "ready" && profile.view.stale ? (
+      <MetricCaveat tone="warn" title={DASHBOARD_COPY.momentsStaleCaveatTitle}>
+        {DASHBOARD_COPY.momentsStaleCaveat}
       </MetricCaveat>
     ) : undefined;
 
   return (
     <MetricSection
-      title={DASHBOARD_COPY.interestingnessTitle}
-      description={DASHBOARD_COPY.interestingnessDescription}
+      title={DASHBOARD_COPY.momentsTitle}
+      description={DASHBOARD_COPY.momentsDescription}
       action={staleAction}
     >
-      {rubric.status === "loading" ? (
-        <p className="text-sm text-ink-500">
-          {DASHBOARD_COPY.interestingnessLoading}
-        </p>
-      ) : rubric.status === "absent" ? (
-        // Set-neutral copy: since 2026-10-02 no committed set ships a rubric,
-        // the served default included, so this state names no set as the
-        // unscored one and claims no rubric elsewhere.
+      {profile.status === "loading" ? (
+        <p className="text-sm text-ink-500">{DASHBOARD_COPY.momentsLoading}</p>
+      ) : profile.status === "absent" ? (
+        // Set-neutral copy: it names no set as the one expected to ship none.
         <div className="rounded-lg border border-ink-200 bg-paper-1 px-4 py-6 text-center shadow-data">
           <p className="font-semibold text-ink-900">
-            {DASHBOARD_COPY.interestingnessAbsentTitle}
+            {DASHBOARD_COPY.momentsAbsentTitle}
           </p>
           <p className="mt-1 text-sm text-ink-500">
-            {DASHBOARD_COPY.interestingnessAbsentLead}{" "}
-            <code className="font-mono text-xs">
-              experiments/lab/rubric_score.py
-            </code>{" "}
-            {DASHBOARD_COPY.interestingnessAbsentTail}
+            {DASHBOARD_COPY.momentsAbsentBody}
           </p>
         </div>
-      ) : rubric.status === "error" ? (
+      ) : profile.status === "error" ? (
         <p className="text-sm text-ink-500">
-          {DASHBOARD_COPY.interestingnessError} {rubric.message}
+          {DASHBOARD_COPY.momentsError} {profile.message}
+        </p>
+      ) : profile.view.stale ? (
+        <p className="text-sm text-ink-500">
+          {DASHBOARD_COPY.momentsStaleCaveatTitle}
         </p>
       ) : (
-        <HistogramBars view={rubric.view} />
+        <MomentCounts view={profile.view} reveal={reveal} />
       )}
     </MetricSection>
   );
 }
 
-function HistogramBars({ view }: { view: RubricView }) {
-  const counts: Record<ScoreBucket, number> = { low: 0, med: 0, high: 0 };
-  for (const game of view.per_game) {
-    counts[scoreBucketOf(game.score)] += 1;
+/** How many games hold each value of a per-game count, values in order. */
+function distribution(values: readonly number[]): [number, number][] {
+  const counts = new Map<number, number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
   }
-  const total = view.per_game.length;
-  const max = Math.max(1, counts.low, counts.med, counts.high);
+  return [...counts.entries()].sort(([a], [b]) => a - b);
+}
 
-  if (total === 0) {
-    return (
-      <p className="text-sm text-ink-500">
-        {DASHBOARD_COPY.interestingnessEmpty}
-      </p>
-    );
-  }
-
+function CountTable({
+  heading,
+  first,
+  rows,
+}: {
+  heading: string;
+  first: string;
+  rows: readonly (readonly [string, number])[];
+}) {
   return (
-    <div>
-      <div className="flex items-end gap-4">
-        {BUCKET_ORDER.map((bucket) => {
-          const count = counts[bucket];
-          const heightPct = count > 0 ? Math.max((count / max) * 100, 6) : 2;
-          return (
-            <a
-              key={bucket}
-              href={highlightsHref(view.seedset, bucket)}
-              aria-label={fmt(DASHBOARD_COPY.interestingnessBucketLink, {
-                count: formatInt(count),
-                bucket: BUCKET_LABEL[bucket],
-                plural: count === 1 ? "" : "s",
-                range: BUCKET_RANGE[bucket],
-              })}
-              className="group flex flex-1 flex-col items-center gap-1 rounded-md p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900"
-            >
-              <span className="font-mono text-xs text-ink-500">{count}</span>
-              <div className="flex h-28 w-full items-end">
-                <div
-                  className="w-full rounded-t-md border-2 border-ink-900 bg-ink-700 transition-colors group-hover:bg-ink-900"
-                  style={{ height: `${heightPct}%` }}
-                />
-              </div>
-              <span className="text-sm font-semibold text-ink-900">
-                {BUCKET_LABEL[bucket]}
-              </span>
-              <span className="font-mono text-3xs text-ink-500">
-                {DASHBOARD_COPY.interestingnessScorePrefix}{" "}
-                {BUCKET_RANGE[bucket]}
-              </span>
-            </a>
-          );
-        })}
-      </div>
-      <p className="mt-3 text-xs text-ink-500">
-        {fmt(DASHBOARD_COPY.interestingnessFooter, {
-          games: formatInt(total),
-          set: view.seedset,
-        })}
-      </p>
+    <div className="min-w-0">
+      <h4 className="mb-1 text-xs font-semibold text-ink-700">{heading}</h4>
+      <table className="w-full font-mono text-xs text-ink-700">
+        <thead>
+          <tr className="text-left text-ink-500">
+            <th className="font-normal">{first}</th>
+            <th className="text-right font-normal">
+              {DASHBOARD_COPY.momentsGamesColumn}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, count]) => (
+            <tr key={label}>
+              <td>{label}</td>
+              <td className="text-right">{formatInt(count)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MomentCounts({ view, reveal }: { view: GameProfileView; reveal: boolean }) {
+  const games = view.pre_reveal.games;
+  const pair = view.reveal.decided_without_proof;
+  const shelfRows = (shelves: readonly { name: string; members: readonly unknown[] }[]) =>
+    shelves.map((shelf) => [shelfTitle(shelf.name), shelf.members.length] as const);
+  const facetRows = (values: readonly number[]) =>
+    distribution(values).map(([value, count]) => [String(value), count] as const);
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <CountTable
+        heading={DASHBOARD_COPY.momentsBeforeReveal}
+        first={DASHBOARD_COPY.momentsShelfColumn}
+        rows={shelfRows(view.pre_reveal.shelves)}
+      />
+      {reveal ? (
+        <CountTable
+          heading={DASHBOARD_COPY.momentsAfterReveal}
+          first={DASHBOARD_COPY.momentsShelfColumn}
+          rows={shelfRows([...view.reveal.shelves, pair.wrong, pair.right])}
+        />
+      ) : (
+        <p className="text-xs text-ink-500">{DASHBOARD_COPY.momentsRevealHint}</p>
+      )}
+      <CountTable
+        heading={DASHBOARD_COPY.momentsFacetMeetings}
+        first={DASHBOARD_COPY.momentsValueColumn}
+        rows={facetRows(games.map((game) => game.meetings.length))}
+      />
+      <CountTable
+        heading={DASHBOARD_COPY.momentsFacetKills}
+        first={DASHBOARD_COPY.momentsValueColumn}
+        rows={facetRows(games.map((game) => game.kills.length))}
+      />
+      <CountTable
+        heading={DASHBOARD_COPY.momentsFacetUnfound}
+        first={DASHBOARD_COPY.momentsValueColumn}
+        rows={facetRows(games.map((game) => game.bodies_never_found))}
+      />
     </div>
   );
 }
@@ -1090,13 +1105,16 @@ export function TournamentDashboardView({
   isLoading,
   error,
   onRefresh,
-  rubric,
+  profile,
+  reveal,
 }: {
   report: TournamentEvalReport | null;
   isLoading: boolean;
   error: string | null;
   onRefresh: () => void;
-  rubric: RubricState;
+  profile: ProfileState;
+  /** Outcome reveal: the reveal-only shelf sizes render only when it is on. */
+  reveal: boolean;
 }) {
   return (
     <main aria-label={DASHBOARD_COPY.ariaLabel} className="flex flex-col gap-4">
@@ -1124,7 +1142,7 @@ export function TournamentDashboardView({
           <GateMetricsSection report={report.gate_metrics} />
           <AccusationCalibration report={report.accusation_calibration} />
           <AlibiFabrication report={report.alibi_fabrication} />
-          <InterestingnessHistogram rubric={rubric} />
+          <MomentsPanel profile={profile} reveal={reveal} />
           <CostDashboardView dashboard={report.cost_dashboard} />
         </>
       ) : isLoading || error === null ? (
@@ -1167,7 +1185,7 @@ export function TournamentDashboardView({
 }
 
 // ---------------------------------------------------------------------------
-// Connected dashboard — store (report) + the `/eval/rubric` fetch (histogram)
+// Connected dashboard — store (report) + the `/eval/game-profile` fetch
 // ---------------------------------------------------------------------------
 
 function DetailedTournamentDashboard() {
@@ -1177,24 +1195,26 @@ function DetailedTournamentDashboard() {
   const loadReport = useTournamentStore((s) => s.loadReport);
 
   // The active set is shared via useReplayStore (Task 12.12): the dashboard's
-  // report + rubric fetches follow it, and its own selector drives it (live, no
+  // report + profile fetches follow it, and its own selector drives it (live, no
   // reload). `setSeedSet` is URL-synced by usePlayback (the existing `set` key).
   const seedSet = useReplayStore((s) => s.seedSet);
   const availableSets = useReplayStore((s) => s.availableSets);
   const setSeedSet = useReplayStore((s) => s.setSeedSet);
   const loadSets = useReplayStore((s) => s.loadSets);
+  // The one global reveal flag (Task 19.10): the reveal-only shelf sizes stay
+  // hidden here exactly when the browser hides those shelves.
+  const revealOutcome = useReplayStore((s) => s.revealOutcome);
 
-  // The rubric is fetched here (not via the tournament store, which is frozen to
-  // the report) — a load-time projection served per set, 404 when the SELECTED
-  // set ships none (since 2026-10-02 no committed set ships one, the served
-  // default included). `reloadNonce` re-triggers the fetch on
-  // Refresh; `seedSet` re-triggers it on a live set switch. It goes through
-  // `api/client`'s `getRubric`, so this panel reads the live API in a normal
-  // build and the pre-baked JSON in the static demo bundle — and gets the
-  // view-model version gate, which a hand-rolled fetch of this stamped payload
-  // silently skipped.
-  const [rubric, setRubric] = useState<RubricState>({ status: "loading" });
+  // The profile is fetched here (not via the tournament store, which is frozen
+  // to the report) — served per set, 404 when the SELECTED set ships none.
+  // `reloadNonce` re-triggers the fetch on Refresh; `seedSet` re-triggers it on
+  // a live set switch. It goes through `api/client`'s `getGameProfile`, so this
+  // panel reads the live API in a normal build and the pre-baked JSON in the
+  // static demo bundle, behind the view-model version gate.
+  const [settled, setSettled] = useState<MomentsLoad | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const request = `${seedSet ?? ""}#${reloadNonce}`;
+  const profile = activeMoments(settled, request);
 
   // Populate the set list so the selector works even when the dashboard is the
   // first view visited; adopts the server default into `seedSet` when unset.
@@ -1204,40 +1224,15 @@ function DetailedTournamentDashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    setRubric({ status: "loading" });
-    getRubric(seedSet ?? undefined)
-      .then((view: RubricView) => {
-        if (!cancelled) {
-          setRubric({ status: "ready", view });
-        }
-      })
-      .catch((cause: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        // A set that ships no rubric is a first-class empty state, not an error
-        // — the same 404 read `ReplayPicker` uses for the Highlights reel.
-        if (cause instanceof ApiError && cause.status === 404) {
-          setRubric({ status: "absent" });
-          return;
-        }
-        // An HTTP failure is reported by STATUS, never by `ApiError.message`:
-        // that folds the response BODY in, and a file server answers with its
-        // own HTML error page — the same reason the no-report panel below
-        // refuses to print a transport error. Any other error (a view-model
-        // contract mismatch) is app-authored and says something useful.
-        const message =
-          cause instanceof ApiError
-            ? `rubric request failed (status ${cause.status})`
-            : cause instanceof Error
-              ? cause.message
-              : String(cause);
-        setRubric({ status: "error", message });
-      });
+    void momentsState(getGameProfile(seedSet ?? undefined)).then((state) => {
+      if (!cancelled) {
+        setSettled({ request, state });
+      }
+    });
     return () => {
       cancelled = true;
     };
-  }, [reloadNonce, seedSet]);
+  }, [request, seedSet]);
 
   // Load the report for the active set on mount + on each live set switch, so the
   // view always reflects the selected set's latest report.
@@ -1258,7 +1253,8 @@ function DetailedTournamentDashboard() {
         isLoading={isLoading}
         error={error}
         onRefresh={handleRefresh}
-        rubric={rubric}
+        profile={profile}
+        reveal={revealOutcome}
       />
     </div>
   );

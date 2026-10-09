@@ -167,6 +167,48 @@ def test_help_exits_zero() -> None:
     assert "Usage:" in proc.stdout
 
 
+#: The help sentence the era registry made false: a committed set records its
+#: own era's declared config, so a config is not confined to other directories.
+_OLD_HELP = (
+    "A config that turns switches on needs an explicit AILIBI_SAMPLE_DIR outside "
+    "the committed sets"
+)
+_ERA_RULE_HELP = (
+    "A committed sample set records only its own era's declared config, or bare "
+    "when its era declares none (eval/eras.py); a candidate round directory, "
+    "replays/candidates/<round>/<set>/, or a scratch directory, named with "
+    "AILIBI_SAMPLE_DIR, takes any config."
+)
+
+
+def help_states_the_era_rule(printed: str) -> bool:
+    flat = " ".join(printed.split())
+    return _ERA_RULE_HELP in flat and _OLD_HELP not in flat
+
+
+def test_the_help_states_the_era_rule() -> None:
+    proc = _run("--help")
+    assert help_states_the_era_rule(proc.stdout), proc.stdout
+    # Planted: the help as it stood before this rule.
+    assert not help_states_the_era_rule(
+        "--experiment-config FILE  A config that turns switches on needs an "
+        "explicit AILIBI_SAMPLE_DIR outside the committed sets: a candidate round"
+    )
+
+
+def test_the_declared_args_comment_states_the_era_rule() -> None:
+    text = " ".join(
+        line.lstrip("# ").strip()
+        for line in _REFRESH_SH.read_text(encoding="utf-8").splitlines()
+        if line.startswith("#")
+    )
+    assert (
+        "a committed sample set records only its own era's declared config, or bare "
+        "when its era declares none" in text
+    )
+    assert "turns switches on records only into an explicit" not in text
+
+
 def test_refresh_sh_is_executable() -> None:
     assert _REFRESH_SH.exists()
     assert os.access(_REFRESH_SH, os.X_OK)
@@ -1254,14 +1296,14 @@ def test_fake_refresh_skips_the_key_preflight_but_keeps_the_substrate_one(
 
 # The only names a `--seeds 0` refresh writes into its target dir: the replay,
 # the roster descriptor, the manifest, the rebuilt eval report and (9p2i only)
-# the rubric. Restoring exactly these keeps the guard below honest without
-# reading every committed replay on every case.
+# the game-shape profile. Restoring exactly these keeps the guard below honest
+# without reading every committed replay on every case.
 _REFRESH_OUTPUT_NAMES = (
     "replay-seed-0.jsonl",
     "roster.json",
     "MANIFEST.md",
     "tournament-eval-report.json",
-    "results-rubric-score.json",
+    "results-game-profile.json",
 )
 
 
@@ -2236,14 +2278,55 @@ def test_the_era_config_passes_the_dry_run_into_the_promoted_set() -> None:
     sha = hashlib.sha256(_ERA_CONFIG.read_bytes()).hexdigest()
     lines = proc.stdout.splitlines()
     assert f"[dry-run] Experiment config: {_ERA_CONFIG} (sha256 {sha})" in lines
-    # The rubric step skips an era the extractor does not read, by name.
-    assert any(
-        line.startswith("[dry-run] interestingness rubric: would skip it")
-        and "ships no rubric" in line
-        for line in lines
-    )
-    assert not any("would regenerate" in line and "rubric" in line for line in lines)
+    # The profile step regenerates the shown set's profile, by name.
+    assert profile_lines(lines) == [_PROFILE_LINE]
     assert _git_status() == before
+
+
+#: What the dry run says the profile step would do for the shown set.
+_PROFILE_LINE = (
+    "[dry-run] game-shape profile: would regenerate "
+    "replays/samples/9p2i/results-game-profile.json and docs/game-profile.md from "
+    "the refreshed replays (scripts/publish_game_profile.py; $0, no provider)"
+)
+
+
+def profile_lines(lines: Sequence[str]) -> list[str]:
+    """Every dry-run line naming the profile or the retired rubric step."""
+
+    return [
+        line for line in lines if "profile" in line.lower() or "rubric" in line.lower()
+    ]
+
+
+def test_the_old_skip_line_fails_the_profile_case() -> None:
+    """Planted: the rubric step's skip line as it stood before the profile."""
+
+    old = (
+        "[dry-run] interestingness rubric: would skip it, because the set is "
+        "recorded with the declared experiment config replays/samples/9p2i/"
+        "experiment-config.json and the gameplay-facts extractor reads only "
+        "recordings made without experiment settings; the set ships no rubric"
+    )
+    assert profile_lines(["[dry-run] manifest: m", old]) != [_PROFILE_LINE]
+
+
+def test_any_other_target_prints_no_profile_line(tmp_path: Path) -> None:
+    for env_update in (
+        {},
+        {
+            "AILIBI_SAMPLE_DIR": str(tmp_path / "9p2i"),
+            "AILIBI_MANIFEST": str(tmp_path / "9p2i" / "MANIFEST.md"),
+            "AILIBI_NUM_PLAYERS": "9",
+            "AILIBI_NUM_IMPOSTORS": "2",
+            "AILIBI_TASKS_PER_CREWMATE": "2",
+        },
+    ):
+        env = _clean_env()
+        env.update(env_update)
+        proc = _run("--seeds", "0", "--dry-run", env=env)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert profile_lines(proc.stdout.splitlines()) == [], env_update
 
 
 def test_a_bare_dry_run_into_the_promoted_set_is_refused() -> None:

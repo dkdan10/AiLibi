@@ -17,7 +17,7 @@
 // DESIGN.md §7) the server stamps on every payload that carries one.
 // `src/api/client.ts` rejects unsupported versions and checks the
 // explicitly compatible historical version's audio before use.
-export const VIEW_MODEL_VERSION = "5";
+export const VIEW_MODEL_VERSION = "6";
 
 export type PlayerRole = "CREWMATE" | "IMPOSTOR";
 export type CurrentAction = "IDLE" | "MOVING" | "TASK" | "KILL" | "VENT" | "REPORT" | "SABOTAGE" | "PRETEND_TASK" | "EMERGENCY" | "REPAIR" | "BLOCKED";
@@ -619,28 +619,165 @@ export interface SuspicionEntryView {
   suspicion: number;
 }
 
-export interface RubricView {
+export interface GameProfileView {
   viewModelVersion: string;
+  rubric_version: number;
+  era: string | null;
+  manifest_key: string | null;
+  source_fingerprint: string;
   seedset: string;
-  git_head: string | null;
-  manifest_sha: string | null;
   stale: boolean;
-  per_game: RubricGameView[];
+  constants: ProfileConstantsView;
+  catalogue: CatalogueEntryView[];
+  pre_reveal: PreRevealHalfView;
+  reveal: RevealHalfView;
 }
 
-export interface RubricGameView {
+export interface ProfileConstantsView {
+  slow_burn_ticks: number;
+  wave_slack_ticks: number;
+  close_call_margin: number;
+  third_round_meetings: number;
+  down_to_the_wire_start: number;
+  runaway_share: string;
+  leak_p_level: string;
+  saturation_share: string;
+}
+
+export interface CatalogueEntryView {
+  name: string;
+  half: "pre_reveal" | "reveal";
+  kind: "shelf" | "chip" | "facet" | "tripwire";
+  classification: "shelf" | "leaks" | "saturated" | "reads_an_ejection" | "reads_the_ending" | "reads_a_role" | "chip" | "facet" | "tripwire";
+}
+
+export interface PreRevealHalfView {
+  shelves: ShelfView[];
+  chips: ChipView[];
+  games: GameFacetsView[];
+  tripwires: TripwiresView;
+}
+
+export interface ShelfView {
+  name: string;
+  members: ShelfMemberView[];
+}
+
+export interface ShelfMemberView {
   seed: number;
-  score: number;
-  reason: string;
-  n_meetings: number;
-  win_shape: string;
-  ejected_impostors: number;
-  accused_impostors: number;
-  survived_accused: number;
-  r1_decisive: number;
-  r2_deception: number;
-  r3_arcs: number;
-  r7_legible: number;
+  meetings: number[];
+  kill_ticks: number[];
+}
+
+export interface ChipView {
+  name: string;
+  members: ChipMemberView[];
+}
+
+export interface ChipMemberView {
+  seed: number;
+  meetings: number[];
+}
+
+export interface GameFacetsView {
+  seed: number;
+  ticks: number;
+  meetings: MeetingFacetView[];
+  kills: KillFacetView[];
+  reports: ReportFacetView[];
+  bodies_never_found: number;
+  moments: string[];
+  tripped: TripLabelView[];
+}
+
+export interface MeetingFacetView {
+  index: number;
+  tick: number;
+  trigger: "report" | "emergency";
+  regrouped: boolean;
+}
+
+export interface KillFacetView {
+  tick: number;
+  in_wave: boolean;
+}
+
+export interface ReportFacetView {
+  meeting: number;
+  corpse_age: number;
+}
+
+export interface TripLabelView {
+  tripwire: string;
+  meeting: number;
+}
+
+export interface TripwiresView {
+  readings: TripwireReadingView[];
+  alibi_flags?: number | null;
+  alibi_flags_evaluable?: number | null;
+}
+
+export interface TripwireReadingView {
+  name: string;
+  tripwire: string;
+  governs: boolean;
+  entries: TripwireEntryView[];
+}
+
+export interface TripwireEntryView {
+  seed: number;
+  meeting: number;
+}
+
+export interface RevealHalfView {
+  shelves: ShelfView[];
+  decided_without_proof: PairView;
+  games: RevealFacetsView[];
+  class_tables?: ClassTableView[] | null;
+}
+
+export interface PairView {
+  right: ShelfView;
+  wrong: ShelfView;
+}
+
+export interface RevealFacetsView {
+  seed: number;
+  ending: string;
+  distance: DistanceFacetView | null;
+  sabotage_starts: number[];
+  tasks_done: number;
+  tasks_assigned: number;
+  ejections: EjectionFacetView[];
+}
+
+export interface DistanceFacetView {
+  counts: "tasks_left" | "kills_short_of_parity";
+  steps: number;
+  start: number;
+}
+
+export interface EjectionFacetView {
+  meeting: number;
+  right: boolean;
+}
+
+export interface ClassTableView {
+  name: string;
+  games: number;
+  members: number;
+  rows: ClassRowView[];
+  classification: "shelf" | "leaks" | "saturated" | "reads_an_ejection" | "reads_the_ending" | "reads_a_role" | "chip" | "facet" | "tripwire";
+}
+
+export interface ClassRowView {
+  fact: string;
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  p: number;
 }
 
 export interface TournamentEvalReport {

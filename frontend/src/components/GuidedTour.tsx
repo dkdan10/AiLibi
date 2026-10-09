@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import { getRubric, getSets, listReplays } from "../api/client";
+import { getSets, listReplays } from "../api/client";
 import { OVERLAY_RANK, useFocusTrap } from "../hooks/useFocusTrap";
 import { useReplayStore } from "../store/replayStore";
 import { tokens } from "../tokens";
@@ -37,13 +37,10 @@ export function openGuidedTour(): void {
 }
 
 // Best-effort: open the head of the CURATED featured list for the target set
-// (Task 19.9). It used to open the rubric's top-ranked game, but the rubric is an
-// internal pacing/structure heuristic whose ordering both Phase-19 audits found
-// inverts the human-interest tails — a fresh re-score clears staleness, it does
-// not validate watchability. The curated head is a hand-read game; the rubric's
-// best-ranked game is the fallback when the served set carries no featured seed,
-// and the first replay when it ships no rubric either. Any error → nothing loads
-// (the legend still teaches the grammar).
+// (Task 19.9) — a hand-read game. When the served set carries no featured seed,
+// the fallback is the first game in seed order: nothing ranks a game, so nothing
+// else could choose one. Any error → nothing loads (the legend still teaches the
+// grammar).
 //
 // Cancellation (Task 12.11 review): `/sets` + `/replays` are async, so re-check
 // the live store right before the navigation and bail if the user moved on —
@@ -62,22 +59,12 @@ async function loadCuratedSeed(): Promise<void> {
       return; // user already opened a replay before /sets resolved
     }
     store.setSeedSet(set);
-    const [list, rubric] = await Promise.all([
-      listReplays(set),
-      getRubric(set).catch(() => null),
-    ]);
+    const list = await listReplays(set);
     if (list.length === 0 || aborted(set)) {
       return;
     }
-    let gameId = list[0]!.game_id;
-    if (rubric !== null && rubric.per_game.length > 0) {
-      const bestSeed = rubric.per_game[0]!.seed;
-      const match = list.find((meta) => meta.seed === bestSeed);
-      if (match !== undefined) {
-        gameId = match.game_id;
-      }
-    }
-    // The curated head wins over the rubric head where the set has one. The
+    let gameId = [...list].sort((a, b) => a.seed - b.seed)[0]!.game_id;
+    // The curated head wins over the first game where the set has one. The
     // featured list is imported DYNAMICALLY: App.tsx lazy-loads ReplayPicker, and
     // a static import here would pull the whole browser into the entry chunk.
     const { featuredForSet } = await import("./ReplayPicker");

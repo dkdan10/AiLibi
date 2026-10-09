@@ -17,8 +17,8 @@
 //   • `expandSetName` / `setOptionLabel` — set ids ("9p2i") expanded into words
 //     once per surface, with the raw id as the fallback for ids `/sets` grows
 //     later.
-//   • `RUBRIC_SPOKES` / `rubricLegendLine` — one table behind both the score
-//     bars and the picker's legend, so the two cannot drift apart.
+//   • `PROFILE_COPY` — the game-shape profile's shelf, chip, facet and
+//     tripwire words, keyed by the names the served profile carries.
 //
 // Also here: `showsBallotCorrectness`, the ballot correctness-badge gate. It is
 // a display gate over copy (the ✓/✗ mark), stated as a pure predicate so the
@@ -124,43 +124,6 @@ export function setOptionLabel(setId: string): string {
   return expanded === setId ? setId : `${setId} — ${expanded}`;
 }
 
-// ── the interestingness sub-scores ───────────────────────────────────────────
-
-/** One spoke of the 4-bar interestingness sub-score. */
-export interface RubricSpoke {
-  /** The rubric's own short key, which the bar prints. */
-  readonly key: "R1" | "R2" | "R3" | "R7";
-  /** What the bar measures — printed on the bar AND in the picker legend. */
-  readonly word: string;
-  /** The `RubricGameView` field this bar reads. */
-  readonly field: "r1_decisive" | "r2_deception" | "r3_arcs" | "r7_legible";
-}
-
-/** The four spokes, in render order. One table, both surfaces. */
-export const RUBRIC_SPOKES: readonly RubricSpoke[] = Object.freeze([
-  { key: "R1", word: "deduction", field: "r1_decisive" },
-  { key: "R2", word: "deception", field: "r2_deception" },
-  { key: "R3", word: "suspicion arcs", field: "r3_arcs" },
-  { key: "R7", word: "legibility", field: "r7_legible" },
-] as const);
-
-/**
- * The header legend for the score bars, built FROM the table.
- *
- * Built rather than written out so a spoke renamed in one place cannot leave
- * the other saying something else — the drift that left the Replays tab
- * showing four unlabelled bars while only Highlights explained them.
- */
-export function rubricLegendLine(): string {
-  const spokes = RUBRIC_SPOKES.map((s) => `${s.word} (${s.key})`).join(", ");
-  return `Score bars: ${spokes}.`;
-}
-
-/** The hover text for one bar: what it measures and where the value sits. */
-export function rubricSpokeTitle(spoke: RubricSpoke, value: number): string {
-  return `${spoke.key} ${spoke.word}: ${value.toFixed(2)} on a 0–1 scale`;
-}
-
 // ── the ballot correctness badge ─────────────────────────────────────────────
 
 /**
@@ -200,7 +163,7 @@ export const SPECTATOR_COPY = Object.freeze({
   dashboard: Object.freeze({
     ariaLabel: "Tournament dashboard",
     intro:
-      "The latest tournament eval report: balance outcome, vote correctness, the conversion and gate surface, the proof-vs-inference deduction instrument, and the interestingness distribution.",
+      "The latest tournament eval report: balance outcome, vote correctness, the conversion and gate surface, the proof-vs-inference deduction instrument, and the moments of the game-shape profile.",
     refresh: "Refresh",
     refreshBusy: "Loading…",
     loadingReport: "Loading tournament report…",
@@ -365,32 +328,27 @@ export const SPECTATOR_COPY = Object.freeze({
     alibiTotal: "Impostor alibis",
     alibiSurvived: "Survived",
 
-    interestingnessTitle: "Interestingness",
-    interestingnessDescription:
-      "Distribution of the rubric's 0–100 score — an internal pacing/structure heuristic, not a human rating. Click a bucket to open those seeds in the Highlights reel.",
-    interestingnessStaleCaveat: "scores unavailable",
-    interestingnessStaleCaveatTitle:
-      "Scores are hidden because their recording sources could not be verified. Re-extract facts and re-score the current set to refresh them.",
-    interestingnessLoading: "Loading the interestingness rubric…",
-    interestingnessAbsentTitle: "No interestingness rubric.",
-    interestingnessAbsentLead:
-      "The selected set ships no rubric, so its games carry no interestingness score. To score them, run",
-    interestingnessAbsentTail: "over this set to populate the histogram.",
-    interestingnessError: "Couldn't load the rubric:",
-    interestingnessEmpty: "The rubric is present but scored no games for this set.",
-    interestingnessFooter:
-      "{games} games scored on {set} · click a bucket to open it in the Highlights reel →",
-    interestingnessBucketLink:
-      "Open {count} {bucket}-interestingness game{plural} (score {range}) in the Highlights reel",
-    interestingnessScorePrefix: "score",
-    // The histogram's three buckets. Their labels ARE the deep-link units, so
-    // they render in the bar, in its link text and in the footer.
-    bucketLabelLow: "Low",
-    bucketLabelMed: "Med",
-    bucketLabelHigh: "High",
-    bucketRangeLow: "0–33",
-    bucketRangeMed: "33–67",
-    bucketRangeHigh: "67–100",
+    momentsTitle: "Moments in this set",
+    momentsDescription:
+      "How many games sit on each shelf of the game-shape profile, and how its facets spread across the set. No game is ranked or scored, and nothing is averaged.",
+    momentsLoading: "Loading the game-shape profile…",
+    momentsAbsentTitle: "No game-shape profile.",
+    momentsAbsentBody:
+      "The selected set ships no game-shape profile, so there are no shelves to count.",
+    momentsStaleCaveat: "profile out of date",
+    momentsStaleCaveatTitle:
+      "The profile was computed from recordings that no longer match the served ones, so its counts are hidden.",
+    momentsError: "Couldn't load the game-shape profile:",
+    momentsBeforeReveal: "Shelves before the reveal",
+    momentsAfterReveal: "Shelves after the reveal",
+    momentsRevealHint:
+      "The shelves that read an ending, an ejection or a role stay hidden until you reveal outcomes.",
+    momentsShelfColumn: "shelf",
+    momentsGamesColumn: "games",
+    momentsValueColumn: "value",
+    momentsFacetMeetings: "Meetings per game",
+    momentsFacetKills: "Kills per game",
+    momentsFacetUnfound: "Bodies never found per game",
 
     costTitle: "Cost dashboard",
     costDescription:
@@ -496,7 +454,8 @@ export const SPECTATOR_COPY = Object.freeze({
 
   /** The Replays browser and the Highlights reel. */
   picker: Object.freeze({
-    highlightsIntro: "Ordered by the interestingness rubric.",
+    highlightsIntro:
+      "Games grouped by the moments they hold, each list in seed order. Nothing here ranks or scores a game.",
     // True in both the live build and the static demo bundle, which serves a
     // SUBSET of the recorded set — the old "Every recorded replay in the served
     // set" was false there, and the flag that would tell them apart is private
@@ -571,8 +530,160 @@ export const SPECTATOR_COPY = Object.freeze({
     clockVersion: "v{version}",
   }),
 
-  /** Shared with `RUBRIC_SPOKES` so the walk covers the spoke words too. */
-  rubricSpokes: RUBRIC_SPOKES,
+  /** The game-shape profile: shelves, the chip, facets and the tripwire. */
+  profile: Object.freeze({
+    heading: "Browse by moment",
+    allGames: "All games",
+    allGamesNote:
+      "Every game listed here, in seed order, including any a tripwire keeps off the shelves.",
+    revealHeading: "After the reveal",
+    revealNote:
+      "These shelves read how the game ended, whether a meeting voted someone out, or a player's role, so they stay hidden until you reveal outcomes.",
+    countOne: "{count} game",
+    countMany: "{count} games",
+    cardShelves: "Shelves this game sits on",
+    loading: "Loading moments…",
+    filterVotedOut: "someone was voted out",
+    absentTitle: "No game-shape profile for this set",
+    absentBody:
+      "The served set ({set}) ships no game-shape profile, so its games sit on no shelf. Browse Replays to inspect this set without one.",
+    absentBodyUnnamed:
+      "The served set ships no game-shape profile, so its games sit on no shelf. Browse Replays to inspect this set without one.",
+    staleTitle: "No current game-shape profile",
+    staleBody:
+      "The profile was computed from recordings that no longer match the served ones, so its shelves are hidden. The recordings remain available through Featured and Replays.",
+    replaysNoProfile:
+      "This set ({set}) ships no game-shape profile, so its cards show no shelves.",
+    browseReplays: "Browse all replays",
+    loadError: "Failed to load the game-shape profile:",
+    // Each shelf by the name the served profile gives it. No description
+    // carries a number: the definitions, with their constants, are on the
+    // generated page.
+    shelves: Object.freeze({
+      the_reporter_saw_it_happen: Object.freeze({
+        title: "The reporter saw it happen",
+        description:
+          "The player who reported the body is one the game records as seeing that kill.",
+      }),
+      double_kill: Object.freeze({
+        title: "Double kill",
+        description: "Two players were killed in the same moment.",
+      }),
+      slow_burn: Object.freeze({
+        title: "Slow burn",
+        description: "A long quiet stretch passed with no kill.",
+      }),
+      two_kills_after_one_regroup: Object.freeze({
+        title: "Two kills after one regroup",
+        description:
+          "Soon after the survivors were gathered back together, two of them were killed.",
+      }),
+      a_close_call: Object.freeze({
+        title: "A close call",
+        description: "A meeting was settled by a single ballot, or ended in a tie.",
+      }),
+      suspicion_moved: Object.freeze({
+        title: "Suspicion moved",
+        description:
+          "From one meeting to the next the votes turned toward someone new, or away from someone still alive.",
+      }),
+      a_third_round: Object.freeze({
+        title: "A third round",
+        description: "The table met for a third time, or more.",
+      }),
+      caught_venting: Object.freeze({
+        title: "Caught venting",
+        description: "Someone told the table they saw a player use a vent.",
+      }),
+      one_line_two_readings: Object.freeze({
+        title: "One line, two readings",
+        description:
+          "Two voters cited the same spoken line and came to different decisions.",
+      }),
+      struck_after_the_regroup: Object.freeze({
+        title: "Struck after the regroup",
+        description: "A kill came soon after the survivors were gathered back together.",
+      }),
+      one_vote_ejection: Object.freeze({
+        title: "One-vote ejection",
+        description: "A player was voted out by the margin of a single ballot.",
+      }),
+      nobody_voted_out: Object.freeze({
+        title: "Nobody voted out",
+        description: "Every meeting ended without anyone being voted out.",
+      }),
+      down_to_the_wire: Object.freeze({
+        title: "Down to the wire",
+        description: "The losing side was one step from winning.",
+      }),
+      runaway: Object.freeze({
+        title: "Runaway",
+        description: "The losing side was still far from winning when the game ended.",
+      }),
+      decided_at_a_meeting: Object.freeze({
+        title: "Decided at a meeting",
+        description: "The game ended at a meeting.",
+      }),
+      decided_without_proof_right: Object.freeze({
+        title: "Decided without proof: the table was right",
+        description:
+          "The voters ejected on lines they held, with no vent sighting, and the table was right.",
+      }),
+      decided_without_proof_wrong: Object.freeze({
+        title: "Decided without proof: wrong on what it held",
+        description:
+          "The voters cited lines they held and it pointed the wrong way. A wrong call on believable evidence is part of the game.",
+      }),
+    }),
+    pair: Object.freeze({
+      heading: "Decided without proof",
+      note: "Ejections whose voters rested on lines they held, with no vent sighting. The two halves always show together.",
+      emptyHalf: "No game listed here lands on this half.",
+    }),
+    chip: Object.freeze({
+      atMeeting: "An eyewitness voted on it at meeting {meeting}",
+      description:
+        "A player who saw the kill cited it on their own ballot at this meeting.",
+    }),
+    // The tripwire's plain label, before the reveal by the owner's ruling.
+    tripwires: Object.freeze({
+      decided_by_a_vote_that_held_nothing:
+        "Kept off the shelves: at meeting {meeting} a player was voted out on ballots that cited nothing the voters held about them, and without those ballots the meeting would have gone another way.",
+      decided_on_a_manufactured_contradiction:
+        "Kept off the shelves: at meeting {meeting} a player was voted out on a contradiction raised against an account that was in fact true.",
+    }),
+    facets: Object.freeze({
+      ticks: "{ticks} ticks",
+      meetings: "{count} meetings · {reported} reported, {called} called",
+      noMeetings: "No meetings",
+      kills: "{count} kills · {wave} soon after a regroup",
+      noKills: "No kills",
+      bodiesNeverFound: "{count} bodies never found",
+      report: "Meeting {meeting}: the body was found {age} ticks after the kill",
+      timeline: "Game timeline: kills and meetings, tick by tick",
+      timelineKill: "Kill at tick {tick}",
+      timelineWaveKill: "Kill at tick {tick}, soon after a regroup",
+      timelineMeeting: "Meeting {meeting} at tick {tick}",
+    }),
+    revealFacets: Object.freeze({
+      ending: "Ended: {ending}",
+      endings: Object.freeze({
+        CREWMATE_EJECT: "the crew voted out every impostor",
+        CREWMATE_TASKS: "the crew finished its tasks",
+        IMPOSTOR_PARITY: "the impostors matched the crew in number",
+        IMPOSTOR_SABOTAGE: "a sabotage ran out",
+        TICK_BUDGET_REACHED: "the run stopped at its tick limit",
+        MEETING_PHASE_REACHED: "the run stopped at a meeting",
+      }),
+      tasksLeft: "The crew had {steps} of {start} tasks left.",
+      killsShort:
+        "The impostors were {steps} kills from matching the crew; they started {start} away.",
+      tasks: "{done} of {assigned} tasks done",
+      sabotage: "A sabotage was in play from tick {tick}.",
+      ejectionRight: "Meeting {meeting}: the vote was right",
+      ejectionWrong: "Meeting {meeting}: the vote was wrong",
+    }),
+  }),
 } as const);
 
 export const BALLOT_COPY = SPECTATOR_COPY.ballot;
@@ -580,6 +691,7 @@ export const DASHBOARD_COPY = SPECTATOR_COPY.dashboard;
 export const MAP_COPY = SPECTATOR_COPY.map;
 export const MEETING_COPY = SPECTATOR_COPY.meeting;
 export const PICKER_COPY = SPECTATOR_COPY.picker;
+export const PROFILE_COPY = SPECTATOR_COPY.profile;
 export const PUBLIC_RESULTS_COPY = SPECTATOR_COPY.publicResults;
 export const TRANSPORT_COPY = SPECTATOR_COPY.transport;
 export const TURN_COPY = SPECTATOR_COPY.turn;

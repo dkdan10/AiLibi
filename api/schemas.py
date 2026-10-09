@@ -73,7 +73,8 @@ from pydantic_core import CoreSchema
 # version-2/3/4 reads with the same audio guard -- reading an OLDER server is
 # still safe, because every version-4 alibi carries the flat triple this
 # contract still serves.
-VIEW_MODEL_VERSION: Final[str] = "5"
+# "6" replaces the interestingness rubric's route and views with the game-shape profile's.
+VIEW_MODEL_VERSION: Final[str] = "6"
 
 
 class _FrozenView(BaseModel):
@@ -1704,56 +1705,238 @@ class PublicResultsView(_FrozenView):
     cases: tuple[PublicCaseView, ...]
 
 
-class RubricGameView(_FrozenView):
-    """One per-game interestingness row from ``results-rubric-score.json``
-    (DESIGN.md §3.1, §7; ``experiments/lab/rubric_score.py``).
+#: What the profile's catalogue records of each name (``eval.game_profile``).
+ProfileClassification: TypeAlias = Literal[
+    "shelf",
+    "leaks",
+    "saturated",
+    "reads_an_ejection",
+    "reads_the_ending",
+    "reads_a_role",
+    "chip",
+    "facet",
+    "tripwire",
+]
 
-    Mirrors the ``interestingness.per_game[]`` entry the rubric scorer emits:
-    the 0–100 ``score`` (decoupled from who won), the ``win_shape`` tag, the
-    drama counts, and the four sub-scores (R1/R2/R3/R7). Joined to a playable
-    replay via ``seed`` → ``game_id = headless-seed-{seed}``.
-    """
+
+class ProfileConstantsView(_FrozenView):
+    """The design constants the game-shape profile's version froze."""
+
+    slow_burn_ticks: int
+    wave_slack_ticks: int
+    close_call_margin: int
+    third_round_meetings: int
+    down_to_the_wire_start: int
+    runaway_share: str
+    leak_p_level: str
+    saturation_share: str
+
+
+class CatalogueEntryView(_FrozenView):
+    """One shelf, chip, facet or tripwire name, its half and its class."""
+
+    name: str
+    half: Literal["pre_reveal", "reveal"]
+    kind: Literal["shelf", "chip", "facet", "tripwire"]
+    classification: ProfileClassification
+
+
+class ShelfMemberView(_FrozenView):
+    """One game on a shelf, with the meetings and kill ticks it points to."""
 
     seed: int
-    score: float
-    reason: str
-    n_meetings: int
-    win_shape: str
-    ejected_impostors: int
-    accused_impostors: int
-    survived_accused: int
-    r1_decisive: float
-    r2_deception: float
-    r3_arcs: float
-    r7_legible: float
+    meetings: tuple[int, ...]
+    kill_ticks: tuple[int, ...]
 
 
-class RubricView(_FrozenView):
-    """The per-set rubric surface served at ``/eval/rubric`` (DESIGN.md §3.1, §7).
+class ShelfView(_FrozenView):
+    """One named shelf: its games in seed order."""
 
-    The rubric is **per-set** (a set that ships none answers 404 / empty state;
-    since 2026-10-02 no committed set ships one) and **staleness-guarded**: ``git_head`` is the commit
-    the rubric was scored at, ``manifest_sha`` is the commit the served set's
-    replays were recorded at (read from its ``MANIFEST.md``), and
-    ``stale`` is ``True`` when they disagree (the rubric was scored against a
-    different code/replay version than the set on disk). ``per_game`` is sorted
-    best-first by the scorer, so the Highlights reel renders it directly.
+    name: str
+    members: tuple[ShelfMemberView, ...]
+
+
+class ChipMemberView(_FrozenView):
+    """One game a meeting chip marks, with the meetings it marks."""
+
+    seed: int
+    meetings: tuple[int, ...]
+
+
+class ChipView(_FrozenView):
+    """One meeting chip: the games it marks, in seed order."""
+
+    name: str
+    members: tuple[ChipMemberView, ...]
+
+
+class TripwireEntryView(_FrozenView):
+    """One ejection a tripwire reading trips."""
+
+    seed: int
+    meeting: int
+
+
+class TripwireReadingView(_FrozenView):
+    """One tripwire reading; a governing reading keeps its games off every shelf."""
+
+    name: str
+    tripwire: str
+    governs: bool
+    entries: tuple[TripwireEntryView, ...]
+
+
+class TripwiresView(_FrozenView):
+    """Every tripwire reading, and how many alibi-class flags row 3 could read.
+
+    The two flag counts are absent from a bundle trimmed to a few games.
+    """
+
+    readings: tuple[TripwireReadingView, ...]
+    alibi_flags: int | None = None
+    alibi_flags_evaluable: int | None = None
+
+
+class MeetingFacetView(_FrozenView):
+    index: int
+    tick: int
+    trigger: Literal["report", "emergency"]
+    regrouped: bool
+
+
+class KillFacetView(_FrozenView):
+    tick: int
+    in_wave: bool
+
+
+class ReportFacetView(_FrozenView):
+    meeting: int
+    corpse_age: int
+
+
+class TripLabelView(_FrozenView):
+    tripwire: str
+    meeting: int
+
+
+class GameFacetsView(_FrozenView):
+    """One game's facets before the reveal, under All games."""
+
+    seed: int
+    ticks: int
+    meetings: tuple[MeetingFacetView, ...]
+    kills: tuple[KillFacetView, ...]
+    reports: tuple[ReportFacetView, ...]
+    bodies_never_found: int
+    moments: tuple[str, ...]
+    tripped: tuple[TripLabelView, ...]
+
+
+class PreRevealHalfView(_FrozenView):
+    """Everything the viewer may show before the reveal."""
+
+    shelves: tuple[ShelfView, ...]
+    chips: tuple[ChipView, ...]
+    games: tuple[GameFacetsView, ...]
+    tripwires: TripwiresView
+
+
+class DistanceFacetView(_FrozenView):
+    counts: Literal["tasks_left", "kills_short_of_parity"]
+    steps: int
+    start: int
+
+
+class EjectionFacetView(_FrozenView):
+    meeting: int
+    right: bool
+
+
+class RevealFacetsView(_FrozenView):
+    """One game's facets behind the reveal."""
+
+    seed: int
+    ending: str
+    distance: DistanceFacetView | None
+    sabotage_starts: tuple[int, ...]
+    tasks_done: int
+    tasks_assigned: int
+    ejections: tuple[EjectionFacetView, ...]
+
+
+class PairView(_FrozenView):
+    """Decided without proof: right, and wrong on what it held, always together."""
+
+    right: ShelfView
+    wrong: ShelfView
+
+
+class ClassRowView(_FrozenView):
+    fact: str
+    a: int
+    b: int
+    c: int
+    d: int
+    p: float
+
+
+class ClassTableView(_FrozenView):
+    name: str
+    games: int
+    members: int
+    rows: tuple[ClassRowView, ...]
+    classification: ProfileClassification
+
+
+class RevealHalfView(_FrozenView):
+    """Everything behind the reveal toggle.
+
+    ``class_tables`` is absent from a bundle trimmed to a few games.
+    """
+
+    shelves: tuple[ShelfView, ...]
+    decided_without_proof: PairView
+    games: tuple[RevealFacetsView, ...]
+    class_tables: tuple[ClassTableView, ...] | None = None
+
+
+class GameProfileView(_FrozenView):
+    """The game-shape profile served at ``/eval/game-profile``.
+
+    Mirrors ``eval.game_profile.GameProfile`` field for field, plus ``stale``:
+    ``True`` when the file's MANIFEST key, seedset or source fingerprint
+    disagrees with the set on disk, and then every member, game and table is
+    withheld. A set that ships no profile answers 404.
     """
 
     view_model_version: str = Field(
         default=VIEW_MODEL_VERSION, serialization_alias="viewModelVersion"
     )
+    rubric_version: int
+    era: str | None
+    manifest_key: str | None
+    source_fingerprint: str
     seedset: str
-    git_head: str | None
-    manifest_sha: str | None
     stale: bool
-    per_game: tuple[RubricGameView, ...]
+    constants: ProfileConstantsView
+    catalogue: tuple[CatalogueEntryView, ...]
+    pre_reveal: PreRevealHalfView
+    reveal: RevealHalfView
 
 
 __all__ = [
     "AccusationClaimView",
     "AdvantageView",
     "AgentMemoryView",
+    "CatalogueEntryView",
+    "ChipMemberView",
+    "ChipView",
+    "ClassRowView",
+    "ClassTableView",
+    "DistanceFacetView",
+    "EjectionFacetView",
+    "GameFacetsView",
+    "GameProfileView",
     "InvestigationPlanView",
     "AgentTickStateView",
     "AgentVisibilityView",
@@ -1771,6 +1954,11 @@ __all__ = [
     "EdgeView",
     "EvalCostSummaryView",
     "ExperimentConfigView",
+    "KillFacetView",
+    "MeetingFacetView",
+    "PairView",
+    "PreRevealHalfView",
+    "ProfileConstantsView",
     "ReplayAccountingView",
     "FailedCallEvalView",
     "FailedCallView",
@@ -1793,16 +1981,19 @@ __all__ = [
     "ReplayMetadataView",
     "ReplayView",
     "ReportBodyEventView",
+    "ReportFacetView",
     "ReportProvenanceGroupView",
+    "RevealFacetsView",
+    "RevealHalfView",
     "RoomView",
-    "RubricGameView",
-    "RubricView",
     "SabotageDetailView",
     "SabotageEventView",
     "SawKillObservationView",
     "SawMoveObservationView",
     "SawPlayerView",
     "SawVentObservationView",
+    "ShelfMemberView",
+    "ShelfView",
     "SizeView",
     "SuspicionEntryView",
     "SuspicionGraphView",
@@ -1810,6 +2001,10 @@ __all__ = [
     "TaskActivityAccountView",
     "TacticalPolicyView",
     "TickView",
+    "TripLabelView",
+    "TripwireEntryView",
+    "TripwireReadingView",
+    "TripwiresView",
     "TurnView",
     "VentEventView",
     "VentView",

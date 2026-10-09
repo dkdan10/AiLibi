@@ -1,39 +1,52 @@
 // HighlightCard (Task 12.9; design/phase-12/stage-1-design.md §3.1, slice 7; the
 // firewall rules in design/phase-12/claude-design-brief.md).
 //
-// PRESENTATIONAL ONLY: one card per game, built from a `RubricGameView` joined to
-// its replay metadata. Clicking it calls `onOpen(gameId)` — the connected
-// `<ReplayPicker/>` turns that into "load this replay + open the workspace".
+// PRESENTATIONAL ONLY: one card per game, built from the game's entry in the
+// set's game-shape profile joined to its replay metadata. Clicking it calls
+// `onOpen(gameId)` — the connected `<ReplayPicker/>` turns that into "load this
+// replay + open the workspace".
 //
-// It shows: a 0–100 interestingness SCORE badge (decoupled from who won), the
-// WIN-SHAPE tag, a DRAMA line (meetings · accused / ejected impostors ·
-// survived-accused), and a 4-spoke mini SUB-SCORE bar whose spokes are named by
-// the one legend table in `lib/copy.ts` — the same table the picker header
-// prints, so a bar and its legend cannot drift apart.
+// It shows the seed, a role-neutral outcome tag, the shelves the game sits on as
+// chips, the eyewitness chip on the meeting it marks, a tripwire's plain label,
+// a facet line and a small timeline of kills and meetings. There is no score and
+// no rank: a card describes its game and orders nothing.
 //
-// Firewall (BINDING): the card keys on drama / score, NEVER on who won. The score
-// badge + sub-scores are role-neutral ink — they never reuse the suspicion (amber)
-// / trust (blue) / kill (red) channels, and the winner is a neutral label, never a
-// guilt hue. No committed set ships a rubric since 2026-10-02, and 4p1i — the
-// fast technical fixture, served only on an explicit `?set=4p1i` — holds games
-// with no meeting at all. So the UNSCORED and ZERO-MEETING states are
-// first-class here, not afterthoughts.
+// Firewall (BINDING): the chips and the timeline are role-neutral ink — they
+// never reuse the suspicion (amber) / trust (blue) / kill (red) channels, and the
+// winner is a neutral label, never a guilt hue. A set may ship no profile at all,
+// and the four-player set holds games with no meeting, so the no-profile and
+// zero-meeting states are first-class here.
 //
 // REVEAL GATING (Task 19.10): this grid renders BEFORE anything is opened, so it
-// is the corpus's biggest pre-play spoiler surface. The card therefore takes a
-// `reveal` prop and, while it is false, emits NO outcome-derived DOM: the winner
-// chip reads "Outcome hidden", and the win shape (which names the MECHANISM of
-// the ending) plus the accused/ejected/survived counts collapse to one honest
-// line. Structure stays visible — the meeting count, the tick count and the
-// interestingness sub-scores describe pacing, not who won. `reveal` is a plain
-// prop: this component stays presentational and the store lives in ReplayPicker.
+// is the corpus's biggest pre-play spoiler surface. The card takes a `reveal`
+// prop and, while it is false, emits NO outcome-derived DOM: the winner chip
+// reads "Outcome hidden", and no reveal-only shelf, ending, distance, sabotage or
+// ejection annotation renders. The facets shown before the reveal describe
+// structure the viewer already shows elsewhere (the length, the meetings, the
+// kills).
 
-import { scoreBucketOf, type ScoreBucket } from "./ReplayFilters";
+import { PROFILE_COPY, fmt } from "../lib/copy";
+import type {
+  GameFacetsView,
+  ReplayMetadataView,
+  RevealFacetsView,
+  Winner,
+} from "../types/api";
 
-import { RUBRIC_SPOKES, rubricSpokeTitle } from "../lib/copy";
-import type { ReplayMetadataView, RubricGameView, Winner } from "../types/api";
+/** One game's entry in the set's game-shape profile, as a card shows it. */
+export interface CardProfile {
+  readonly facets: GameFacetsView;
+  /** The reveal facets, or `null` when the profile serves none for the game. */
+  readonly revealFacets: RevealFacetsView | null;
+  /** The shelves before the reveal the game sits on, in the profile's order. */
+  readonly shelves: readonly string[];
+  /** The reveal-only shelves the game sits on, the pair's halves included. */
+  readonly revealShelves: readonly string[];
+  /** The meeting indexes the eyewitness chip marks. */
+  readonly eyewitness: readonly number[];
+}
 
-/** One card's data: a rubric row (when scored) joined to its replay metadata. */
+/** One card's data: the game's profile entry (when served) and its metadata. */
 export interface HighlightCardData {
   /** Stable React key. */
   readonly key: string;
@@ -44,15 +57,20 @@ export interface HighlightCardData {
   readonly winner: Winner | null;
   readonly completionStatus?: ReplayMetadataView["completion_status"];
   readonly totalTicks: number | null;
-  /** `null` = unscored (the set ships no rubric). */
-  readonly rubric: RubricGameView | null;
+  /** `null` = the set ships no current profile. */
+  readonly profile: CardProfile | null;
 }
 
-const SCORE_BUCKET_LABEL: Record<ScoreBucket, string> = {
-  low: "Low",
-  med: "Med",
-  high: "High",
-};
+/** A shelf's title by the name the served profile gives it. */
+export function shelfTitle(name: string): string {
+  const entry = (PROFILE_COPY.shelves as Readonly<Record<string, { title: string }>>)[
+    name
+  ];
+  if (entry === undefined) {
+    throw new Error(`the game-shape profile names a shelf this build has no words for: ${name}`);
+  }
+  return entry.title;
+}
 
 function winnerLabel(
   winner: Winner | null,
@@ -86,9 +104,6 @@ function WinnerTag({
   return (
     <span
       title={hidden ? "Hidden until you reveal outcomes" : undefined}
-      // `text-3xs` is the named 10px step — identical to the ad-hoc `text-[10px]`
-      // this line carried, minus the literal (the rest of the file still has a
-      // few; converting them all is out of 19.10's scope).
       className="inline-flex items-center gap-1 rounded-pill border border-ink-300 px-2 py-0.5 font-mono text-3xs text-ink-600"
     >
       <span aria-hidden>{glyph}</span>
@@ -97,162 +112,193 @@ function WinnerTag({
   );
 }
 
-// 0–100 score badge. Role-neutral ink-on-paper: the number + the Low/Med/High
-// bucket carry the meaning, with no reserved-channel hue.
-//
-// The bucket line carries the NARROW LABEL (Task 19.9, restated per-badge because
-// the number travels): both Phase-19 audits found this scalar's ordering inverts
-// the human-interest tails, so it must never read as a watchability ranking.
-const SCORE_TITLE =
-  "Internal pacing/structure heuristic — not a human rating, not a watchability ranking";
-
-function ScoreBadge({ score }: { score: number }) {
-  const bucket = scoreBucketOf(score);
+function Chip({
+  text,
+  revealOnly,
+  title,
+}: {
+  text: string;
+  revealOnly?: boolean;
+  title?: string;
+}) {
   return (
-    <div
-      title={SCORE_TITLE}
-      className="flex shrink-0 flex-col items-center rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1.5 shadow-data"
+    <li
+      title={title}
+      className={
+        "rounded-pill border-2 px-2 py-0.5 font-mono text-3xs font-medium text-ink-900 " +
+        (revealOnly ? "border-dashed border-ink-500 bg-paper-1" : "border-ink-900 bg-paper-2")
+      }
     >
-      <div className="flex items-baseline gap-0.5">
-        <span className="font-display text-2xl leading-none text-ink-900">
-          {Math.round(score)}
-        </span>
-        <span className="font-mono text-[10px] text-ink-400">/100</span>
-      </div>
-      <span className="mt-0.5 font-mono text-[9px] uppercase tracking-wide text-ink-500">
-        {SCORE_BUCKET_LABEL[bucket]} · internal heuristic
-      </span>
+      {text}
+    </li>
+  );
+}
+
+function count(template: string, value: number): string {
+  return fmt(template, { count: String(value) });
+}
+
+// The structure line: length, meetings by what opened them, kills and the wave,
+// bodies never found. Every value is a plain count of the recording.
+function FacetLine({ facets }: { facets: GameFacetsView }) {
+  const reported = facets.meetings.filter((meeting) => meeting.trigger === "report").length;
+  const wave = facets.kills.filter((kill) => kill.in_wave).length;
+  const parts = [
+    fmt(PROFILE_COPY.facets.ticks, { ticks: String(facets.ticks) }),
+    facets.meetings.length === 0
+      ? PROFILE_COPY.facets.noMeetings
+      : fmt(PROFILE_COPY.facets.meetings, {
+          count: String(facets.meetings.length),
+          reported: String(reported),
+          called: String(facets.meetings.length - reported),
+        }),
+    facets.kills.length === 0
+      ? PROFILE_COPY.facets.noKills
+      : fmt(PROFILE_COPY.facets.kills, {
+          count: String(facets.kills.length),
+          wave: String(wave),
+        }),
+    count(PROFILE_COPY.facets.bodiesNeverFound, facets.bodies_never_found),
+  ];
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p className="font-mono text-xs text-ink-700">{parts.join(" · ")}</p>
+      {facets.reports.length > 0 && (
+        <ul className="font-mono text-3xs text-ink-500">
+          {facets.reports.map((report) => (
+            <li key={report.meeting}>
+              {fmt(PROFILE_COPY.facets.report, {
+                meeting: String(report.meeting + 1),
+                age: String(report.corpse_age),
+              })}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-function WinShapeTag({ shape }: { shape: string }) {
+// A tick-by-tick strip: a mark per kill (a wave kill hollow) and per meeting.
+// Neutral ink only; positions are the ticks themselves over the game's length.
+function Timeline({ facets }: { facets: GameFacetsView }) {
+  const length = Math.max(facets.ticks, 1);
+  const left = (tick: number) => `${Math.min(100, (tick / length) * 100)}%`;
   return (
-    <span className="inline-block rounded-pill border-2 border-ink-900 bg-paper-2 px-2.5 py-0.5 font-mono text-xs font-medium text-ink-900">
-      {shape}
-    </span>
+    <div
+      role="img"
+      aria-label={PROFILE_COPY.facets.timeline}
+      className="relative h-4 w-full rounded-sm bg-paper-3 shadow-data"
+    >
+      {facets.meetings.map((meeting) => (
+        <span
+          key={`m-${meeting.index}`}
+          title={fmt(PROFILE_COPY.facets.timelineMeeting, {
+            meeting: String(meeting.index + 1),
+            tick: String(meeting.tick),
+          })}
+          className="absolute top-0 h-4 w-0.5 bg-ink-900"
+          style={{ left: left(meeting.tick) }}
+        />
+      ))}
+      {facets.kills.map((kill, index) => (
+        <span
+          key={`k-${index}-${kill.tick}`}
+          title={fmt(
+            kill.in_wave ? PROFILE_COPY.facets.timelineWaveKill : PROFILE_COPY.facets.timelineKill,
+            { tick: String(kill.tick) },
+          )}
+          className={
+            "absolute top-1 h-2 w-2 -translate-x-1 rounded-full border-2 border-ink-700 " +
+            (kill.in_wave ? "bg-paper-0" : "bg-ink-700")
+          }
+          style={{ left: left(kill.tick) }}
+        />
+      ))}
+    </div>
   );
 }
 
-// Meetings · accused / ejected impostors · survived-accused. Zero-meeting games
-// (common in the 4p1i set) get an honest "No meetings" rather than a row of 0s.
-//
-// Reveal split (Task 19.10): the MEETING COUNT is structure — how much
-// deliberation the game holds — and stays visible unspoiled, as does the
-// zero-meeting line. The accused / ejected / survived counts are outcome (they
-// say whether the table got it right), so unrevealed they collapse to one line
-// that admits the omission rather than silently dropping to a shorter sentence.
-function DramaLine({ rubric, reveal }: { rubric: RubricGameView; reveal: boolean }) {
-  if (rubric.n_meetings === 0) {
-    return (
-      <p className="font-mono text-xs text-ink-500">
-        No meetings — no deduction drama
-      </p>
+function endingWords(ending: string): string {
+  const words = (PROFILE_COPY.revealFacets.endings as Readonly<Record<string, string>>)[ending];
+  if (words === undefined) {
+    throw new Error(`the game-shape profile names an ending this build has no words for: ${ending}`);
+  }
+  return words;
+}
+
+/** A tripwire's plain label at the meeting it trips, counted from one. */
+export function tripwireLabel(tripwire: string, meeting: number): string {
+  const template = (PROFILE_COPY.tripwires as Readonly<Record<string, string>>)[tripwire];
+  if (template === undefined) {
+    throw new Error(`the game-shape profile names a tripwire this build has no words for: ${tripwire}`);
+  }
+  return fmt(template, { meeting: String(meeting + 1) });
+}
+
+// Behind the reveal: the ending, the losing side's distance, the sabotages in
+// play and each ejection's annotation.
+function RevealFacetLines({ facets }: { facets: RevealFacetsView }) {
+  const lines = [fmt(PROFILE_COPY.revealFacets.ending, { ending: endingWords(facets.ending) })];
+  if (facets.distance !== null) {
+    lines.push(
+      fmt(
+        facets.distance.counts === "tasks_left"
+          ? PROFILE_COPY.revealFacets.tasksLeft
+          : PROFILE_COPY.revealFacets.killsShort,
+        { steps: String(facets.distance.steps), start: String(facets.distance.start) },
+      ),
     );
   }
-  return (
-    <p className="font-mono text-xs text-ink-700">
-      <span className="font-semibold">{rubric.n_meetings}</span>{" "}
-      {rubric.n_meetings === 1 ? "meeting" : "meetings"}
-      <span className="text-ink-300"> · </span>
-      {reveal ? (
-        <>
-          <span title="impostors verbally accused / impostors ejected">
-            {rubric.accused_impostors} accused / {rubric.ejected_impostors} ejected
-          </span>
-          <span className="text-ink-300"> · </span>
-          <span title="accused impostors who survived to game end">
-            {rubric.survived_accused} survived
-          </span>
-        </>
-      ) : (
-        <span className="text-ink-500">outcome details hidden</span>
-      )}
-    </p>
+  lines.push(
+    fmt(PROFILE_COPY.revealFacets.tasks, {
+      done: String(facets.tasks_done),
+      assigned: String(facets.tasks_assigned),
+    }),
   );
-}
-
-// The 4-spoke mini sub-score bar. Each sub-score is 0–1; bars are neutral ink so
-// they never collide with a semantic channel.
-//
-// Each spoke prints its WORD, not only its key: a bare "R1" meant nothing to a
-// first-time viewer, and the meaning used to exist only in a hover title (which
-// a touch device never shows) and in a legend the Replays tab did not carry.
-function SubScoreBar({ rubric }: { rubric: RubricGameView }) {
+  lines.push(
+    ...facets.sabotage_starts.map((tick) =>
+      fmt(PROFILE_COPY.revealFacets.sabotage, { tick: String(tick) }),
+    ),
+  );
+  lines.push(
+    ...facets.ejections.map((ejection) =>
+      fmt(
+        ejection.right
+          ? PROFILE_COPY.revealFacets.ejectionRight
+          : PROFILE_COPY.revealFacets.ejectionWrong,
+        { meeting: String(ejection.meeting + 1) },
+      ),
+    ),
+  );
   return (
-    // Three shared rows (bar · label · value) rather than four independent
-    // columns: the labels are words now, and a word that wraps in one column
-    // would otherwise push only that column's number a line down. `subgrid`
-    // makes the row heights common, so the numbers stay on one line at every
-    // card width.
-    <div
-      className="grid auto-cols-fr grid-flow-col grid-rows-[auto_auto_auto] gap-x-2 gap-y-1"
-      aria-label="Rubric sub-scores"
-    >
-      {RUBRIC_SPOKES.map((spoke) => {
-        const value = rubric[spoke.field];
-        const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
-        return (
-          <div
-            key={spoke.key}
-            className="row-span-3 grid grid-rows-subgrid justify-items-center"
-            title={rubricSpokeTitle(spoke, value)}
-          >
-            <div className="relative flex h-10 w-full items-end overflow-hidden rounded-sm bg-paper-3 shadow-data">
-              {/* Baseline reference at the 0.5 midpoint: without it a bare bar
-                  gives no sense of where a value sits on its 0–1 scale. */}
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-ink-300"
-              />
-              <div className="relative w-full bg-ink-700" style={{ height: `${pct}%` }} />
-            </div>
-            <span className="text-center font-mono text-[9px] font-semibold leading-tight text-ink-700">
-              {spoke.key} {spoke.word}
-            </span>
-            {/* The concrete value, not just a height. */}
-            <span className="font-mono text-[9px] text-ink-500">{value.toFixed(2)}</span>
-          </div>
-        );
-      })}
-    </div>
+    <ul className="flex flex-col gap-0.5 font-mono text-3xs text-ink-600">
+      {lines.map((line) => (
+        <li key={line}>{line}</li>
+      ))}
+    </ul>
   );
 }
 
 interface HighlightCardProps {
   data: HighlightCardData;
   onOpen: (gameId: string) => void;
-  // Set-wide absent or withheld scores are explained once above the grid.
-  hideUnscoredNote?: boolean;
   // Outcome reveal (Task 19.10). Required, not optional: an omitted spoiler gate
   // must be a compile error, never a silent default to "show everything".
   reveal: boolean;
 }
 
-export function HighlightCard({
-  data,
-  onOpen,
-  hideUnscoredNote,
-  reveal,
-}: HighlightCardProps) {
-  const { rubric } = data;
-  const scored = rubric !== null;
-  const ariaLabel = scored
-    ? `Open replay seed ${data.seed}, interestingness score ${Math.round(
-        rubric.score,
-      )} of 100`
-    : `Open replay seed ${data.seed} (score unavailable)`;
-
+export function HighlightCard({ data, onOpen, reveal }: HighlightCardProps) {
+  const { profile } = data;
   return (
     <button
       type="button"
       onClick={() => {
         onOpen(data.gameId);
       }}
-      aria-label={ariaLabel}
+      aria-label={`Open replay seed ${data.seed}`}
       className="flex w-full flex-col gap-3 rounded-lg border-2 border-ink-900 bg-paper-0 p-4 text-left shadow-chrome-1 transition-transform hover:-translate-y-0.5 hover:shadow-chrome-2 focus-visible:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-900"
     >
-      {/* header: seed + role-neutral outcome */}
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-xs font-semibold text-ink-900">
           seed {data.seed}
@@ -264,40 +310,48 @@ export function HighlightCard({
         />
       </div>
 
-      {scored ? (
-        <>
-          <div className="flex items-start gap-3">
-            <ScoreBadge score={rubric.score} />
-            <div className="flex min-w-0 flex-col gap-1.5">
-              {/* The win shape names HOW the game ended ("impostor-win",
-                  "eject-decided", "stopwatch-no-meeting") — a sharper spoiler
-                  than the winner itself, so it is omitted entirely rather than
-                  placeheld while unrevealed (Task 19.10). */}
-              {reveal && <WinShapeTag shape={rubric.win_shape} />}
-              <DramaLine rubric={rubric} reveal={reveal} />
-            </div>
-          </div>
-          <SubScoreBar rubric={rubric} />
-        </>
-      ) : hideUnscoredNote ? (
-        // The set banner explains why scores are unavailable; retain factual ticks.
+      {profile === null ? (
         data.totalTicks !== null && (
           <span className="font-mono text-[11px] text-ink-500">
-            {data.totalTicks} ticks
+            {fmt(PROFILE_COPY.facets.ticks, { ticks: String(data.totalTicks) })}
           </span>
         )
       ) : (
-        // A missing per-game entry says nothing about whether the set has a rubric.
-        <div className="flex flex-col gap-1 rounded-md border border-dashed border-ink-300 bg-paper-1 px-3 py-2">
-          <span className="font-mono text-xs font-semibold text-ink-700">
-            No score available for this recording
-          </span>
-          {data.totalTicks !== null && (
-            <span className="font-mono text-[11px] text-ink-500">
-              {data.totalTicks} ticks
-            </span>
+        <>
+          {profile.facets.tripped.map((label) => (
+            <p
+              key={`${label.tripwire}-${label.meeting}`}
+              className="rounded-md border border-dashed border-ink-500 bg-paper-1 px-2 py-1 text-xs text-ink-700"
+            >
+              {tripwireLabel(label.tripwire, label.meeting)}
+            </p>
+          ))}
+          {(profile.shelves.length > 0 ||
+            profile.eyewitness.length > 0 ||
+            (reveal && profile.revealShelves.length > 0)) && (
+            <ul className="flex flex-wrap gap-1.5" aria-label={PROFILE_COPY.cardShelves}>
+              {profile.shelves.map((name) => (
+                <Chip key={name} text={shelfTitle(name)} />
+              ))}
+              {profile.eyewitness.map((meeting) => (
+                <Chip
+                  key={`eye-${meeting}`}
+                  text={fmt(PROFILE_COPY.chip.atMeeting, { meeting: String(meeting + 1) })}
+                  title={PROFILE_COPY.chip.description}
+                />
+              ))}
+              {reveal &&
+                profile.revealShelves.map((name) => (
+                  <Chip key={name} text={shelfTitle(name)} revealOnly />
+                ))}
+            </ul>
           )}
-        </div>
+          <FacetLine facets={profile.facets} />
+          <Timeline facets={profile.facets} />
+          {reveal && profile.revealFacets !== null && (
+            <RevealFacetLines facets={profile.revealFacets} />
+          )}
+        </>
       )}
     </button>
   );

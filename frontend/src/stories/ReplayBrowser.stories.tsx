@@ -1,83 +1,122 @@
-// Stories for the replay browser + Highlights reel (Task 12.9; design/phase-12/
+// Stories for the replay browser + "Browse by moment" (Task 12.9; design/phase-12/
 // stage-1-design.md §3.1, §2.1, slice 7). They drive the PRESENTATIONAL
 // <ReplayBrowserView/> — the connected <ReplayPicker/> only adds the store + fetch
 // + URL wiring, which Storybook can't host — with mock DTOs in the served shape so
 // every required state is visible in isolation:
 //   • loading / list / empty / error (the contract's state set);
-//   • the first-class empty / zero-meeting paths (no committed set ships a
-//     rubric, so "no rubric" + zero-meeting cards are common, not edges);
-//   • the staleness banner (git_head mismatch) and the role-neutral cards.
+//   • the shelves before and after the reveal, the pair with an empty half, and
+//     a game a tripwire keeps off the shelves;
+//   • the no-profile and stale states and the role-neutral cards.
 
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import type { HighlightCardData } from "../components/HighlightCard";
 import { EMPTY_FILTERS } from "../components/ReplayFilters";
-import { ReplayBrowserView } from "../components/ReplayPicker";
-import type { RubricGameView, Winner } from "../types/api";
+import { ReplayBrowserView, buildCards } from "../components/ReplayPicker";
+import type {
+  GameFacetsView,
+  GameProfileView,
+  ReplayMetadataView,
+  Winner,
+} from "../types/api";
 
-// A realistic 9p2i rubric row with sensible defaults; override per card.
-function rubricGame(over: Partial<RubricGameView> & { seed: number }): RubricGameView {
+function facets(seed: number, meetings: number, tripped = false): GameFacetsView {
   return {
-    score: 50,
-    reason: "CREWMATE_EJECT",
-    n_meetings: 2,
-    win_shape: "eject-decided",
-    ejected_impostors: 1,
-    accused_impostors: 2,
-    survived_accused: 0,
-    r1_decisive: 1,
-    r2_deception: 0.2,
-    r3_arcs: 1,
-    r7_legible: 1,
-    ...over,
-  };
-}
-
-function card(
-  seed: number,
-  winner: Winner | null,
-  rubric: RubricGameView | null,
-  totalTicks: number | null = 420,
-): HighlightCardData {
-  return {
-    key: `seed-${seed}`,
-    gameId: `headless-seed-${seed}`,
     seed,
-    winner,
-    totalTicks,
-    rubric,
+    ticks: 30 + seed,
+    meetings: Array.from({ length: meetings }, (_, index) => ({
+      index,
+      tick: 10 + index * 12,
+      trigger: "report" as const,
+      regrouped: index < meetings - 1,
+    })),
+    kills: [
+      { tick: 5, in_wave: false },
+      { tick: 19, in_wave: meetings > 0 },
+    ],
+    reports: meetings > 0 ? [{ meeting: 0, corpse_age: 5 }] : [],
+    bodies_never_found: meetings > 0 ? 1 : 2,
+    moments: [],
+    tripped: tripped ? [{ tripwire: "decided_by_a_vote_that_held_nothing", meeting: 1 }] : [],
   };
 }
 
-// A varied reel: a top eject-decided game, a stopwatch win, an impostor win where
-// deception survived, and a zero-meeting game (drama line + sub-scores degrade
-// honestly, never to a broken panel).
-const REEL_CARDS: HighlightCardData[] = [
-  card(5, "CREWMATES", rubricGame({ seed: 5, score: 80, win_shape: "eject-decided", n_meetings: 2, ejected_impostors: 2, accused_impostors: 1, r2_deception: 0.2, r3_arcs: 1, r7_legible: 1 })),
-  card(47, "CREWMATES", rubricGame({ seed: 47, score: 73.3, win_shape: "eject-decided", n_meetings: 3, ejected_impostors: 2, accused_impostors: 2, r7_legible: 0.67 })),
-  card(12, "IMPOSTORS", rubricGame({ seed: 12, score: 58.5, reason: "IMPOSTOR_PARITY", win_shape: "impostor-win", n_meetings: 2, ejected_impostors: 0, accused_impostors: 2, survived_accused: 2, r1_decisive: 0, r2_deception: 1, r3_arcs: 0.5, r7_legible: 0.5 })),
-  card(31, "CREWMATES", rubricGame({ seed: 31, score: 41.5, win_shape: "stopwatch-some-eject", n_meetings: 1, ejected_impostors: 1, accused_impostors: 1, r1_decisive: 0.5, r2_deception: 0.2, r3_arcs: 0, r7_legible: 1 })),
-  card(8, "CREWMATES", rubricGame({ seed: 8, score: 18, win_shape: "stopwatch-no-meeting", n_meetings: 0, ejected_impostors: 0, accused_impostors: 0, survived_accused: 0, r1_decisive: 0, r2_deception: 0, r3_arcs: 0, r7_legible: 0 })),
-  card(23, "IMPOSTORS", rubricGame({ seed: 23, score: 15, reason: "IMPOSTOR_PARITY", win_shape: "impostor-win", n_meetings: 0, ejected_impostors: 0, accused_impostors: 0, survived_accused: 0, r1_decisive: 0, r2_deception: 0.4, r3_arcs: 0, r7_legible: 0 })),
-];
+function member(seed: number) {
+  return { seed, meetings: [0], kill_ticks: [] };
+}
 
-const WIN_SHAPES = [
-  "eject-decided",
-  "impostor-win",
-  "stopwatch-no-meeting",
-  "stopwatch-some-eject",
-];
+const SEEDS = [5, 8, 12, 23, 26, 31];
 
-// An unscored browser: replays with NO rubric (unscored cards), which every
-// committed set serves since 2026-10-02.
-const UNSCORED_CARDS: HighlightCardData[] = [
-  card(0, "CREWMATES", null, 510),
-  card(1, "CREWMATES", null, 488),
-  card(2, "IMPOSTORS", null, 372),
-  card(3, "CREWMATES", null, 521),
-];
+const PROFILE: GameProfileView = {
+  viewModelVersion: "6",
+  rubric_version: 2,
+  era: "stage-b-r2",
+  manifest_key: "43b5ee45",
+  source_fingerprint: "sha256:0",
+  seedset: "9p2i",
+  stale: false,
+  constants: {
+    slow_burn_ticks: 20,
+    wave_slack_ticks: 4,
+    close_call_margin: 1,
+    third_round_meetings: 3,
+    down_to_the_wire_start: 3,
+    runaway_share: "1/2",
+    leak_p_level: "0.05",
+    saturation_share: "3/4",
+  },
+  catalogue: [],
+  pre_reveal: {
+    shelves: [
+      { name: "the_reporter_saw_it_happen", members: [member(5), member(31)] },
+      { name: "double_kill", members: [member(12)] },
+      { name: "slow_burn", members: [member(5), member(23)] },
+      { name: "a_third_round", members: [member(31)] },
+    ],
+    chips: [{ name: "an_eyewitness_voted_on_it", members: [{ seed: 5, meetings: [0] }] }],
+    games: [facets(5, 2), facets(8, 0), facets(12, 2), facets(23, 1), facets(26, 2, true), facets(31, 3)],
+    tripwires: { readings: [] },
+  },
+  reveal: {
+    shelves: [
+      { name: "caught_venting", members: [member(31)] },
+      { name: "runaway", members: [member(12)] },
+    ],
+    decided_without_proof: {
+      right: { name: "decided_without_proof_right", members: [member(5), member(31)] },
+      wrong: { name: "decided_without_proof_wrong", members: [] },
+    },
+    games: SEEDS.map((seed) => ({
+      seed,
+      ending: seed === 12 || seed === 23 ? "IMPOSTOR_PARITY" : "CREWMATE_EJECT",
+      distance: { counts: "kills_short_of_parity" as const, steps: 2, start: 5 },
+      sabotage_starts: [],
+      tasks_done: 10,
+      tasks_assigned: 14,
+      ejections: seed === 8 ? [] : [{ meeting: 0, right: seed !== 26 }],
+    })),
+  },
+};
 
-const meta: Meta<typeof ReplayBrowserView> = {
+function meta(seed: number, winner: Winner | null): ReplayMetadataView {
+  return {
+    game_id: `headless-seed-${seed}`,
+    seed,
+    total_ticks: 30 + seed,
+    winner,
+    winner_reason: null,
+    meeting_count: 2,
+    total_cost_usd: 0,
+    prompt_versions: {},
+    created_at: null,
+  };
+}
+
+const LIST: ReplayMetadataView[] = SEEDS.map((seed) =>
+  meta(seed, seed === 12 || seed === 23 ? "IMPOSTORS" : "CREWMATES"),
+);
+const CARDS = buildCards(PROFILE, LIST);
+
+const storyMeta: Meta<typeof ReplayBrowserView> = {
   title: "Browser/ReplayBrowser",
   component: ReplayBrowserView,
   parameters: { layout: "fullscreen" },
@@ -92,78 +131,86 @@ const meta: Meta<typeof ReplayBrowserView> = {
     view: "highlights",
     status: "ready",
     error: null,
-    cards: REEL_CARDS,
-    totalCount: REEL_CARDS.length,
+    cards: CARDS,
+    totalCount: CARDS.length,
     filters: EMPTY_FILTERS,
     onFiltersChange: () => {},
-    winShapeOptions: WIN_SHAPES,
     set: "9p2i",
-    stale: false,
-    rubricMissing: false,
+    profile: PROFILE,
+    profileMissing: false,
+    reveal: false,
+    onReveal: () => {},
     onOpen: () => {},
     onBrowseReplays: () => {},
   },
 };
 
-export default meta;
+export default storyMeta;
 type Story = StoryObj<typeof ReplayBrowserView>;
 
-// LIST — the Highlights reel, best-first, with the four shapes and a zero-meeting
-// card showing the honest "No meetings" degrade.
+// LIST — the shelves before the reveal, in the profile's order, then All games;
+// seed 26 sits on none and carries its label.
 export const List: Story = {};
 
-// LOADING — the rubric is still in flight.
+// REVEALED — the reveal-only shelves and the pair, wrong beside right, the empty
+// half saying so.
+export const Revealed: Story = {
+  args: { reveal: true },
+};
+
+// LOADING — the profile is still in flight.
 export const Loading: Story = {
   args: { status: "loading", cards: [], totalCount: 0 },
 };
 
-// EMPTY (no rubric) — the common case: the set ships no rubric, so the reel
-// shows a real, explanatory empty state, not a broken panel.
-export const EmptyNoRubric: Story = {
+// EMPTY (no profile) — the set ships none, so the page shows a real,
+// explanatory empty state, not a broken panel.
+export const EmptyNoProfile: Story = {
   args: {
     status: "ready",
-    rubricMissing: true,
-    cards: [],
-    totalCount: 0,
+    profile: null,
+    profileMissing: true,
+    cards: buildCards(null, LIST),
+    totalCount: LIST.length,
     set: "4p1i",
-    winShapeOptions: [],
   },
 };
 
-// EMPTY (no matches) — filters exclude every game (e.g. impostor wins only).
+// EMPTY (no matches) — filters exclude every game.
 export const EmptyNoMatches: Story = {
   args: {
     status: "ready",
     cards: [],
-    totalCount: REEL_CARDS.length,
-    filters: { ...EMPTY_FILTERS, winner: "IMPOSTORS", scoreBucket: "high" },
+    totalCount: CARDS.length,
+    reveal: true,
+    filters: { ...EMPTY_FILTERS, winner: "IMPOSTORS", hasEjection: true },
   },
 };
 
-// ERROR — the rubric fetch failed (a 500, not a 404 — 404 is the empty state).
+// ERROR — the profile fetch failed (a 500, not a 404 — 404 is the empty state).
 export const Error: Story = {
   args: {
     status: "error",
-    error: "API request to /api/eval/rubric failed (status 500): internal error",
+    error: "API request to /api/eval/game-profile failed (status 500): internal error",
     cards: [],
     totalCount: 0,
   },
 };
 
-// STALE — the rubric's git_head ≠ the set's recorded sha: scores shown with the
-// honesty banner, never passed off as fresh.
+// STALE — the profile was computed from other recordings, so its shelves are
+// withheld and the page says so.
 export const Stale: Story = {
-  args: { stale: true },
+  args: { profile: { ...PROFILE, stale: true } },
 };
 
-// REPLAYS BROWSER — the 4p1i set with no rubric: every card is unscored, rendered
-// as a real "Not scored" state rather than an empty score panel.
-export const ReplaysBrowserUnscored: Story = {
+// REPLAYS BROWSER — a set with no profile: every card stays factual.
+export const ReplaysBrowserNoProfile: Story = {
   args: {
     view: "replays",
-    cards: UNSCORED_CARDS,
-    totalCount: UNSCORED_CARDS.length,
+    profile: null,
+    profileMissing: true,
+    cards: buildCards(null, LIST),
+    totalCount: LIST.length,
     set: "4p1i",
-    winShapeOptions: [],
   },
 };

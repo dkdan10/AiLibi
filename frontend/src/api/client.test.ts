@@ -13,7 +13,7 @@ import {
   ViewModelVersionError,
   getBeliefFrames,
   getReplay,
-  getRubric,
+  getGameProfile,
   getSets,
   getTick,
 } from "./client";
@@ -55,22 +55,35 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("highlight source freshness", () => {
-  it.each([false, true])("only passes current enrichment through (stale=%s)", async (stale) => {
-    const row = { seed: 13, n_meetings: 5, win_shape: "impostor-win", score: 51.2 };
-    stubFetch(jsonResponse({
+describe("the game-shape profile route", () => {
+  it.each([false, true])("passes the served profile through as served (stale=%s)", async (stale) => {
+    // The server withholds every member of a stale profile itself, so the client
+    // adds no second rule: it reads what it is served, behind the version gate.
+    const profile = {
       viewModelVersion: VIEW_MODEL_VERSION,
-      seedset: "9p2i", git_head: "old", manifest_sha: "current", stale,
-      per_game: [row],
-    }));
-    const rubric = await getRubric("9p2i");
-    expect(rubric.stale).toBe(stale);
-    expect(rubric.per_game).toEqual(stale ? [] : [row]);
+      rubric_version: 2,
+      seedset: "9p2i",
+      stale,
+      pre_reveal: { shelves: [], chips: [], games: stale ? [] : [{ seed: 13 }] },
+    };
+    const fetchSpy = vi.fn(() => Promise.resolve(jsonResponse(profile)));
+    vi.stubGlobal("fetch", fetchSpy);
+    await expect(getGameProfile("9p2i")).resolves.toEqual(profile);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/eval/game-profile?set=9p2i",
+      expect.anything(),
+    );
+  });
+
+  it("asks for the version-one route nowhere", () => {
+    const source = readFileSync(join(SRC_DIR, "api", "client.ts"), "utf8");
+    expect(source).not.toContain("/eval/rubric");
+    expect(source).toContain("/eval/game-profile");
   });
 });
 
 describe("the view-model version gate", () => {
-  it.each(["2", "3", "4", VIEW_MODEL_VERSION])("reads compatible audio in version %s", async (version) => {
+  it.each(["2", "3", "4", "5", VIEW_MODEL_VERSION])("reads compatible audio in version %s", async (version) => {
     const replay = {
       ...stampedReplay(version),
       ticks: [{ agent_states: [
@@ -82,7 +95,7 @@ describe("the view-model version gate", () => {
     await expect(getReplay("headless-seed-0")).resolves.toEqual(replay);
   });
 
-  it.each(["2", "3", "4", VIEW_MODEL_VERSION])("rejects unsupported audio in version %s", async (version) => {
+  it.each(["2", "3", "4", "5", VIEW_MODEL_VERSION])("rejects unsupported audio in version %s", async (version) => {
     stubFetch(jsonResponse({
       ...stampedReplay(version),
       ticks: [{ agent_states: [{ visibility: {
@@ -160,6 +173,18 @@ describe("the view-model version gate", () => {
     expect(replay.viewModelVersion).toBe("4");
   });
 
+  it("still reads a version-5 replay, which version 6 left as it was", async () => {
+    // Version 6 replaced the version-one rubric's route and views with the
+    // game-shape profile's; no replay payload changed shape, so a replay a
+    // version-5 server serves reads here unchanged.
+    expect(VIEW_MODEL_VERSION).toBe("6");
+    stubFetch(jsonResponse(stampedReplay("5")));
+
+    const replay = await getReplay("headless-seed-0");
+
+    expect(replay.viewModelVersion).toBe("5");
+  });
+
   it("passes through a payload the server does not stamp", async () => {
     // `GET /sets` (like ticks, meetings and memory) carries no version field and
     // never did. The rule is "if it is stamped, it must match" — an unstamped
@@ -190,7 +215,7 @@ describe("the view-model version gate", () => {
 
   it("leaves transport and HTTP failures as ApiError", async () => {
     // The gate runs after the status check, so a 404 is still an ApiError with
-    // its status intact — the Highlights reel's "no rubric" empty state reads
+    // its status intact — the Highlights tab's no-profile state reads
     // `status === 404` and must not start seeing a contract error instead.
     stubFetch(new Response("no such replay", { status: 404 }));
 
@@ -204,27 +229,25 @@ describe("the view-model version gate", () => {
 });
 
 describe("the routes that used to build their own URL", () => {
-  it("runs the version gate on the rubric the dashboard reads", async () => {
-    // `RubricView` is one of only two stamped payloads. The Tournament
-    // dashboard re-implemented this call with a bare `fetch`, so on the first
-    // contract bump a stale build would have rendered a thousand lines of
-    // statistics from foreign bytes while the picker — same endpoint, one route
-    // away — threw. Both go through `getRubric` now.
+  it("runs the version gate on the profile the dashboard reads", async () => {
+    // The profile is a stamped payload. Both the dashboard and the picker read
+    // it through `getGameProfile`, so a stale build fails on the contract
+    // rather than rendering shelves from foreign bytes.
     stubFetch(
-      jsonResponse({ viewModelVersion: "99-from-the-future", per_game: [] }),
+      jsonResponse({ viewModelVersion: "99-from-the-future", catalogue: [] }),
     );
 
-    await expect(getRubric("9p2i")).rejects.toBeInstanceOf(
+    await expect(getGameProfile("9p2i")).rejects.toBeInstanceOf(
       ViewModelVersionError,
     );
   });
 
-  it("keeps the rubric's 404 an ApiError so the absent state still reads it", async () => {
-    // The dashboard's "no rubric for this set" panel is a first-class state,
+  it("keeps the profile's 404 an ApiError so the absent state still reads it", async () => {
+    // The dashboard's "no profile for this set" panel is a first-class state,
     // selected on `err instanceof ApiError && err.status === 404`.
-    stubFetch(new Response("no rubric", { status: 404 }));
+    stubFetch(new Response("no profile", { status: 404 }));
 
-    const error = await getRubric("4p1i").catch((caught: unknown) => caught);
+    const error = await getGameProfile("4p1i").catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(404);
@@ -264,7 +287,7 @@ describe("the routes that used to build their own URL", () => {
       new Response("<!DOCTYPE HTML PUBLIC><h1>500</h1>", { status: 500 }),
     );
 
-    const error = (await getRubric("9p2i").catch(
+    const error = (await getGameProfile("9p2i").catch(
       (caught: unknown) => caught,
     )) as ApiError;
 

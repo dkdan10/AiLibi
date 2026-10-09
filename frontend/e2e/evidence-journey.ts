@@ -55,19 +55,33 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
-  // No committed set ships a rubric since 2026-10-02 (the gameplay-facts
-  // extractor does not read the shown 9-player set's recordings), so both sets
-  // render the set-level unscored state, in words that name no set as the
-  // unscored one, and neither draws the score legend.
+  // The shown 9-player set ships the game-shape profile: its Highlights tab
+  // opens on "Browse by moment", whose first shelf lists the featured head, seed
+  // 19, and no reveal-only shelf shows before the reveal. The four-player set
+  // ships none and renders the set-neutral no-profile state. Neither draws a
+  // score.
+  const moments = page.getByRole("region", { name: "Browse by moment", exact: true });
+  await page.goto(`${origin}/?set=9p2i&view=highlights`);
+  const reporter = moments.getByRole("region", { name: "The reporter saw it happen", exact: true });
+  await expect(reporter.getByRole("button", { name: "Open replay seed 19", exact: true })).toBeVisible();
+  await expect(moments.getByRole("region", { name: "All games", exact: true })).toBeVisible();
+  await expect(moments).not.toContainText("Caught venting");
+  await expect(moments).not.toContainText("ships no game-shape profile");
+  await expect(moments).not.toContainText("/100");
+  await page.goto(`${origin}/?set=4p1i&view=highlights`);
+  await expect(moments).toContainText("No game-shape profile for this set");
+  await expect(moments).not.toContainText("fixture");
+
   const browser = page.getByRole("region", { name: "Replay browser", exact: true });
-  for (const set of ["9p2i", "4p1i"]) {
-    await page.goto(`${origin}/?set=${set}&view=replays`);
-    await expect(browser).toContainText("ships no interestingness rubric — its games are unscored.");
-    await expect(browser).not.toContainText("The 0–100 score is an internal pacing/structure heuristic");
-    await expect(browser).not.toContainText("fixture");
-    await expect(browser).not.toContainText("Earlier scores");
-    await expect(browser).not.toContainText("No score available for this recording");
-  }
+  await page.goto(`${origin}/?set=9p2i&view=replays`);
+  await expect(browser.getByRole("button", { name: "Open replay seed 19", exact: true })).toContainText(
+    "The reporter saw it happen",
+  );
+  await expect(browser).not.toContainText("ships no game-shape profile");
+  await page.goto(`${origin}/?set=4p1i&view=replays`);
+  await expect(browser).toContainText("ships no game-shape profile, so its cards show no shelves.");
+  await expect(browser).not.toContainText("fixture");
+  await expect(browser).not.toContainText("interestingness");
 
   // The 9p2i results cover the whole set and publish the curated cases, each
   // on a featured game and each pinned, with the set itself, to the commit

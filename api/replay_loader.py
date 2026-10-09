@@ -79,6 +79,7 @@ from api.schemas import (
     FinaleAgentRecapView,
     FinaleEventView,
     FoundBodyObsView,
+    GameProfileView,
     GameFinale,
     GateView,
     TaskActivityAccountView,
@@ -97,8 +98,6 @@ from api.schemas import (
     ReplayView,
     ReportBodyEventView,
     RoomView,
-    RubricGameView,
-    RubricView,
     SabotageDetailView,
     SabotageEventView,
     SawMoveObservationView,
@@ -249,11 +248,10 @@ _DEFAULT_METADATA_CACHE_SIZE: Final[int] = 1024
 # the same configured replay/eval directory it scans for replays (Task 5.7).
 _TOURNAMENT_REPORT_FILENAME: Final[str] = REPORT_FILENAME
 
-# Per-set rubric surface (Task 12.2; DESIGN.md §3.1, §7). The interestingness
-# scorer (``experiments/lab/rubric_score.py``) co-locates its
-# ``results-rubric-score.json`` into a served set's dir; the loader serves it
-# read-only and staleness-guards it against the set's ``MANIFEST.md`` git sha.
-_RUBRIC_FILENAME: Final[str] = "results-rubric-score.json"
+# The per-set game-shape profile. ``scripts/publish_game_profile.py`` writes it
+# beside a profiled set's recordings; the loader serves it read-only and
+# staleness-guards it against the set's MANIFEST key, roster and source bytes.
+_PROFILE_FILENAME: Final[str] = "results-game-profile.json"
 _MANIFEST_FILENAME: Final[str] = "MANIFEST.md"
 
 # The ``MANIFEST.md`` table row shape (``scripts/_manifest_writer.py``). Task 14.7
@@ -273,7 +271,7 @@ _MANIFEST_MIN_ROW_CELLS: Final[int] = 9
 # The mixed-provenance SET FINGERPRINT (Task 19.9): a piecemeal-recorded set has no
 # single recording sha, so its provenance key is a digest over the sorted per-seed
 # shas. The prefix keeps it unmistakable for a bare git sha; the pattern is what
-# :func:`_rubric_is_stale` validates before trusting one, so a truncated stamp
+# :func:`_provenance_is_stale` validates before trusting one, so a truncated stamp
 # cannot prefix-match its way to "fresh". Kept in lockstep with
 # ``experiments.lab.rubric_score``.
 _SET_FINGERPRINT_PREFIX: Final[str] = "multi:"
@@ -1259,75 +1257,52 @@ class ReplayLoader:
             self._cache_generation,
         )
 
-    def rubric(self) -> RubricView:
-        """Load + staleness-guard the per-set rubric from the configured dir.
+    def game_profile(self) -> GameProfileView:
+        """Load and staleness-guard the set's game-shape profile.
 
-        Reads ``<replay_dir>/results-rubric-score.json`` (co-located by
-        ``experiments/lab/rubric_score.py``) and serves its
-        ``interestingness.per_game[]`` rows, comparing the rubric's ``git_head``
-        to the set's ``MANIFEST.md`` git sha to flag staleness (DESIGN.md §3.1,
-        §7). Raises :class:`FileNotFoundError` when the set ships no rubric
-        (every committed set since 2026-10-02) → the eval route maps that to a 404 /
-        empty state). A malformed rubric fails loud rather than being silently
-        coerced (AGENTS.md "no silent fallbacks").
+        Reads ``<replay_dir>/results-game-profile.json``, written beside a
+        profiled set's recordings by ``scripts/publish_game_profile.py``. Raises
+        :class:`FileNotFoundError` when the set ships no profile, which the eval
+        route answers with a 404. A present file that is malformed, or that
+        carries a field the view does not define (a score, a rank, a per-game
+        total among them), fails loud (AGENTS.md "no silent fallbacks"). When the
+        file's MANIFEST key, seedset or source fingerprint disagrees with the set
+        on disk, the view is served ``stale`` with every member, game and table
+        withheld.
         """
 
-        path = self._replay_dir / _RUBRIC_FILENAME
+        path = self._replay_dir / _PROFILE_FILENAME
         if not path.is_file():
             raise FileNotFoundError(path)
         raw: Any = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError(
-                f"invalid rubric file {path}: expected a JSON object, got "
+                f"invalid profile file {path}: expected a JSON object, got "
                 f"{type(raw).__name__}"
             )
-        seedset = raw.get("seedset")
-        if not isinstance(seedset, str):
-            raise ValueError(f"invalid rubric file {path}: missing/invalid 'seedset'")
-        git_head = raw.get("git_head")
-        if git_head is not None and not isinstance(git_head, str):
-            raise ValueError(f"invalid rubric file {path}: invalid 'git_head'")
-        # A PRESENT-but-malformed rubric fails loud (AGENTS.md "no silent
-        # fallbacks"): the 404/empty state is reserved for an ABSENT rubric (the
-        # FileNotFoundError above), so a producer that wrote a file missing its
-        # ``interestingness.per_game`` must not masquerade as a legitimate
-        # "no highlights" surface.
-        inter = raw.get("interestingness")
-        if not isinstance(inter, dict):
+        computed = [
+            key
+            for key in ("stale", "viewModelVersion", "view_model_version")
+            if key in raw
+        ]
+        if computed:
             raise ValueError(
-                f"invalid rubric file {path}: 'interestingness' must be an object"
+                f"invalid profile file {path}: {computed[0]!r} is the loader's to set"
             )
-        per_game_raw = inter.get("per_game")
-        if not isinstance(per_game_raw, list):
-            raise ValueError(
-                f"invalid rubric file {path}: 'interestingness.per_game' must be a list"
-            )
-        per_game = tuple(RubricGameView.model_validate(g) for g in per_game_raw)
-        # A content fingerprint binds scores to replay, roster and manifest bytes;
-        # stale sources suppress score rows instead of serving them as evidence.
-        manifest_sha = _manifest_git_sha(self._replay_dir)
-        # Staleness is BOTH a sha mismatch (rubric scored vs replays recorded)
-        # AND a SET mismatch (DESIGN.md §7: "fail-loud/banner on set or sha
-        # mismatch") — so a rubric from a different set co-located here (e.g. a
-        # 4p1i rubric dropped into the 9p2i dir) whose git_head happens to match
-        # is still flagged rather than served as fresh, wrong-set highlights.
+        view = GameProfileView.model_validate({**raw, "stale": False})
         expected_seedset = _expected_seedset(self._replay_dir)
-        sha_stale = _rubric_is_stale(git_head, manifest_sha)
-        set_stale = expected_seedset is not None and seedset != expected_seedset
         try:
-            source_stale = raw.get("source_fingerprint") != recording_fingerprint(
+            source_stale = view.source_fingerprint != recording_fingerprint(
                 self._replay_dir
             )
         except ValueError:
             source_stale = True
-        stale = sha_stale or set_stale or source_stale
-        return RubricView(
-            seedset=seedset,
-            git_head=git_head,
-            manifest_sha=manifest_sha,
-            stale=stale,
-            per_game=() if stale else per_game,
+        stale = (
+            _provenance_is_stale(view.manifest_key, _manifest_git_sha(self._replay_dir))
+            or (expected_seedset is not None and view.seedset != expected_seedset)
+            or source_stale
         )
+        return _withheld_profile(view) if stale else view
 
     def clear_cache(self) -> None:
         """Drop the per-process caches (engine playback, memory walk, summary).
@@ -3830,8 +3805,9 @@ def _manifest_seed_shas(replay_dir: Path) -> list[tuple[str, str]]:
     """The ``(seed, git_sha)`` pairs of the set's ``MANIFEST.md`` data rows.
 
     Empty when the manifest is absent or carries no data rows. Kept in lockstep
-    with ``experiments.lab.rubric_score._manifest_seed_shas`` so the producer and
-    this reader derive the SAME provenance key from the same bytes.
+    with ``experiments.lab.rubric_score._manifest_seed_shas``, which the frozen
+    geomean parity pin still reads; the game-shape profile's publisher stamps
+    the key this reader derives.
     """
 
     try:
@@ -3862,14 +3838,14 @@ def _manifest_git_sha(replay_dir: Path) -> str | None:
     behaviour every single-sha set keeps). A PIECEMEAL-refreshed set — the
     baseline-6 9p2i set carried three distinct recording shas — returns a stable
     ``multi:<digest>`` FINGERPRINT over its sorted ``(seed, sha)`` rows instead
-    (Task 19.9). Returning ``None`` there, as this did before, made the rubric
-    read stale unconditionally: no re-score could ever clear the banner, because
-    the key it had to match did not exist. The fingerprint is a real key — it
-    changes exactly when a seed's recording sha changes — so a re-scored rubric
-    reads fresh and a later partial re-record reads stale, both honestly.
+    (Task 19.9). Returning ``None`` there made every derived file read stale
+    unconditionally, because the key it had to match did not exist. The
+    fingerprint is a real key — it changes exactly when a seed's recording sha
+    changes — so a re-derived file reads fresh and a later partial re-record
+    reads stale, both honestly.
 
     ``None`` only when the manifest is absent or ships no data rows (no
-    provenance to compare at all → :func:`_rubric_is_stale` reports stale rather
+    provenance to compare at all → :func:`_provenance_is_stale` reports stale rather
     than a false "fresh").
     """
 
@@ -3888,8 +3864,8 @@ def _set_fingerprint(rows: Iterable[tuple[str, str]]) -> str:
     The mixed-provenance provenance key. Prefixed ``multi:`` so it can never be
     confused with (or accidentally prefix-match) a bare git sha, and truncated:
     this is a change detector, not a security boundary. Kept in lockstep with
-    ``experiments.lab.rubric_score._set_fingerprint`` — the producer stamps the
-    exact string this reader recomputes.
+    ``experiments.lab.rubric_score._set_fingerprint`` for the frozen parity pin;
+    the profile's publisher stamps the exact string this reader recomputes.
     """
 
     payload = "\n".join(f"{seed}:{sha}" for seed, sha in sorted(set(rows)))
@@ -3897,13 +3873,13 @@ def _set_fingerprint(rows: Iterable[tuple[str, str]]) -> str:
     return f"{_SET_FINGERPRINT_PREFIX}{digest[:_SET_FINGERPRINT_DIGEST_LEN]}"
 
 
-def _rubric_is_stale(git_head: str | None, manifest_sha: str | None) -> bool:
-    """Whether the rubric's provenance key disagrees with the set's own.
+def _provenance_is_stale(git_head: str | None, manifest_sha: str | None) -> bool:
+    """Whether a derived file's provenance key disagrees with the set's own.
 
     Two key shapes, two comparisons:
 
     * A bare git sha compares by PREFIX in either direction — the manifest stores
-      a SHORT sha and a rubric may carry a full ``git rev-parse HEAD``, so a
+      a SHORT sha and a derived file may carry a full ``git rev-parse HEAD``, so a
       prefix relation is the legitimate "same commit" test.
     * A ``multi:<12 hex>`` set fingerprint compares by EXACT EQUALITY on a
       well-formed value. It is a fixed-width digest, never a truncatable prefix,
@@ -3928,14 +3904,68 @@ def _rubric_is_stale(git_head: str | None, manifest_sha: str | None) -> bool:
     return not (git_head.startswith(manifest_sha) or manifest_sha.startswith(git_head))
 
 
+def _withheld_profile(view: GameProfileView) -> GameProfileView:
+    """``view`` served stale: provenance and catalogue kept, every member withheld."""
+
+    pre = view.pre_reveal
+    reveal = view.reveal
+    return view.model_copy(
+        update={
+            "stale": True,
+            "pre_reveal": pre.model_copy(
+                update={
+                    "shelves": tuple(
+                        shelf.model_copy(update={"members": ()})
+                        for shelf in pre.shelves
+                    ),
+                    "chips": tuple(
+                        chip.model_copy(update={"members": ()}) for chip in pre.chips
+                    ),
+                    "games": (),
+                    "tripwires": pre.tripwires.model_copy(
+                        update={
+                            "readings": tuple(
+                                reading.model_copy(update={"entries": ()})
+                                for reading in pre.tripwires.readings
+                            ),
+                            "alibi_flags": None,
+                            "alibi_flags_evaluable": None,
+                        }
+                    ),
+                }
+            ),
+            "reveal": reveal.model_copy(
+                update={
+                    "shelves": tuple(
+                        shelf.model_copy(update={"members": ()})
+                        for shelf in reveal.shelves
+                    ),
+                    "decided_without_proof": reveal.decided_without_proof.model_copy(
+                        update={
+                            "right": reveal.decided_without_proof.right.model_copy(
+                                update={"members": ()}
+                            ),
+                            "wrong": reveal.decided_without_proof.wrong.model_copy(
+                                update={"members": ()}
+                            ),
+                        }
+                    ),
+                    "games": (),
+                    "class_tables": None,
+                }
+            ),
+        }
+    )
+
+
 def _expected_seedset(replay_dir: Path) -> str | None:
     """The served set's identity (``"{players}p{impostors}i"``) from its roster.
 
     Read from the set's ``roster.json`` (the authoritative per-set descriptor),
     so it is cwd/name-independent: the canonical 9p2i set resolves to ``"9p2i"``.
     Returns ``None`` for the flat default (no ``roster.json``), which ships no
-    rubric — there the seedset check is moot and only the sha guard applies.
-    Used to flag a co-located rubric whose ``seedset`` does not match the set it
+    profile — there the seedset check is moot and only the sha guard applies.
+    Used to flag a co-located profile whose ``seedset`` does not match the set it
     is being served for (DESIGN.md §7 "set mismatch").
     """
 
@@ -3958,7 +3988,7 @@ _REPLAY_GLOB: Final[str] = REPLAY_FILENAME_GLOB
 # have exactly one, 11/50 none), 23/50 decided by the task timer against the map's
 # own ``dead_task_rule: redistribute`` intent that "the only crew win path becomes
 # ejection" (engine/maps/canonical_1.yaml:39-44). 9p2i is the set with meetings and
-# suspicion arcs; neither set ships a rubric since 2026-10-02. Deep-links that
+# suspicion arcs, and the one that ships the game-shape profile. Deep-links that
 # omit ``set`` now resolve 9p2i; an explicit ``?set=4p1i`` still serves the fixture.
 DEFAULT_SET: Final[str] = "9p2i"
 
@@ -4120,7 +4150,7 @@ def get_replay_loader(
     """FastAPI dependency: the per-set loader for the ``set`` query param.
 
     Every replay/eval route depends on this, so threading ``set`` here
-    set-parametrizes ``/replays``, ``/replays/{game_id}/*``, ``/eval/rubric``, and
+    set-parametrizes ``/replays``, ``/replays/{game_id}/*``, ``/eval/game-profile``, and
     ``/eval/tournament-report`` at once over a per-set cached loader. An omitted (or
     empty) ``set`` resolves to :meth:`SetLoaderRegistry.default_set` — the SAME
     resolver ``GET /sets`` advertises, so the no-``set`` default and the advertised

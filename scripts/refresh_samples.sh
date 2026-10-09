@@ -69,12 +69,14 @@ Usage: $(basename "$0") (--full | --meetings | --seeds N,N,N) [--dry-run]
                   Record every seed with the experimental switches this JSON
                   file declares (default: none, the historical defaults). The
                   file is checked before anything stages and copied into the
-                  stage once, and every seed records from that copy. A config
-                  that turns switches on needs an explicit AILIBI_SAMPLE_DIR
-                  outside the committed sets: a candidate round directory,
-                  replays/candidates/<round>/<set>/, or a scratch directory.
-                  The meeting-experiment environment variables are refused
-                  with or without this flag.
+                  stage once, and every seed records from that copy. A
+                  committed sample set records only its own era's declared
+                  config, or bare when its era declares none (eval/eras.py);
+                  a candidate round directory,
+                  replays/candidates/<round>/<set>/, or a scratch directory,
+                  named with AILIBI_SAMPLE_DIR, takes any config. The
+                  meeting-experiment environment variables are refused with
+                  or without this flag.
   -h, --help      Show this help
 
 Modes are mutually exclusive. The meeting-bearing seeds are derived from
@@ -305,11 +307,12 @@ fi
 # recording target, checked before any preflight or staging, in the dry run and
 # the real run alike. scripts/_declared_experiment.py states the three rules: the
 # file must parse as a closed experiment config; any meeting-experiment variable
-# in the environment is refused, with or without a config; and a config that
-# turns switches on records only into an explicit AILIBI_SAMPLE_DIR that resolves
-# outside the committed sets, inside replays/ only at
-# replays/candidates/<round>/<set>/. The check prints the file's sha256, which
-# the snapshot below must match.
+# in the environment is refused, with or without a config; and a committed sample set
+# records only its own era's declared config, or bare when its era declares none,
+# while a candidate round or a scratch directory, named with an explicit
+# AILIBI_SAMPLE_DIR (inside replays/ only at replays/candidates/<round>/<set>/),
+# takes any config. The check prints the file's sha256, which the snapshot below
+# must match.
 declared_args=(check --sample-dir "$SAMPLE_DIR" --manifest "$MANIFEST")
 if [[ -n "$experiment_config" ]]; then
   declared_args+=(--config "$experiment_config")
@@ -582,10 +585,8 @@ if [[ "$dry_run" -eq 1 ]]; then
   fi
   echo "[dry-run] manifest: $MANIFEST"
   echo "[dry-run] eval report: would rebuild $SAMPLE_DIR/tournament-eval-report.json.gz from the refreshed replays (scripts/build_sample_report.py; \$0, no provider)"
-  if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" && -n "$experiment_config" ]]; then
-    echo "[dry-run] interestingness rubric: would skip it, because the set is recorded with the declared experiment config $experiment_config and the gameplay-facts extractor reads only recordings made without experiment settings; the set ships no rubric"
-  elif [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
-    echo "[dry-run] interestingness rubric: would regenerate $SAMPLE_DIR/results-rubric-score.json (\$0, no provider)"
+  if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
+    echo "[dry-run] game-shape profile: would regenerate $SAMPLE_DIR/results-game-profile.json and docs/game-profile.md from the refreshed replays (scripts/publish_game_profile.py; \$0, no provider)"
   fi
   echo "[dry-run] no API calls made; no files written."
   if ! substrate_lever_preflight; then
@@ -1120,47 +1121,24 @@ echo "Total spend: \$$total (recorded in $MANIFEST)."
 echo "Rebuilding eval report from the refreshed replays ..."
 uv run python "$REPO_ROOT/scripts/build_sample_report.py" --sample-dir "$SAMPLE_DIR"
 
-# Regenerate the per-set interestingness rubric (Task 12.2; DESIGN.md §3.1, §7)
-# so /eval/rubric stays FRESH after a re-record instead of only banner-guarded
-# when stale. The gameplay-facts extractor is pinned to the canonical 9p2i set
-# (it reads replays/samples/9p2i + writes facts to a predictable temp path), so
-# this runs only when the refresh target IS that set; for any other set the
-# producer is a no-op here (the flat 4p1i baseline ships no rubric by design).
-# $0, no provider call. The paid replay JSONL + MANIFEST + eval report are
-# already written above (preserved on disk), but a regen FAILURE exits non-zero:
-# the refresh is not "complete" — and must not be committed — while the rubric
-# is stale, so the operator re-runs it rather than shipping a drifted surface.
-#
-# The gameplay-facts extractor reads only recordings made without experiment
-# settings, so a set recorded under a declared config (an era the extractor does
-# not read; eval/eras.py) skips this step with one named line and ships no rubric.
-if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" && -n "$experiment_config" ]]; then
-  echo "Skipping the interestingness rubric: $SAMPLE_DIR is recorded with the declared experiment config $experiment_config, and the gameplay-facts extractor reads only recordings made without experiment settings, so the set ships no rubric."
-elif [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
-  echo "Regenerating the per-set interestingness rubric (9p2i) ..."
-  # Run from the repo root in a subshell: the extractor reads its hardcoded 9p2i
-  # set + writes facts to this predictable temp path (no sys.path bootstrap, so
-  # PYTHONPATH=repo root), and rubric_score's lab-artifact write is repo-relative
-  # — a stray caller cwd would otherwise drop it or trip the warning. The rubric
-  # stamps the set's MANIFEST sha (not git HEAD), so its freshness is independent
-  # of cwd/git. The producer then scores those facts and co-locates the rubric.
-  _facts_path="${TMPDIR:-/tmp}/ailibi-gameplay-facts-9p2i.json"
-  if (
-    cd "$REPO_ROOT" \
-      && PYTHONPATH="$REPO_ROOT" uv run python \
-        audits/workflows/extract_gameplay_facts.py >/dev/null \
-      && uv run python experiments/lab/rubric_score.py "$_facts_path" \
-        --set-dir "$SAMPLE_DIR"
-  ); then
-    echo "  rubric refreshed: $SAMPLE_DIR/results-rubric-score.json"
+# Regenerate the game-shape profile so /eval/game-profile stays fresh after a
+# re-record instead of only reading stale. The profile is published for the shown
+# 9-player set only (scripts/publish_game_profile.py, PROFILE_SETS), so this runs
+# only when the refresh target IS that set; any other target prints no profile
+# line, and the four-player set ships no profile by design. $0, no provider call.
+# The paid replay JSONL + MANIFEST + eval report are already written above
+# (preserved on disk), but a regen FAILURE exits non-zero: the refresh is not
+# "complete" — and must not be committed — while the profile is stale.
+if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
+  echo "Regenerating the game-shape profile (9p2i) ..."
+  if (cd "$REPO_ROOT" && uv run python scripts/publish_game_profile.py); then
+    echo "  profile refreshed: $SAMPLE_DIR/results-game-profile.json and docs/game-profile.md"
   else
-    echo "ERROR: rubric regen failed. The re-recorded replays + MANIFEST +" >&2
-    echo "  eval report are preserved on disk, but /eval/rubric is now STALE." >&2
-    echo "  Re-run the rubric step before committing the refreshed set:" >&2
-    echo "    PYTHONPATH=$REPO_ROOT uv run python \\" >&2
-    echo "      audits/workflows/extract_gameplay_facts.py >/dev/null \\" >&2
-    echo "      && uv run python experiments/lab/rubric_score.py \\" >&2
-    echo "        $_facts_path --set-dir $SAMPLE_DIR" >&2
+    echo "ERROR: the game-shape profile failed to regenerate. The re-recorded" >&2
+    echo "  replays + MANIFEST + eval report are preserved on disk, but" >&2
+    echo "  /eval/game-profile is now STALE. Re-run the step before committing" >&2
+    echo "  the refreshed set:" >&2
+    echo "    uv run python scripts/publish_game_profile.py" >&2
     exit 1
   fi
 fi

@@ -63,9 +63,9 @@ from api.schemas import (  # noqa: E402
     AgentMemoryView,
     BeliefFrameView,
     EvalCostSummaryView,
+    GameProfileView,
     PublicResultsView,
     ReplayView,
-    RubricView,
     SuspicionGraphView,
 )
 from eval.meeting_quality import TournamentEvalReport  # noqa: E402
@@ -84,7 +84,7 @@ _ROOTS: Final[tuple[type[BaseModel], ...]] = (
     EvalCostSummaryView,
     PublicResultsView,
     SuspicionGraphView,
-    RubricView,
+    GameProfileView,
     TournamentEvalReport,
 )
 
@@ -300,6 +300,11 @@ class _Generator:
                     ("ReplayMetadataView", "temporal_observation_version"),
                     ("GateView", "threshold_source"),
                     ("PublicResultsView", "provenance_groups"),
+                    # A bundle trimmed to a few games omits the set-level
+                    # tables and counts these carry; the live API serves them.
+                    ("RevealHalfView", "class_tables"),
+                    ("TripwiresView", "alibi_flags"),
+                    ("TripwiresView", "alibi_flags_evaluable"),
                     ("ObservationReferenceView", "source_tick"),
                     ("ObservationReferenceView", "observation_phase"),
                     ("ObservationReferenceView", "observation_order"),
