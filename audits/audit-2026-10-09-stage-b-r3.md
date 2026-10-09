@@ -2071,6 +2071,7 @@ The audit gives no verdict.
   same card (memo 8.7 item 3); and the scorecard's frozen before column in the
   grow form the promotion card contracts (the orchestrator's default of
   2026-10-09, memo section 8.9's addendum on `main`).
+- **The step taken**: section 11, by the orchestrator under memo 8.8, on the readings above.
 - **Before this record merges**: the stop of 7.5, the route-lines card's
   committed-payload case that reads the round's own declared config. Its
   edit is outside this card's scope and is the orchestrator's to assign.
@@ -2095,3 +2096,30 @@ The audit gives no verdict.
   no husk and no `failed_call` row. Recording wall comes from the recorder's
   logs, kept outside the repository with the operator log; every other count
   reproduces from the committed bytes with the commands above.
+
+## 11. The step taken (2026-10-09, the orchestrator under memo 8.8)
+
+The orchestrator takes the step the rule names (8.7): candidate round 3 is promoted as the shown set by the
+era-keyed path, in one card with the tour's re-curation (decision memo 8.7 item 3), keeping round 2's bytes as
+`replays/candidates/stage-b-r2` (memo 8.9). The owner's criteria (memo 8.8), read on this audit:
+
+1. **No issue with the recording.** 50 of 50 seeds in one sitting, 3 h 32 min 47 s from the window's open to the
+   last seed, with 3.34 h of recording wall summed over its eleven legs (7.2); no stop rule fired (6.2); cost
+   $0.0000; every gate and count-only key scan at every checkpoint passed (6.1, 7.1); every one of the 20 conformance
+   cells reads 0, including the field's own two, 0 of 7,956 steps false to the map and 0 of 2,416 lines off the table
+   (8.2, 8.3); the spend sits at 54.4, 55.2 and 56.8 percent of the call, input and output ceilings and at 27.8
+   percent of the 12 h wall (7.2). The one red test (7.5) read the round's declared config by design and predates the
+   round; it was re-scoped test-only (the card's Results, review round 1), not treated as a recording defect.
+2. **No step down in gameplay against the direction.** The process rows hold: grounded EJECT ballots 394 of 397,
+   unexplained decisions 6 of 702, agent-authored ballots 692 of 702, wrong-but-believable ejections 177 of 397, each
+   as 8.1 reads them against round 2. The ejections charged on a route the map or the regroup reconciles fell from 40
+   of 66 to 29 of 61, while the ejected player's served line was shown to the voters in 26 of those 29 and in all 7
+   witness cases (8.6): the lines reached, and the tables still misjudged 29 times. The impostor win share moved from
+   24 of 50 to 17 of 50, inside the band and above the watched floor (8.5); the re-keyed reporter flag reads 6.4
+   against bar A's 21.28 (8.5); the cited lines true to the route read 245 of 248 (8.8). One reading this promotion
+   carries as a stated limitation: held kill witnesses ejected read 6 of 14 against round 2's 5 of 14, with the
+   witness's line served in all six (8.6, 8.8), so the route line reached the witness meetings and did not change
+   their outcome. Nothing in this decision reads role-correctness.
+
+The promotion card `promote-round-3` dispatches after this record merges and after `retire-era-locked-pins` merges;
+its merge is the orchestrator's under memo 8.9.

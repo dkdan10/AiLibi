@@ -1283,3 +1283,10 @@ verbatim only if nothing in the audit's readings contradicts it. Every reading i
 54 to 57 percent of each ceiling" (7.2: calls 54.4%, input 55.2% and output 56.8% of their ceilings, the recording
 wall 27.8% of its 12 h). The text is not edited and the section is not written; the question is the orchestrator's,
 and the pull request stays a draft until the step is written.
+
+### The step taken (2026-10-09)
+
+The orchestrator took the step the rule names, under decision memo 8.8: round 3 is promoted as the shown set by the
+era-keyed path, in one card with the tour's re-curation, keeping round 2's bytes as a candidate copy. The decision
+and the readings it rests on are audit section 11; the one stop (audit 7.5) was resolved by the test-only re-scope
+recorded in review round 1 above, with CI green at the head. Nothing here moves a recorded byte.
