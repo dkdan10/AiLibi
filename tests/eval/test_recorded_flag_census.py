@@ -32,9 +32,7 @@ The walk is restricted to those two packages by construction, not by an
 allowlist. ``audits/workflows/extract_gameplay_facts.py`` re-derives on purpose
 -- a counterfactual is exactly what it is for -- and lives outside the swept
 roots, so no entry can rot into covering the sites this gate forbids.
-``scripts/counterfactual_phase20.py`` is outside the roots too and would be
-clean anyway: it threads all three channels (only ``trigger_kind`` is left off,
-deliberately). The recorded-input allowlist below remains empty. The reasoning
+The recorded-input allowlist below remains empty. The reasoning
 scorecard also contains synthetic detector probes, classified narrowly by their
 module, function, direct fixture builder, literal Boolean input and explicit
 candidate/legacy profile. This does not exempt its recorded-corpus analysis or
@@ -539,11 +537,11 @@ def test_the_gate_leaves_a_threaded_reconstruction_alone(tmp_path: Path) -> None
 
 
 def test_the_gate_leaves_the_counterfactual_shape_alone(tmp_path: Path) -> None:
-    # The calibration this rule is set to: ``scripts/counterfactual_phase20.py``
-    # threads all three private channels and deliberately leaves ``trigger_kind``
-    # off. It lives outside the swept roots, but the predicate must not depend on
-    # that — a gate keyed on trigger_kind would ban the repo's own best
-    # reconstruction the moment anyone moved it.
+    # The calibration this rule is set to: a reconstruction that threads all
+    # three private channels and deliberately leaves ``trigger_kind`` off. The
+    # predicate must not depend on where such a module lives — a gate keyed on
+    # trigger_kind would ban that shape the moment anyone moved one into the
+    # swept roots.
     counterfactual = tmp_path / "counterfactual_instrument.py"
     counterfactual.write_text(
         "from meetings.transcript import detect_contradictions\n"

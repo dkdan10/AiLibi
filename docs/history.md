@@ -172,6 +172,8 @@ the phase closed behind it that same day at `d8ec0a1c`
 ([close audit](../audits/audit-phase-20-close.md)).
 [Contract](../tasks/phase-20.md) ·
 [record](../audits/audit-phase-20-baseline-7.md).
+Retired on 2026-10-09: the offline lever counterfactual script, which refused to
+run once its levers graduated; its last version is at `a8a3db9b`.
 
 ---
 
