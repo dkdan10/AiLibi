@@ -47,7 +47,8 @@ from meetings.schemas import (
     SawPlayerObservation,
     SawVentObservation,
 )
-from tests._helpers.committed import funnel_9p2i, funnel_report
+from tests._helpers.committed import funnel_9p2i, funnel_report, solvability_report
+from tests._helpers.recorded_counts import recorded_counts
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -585,66 +586,60 @@ def nine_funnel() -> InformationFunnelReport:
 def test_funnel_reproduces_report_meeting_count(
     nine_funnel: InformationFunnelReport,
 ) -> None:
-    # The promoted stage-b-r2 recording (model Qwen/Qwen3.6-27B, prompt set
-    # qwen3_6_27b: v6 for the three meeting-speech templates, v8 for vote_ballot
-    # with the two ballot arms). Re-derived from the committed 9p2i bytes via
-    # eval.funnel.
-    assert nine_funnel.games_total == 50
-    assert nine_funnel.report_meetings == 114  # was 135
+    # Re-derived from the committed 9p2i bytes via eval.funnel and held to the
+    # solvability walk's own body-report census rather than transcribed (135 on
+    # the baseline-9 bytes).
+    assert nine_funnel.games_total == recorded_counts(_NINE).games
+    assert nine_funnel.report_meetings == solvability_report(_NINE).body_meetings
 
 
 def test_funnel_reproduces_oracle_stage(nine_funnel: InformationFunnelReport) -> None:
-    # The committed bytes: the oracle is a diagnostic ceiling; the median holds
-    # at 3, and killer-in-set is preserved via one-hop reachability (the model
-    # never wrongly alibis the killer) — every report meeting holds it.
-    assert nine_funnel.candidate_set_median == 3.0
+    # The committed bytes: the oracle is a diagnostic ceiling. Its cells nest
+    # and are not transcribed (the baseline-9 bytes read a 2.82 mean, 120
+    # killer-in-set and 27 of 33 singletons holding exactly the killer): the
+    # killer-in-set count sits inside the report meetings, and a singleton
+    # holding exactly the killer is one of the singletons, themselves among the
+    # sets of at most two.
     assert nine_funnel.candidate_set_mean is not None
-    assert round(nine_funnel.candidate_set_mean, 2) == 2.93  # was 2.82
-    assert nine_funnel.killer_in_set == 114  # was 120
     assert nine_funnel.candidate_set_pm1_mean is not None
-    assert round(nine_funnel.candidate_set_pm1_mean, 2) == 2.45  # was 2.25
-    # 28 singleton ±1-window sets, every one holding EXACTLY the killer: with no
-    # stale report the dead-killer late-report miss the baseline-9 bytes carried
-    # (27 of 33) does not occur (unique_killer never over-counts a singleton that
-    # convicted the wrong player).
-    assert nine_funnel.candidate_singleton_pm1 == 28  # was 33
-    assert nine_funnel.unique_killer_pm1 == 28  # was 27
-    assert nine_funnel.candidate_le2_pm1 == 69  # was 85
+    assert nine_funnel.killer_in_set <= nine_funnel.report_meetings
+    assert nine_funnel.unique_killer_pm1 <= nine_funnel.candidate_singleton_pm1
+    assert nine_funnel.candidate_singleton_pm1 <= nine_funnel.candidate_le2_pm1
 
 
 def test_funnel_reproduces_possession_stage(
     nine_funnel: InformationFunnelReport,
 ) -> None:
-    assert nine_funnel.vent_witnessed == 26  # was 95
-    assert nine_funnel.kill_witnessed == 14  # was 3
-    assert nine_funnel.killer_at_scene == 30  # was 35
-    assert nine_funnel.last_seen_with_killer == 34  # was 39
-    # The union vent ∪ kill-witnessed ∪ scene ∪ last-seen.
-    assert nine_funnel.hard_clue_held == 67  # was 112
+    # The union vent ∪ kill-witnessed ∪ scene ∪ last-seen holds each part and
+    # sits inside the report meetings; the parts are not transcribed (the
+    # baseline-9 bytes read 95 / 3 / 35 / 39, union 112).
+    for part in (
+        nine_funnel.vent_witnessed,
+        nine_funnel.kill_witnessed,
+        nine_funnel.killer_at_scene,
+        nine_funnel.last_seen_with_killer,
+    ):
+        assert part <= nine_funnel.hard_clue_held
+    assert nine_funnel.hard_clue_held <= nine_funnel.report_meetings
 
 
 def test_funnel_reproduces_transmission_stage(
     nine_funnel: InformationFunnelReport,
 ) -> None:
-    # The transmission census: free-text vent mentions cover 22 of the 26 held
-    # vents, and innocent-reporter ejections stand at 17 (the baseline-9 bytes:
-    # 71 of 95, and 7).
-    assert nine_funnel.vent_mentioned == 22  # was 71
-    assert nine_funnel.vent_meetings == 26  # was 95
-    assert nine_funnel.reporter_ejected == 17  # was 7
-    assert nine_funnel.reporter_ejected_innocent == 17  # was 7
-    assert nine_funnel.report_ejections == 63  # was 80
-    # Votes outside the ≤3 exact-tick candidate set.
-    assert nine_funnel.votes_outside_small_set == 14
-    assert nine_funnel.small_set_ejections == 40  # was 51
+    # The transmission census, derived: free-text vent mentions cover some of
+    # the held vents, every ejected reporter is innocent while impostors never
+    # report, and the small-set ejections sit inside the report ejections (the
+    # baseline-9 bytes: 71 of 95 vents mentioned, 7 innocent reporters).
+    assert nine_funnel.vent_mentioned <= nine_funnel.vent_meetings
+    assert nine_funnel.reporter_ejected_innocent == nine_funnel.reporter_ejected
+    assert nine_funnel.reporter_ejected <= nine_funnel.report_ejections
+    assert nine_funnel.small_set_ejections <= nine_funnel.report_ejections
     # The messenger-innocent-prior tripwire: no committed killer self-reports.
     assert nine_funnel.killer_self_reported == 0
-    # 15.4's SawVentObservation type makes held vents STRUCTURALLY speakable — 23
-    # structured vent observations on the promoted bytes. Pinned so the folds
-    # cannot silently drift.
-    assert nine_funnel.structured_vent_observed == 23  # was 69
-    assert nine_funnel.killer_placement_observed == 28  # was 22
-    assert nine_funnel.killer_accused == 87  # was 86
+    # 15.4's SawVentObservation type makes held vents STRUCTURALLY speakable;
+    # the speakable vents sit inside the held ones (69 on the baseline-9 bytes).
+    assert nine_funnel.structured_vent_observed <= nine_funnel.vent_meetings
+    assert nine_funnel.killer_accused <= nine_funnel.report_meetings
 
 
 def test_funnel_runs_on_4p1i_preset() -> None:

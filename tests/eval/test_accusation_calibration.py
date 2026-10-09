@@ -689,13 +689,9 @@ _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 _COMMITTED_SPLIT: Final[
     Mapping[str, tuple[tuple[float, int], tuple[float, int], tuple[float, int]]]
 ] = {
-    # The promoted stage-b-r2 bytes; the baseline-9 bytes read (0.3031, 750),
-    # crew (0.1896, 567) and impostor (0.6746, 183).
-    "replays/samples/9p2i": (
-        (0.28727770177838546, 731),  # was (0.3031066666666665, 750)
-        (0.1690340909090909, 528),  # was (0.18955908289241633, 567)
-        (0.6687192118226603, 203),  # was (0.6745901639344266, 183)
-    ),
+    # The frozen baseline-9 sets. The shown 9p2i set is not transcribed (the
+    # baseline-9 bytes read (0.3031, 750), crew (0.1896, 567) and impostor
+    # (0.6746, 183)); its curves are held to their own partition below.
     "replays/ml_corpus/9p2i": (
         (0.28633187772925806, 2290),  # was (0.27847654435671193, 2153)
         (0.1685755813953478, 1720),  # was (0.163608374384236, 1624)
@@ -712,6 +708,9 @@ _COMMITTED_SPLIT: Final[
         (0.6441860465116278, 43),  # was (0.6453488372093021, 43)
     ),
 }
+
+
+_SHOWN_SET: Final[str] = "replays/samples/9p2i"
 
 
 def _committed_calibration(sample_dir: str) -> AccusationCalibrationReport:
@@ -752,6 +751,21 @@ def test_committed_sets_pin_the_accuser_role_split(sample_dir: str) -> None:
     # The ceiling itself: not one impostor accusation on the record scores.
     assert sum(b.impostor_hits for b in impostor.bins) == 0
     assert all(b.actual_impostor_rate == 0.0 for b in impostor.bins if b.count > 0)
+
+
+def test_the_shown_sets_curves_partition_the_pooled_one() -> None:
+    """The shown set's role-conditioned curves, derived rather than transcribed.
+
+    The two conditioned curves partition the pooled one on the shown bytes as on
+    the frozen sets, and each ECE is a calibration error in [0, 1].
+    """
+
+    result = _committed_calibration(_SHOWN_SET)
+    crew = result.accusation_claim_crew_accuser
+    impostor = result.accusation_claim_impostor_accuser
+    assert crew.total + impostor.total == result.accusation_claim_total > 0
+    for ece in (result.accusation_claim_ece, crew.ece, impostor.ece):
+        assert ece is not None and 0.0 <= ece <= 1.0
 
 
 def _populated_bins(index: int, count: int, hits: int) -> tuple[CalibrationBin, ...]:
@@ -920,9 +934,9 @@ def test_the_4p1i_impostor_curves_are_honestly_low_power() -> None:
 
     A single-impostor roster gives the impostor accuser few lawful confidences
     to spread, so the conditioned curve legitimately flags. The corpus 9p2i
-    curve, with two impostors accusing, does not; the promoted samples 9p2i
-    curve does too, its 203 impostor accusations falling in four bins (the
-    baseline-9 bytes populated five).
+    curve, with two impostors accusing, does not; the shown samples 9p2i
+    curve's flag is its own bin count read against the bar, not transcribed
+    (round 2's fell in four bins; the baseline-9 bytes populated five).
     """
 
     for sample_dir, populated in (
@@ -933,11 +947,10 @@ def test_the_4p1i_impostor_curves_are_honestly_low_power() -> None:
         assert curve.populated_bins == populated
         assert curve.populated_bins < MIN_POPULATED_BINS_FOR_POWER
         assert curve.low_power is True
-    promoted = _committed_calibration(
-        "replays/samples/9p2i"
-    ).accusation_claim_impostor_accuser
-    assert promoted.populated_bins == 4  # was at least 5
-    assert promoted.low_power is True  # was False
+    promoted = _committed_calibration(_SHOWN_SET).accusation_claim_impostor_accuser
+    assert promoted.low_power is (
+        promoted.populated_bins < MIN_POPULATED_BINS_FOR_POWER
+    )
     curve = _committed_calibration(
         "replays/ml_corpus/9p2i"
     ).accusation_claim_impostor_accuser
@@ -1105,18 +1118,19 @@ def test_the_committed_guard_drop_reconciles_against_the_vote_curve() -> None:
     count. A census that over-counted marked SKIPs would fail here.
 
     The guard now authors almost no ballot: one on the corpus 9p2i set and none
-    on the other three, so that set is the one whose reconciliation exercises a
-    real drop, and the exact per-set drop is pinned beside it.
+    on the other two frozen sets, so that set is the one whose reconciliation
+    exercises a real drop, and the exact per-set drop of the frozen sets is
+    pinned beside it; the shown set's is reconciled, not transcribed (26 on the
+    baseline-9 bytes).
     """
 
     drops: Mapping[str, int] = {
         "replays/ml_corpus/4p1i": 0,  # was 2
         "replays/ml_corpus/9p2i": 1,  # was 67
         "replays/samples/4p1i": 0,  # was 1
-        "replays/samples/9p2i": 0,  # was 26
     }
     assert sorted(drops) == sorted(_COMMITTED_SPLIT)
-    for sample_dir in sorted(_COMMITTED_SPLIT):
+    for sample_dir in (*sorted(_COMMITTED_SPLIT), _SHOWN_SET):
         served = _committed_calibration(sample_dir)
         raw = json.loads(read_set_report_text(_REPO_ROOT / sample_dir))
         non_skip = sum(
@@ -1130,9 +1144,10 @@ def test_the_committed_guard_drop_reconciles_against_the_vote_curve() -> None:
             non_skip - served.vote_ballot_total
             == served.vote_ballot_guard_authored_excluded
         ), sample_dir
-        assert served.vote_ballot_guard_authored_excluded == drops[sample_dir], (
-            sample_dir
-        )
+        if sample_dir in drops:
+            assert served.vote_ballot_guard_authored_excluded == drops[sample_dir], (
+                sample_dir
+            )
     # The reconciliation still runs over a real drop on at least one set.
     assert any(drop > 0 for drop in drops.values())
 

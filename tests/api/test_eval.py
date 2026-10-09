@@ -28,6 +28,7 @@ from eval.report_schema import (
     TournamentReport,
 )
 from eval.report_io import report_path, write_report_text
+from tests._helpers.recorded_counts import recorded_counts
 from tests.api.fixtures.sample_replay import write_meeting_replay, write_sample_replay
 
 
@@ -197,25 +198,22 @@ _COMMITTED_SAMPLES_DIR = (
 def test_committed_4p1i_report_validates_against_current_model() -> None:
     report = ReplayLoader(replay_dir=_COMMITTED_SAMPLES_DIR).tournament_report()
     assert isinstance(report, TournamentEvalReport)
-    # The regenerated committed report carries every Task 7.11 field.
-    # ejection_accuracy is None iff the set has no ejections (the field's own
-    # validator). Re-anchored to the baseline-9 process re-record (Qwen/Qwen3.6-27B,
-    # the same seeds on the substrate wave's prompt bytes): the flat 4p/1i set now
-    # ejects in 20 of its 39 meetings, every one an impostor (accuracy 20/20 = 1.0;
-    # baseline 8 read 20 impostor + 4 crew, 20/24). With that supply the set is
-    # still not small-n (flag False). vote_correctness_rate 19/20 = 0.95 — all but
-    # one impostor ejection is transcript-evidence-backed. flagged_but_ignored is
-    # 0: no SKIPPED meeting carried a still-flagged transcript contradiction.
-    assert report.vote_correctness.total_ejections == 20  # was 24
-    assert report.vote_correctness.ejection_accuracy == pytest.approx(
-        20 / 20
-    )  # was 20 / 24
-    assert report.vote_correctness.impostor_ejections == 20
-    assert report.vote_correctness.crewmate_ejections == 0  # was 4
-    assert report.vote_correctness.vote_correctness_rate == pytest.approx(0.95)
-    assert report.vote_correctness.vote_correctness_small_n is False
-    assert report.vote_correctness.contradictions_flagged_but_ignored == 0
+    # The regenerated committed report carries every Task 7.11 field and
+    # validates through the runtime loader. Its role-reading cells (impostor
+    # and crewmate ejections, accuracy, the vote-correctness rate) are not
+    # pinned here: build_sample_report.py --check holds the report byte for
+    # byte. What stays is role-blind: the ejection partition, the meeting
+    # partition and the recorded meeting count. History: the role literals
+    # left this test on 2026-10-09 (baseline 8 read 20 impostor + 4 crew of 24).
+    rows = recorded_counts(_COMMITTED_SAMPLES_DIR)
+    assert report.vote_correctness.total_ejections == rows.ejections
+    assert (
+        report.vote_correctness.impostor_ejections
+        + report.vote_correctness.crewmate_ejections
+        == report.vote_correctness.total_ejections
+    )
     assert isinstance(report.accusation_calibration.vote_ballot_low_power, bool)
+    assert report.meeting_rate.meetings_total == rows.meetings
     assert (
         report.meeting_rate.skipped_meetings + report.meeting_rate.ejected_meetings
         == report.meeting_rate.meetings_total
