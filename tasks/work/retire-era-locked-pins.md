@@ -99,6 +99,18 @@ re-record and prove no defect. The four ML files read role or outcome on frozen 
 Each item names its enforcing mechanism and the planted or perturbed case proving it bites. `B` is the merge base
 with `main` after `main` is merged in following the round-3 record's merge; `H` is the PR head.
 
+- [x] Review correction: `main` is merged in after round 3's record, every row this card states is re-derived at
+  the merged head, and the swap rehearsal ran on round 3's bytes (review round 4). `f167b757` merges `main` at
+  `3d32d31e` (the record's merge is `c71ea63e`) and is not a rebase. The record's files arrive untouched and this
+  card's deletions stay; `docs/artifacts.md` conflicted on the `audits/` row only. From `git ls-files` blob sizes at
+  that head, the `tests/fixtures/` row reads 2,027,881 tracked bytes / 25 files and the `audits/` row 31,568,945 /
+  335; the record's `replays/candidates/` row (72 MB / 111 files) re-derives as written. Round 3's bytes left three
+  pins of the family failing that round 1's stand-in had passed by coincidence. Each is now derived, or its exhibit
+  found by shape (`00161d6a`, `990d8512`). Proof: offline `verify_ml_evidence.py` exits 0 with 0 FAIL, and the
+  `audits/` row at either side of the conflict, or one file off, fails it (probes A1 to A3). At `990d8512` the
+  rehearsal reads 330 failed and 23 errors against B's 482 and 23; no test fails at H that passes at B, and every
+  failure is classed in Results. Each of the three pins' round-2 forms fails on round 3's bytes (controls D4, T3, B2)
+  while its derived form passes (`bin/probe.py`, `bin/rehearse.sh`).
 - [x] Review correction: the shown set's honesty cells are held again (review round 2). The first build's sweep
   had deleted their literals from `tests/eval/test_evidence_honesty.py` with no gate holding them (no honesty report is
   committed), and two listed-class mutants of the fold survived at `7ae55b51` that the base killed. Every shown-set
@@ -181,7 +193,7 @@ with `main` after `main` is merged in following the round-3 record's merge; `H` 
   both files are regenerated. Mechanism: `publish_process_scorecard.py --check` and `read_before_columns`'s sha256
   pin. Proof: `--check` exits 0 at H and exits 1 on a scratch copy of the JSON with the `appendix` key restored;
   `git diff --stat B H -- audits/deduction-candidate/run-2026-09-16 docs/process-scorecard-before.json` prints nothing.
-- [ ] **The re-pin family is split, and the next promotion re-pins no transcribed count.** The family is the 39 files
+- [x] **The re-pin family is split, and the next promotion re-pins no transcribed count.** The family is the 39 files
   above, V7's two files, `frontend/e2e/evidence-journey.ts`, the golden's pin table and any file a card merged
   since `335cbdc9` added with a literal count of a committed set (the sweep re-run at B). Each pin is classed as:
   *integrity* (schema validation, partition identities, byte identity, the frozen before columns), *firewall*,
@@ -502,7 +514,7 @@ of item 8 leave the labelled `**k/n**` shape the check reads.
 | `build_sample_report.py --check` on samples/4p1i, samples/9p2i, ml_corpus/4p1i, ml_corpus/9p2i | 0, 0, 0, 0 |
 | `measure_baseline.py <set> --honesty --json` on the same four sets | 0, 0, 0, 0 |
 | `build_sample_report.py --sample-dir replays/samples/9p2i --baseline-out x` ("unrecognized arguments") | 2 |
-| `git merge-base --is-ancestor <round-3 record merge> HEAD` | not runnable: the record has not merged |
+| `git merge-base --is-ancestor <round-3 record merge> HEAD` | not runnable: the record has not merged (exit 0 at `990d8512`, review round 4) |
 
 `git ls-files tests/fixtures | wc -l` gives 25 and the tracked bytes are 2,027,881, the row's figures;
 `git ls-files audits` gives 334 files and 31,425,810 bytes, the row's figures (both re-derived after the
@@ -562,15 +574,15 @@ by the shape their test needs. The frozen sets (`replays/ml_corpus/*` and `repla
 | `tests/_helpers/recorded_counts.py` (new), `tests/_helpers/committed.py` | the count fold; the movement-decided list names only the frozen sets' 51 meetings | | |
 | `tests/eval/test_evidence_honesty.py` | the shown set's turns, prompts, ballots and meetings against the recorded rows (`tests/_helpers/recorded_counts.py`), and its testimony rows against a count of the tagged meeting frame in the recorded bytes; partitions and nestings beside every shown literal | none: no honesty report is committed, so no byte-identity gate holds the shown cells (corrected 2026-10-09: the first ledger named `build_sample_report.py --check`, which does not read this instrument) | the shown set's other cells as literals, restored in review round 2 because no gate holds them and none has a second surface short of re-implementing the fold (the card's stop-and-ask, raised in the PR's Questions); two planted cases for the agent-frame window and the rendered-row count; frozen sets; the semantic zeros |
 | `tests/eval/test_gate_spec_metrics.py` (added 2026-10-09; the first ledger missed it) | the decomposition, the multi-signal fold and the committed report's impostor ejections agree; the supply gauges equal an independent fold of the recorded meeting rows (non-vent flags, weak and strong, zero-flag meetings, subject roles, accused-impostor meetings), the genuine-subject count is re-folded, and the flag census sits inside the committed report's taxonomy | the W0 to W2 anchor tests and the whole-derivation pin left with their mechanism (G27, not transcription). The committed report carries no supply block, so `build_sample_report.py --check` holds none of the gauges; the over-gate listener count is held by its synthetic case alone | the synthetic cases |
-| `tests/eval/test_deduction_metrics.py` | the report-block cells as partitions and cross-checks (rows, DTO rule, kill-craft, impostor ejections); the weak-only exhibit found | shown literals (`build_sample_report.py --check`) | the meeting-flag cross-tab lines and the partner-ballot tuple, which `check_doc_facts.py` parses as the reading guide's source (front-door owned) |
+| `tests/eval/test_deduction_metrics.py` | the report-block cells as partitions and cross-checks (rows, DTO rule, kill-craft, impostor ejections); the weak-only exhibit found; the live teammate body's count against the ballots' recorded `teammate_coerced` reason (added in review round 4) | shown literals (`build_sample_report.py --check`) | the meeting-flag cross-tab lines and the partner-ballot tuple, which `check_doc_facts.py` parses as the reading guide's source (front-door owned) |
 | `tests/eval/test_gameplay_census.py` | the shown JSON figures as partitions and cross-checks; the harness, double-kill and trigger-tick games found | the shown literals (`publish_gameplay_census.py --check`) | round 1's legs; era pins |
 | `tests/eval/test_reporter_justice.py`, `test_vj_instruments.py`, `test_vote_correctness.py`, `test_wave2_metrics.py`, `test_funnel.py`, `test_funnel_pooling.py`, `test_accusation_calibration.py`, `test_validity.py`, `test_solvability.py`, `test_kill_craft.py`, `test_gate_metrics.py`, `test_witness_entitlement.py` | the shown cells as their own ratios, partitions and nestings, held to the rows and sibling folds (I-2 claims, solvability body meetings, funnel report meetings, MANIFEST winners); the gate block equals its recompute; lost openings read off the rows; the witnessed-kill producer case found | | frozen sets; the four bare `nine.*` citation lines and the partner tuple `check_doc_facts.py` parses; the round-2 classification finding in `test_vote_correctness.py`, named as round 2's for the promotion to re-point; semantic zeros (genuine-class supply, sheltered survivors, retired guards) |
 | `tests/api/test_eval.py`, `tests/eval/test_meeting_quality.py` (V7) | the ejection, meeting and SKIP partitions against the rows; the recompute equals the stored conversion block | every role-reading literal and the recount tables (`build_sample_report.py --check`); each trail is one history line | validation, route and partition asserts; `unclassified == 0`, `citation_coerced == 0` |
 | `tests/api/test_evidence_taxonomy.py`, `test_observation_references.py`, `test_replay_loader.py`, `test_view_model.py` | taxonomy totals via the committed report; the citation exhibits, the forged ballot, the finales and the non-meeting control found; action labels against applied actions; chips equal the surrogate dataset's independent marker parse | | frozen 4p1i rows; the retired-guard zeros |
 | `tests/api/fixtures/evidence_mechanisms.py`, `tests/api/test_evidence_mechanisms.py`, `tests/eval/test_watchability.py`, `test_watchability_reanchor.py` | | | classed and kept: the mechanism anchors are the executable evidence the Task-19.11 owner decision reserves, and the referee floors are the frozen referee (the KEEP FROZEN row); no byte-identity gate holds either |
-| `tests/agents/test_absence_prior.py`, `test_beliefs.py`, `test_beliefs_hard_evidence_gate.py`, `test_impostor_policy.py`, `test_memory_meeting_history.py` | histograms partition the recorded meetings; anchors found by shape; the hard-evidence census and the counterfactual held to their partitions; the refuted living lead found | | the clamp's zero polarity; frozen rows and totals (re-measured over the three frozen sets) |
-| `tests/meetings/test_contradictions.py`, `test_transcript.py`, `test_manager.py`, `test_vote_tally_parity.py`, `test_citation_relevance.py` | meeting totals counted off the rows; classes found by mechanism; compared ballots equal the recorded EJECT ballots; the collision held above zero | | frozen-set totals (25; 16/19/12/7/3/365; 531 with 321/210); retired-guard markers at zero |
-| `tests/meetings/test_prompt_byte_golden.py` | `samples/9p2i`'s meetings and ballots come from an independent count of its replay files (a counted row); the route-line ballots equal the reconciled ballots | | the semantic zeros as literals; the `samples/4p1i` and `candidates/stage-b-r1/9p2i` literal rows; a key for every walked set and `KeyError` for a set without one (restored 2026-10-09); no campaign mark |
+| `tests/agents/test_absence_prior.py`, `test_beliefs.py`, `test_beliefs_hard_evidence_gate.py`, `test_impostor_policy.py`, `test_memory_meeting_history.py` | histograms partition the recorded meetings; anchors found by shape, the relevance-gate anchor's meeting-0 ungated carry held as a relation to the gated one (review round 4); the hard-evidence census and the counterfactual held to their partitions; the refuted living lead found | | the clamp's zero polarity; frozen rows and totals (re-measured over the three frozen sets) |
+| `tests/meetings/test_contradictions.py`, `test_transcript.py`, `test_manager.py`, `test_vote_tally_parity.py`, `test_citation_relevance.py` | meeting totals counted off the rows; classes found by mechanism; the unflagged-player meeting found by shape (review round 4); compared ballots equal the recorded EJECT ballots; the collision held above zero | | frozen-set totals (25; 16/19/12/7/3/365; 531 with 321/210); retired-guard markers at zero |
+| `tests/meetings/test_prompt_byte_golden.py` | `samples/9p2i`'s meetings and ballots come from an independent count of its replay files (a counted row); the route-line ballots equal the reconciled ballots | | the semantic zeros as literals; the `samples/4p1i`, `candidates/stage-b-r1/9p2i` and, from the record's merge, `candidates/stage-b-r3/9p2i` literal rows; a key for every walked set and `KeyError` for a set without one (restored 2026-10-09); no campaign mark |
 | `tests/orchestrator/test_replay.py`, `tests/training/test_surrogate_dataset.py`, `tests/scripts/test_measure_baseline_cli.py` | tick rows counted; the marker census per set; CLI lines against the instrument objects and the MANIFEST | | frozen sets' census rows |
 | `tests/eval/test_game_profile.py`, `tests/api/test_game_profile_view.py` (added by the sweep at B) | shelf order and the tripped game's absence; the planted pointer on the chip's first member | the shelf sizes, members and readings (`publish_game_profile.py --check`) | |
 | `frontend/src/lib/bodies.test.ts`, `contradictions.test.ts`, `annotations.test.ts`, `regroup.test.ts`, `vents.test.ts` (the last three added by the sweep at B) | frames, reports, meetings and flags counted off the JSONL; the census twins equal `docs/gameplay-census.json`; exhibits found; the negative controls stated as inequalities | | the fixture digests (integrity); frozen 4p1i literals; semantic zeros |
@@ -586,7 +598,7 @@ In scratch worktrees at B (`97549508`) and at H, round 2's replays, MANIFEST, ro
 report, profile, census and scorecard were regenerated and the three corpus-bound viewer fixtures
 regenerated from their documented generators; nothing was committed. **Round 3 has not recorded**, so round
 1's candidate bytes stood in for it (its declared config differs from round 2's only by the missing
-`kill_cooldown_ticks`). The rehearsal re-runs on round 3's bytes at the merge.
+`kill_cooldown_ticks`). The rehearsal re-runs on round 3's bytes at the merge (done in review round 4, below).
 
 | | default tier (pytest) | viewer (vitest) |
 |---|---|---|
@@ -885,3 +897,194 @@ exits 0 over the bundle's 110 files. Nothing ships.
 - The CI paragraph above said every later commit changed only this card. It is corrected in place.
 - No follow-through outside Expected scope this round: `tests/eval/test_evidence_honesty.py` is in the re-pin
   family, and `scripts/check_doc_facts.py` is in Expected scope.
+
+### Review corrections, round 4 (2026-10-09)
+
+Review round 3 passed `4f59b575` on all three lenses, with the L9 box still open. Round 4 is the integration
+round that the card's merge gate names. Its one finding: merge `main` after round 3's record, re-derive every row
+this card states at the merged head, re-run the swap rehearsal on round 3's bytes, and tick the box. This round's
+commits are `f167b757` (the merge), `00161d6a` and `990d8512` (the three pins round 3's bytes exposed), then this
+Results commit. Every figure below was measured at `990d8512` unless another head is named. That tree differs
+from this commit's only in this card. Scratch work stayed under `retire-fix-r4-wf_028c0d2b-852-1/` in the session
+scratchpad, and nothing from it is committed. Every census was count-only, no rendered prompt or transcript text
+was quoted, and band 2100-2999 stayed unseen.
+
+**The merge.** `f167b757` merges `origin/main` at `3d32d31e`; round 3's record merged at `c71ea63e` (PR #505). It
+is a merge, not a rebase, and no pushed commit was rewritten. Two of the 63 incoming paths overlap this branch:
+- `docs/artifacts.md`, which conflicted on the `audits/` row only.
+- The golden, which merged on its own. The record's `candidates/stage-b-r3/9p2i` row lands beside the counted
+  `samples/9p2i` row and the literal round-1 row.
+
+Both sides are kept. Over `replays`, `audits`, `tasks`, `docs/experiment-arms.md` and
+`tests/meetings/test_route_lines_arm.py`, `git diff --stat origin/main f167b757` names only this card's own edits:
+`audits/workflows/extract_gameplay_facts.py` (G27), `replays/ml_corpus/README.md` (G21) and this card. Outside the
+record's paths, `git diff --stat 4f59b575 f167b757` names only the two re-derived rows and the golden's round-3 row.
+The ancestry check against `c71ea63e` exits 0.
+
+**The rows, re-derived** from `git ls-files -s` blob sizes (`git cat-file --batch-check='%(objectsize)'`). The
+working tree's `wc -c` agrees, and nothing under these paths changed after the merge:
+
+| row | files | tracked bytes | stated in `docs/artifacts.md` |
+|---|---|---|---|
+| `tests/fixtures/` | 25 | 2,027,881 | 2,027,881 tracked bytes / 25 files (unchanged) |
+| `audits/` | 335 | 31,568,945 | 31,568,945 tracked bytes / 335 files. This branch's 31,425,810 plus the record's audit and index (+143,135); `main` read 31,575,005 before this card's extractor edit |
+| `replays/candidates/` | 111 | 75,649,549 (72.1 MiB) | 72 MB / 111 files, the record's figure, kept as written |
+
+Offline `verify_ml_evidence.py`: 64 checks, 52 OK, 0 FAIL, 7 ABSENT, 5 INFO, exit 0.
+`tests/scripts/test_verify_ml_evidence.py`: 90 passed. It derives the candidate row's count from the index and
+pins no live row value.
+
+**The golden's round-3 row stays literal**, (119, 702, 0, 0) as the record landed it. It counts a candidate copy,
+the same class as round 1's row: a round is recorded once, so no re-record changes it. At the promotion its key
+leaves with its bytes (the candidate-round item of `promote-round-3`, under memo 8.9's amendment), so the promotion
+re-pins no count of it. The rehearsal holds the row: with round 3 moved into `samples/9p2i`, the counted row reads
+119 meetings and 702 ballots off the replay files, which is the record's literal. Round 2's copy reads 117 and 691,
+the history line's figures.
+
+**The swap rehearsal on round 3's bytes**, run the way the promotion card's first two items move the bytes. It ran
+in scratch worktrees at B (`3d32d31e`) and at H (`bin/rehearse.sh`, `bin/swap.py`):
+- Round 2's 50 replays, MANIFEST, roster and report moved to `replays/candidates/stage-b-r2/9p2i/`, and its
+  declared config moved to the round root. A new README carries one `candidate-declaration` block (`9p2i seeds
+  0-49`), and `results-game-profile.json` stayed.
+- Round 3's 54 files moved into `replays/samples/9p2i`, its config included. Round 3's README and emptied round
+  directory were deleted. Each of the 108 moved files has the same sha256 before and after.
+- `eval/eras.py` filed `samples/9p2i` under a `stage-b-r3` era, `ERAS` and `COMMITTED_SETS` dropped `STAGE_B_R2`,
+  and `STAGE_B_R2.declared_config` named the candidate copy.
+- The eval report was rebuilt and is byte-equal to round 3's committed report. The profile, census, scorecard and
+  three corpus-bound viewer fixtures were regenerated by their own commands.
+- Then the default tier and the viewer suite ran.
+
+| checkout | default tier (pytest) | viewer (vitest) |
+|---|---|---|
+| B `3d32d31e` | 482 failed, 10,381 passed, 23 errors | 12 failed, 799 passed |
+| H `f167b757` (the merge) | 333 failed, 10,414 passed, 23 errors | 811 passed |
+| H `00161d6a` | 330 failed, 10,417 passed, 23 errors | 811 passed |
+| H `990d8512` | 330 failed, 10,417 passed, 23 errors | 811 passed |
+
+By test id at `990d8512`, 152 failures at B pass at H. One of the 152 is the renamed transcript case below. No test
+fails at H that passes at B. The 23 errors are the same ids at B and H: 17 in `tests/experiments/test_route_check_replay.py`
+and 6 in `tests/experiments/test_route_lines_replay.py`. They are setup errors that pin recorded shas and r2's
+column at its old path. The viewer's one failure in the stand-in rehearsal (the stand-in's declared config) is gone
+on round 3's bytes.
+
+**What round 3's bytes exposed.** Round 1's stand-in passed three pins of the family by coincidence. Each pin was a
+value of round 2's bytes, not a defect, and each is now derived or its exhibit found by shape, with one dated history
+line:
+- `tests/eval/test_deduction_metrics.py`, `test_the_live_body_is_what_the_committed_bytes_carry`. The live teammate
+  body's count was the literal 16, which round 1's bytes also carry; round 3's carry 10. The count now equals the
+  number of ballots whose recorded `guard_rewrite_reason` is `teammate_coerced`, and is above 0. The two counts
+  agree on every set that carries the body: 16 on round 2 and round 1, 10 on round 3, 12 on the corpus 9p2i set.
+  A reworded body therefore reads 0 against them (probe D1).
+- `tests/meetings/test_transcript.py`, the C-C-2 pin. It read seed 38 meeting 1, but round 3's seed 38 holds one
+  meeting. The pin is renamed `test_an_unflagged_player_stays_below_gate_and_is_not_redirect_argmax`. Its meeting is
+  the first one where a re-derived flag names a living player and at least two living players carry none, and every
+  unflagged player of that meeting is held at the prior, below the gate, and never the redirect argmax. `00161d6a`
+  found two unflagged players only, and the probe showed the dropped filter was equivalent there. `990d8512` added
+  the flagged-player half of the shape, and the dropped filter now fails (T1).
+- `tests/agents/test_beliefs.py`, `test_the_gate_is_load_bearing_at_the_accused_meeting`. It pinned meeting 0's
+  ungated carry at the 0.5 prior, which was a property of round 2's anchor. On round 3's bytes the census finds 13
+  lifting coordinates and one of the anchor's shape. That one's ungated carry starts at 0.45, because the gate
+  already bites at meeting 0. (Round 2's bytes give 14 coordinates, three of the shape.) The case now asserts the
+  relation the mechanism gives: the gated carry starts at the prior and the ungated one starts no higher. The
+  finder is unchanged. A finder that also asked for an ungated start at the prior finds no coordinate on round 3's
+  bytes, so the relation is the claim those bytes support.
+
+**Every failure left at H, classed** (330; the per-file counts sum to pytest's total, and the full id list is
+reproducible from the rehearsal's output):
+- **Front door and era stamps the promotion or the front-door card owns** (195): `tests/scripts/test_check_doc_facts.py`.
+- **Era and provenance items the promotion owns** (98):
+  - `tests/eval/test_eras.py` (8).
+  - The featured list's criteria and planted seeds: `tests/api/test_sets.py` (11) and
+    `tests/scripts/test_measure_featured_criterion.py` (7).
+  - Public cases and provenance: `tests/api/test_public_results.py` (7),
+    `tests/scripts/test_public_recording_provenance.py` (1) and `tests/orchestrator/test_recording_fingerprint.py` (1).
+  - Bundle, publishers and recorder: `tests/scripts/test_build_demo_bundle.py` (2),
+    `tests/scripts/test_publish_game_profile.py` (4), `tests/scripts/test_publish_gameplay_census.py` (3),
+    `tests/scripts/test_refresh_samples.py` (1) and `tests/eval/test_process_scorecard.py` (1).
+  - `tests/scripts/test_counterfactual_phase21.py` (1, never written here).
+  - The route instruments: `tests/experiments/test_route_check_replay.py` (16) and
+    `tests/experiments/test_route_lines_replay.py` (3), with the 23 errors.
+  - `tests/eval/test_gameplay_census.py` (9): the era ids, the route field's scope on the shown set, and r2's
+    column at its old path.
+  - The golden (3): the walk of the new candidate copy without its row, the keying equality, and the route lines
+    forced ON, which move nothing on a set recorded with them ON.
+  - `tests/meetings/test_route_lines_arm.py` (20): round 2's declared config read at the shown path, and the shown
+    config now reading the route field ON, which is the promotion's route-field item.
+- **Front-door literals kept** (3), which `check_doc_facts.py` parses: `tests/eval/test_deduction_metrics.py` (2)
+  and `tests/eval/test_vj_instruments.py` (1).
+- **Kept by classification** (34): `tests/eval/test_vote_correctness.py` (1, round 2's recorded finding),
+  `tests/api/test_evidence_mechanisms.py` (5, the reserved decision's anchors), `tests/eval/test_watchability.py` (7)
+  and `test_watchability_reanchor.py` (1, the frozen referee; the shown era's stage block is the promotion's), and
+  `tests/eval/test_evidence_honesty.py` (20, the shown cells restored in review round 2, pending the PR's Question).
+
+So the failures at B that assert a transcribed count of the shown bytes read 0 at H. The only exceptions are the
+ledger's kept classes, and every other failure is an era, provenance or front-door item the promotion or the
+front-door card owns. That is the L9 box's proof, and the box is ticked. The honesty literals stay the PR's open
+Question; ticking the box does not answer it.
+
+**Probe of this round** (`bin/probe.py`: each mutant applied in place and restored, the tree clean afterwards; 18
+mutants and controls over the spans this round changed and the spans the finding names):
+
+| id | span | class | result |
+|---|---|---|---|
+| A1 | `audits/` row at `main`'s side of the conflict | planted row value | killed (`verify_ml_evidence.py` exit 1) |
+| A2 | `audits/` row at the branch's side | planted row value | killed |
+| A3 | `audits/` row one file off | planted row value | killed |
+| A4 | `tests/fixtures/` row at the pre-card figure | planted row value | killed |
+| A5 | `replays/candidates/` row one file off | planted row value | killed |
+| G1 | the golden's round-3 row deleted | dropped tuple member | killed (`KeyError` naming the set, and the keying equality) |
+| G2 | the round-3 row's meetings off by one | planted row value | killed |
+| G3 | the round-3 row's semantic zero made one | planted row value | killed |
+| D1 | the production teammate body reworded | planted source change | killed |
+| D2 | the recorded reason read made another kind | kind read made a constant | killed |
+| D3 | the body filter dropped | dropped filter | killed |
+| D4 | the derived count read as round 2's 16 | control | survives on round 2's bytes, killed on round 3's |
+| T1 | the unflagged filter dropped | dropped filter | killed at `990d8512` (survived at `00161d6a`, which led to that commit) |
+| T2 | the two-player bound loosened to 0 | comparison loosened | survived: equivalent, since the first meeting of the shape already holds two or more |
+| T2b | the flagged-player half of the shape dropped | dropped filter | survived: equivalent, since every unflagged player of either meeting sits at the prior |
+| T3 | the found meeting read as round 2's coordinate | control | survives on round 2's bytes, killed on round 3's (`IndexError`) |
+| B1 | the ungated carry read off the gated fold | swapped collection | killed |
+| B2 | the relation read as round 2's 0.5 | control | survives on round 2's bytes, killed on round 3's |
+
+Thirteen of the fifteen mutants are killed, two equivalent survivors are listed, and each of the three controls
+shows the round-2 literal failing on round 3's bytes while the derived form passes. Each gate passes unmutated.
+
+**Validation at `990d8512`** (bare shell, `env | grep -c '^AILIBI_'` printed 0; exit codes as they came back):
+- The ancestry check against `c71ea63e`: 0.
+- `test_suite_tiers.py`: 0 (8 passed).
+- Collection: `tests/training` default 376 at H and 476 at B; `-m campaign` 439 at H and 337 at B; the whole
+  default tier 10,793 at H and 10,909 at B. The moved tests run in the campaign tier: 102 of them, the two whole
+  files' 84 and 18 function-marked value pins. B's whole default tier read 10,886 before the record's merge.
+- `pytest -m campaign`: 0 (439 passed).
+- `verify_ml_evidence.py`, offline: 0 (64 checks, 52 OK, 0 FAIL, 7 ABSENT, 5 INFO).
+  `tests/scripts/test_verify_ml_evidence.py`: 0 (90 passed).
+- `check_doc_facts.py` 0 and `validate_task_docs.py` 0.
+- The scorecard, census and profile `--check`: 0, 0 and 0.
+- `verify_samples.sh`: 0 (four sets, each 50 clean: samples/4p1i, samples/9p2i, candidates/stage-b-r1/9p2i and
+  candidates/stage-b-r3/9p2i).
+- `build_sample_report.py --check` on samples/4p1i, samples/9p2i, ml_corpus/4p1i, ml_corpus/9p2i,
+  candidates/stage-b-r1/9p2i and candidates/stage-b-r3/9p2i: 0, 0, 0, 0, 0 and 0.
+- `measure_baseline.py --honesty --json` on the four sets: 0, 0, 0 and 0. `--baseline-out` exits 2 with
+  "unrecognized arguments".
+- The nothing-moves diff from `3d32d31e` prints 0 lines; under `replays/ml_corpus/` only the README moves. The
+  diffs over the record's paths and over the scorecard's archive and before column print 0 lines.
+- `tests/fixtures`: 25 files and 2,027,881 bytes. `audits`: 335 files and 31,568,945 bytes. `replays/candidates`:
+  111 files.
+- The extractor card's last commit is still the orchestrator's closure (`97549508`).
+
+**Demo bundle.** `bin/bundle_compare.sh` built the bundle at `990d8512` and at B (`3d32d31e`) in one checkout. It
+wrote B's bytes over the 96 differing paths, restored the 14 paths this card deletes as untracked files, then
+restored the head to a clean status. `diff -r` exits 0 over the bundle's 110 files. Nothing ships.
+
+**CI.** At `990d8512` the campaign workflow's run is 37959267549, green. CI's run at the final head, which is this
+commit, is cited by run id in the PR body (memo 8.7 item 1). No card-only commit records it.
+
+**Decisions of this round.**
+- The golden's round-3 row stays literal, as above. A counted form would change no promotion step, because the key
+  leaves with the bytes.
+- The three exposed pins are in the re-pin family (`test_deduction_metrics.py`, `test_transcript.py` and
+  `test_beliefs.py` are in Expected scope), so they were fixed here rather than stopped on. Each is an exhibit or
+  a count of the shown bytes, the class the card retires, not a finding outside its scope.
+- No follow-through outside Expected scope this round, and no recorded byte moved.
+- `bash scripts/check.sh` ran once at the final head as the dispatch asked. Its result is in the PR body beside the
+  CI run, which stays the gate record.
