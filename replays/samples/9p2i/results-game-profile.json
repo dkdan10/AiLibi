@@ -1,8 +1,8 @@
 {
   "rubric_version": 2,
-  "era": "stage-b-r2",
-  "manifest_key": "43b5ee45",
-  "source_fingerprint": "sha256:ebb629f67c36607e39733660db7e069729fff198adcf34c091a4d6252d796ae2",
+  "era": "stage-b-r3",
+  "manifest_key": "641b4254",
+  "source_fingerprint": "sha256:ea53a00f4c59aa23dd6c014c92443b36049ee192ec8a33e07d3ca69301f55329",
   "seedset": "9p2i",
   "constants": {
     "slow_burn_ticks": 20,
@@ -35,15 +35,15 @@
     },
     {
       "name": "two_kills_after_one_regroup",
-      "half": "pre_reveal",
+      "half": "reveal",
       "kind": "shelf",
-      "classification": "shelf"
+      "classification": "leaks"
     },
     {
       "name": "a_close_call",
-      "half": "pre_reveal",
+      "half": "reveal",
       "kind": "shelf",
-      "classification": "shelf"
+      "classification": "leaks"
     },
     {
       "name": "suspicion_moved",
@@ -203,28 +203,7 @@
             "kill_ticks": []
           },
           {
-            "seed": 1,
-            "meetings": [
-              2
-            ],
-            "kill_ticks": []
-          },
-          {
             "seed": 7,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 9,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 16,
             "meetings": [
               1
             ],
@@ -247,7 +226,8 @@
           {
             "seed": 28,
             "meetings": [
-              0
+              0,
+              2
             ],
             "kill_ticks": []
           },
@@ -292,6 +272,20 @@
               0
             ],
             "kill_ticks": []
+          },
+          {
+            "seed": 45,
+            "meetings": [
+              3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 46,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
           }
         ]
       },
@@ -302,7 +296,8 @@
             "seed": 1,
             "meetings": [],
             "kill_ticks": [
-              7
+              7,
+              19
             ]
           },
           {
@@ -353,14 +348,6 @@
         "name": "slow_burn",
         "members": [
           {
-            "seed": 1,
-            "meetings": [],
-            "kill_ticks": [
-              19,
-              40
-            ]
-          },
-          {
             "seed": 5,
             "meetings": [],
             "kill_ticks": [
@@ -385,6 +372,22 @@
             ]
           },
           {
+            "seed": 16,
+            "meetings": [],
+            "kill_ticks": [
+              8,
+              40
+            ]
+          },
+          {
+            "seed": 17,
+            "meetings": [],
+            "kill_ticks": [
+              28,
+              49
+            ]
+          },
+          {
             "seed": 18,
             "meetings": [],
             "kill_ticks": [
@@ -401,6 +404,14 @@
             ]
           },
           {
+            "seed": 20,
+            "meetings": [],
+            "kill_ticks": [
+              20,
+              40
+            ]
+          },
+          {
             "seed": 22,
             "meetings": [],
             "kill_ticks": [
@@ -410,11 +421,11 @@
             ]
           },
           {
-            "seed": 25,
+            "seed": 28,
             "meetings": [],
             "kill_ticks": [
-              7,
-              28
+              27,
+              51
             ]
           },
           {
@@ -426,206 +437,36 @@
             ]
           },
           {
+            "seed": 34,
+            "meetings": [],
+            "kill_ticks": [
+              19,
+              43
+            ]
+          },
+          {
             "seed": 39,
             "meetings": [],
             "kill_ticks": [
               17,
-              42
+              47
             ]
           },
           {
-            "seed": 47,
+            "seed": 45,
             "meetings": [],
             "kill_ticks": [
-              17,
-              42
+              38,
+              58
             ]
-          }
-        ]
-      },
-      {
-        "name": "two_kills_after_one_regroup",
-        "members": [
+          },
           {
-            "seed": 0,
-            "meetings": [
-              0
-            ],
+            "seed": 46,
+            "meetings": [],
             "kill_ticks": [
-              25,
-              27
+              22,
+              45
             ]
-          },
-          {
-            "seed": 4,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": [
-              15,
-              15
-            ]
-          },
-          {
-            "seed": 12,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": [
-              19,
-              22
-            ]
-          },
-          {
-            "seed": 13,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": [
-              18,
-              20
-            ]
-          },
-          {
-            "seed": 16,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": [
-              18,
-              21
-            ]
-          },
-          {
-            "seed": 36,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": [
-              20,
-              22
-            ]
-          }
-        ]
-      },
-      {
-        "name": "a_close_call",
-        "members": [
-          {
-            "seed": 0,
-            "meetings": [
-              3
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 1,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 9,
-            "meetings": [
-              1,
-              2
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 16,
-            "meetings": [
-              1,
-              2
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 21,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 22,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 23,
-            "meetings": [
-              0,
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 24,
-            "meetings": [
-              2
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 25,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 31,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 36,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 37,
-            "meetings": [
-              2
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 38,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 41,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 43,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 47,
-            "meetings": [
-              0,
-              3
-            ],
-            "kill_ticks": []
           }
         ]
       },
@@ -635,21 +476,6 @@
           {
             "seed": 0,
             "meetings": [
-              1,
-              3
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 1,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 7,
-            "meetings": [
               1
             ],
             "kill_ticks": []
@@ -657,14 +483,6 @@
           {
             "seed": 8,
             "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 9,
-            "meetings": [
-              1,
               2
             ],
             "kill_ticks": []
@@ -677,9 +495,9 @@
             "kill_ticks": []
           },
           {
-            "seed": 18,
+            "seed": 17,
             "meetings": [
-              1
+              2
             ],
             "kill_ticks": []
           },
@@ -691,14 +509,36 @@
             "kill_ticks": []
           },
           {
-            "seed": 25,
+            "seed": 24,
             "meetings": [
               1
             ],
             "kill_ticks": []
           },
           {
+            "seed": 26,
+            "meetings": [
+              1,
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 28,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
             "seed": 30,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 32,
             "meetings": [
               1
             ],
@@ -719,7 +559,7 @@
             "kill_ticks": []
           },
           {
-            "seed": 38,
+            "seed": 36,
             "meetings": [
               1
             ],
@@ -740,10 +580,9 @@
             "kill_ticks": []
           },
           {
-            "seed": 47,
+            "seed": 49,
             "meetings": [
-              2,
-              3
+              2
             ],
             "kill_ticks": []
           }
@@ -754,13 +593,6 @@
         "members": [
           {
             "seed": 0,
-            "meetings": [
-              2
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 1,
             "meetings": [
               2
             ],
@@ -788,14 +620,14 @@
             "kill_ticks": []
           },
           {
-            "seed": 15,
+            "seed": 13,
             "meetings": [
               2
             ],
             "kill_ticks": []
           },
           {
-            "seed": 16,
+            "seed": 15,
             "meetings": [
               2
             ],
@@ -823,6 +655,20 @@
             "kill_ticks": []
           },
           {
+            "seed": 20,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 21,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
             "seed": 22,
             "meetings": [
               2
@@ -830,7 +676,14 @@
             "kill_ticks": []
           },
           {
-            "seed": 24,
+            "seed": 26,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 28,
             "meetings": [
               2
             ],
@@ -851,13 +704,6 @@
             "kill_ticks": []
           },
           {
-            "seed": 38,
-            "meetings": [
-              2
-            ],
-            "kill_ticks": []
-          },
-          {
             "seed": 39,
             "meetings": [
               2
@@ -872,7 +718,21 @@
             "kill_ticks": []
           },
           {
-            "seed": 47,
+            "seed": 45,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 46,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 48,
             "meetings": [
               2
             ],
@@ -899,25 +759,7 @@
             ]
           },
           {
-            "seed": 1,
-            "meetings": [
-              2
-            ]
-          },
-          {
             "seed": 7,
-            "meetings": [
-              1
-            ]
-          },
-          {
-            "seed": 9,
-            "meetings": [
-              2
-            ]
-          },
-          {
-            "seed": 16,
             "meetings": [
               1
             ]
@@ -937,7 +779,8 @@
           {
             "seed": 28,
             "meetings": [
-              0
+              0,
+              2
             ]
           },
           {
@@ -967,14 +810,25 @@
           {
             "seed": 38,
             "meetings": [
-              0,
-              1
+              0
             ]
           },
           {
             "seed": 43,
             "meetings": [
               0
+            ]
+          },
+          {
+            "seed": 45,
+            "meetings": [
+              3
+            ]
+          },
+          {
+            "seed": 46,
+            "meetings": [
+              1
             ]
           }
         ]
@@ -1058,25 +912,13 @@
       },
       {
         "seed": 1,
-        "ticks": 41,
+        "ticks": 19,
         "meetings": [
           {
             "index": 0,
             "tick": 10,
             "trigger": "report",
             "regrouped": true
-          },
-          {
-            "index": 1,
-            "tick": 29,
-            "trigger": "report",
-            "regrouped": true
-          },
-          {
-            "index": 2,
-            "tick": 41,
-            "trigger": "report",
-            "regrouped": false
           }
         ],
         "kills": [
@@ -1093,25 +935,17 @@
             "in_wave": true
           },
           {
-            "tick": 40,
-            "in_wave": false
+            "tick": 19,
+            "in_wave": true
           }
         ],
         "reports": [
           {
             "meeting": 0,
             "corpse_age": 3
-          },
-          {
-            "meeting": 1,
-            "corpse_age": 10
-          },
-          {
-            "meeting": 2,
-            "corpse_age": 1
           }
         ],
-        "bodies_never_found": 1,
+        "bodies_never_found": 3,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -1119,7 +953,7 @@
       },
       {
         "seed": 2,
-        "ticks": 22,
+        "ticks": 24,
         "meetings": [
           {
             "index": 0,
@@ -1142,7 +976,11 @@
             "in_wave": true
           },
           {
-            "tick": 22,
+            "tick": 19,
+            "in_wave": true
+          },
+          {
+            "tick": 24,
             "in_wave": false
           }
         ],
@@ -1152,7 +990,7 @@
             "corpse_age": 3
           }
         ],
-        "bodies_never_found": 3,
+        "bodies_never_found": 4,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -1427,7 +1265,7 @@
       },
       {
         "seed": 8,
-        "ticks": 62,
+        "ticks": 63,
         "meetings": [
           {
             "index": 0,
@@ -1464,10 +1302,6 @@
           {
             "tick": 50,
             "in_wave": false
-          },
-          {
-            "tick": 62,
-            "in_wave": true
           }
         ],
         "reports": [
@@ -1484,7 +1318,7 @@
             "corpse_age": 3
           }
         ],
-        "bodies_never_found": 2,
+        "bodies_never_found": 1,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -1492,7 +1326,7 @@
       },
       {
         "seed": 9,
-        "ticks": 33,
+        "ticks": 34,
         "meetings": [
           {
             "index": 0,
@@ -1502,13 +1336,13 @@
           },
           {
             "index": 1,
-            "tick": 19,
+            "tick": 18,
             "trigger": "report",
             "regrouped": true
           },
           {
             "index": 2,
-            "tick": 33,
+            "tick": 34,
             "trigger": "report",
             "regrouped": false
           }
@@ -1523,12 +1357,8 @@
             "in_wave": true
           },
           {
-            "tick": 18,
+            "tick": 30,
             "in_wave": false
-          },
-          {
-            "tick": 27,
-            "in_wave": true
           }
         ],
         "reports": [
@@ -1538,14 +1368,14 @@
           },
           {
             "meeting": 1,
-            "corpse_age": 1
+            "corpse_age": 3
           },
           {
             "meeting": 2,
-            "corpse_age": 6
+            "corpse_age": 4
           }
         ],
-        "bodies_never_found": 1,
+        "bodies_never_found": 0,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -1682,7 +1512,7 @@
       },
       {
         "seed": 13,
-        "ticks": 40,
+        "ticks": 48,
         "meetings": [
           {
             "index": 0,
@@ -1692,7 +1522,13 @@
           },
           {
             "index": 1,
-            "tick": 22,
+            "tick": 21,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 38,
             "trigger": "report",
             "regrouped": true
           }
@@ -1707,15 +1543,7 @@
             "in_wave": true
           },
           {
-            "tick": 20,
-            "in_wave": true
-          },
-          {
-            "tick": 32,
-            "in_wave": true
-          },
-          {
-            "tick": 40,
+            "tick": 34,
             "in_wave": false
           }
         ],
@@ -1726,10 +1554,14 @@
           },
           {
             "meeting": 1,
-            "corpse_age": 2
+            "corpse_age": 3
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 4
           }
         ],
-        "bodies_never_found": 3,
+        "bodies_never_found": 0,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -1833,7 +1665,7 @@
       },
       {
         "seed": 16,
-        "ticks": 51,
+        "ticks": 43,
         "meetings": [
           {
             "index": 0,
@@ -1843,15 +1675,9 @@
           },
           {
             "index": 1,
-            "tick": 22,
+            "tick": 43,
             "trigger": "report",
-            "regrouped": true
-          },
-          {
-            "index": 2,
-            "tick": 35,
-            "trigger": "report",
-            "regrouped": true
+            "regrouped": false
           }
         ],
         "kills": [
@@ -1864,19 +1690,7 @@
             "in_wave": false
           },
           {
-            "tick": 18,
-            "in_wave": true
-          },
-          {
-            "tick": 21,
-            "in_wave": true
-          },
-          {
-            "tick": 32,
-            "in_wave": true
-          },
-          {
-            "tick": 51,
+            "tick": 40,
             "in_wave": false
           }
         ],
@@ -1887,22 +1701,16 @@
           },
           {
             "meeting": 1,
-            "corpse_age": 1
-          },
-          {
-            "meeting": 2,
             "corpse_age": 3
           }
         ],
-        "bodies_never_found": 3,
-        "moments": [
-          "struck_after_the_regroup"
-        ],
+        "bodies_never_found": 1,
+        "moments": [],
         "tripped": []
       },
       {
         "seed": 17,
-        "ticks": 44,
+        "ticks": 63,
         "meetings": [
           {
             "index": 0,
@@ -1918,7 +1726,13 @@
           },
           {
             "index": 2,
-            "tick": 30,
+            "tick": 31,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 3,
+            "tick": 52,
             "trigger": "report",
             "regrouped": true
           }
@@ -1933,8 +1747,12 @@
             "in_wave": true
           },
           {
-            "tick": 26,
-            "in_wave": true
+            "tick": 28,
+            "in_wave": false
+          },
+          {
+            "tick": 49,
+            "in_wave": false
           }
         ],
         "reports": [
@@ -1948,7 +1766,11 @@
           },
           {
             "meeting": 2,
-            "corpse_age": 4
+            "corpse_age": 3
+          },
+          {
+            "meeting": 3,
+            "corpse_age": 3
           }
         ],
         "bodies_never_found": 0,
@@ -2085,7 +1907,7 @@
       },
       {
         "seed": 20,
-        "ticks": 26,
+        "ticks": 64,
         "meetings": [
           {
             "index": 0,
@@ -2097,7 +1919,19 @@
             "index": 1,
             "tick": 26,
             "trigger": "report",
-            "regrouped": false
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 43,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 3,
+            "tick": 54,
+            "trigger": "report",
+            "regrouped": true
           }
         ],
         "kills": [
@@ -2112,6 +1946,18 @@
           {
             "tick": 20,
             "in_wave": true
+          },
+          {
+            "tick": 40,
+            "in_wave": false
+          },
+          {
+            "tick": 51,
+            "in_wave": true
+          },
+          {
+            "tick": 64,
+            "in_wave": true
           }
         ],
         "reports": [
@@ -2122,9 +1968,17 @@
           {
             "meeting": 1,
             "corpse_age": 6
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 3,
+            "corpse_age": 3
           }
         ],
-        "bodies_never_found": 1,
+        "bodies_never_found": 2,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -2132,7 +1986,7 @@
       },
       {
         "seed": 21,
-        "ticks": 35,
+        "ticks": 40,
         "meetings": [
           {
             "index": 0,
@@ -2145,6 +1999,12 @@
             "tick": 27,
             "trigger": "report",
             "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 40,
+            "trigger": "report",
+            "regrouped": false
           }
         ],
         "kills": [
@@ -2161,7 +2021,7 @@
             "in_wave": false
           },
           {
-            "tick": 35,
+            "tick": 36,
             "in_wave": true
           }
         ],
@@ -2173,9 +2033,13 @@
           {
             "meeting": 1,
             "corpse_age": 5
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 4
           }
         ],
-        "bodies_never_found": 2,
+        "bodies_never_found": 1,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -2248,7 +2112,7 @@
       },
       {
         "seed": 23,
-        "ticks": 35,
+        "ticks": 22,
         "meetings": [
           {
             "index": 0,
@@ -2260,7 +2124,7 @@
             "index": 1,
             "tick": 22,
             "trigger": "report",
-            "regrouped": true
+            "regrouped": false
           }
         ],
         "kills": [
@@ -2275,10 +2139,6 @@
           {
             "tick": 21,
             "in_wave": true
-          },
-          {
-            "tick": 35,
-            "in_wave": false
           }
         ],
         "reports": [
@@ -2291,7 +2151,7 @@
             "corpse_age": 1
           }
         ],
-        "bodies_never_found": 2,
+        "bodies_never_found": 1,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -2299,7 +2159,7 @@
       },
       {
         "seed": 24,
-        "ticks": 46,
+        "ticks": 25,
         "meetings": [
           {
             "index": 0,
@@ -2310,12 +2170,6 @@
           {
             "index": 1,
             "tick": 18,
-            "trigger": "report",
-            "regrouped": true
-          },
-          {
-            "index": 2,
-            "tick": 37,
             "trigger": "report",
             "regrouped": true
           }
@@ -2334,11 +2188,7 @@
             "in_wave": true
           },
           {
-            "tick": 33,
-            "in_wave": false
-          },
-          {
-            "tick": 46,
+            "tick": 25,
             "in_wave": true
           }
         ],
@@ -2350,10 +2200,6 @@
           {
             "meeting": 1,
             "corpse_age": 2
-          },
-          {
-            "meeting": 2,
-            "corpse_age": 4
           }
         ],
         "bodies_never_found": 2,
@@ -2364,7 +2210,7 @@
       },
       {
         "seed": 25,
-        "ticks": 43,
+        "ticks": 30,
         "meetings": [
           {
             "index": 0,
@@ -2374,7 +2220,7 @@
           },
           {
             "index": 1,
-            "tick": 31,
+            "tick": 23,
             "trigger": "report",
             "regrouped": true
           }
@@ -2389,12 +2235,12 @@
             "in_wave": false
           },
           {
-            "tick": 28,
-            "in_wave": false
+            "tick": 21,
+            "in_wave": true
           },
           {
-            "tick": 43,
-            "in_wave": false
+            "tick": 30,
+            "in_wave": true
           }
         ],
         "reports": [
@@ -2404,16 +2250,18 @@
           },
           {
             "meeting": 1,
-            "corpse_age": 3
+            "corpse_age": 2
           }
         ],
         "bodies_never_found": 2,
-        "moments": [],
+        "moments": [
+          "struck_after_the_regroup"
+        ],
         "tripped": []
       },
       {
         "seed": 26,
-        "ticks": 33,
+        "ticks": 41,
         "meetings": [
           {
             "index": 0,
@@ -2431,7 +2279,7 @@
             "index": 2,
             "tick": 33,
             "trigger": "report",
-            "regrouped": false
+            "regrouped": true
           }
         ],
         "kills": [
@@ -2467,13 +2315,10 @@
           }
         ],
         "bodies_never_found": 1,
-        "moments": [],
-        "tripped": [
-          {
-            "tripwire": "decided_by_a_vote_that_held_nothing",
-            "meeting": 2
-          }
-        ]
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
       },
       {
         "seed": 27,
@@ -2522,7 +2367,7 @@
       },
       {
         "seed": 28,
-        "ticks": 27,
+        "ticks": 57,
         "meetings": [
           {
             "index": 0,
@@ -2533,6 +2378,18 @@
           {
             "index": 1,
             "tick": 20,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 28,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 3,
+            "tick": 54,
             "trigger": "report",
             "regrouped": true
           }
@@ -2553,6 +2410,10 @@
           {
             "tick": 27,
             "in_wave": true
+          },
+          {
+            "tick": 51,
+            "in_wave": false
           }
         ],
         "reports": [
@@ -2563,9 +2424,17 @@
           {
             "meeting": 1,
             "corpse_age": 2
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 3,
+            "corpse_age": 3
           }
         ],
-        "bodies_never_found": 2,
+        "bodies_never_found": 1,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -2755,7 +2624,7 @@
       },
       {
         "seed": 33,
-        "ticks": 32,
+        "ticks": 40,
         "meetings": [
           {
             "index": 0,
@@ -2765,7 +2634,7 @@
           },
           {
             "index": 1,
-            "tick": 23,
+            "tick": 24,
             "trigger": "report",
             "regrouped": true
           }
@@ -2784,8 +2653,12 @@
             "in_wave": true
           },
           {
-            "tick": 32,
+            "tick": 33,
             "in_wave": true
+          },
+          {
+            "tick": 40,
+            "in_wave": false
           }
         ],
         "reports": [
@@ -2795,10 +2668,10 @@
           },
           {
             "meeting": 1,
-            "corpse_age": 3
+            "corpse_age": 4
           }
         ],
-        "bodies_never_found": 2,
+        "bodies_never_found": 3,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -2806,7 +2679,7 @@
       },
       {
         "seed": 34,
-        "ticks": 24,
+        "ticks": 43,
         "meetings": [
           {
             "index": 0,
@@ -2818,7 +2691,7 @@
             "index": 1,
             "tick": 24,
             "trigger": "report",
-            "regrouped": false
+            "regrouped": true
           }
         ],
         "kills": [
@@ -2827,8 +2700,12 @@
             "in_wave": false
           },
           {
-            "tick": 20,
+            "tick": 19,
             "in_wave": true
+          },
+          {
+            "tick": 43,
+            "in_wave": false
           }
         ],
         "reports": [
@@ -2838,10 +2715,10 @@
           },
           {
             "meeting": 1,
-            "corpse_age": 4
+            "corpse_age": 5
           }
         ],
-        "bodies_never_found": 0,
+        "bodies_never_found": 1,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -3016,29 +2893,11 @@
       },
       {
         "seed": 38,
-        "ticks": 58,
+        "ticks": 20,
         "meetings": [
           {
             "index": 0,
             "tick": 11,
-            "trigger": "report",
-            "regrouped": true
-          },
-          {
-            "index": 1,
-            "tick": 22,
-            "trigger": "report",
-            "regrouped": true
-          },
-          {
-            "index": 2,
-            "tick": 39,
-            "trigger": "report",
-            "regrouped": true
-          },
-          {
-            "index": 3,
-            "tick": 49,
             "trigger": "report",
             "regrouped": true
           }
@@ -3057,15 +2916,7 @@
             "in_wave": true
           },
           {
-            "tick": 36,
-            "in_wave": false
-          },
-          {
-            "tick": 46,
-            "in_wave": true
-          },
-          {
-            "tick": 58,
+            "tick": 20,
             "in_wave": true
           }
         ],
@@ -3073,21 +2924,9 @@
           {
             "meeting": 0,
             "corpse_age": 1
-          },
-          {
-            "meeting": 1,
-            "corpse_age": 4
-          },
-          {
-            "meeting": 2,
-            "corpse_age": 3
-          },
-          {
-            "meeting": 3,
-            "corpse_age": 3
           }
         ],
-        "bodies_never_found": 2,
+        "bodies_never_found": 3,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -3095,7 +2934,7 @@
       },
       {
         "seed": 39,
-        "ticks": 54,
+        "ticks": 61,
         "meetings": [
           {
             "index": 0,
@@ -3111,7 +2950,7 @@
           },
           {
             "index": 2,
-            "tick": 45,
+            "tick": 50,
             "trigger": "report",
             "regrouped": true
           }
@@ -3130,12 +2969,8 @@
             "in_wave": true
           },
           {
-            "tick": 42,
+            "tick": 47,
             "in_wave": false
-          },
-          {
-            "tick": 54,
-            "in_wave": true
           }
         ],
         "reports": [
@@ -3148,7 +2983,7 @@
             "corpse_age": 3
           }
         ],
-        "bodies_never_found": 3,
+        "bodies_never_found": 2,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -3379,7 +3214,7 @@
       },
       {
         "seed": 45,
-        "ticks": 38,
+        "ticks": 59,
         "meetings": [
           {
             "index": 0,
@@ -3392,6 +3227,18 @@
             "tick": 30,
             "trigger": "report",
             "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 46,
+            "trigger": "emergency",
+            "regrouped": true
+          },
+          {
+            "index": 3,
+            "tick": 59,
+            "trigger": "report",
+            "regrouped": false
           }
         ],
         "kills": [
@@ -3410,6 +3257,10 @@
           {
             "tick": 38,
             "in_wave": true
+          },
+          {
+            "tick": 58,
+            "in_wave": false
           }
         ],
         "reports": [
@@ -3420,6 +3271,10 @@
           {
             "meeting": 1,
             "corpse_age": 3
+          },
+          {
+            "meeting": 3,
+            "corpse_age": 1
           }
         ],
         "bodies_never_found": 2,
@@ -3430,62 +3285,11 @@
       },
       {
         "seed": 46,
-        "ticks": 35,
+        "ticks": 54,
         "meetings": [
           {
             "index": 0,
             "tick": 12,
-            "trigger": "report",
-            "regrouped": true
-          },
-          {
-            "index": 1,
-            "tick": 27,
-            "trigger": "report",
-            "regrouped": true
-          }
-        ],
-        "kills": [
-          {
-            "tick": 7,
-            "in_wave": false
-          },
-          {
-            "tick": 9,
-            "in_wave": false
-          },
-          {
-            "tick": 23,
-            "in_wave": false
-          },
-          {
-            "tick": 35,
-            "in_wave": true
-          }
-        ],
-        "reports": [
-          {
-            "meeting": 0,
-            "corpse_age": 3
-          },
-          {
-            "meeting": 1,
-            "corpse_age": 4
-          }
-        ],
-        "bodies_never_found": 2,
-        "moments": [
-          "struck_after_the_regroup"
-        ],
-        "tripped": []
-      },
-      {
-        "seed": 47,
-        "ticks": 65,
-        "meetings": [
-          {
-            "index": 0,
-            "tick": 9,
             "trigger": "report",
             "regrouped": true
           },
@@ -3497,13 +3301,7 @@
           },
           {
             "index": 2,
-            "tick": 45,
-            "trigger": "report",
-            "regrouped": true
-          },
-          {
-            "index": 3,
-            "tick": 57,
+            "tick": 48,
             "trigger": "report",
             "regrouped": true
           }
@@ -3514,15 +3312,62 @@
             "in_wave": false
           },
           {
-            "tick": 17,
-            "in_wave": true
-          },
-          {
-            "tick": 42,
+            "tick": 9,
             "in_wave": false
           },
           {
-            "tick": 53,
+            "tick": 22,
+            "in_wave": true
+          },
+          {
+            "tick": 45,
+            "in_wave": false
+          }
+        ],
+        "reports": [
+          {
+            "meeting": 0,
+            "corpse_age": 3
+          },
+          {
+            "meeting": 1,
+            "corpse_age": 1
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 3
+          }
+        ],
+        "bodies_never_found": 1,
+        "moments": [
+          "struck_after_the_regroup"
+        ],
+        "tripped": []
+      },
+      {
+        "seed": 47,
+        "ticks": 24,
+        "meetings": [
+          {
+            "index": 0,
+            "tick": 9,
+            "trigger": "report",
+            "regrouped": true
+          },
+          {
+            "index": 1,
+            "tick": 24,
+            "trigger": "report",
+            "regrouped": false
+          }
+        ],
+        "kills": [
+          {
+            "tick": 7,
+            "in_wave": false
+          },
+          {
+            "tick": 18,
             "in_wave": true
           }
         ],
@@ -3534,14 +3379,6 @@
           {
             "meeting": 1,
             "corpse_age": 6
-          },
-          {
-            "meeting": 2,
-            "corpse_age": 3
-          },
-          {
-            "meeting": 3,
-            "corpse_age": 4
           }
         ],
         "bodies_never_found": 0,
@@ -3552,7 +3389,7 @@
       },
       {
         "seed": 48,
-        "ticks": 25,
+        "ticks": 53,
         "meetings": [
           {
             "index": 0,
@@ -3562,9 +3399,15 @@
           },
           {
             "index": 1,
-            "tick": 25,
+            "tick": 22,
             "trigger": "report",
-            "regrouped": false
+            "regrouped": true
+          },
+          {
+            "index": 2,
+            "tick": 39,
+            "trigger": "report",
+            "regrouped": true
           }
         ],
         "kills": [
@@ -3579,6 +3422,14 @@
           {
             "tick": 20,
             "in_wave": true
+          },
+          {
+            "tick": 35,
+            "in_wave": false
+          },
+          {
+            "tick": 53,
+            "in_wave": false
           }
         ],
         "reports": [
@@ -3588,10 +3439,14 @@
           },
           {
             "meeting": 1,
-            "corpse_age": 5
+            "corpse_age": 2
+          },
+          {
+            "meeting": 2,
+            "corpse_age": 4
           }
         ],
-        "bodies_never_found": 1,
+        "bodies_never_found": 2,
         "moments": [
           "struck_after_the_regroup"
         ],
@@ -3661,34 +3516,19 @@
           "name": "decisive",
           "tripwire": "decided_by_a_vote_that_held_nothing",
           "governs": true,
-          "entries": [
-            {
-              "seed": 26,
-              "meeting": 2
-            }
-          ]
+          "entries": []
         },
         {
           "name": "decisive_read_as_skip",
           "tripwire": "decided_by_a_vote_that_held_nothing",
           "governs": false,
-          "entries": [
-            {
-              "seed": 26,
-              "meeting": 2
-            }
-          ]
+          "entries": []
         },
         {
           "name": "decisive_all_ungrounded_removed",
           "tripwire": "decided_by_a_vote_that_held_nothing",
           "governs": false,
-          "entries": [
-            {
-              "seed": 26,
-              "meeting": 2
-            }
-          ]
+          "entries": []
         },
         {
           "name": "every",
@@ -3702,11 +3542,7 @@
           "governs": false,
           "entries": [
             {
-              "seed": 26,
-              "meeting": 2
-            },
-            {
-              "seed": 41,
+              "seed": 44,
               "meeting": 0
             }
           ]
@@ -3719,11 +3555,215 @@
         }
       ],
       "alibi_flags": 15,
-      "alibi_flags_evaluable": 1
+      "alibi_flags_evaluable": 0
     }
   },
   "reveal": {
     "shelves": [
+      {
+        "name": "two_kills_after_one_regroup",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              25,
+              27
+            ]
+          },
+          {
+            "seed": 1,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              19,
+              19
+            ]
+          },
+          {
+            "seed": 2,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              16,
+              19
+            ]
+          },
+          {
+            "seed": 4,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              15,
+              15
+            ]
+          },
+          {
+            "seed": 12,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              19,
+              22
+            ]
+          },
+          {
+            "seed": 26,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              20,
+              21
+            ]
+          },
+          {
+            "seed": 36,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              20,
+              22
+            ]
+          },
+          {
+            "seed": 38,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": [
+              18,
+              20
+            ]
+          }
+        ]
+      },
+      {
+        "name": "a_close_call",
+        "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 1,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 2,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 8,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 21,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 22,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 24,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 25,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 30,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 33,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 35,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 37,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 43,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 45,
+            "meetings": [
+              2,
+              3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 46,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 49,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          }
+        ]
+      },
       {
         "name": "caught_venting",
         "members": [
@@ -3766,7 +3806,7 @@
           {
             "seed": 9,
             "meetings": [
-              1
+              2
             ],
             "kill_ticks": []
           },
@@ -3782,13 +3822,6 @@
             "seed": 11,
             "meetings": [
               0,
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 13,
-            "meetings": [
               1
             ],
             "kill_ticks": []
@@ -3815,6 +3848,13 @@
             "kill_ticks": []
           },
           {
+            "seed": 21,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
             "seed": 22,
             "meetings": [
               1
@@ -3825,13 +3865,6 @@
             "seed": 27,
             "meetings": [
               0,
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 34,
-            "meetings": [
               1
             ],
             "kill_ticks": []
@@ -3858,6 +3891,13 @@
             "kill_ticks": []
           },
           {
+            "seed": 45,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
             "seed": 49,
             "meetings": [
               0,
@@ -3870,6 +3910,13 @@
       {
         "name": "one_line_two_readings",
         "members": [
+          {
+            "seed": 0,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
           {
             "seed": 2,
             "meetings": [
@@ -3887,6 +3934,14 @@
           {
             "seed": 5,
             "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 6,
+            "meetings": [
               0
             ],
             "kill_ticks": []
@@ -3894,21 +3949,34 @@
           {
             "seed": 9,
             "meetings": [
-              1,
+              0,
               2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 10,
+            "meetings": [
+              1
             ],
             "kill_ticks": []
           },
           {
             "seed": 11,
             "meetings": [
-              0,
-              1
+              0
             ],
             "kill_ticks": []
           },
           {
             "seed": 13,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 17,
             "meetings": [
               1
             ],
@@ -3917,7 +3985,6 @@
           {
             "seed": 18,
             "meetings": [
-              0,
               1
             ],
             "kill_ticks": []
@@ -3932,14 +3999,15 @@
           {
             "seed": 20,
             "meetings": [
-              0
+              0,
+              1
             ],
             "kill_ticks": []
           },
           {
             "seed": 21,
             "meetings": [
-              1
+              2
             ],
             "kill_ticks": []
           },
@@ -3951,7 +4019,22 @@
             "kill_ticks": []
           },
           {
-            "seed": 24,
+            "seed": 23,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 27,
+            "meetings": [
+              0,
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 28,
             "meetings": [
               2
             ],
@@ -3967,14 +4050,7 @@
           {
             "seed": 34,
             "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 36,
-            "meetings": [
-              1
+              0
             ],
             "kill_ticks": []
           },
@@ -3986,24 +4062,16 @@
             "kill_ticks": []
           },
           {
-            "seed": 38,
-            "meetings": [
-              0,
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 39,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 43,
+            "seed": 42,
             "meetings": [
               0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 45,
+            "meetings": [
+              2
             ],
             "kill_ticks": []
           },
@@ -4030,22 +4098,14 @@
           {
             "seed": 1,
             "meetings": [
-              1
+              0
             ],
             "kill_ticks": []
           },
           {
-            "seed": 9,
+            "seed": 21,
             "meetings": [
-              1,
-              2
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 16,
-            "meetings": [
-              1
+              0
             ],
             "kill_ticks": []
           },
@@ -4057,16 +4117,23 @@
             "kill_ticks": []
           },
           {
-            "seed": 23,
+            "seed": 24,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 25,
             "meetings": [
               0
             ],
             "kill_ticks": []
           },
           {
-            "seed": 24,
+            "seed": 33,
             "meetings": [
-              2
+              1
             ],
             "kill_ticks": []
           },
@@ -4078,15 +4145,9 @@
             "kill_ticks": []
           },
           {
-            "seed": 43,
+            "seed": 45,
             "meetings": [
-              0
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 47,
-            "meetings": [
+              2,
               3
             ],
             "kill_ticks": []
@@ -4096,6 +4157,13 @@
       {
         "name": "nobody_voted_out",
         "members": [
+          {
+            "seed": 2,
+            "meetings": [
+              0
+            ],
+            "kill_ticks": []
+          },
           {
             "seed": 4,
             "meetings": [
@@ -4114,9 +4182,26 @@
             "kill_ticks": []
           },
           {
+            "seed": 26,
+            "meetings": [
+              0,
+              1,
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
             "seed": 31,
             "meetings": [
               0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 34,
+            "meetings": [
+              0,
+              1
             ],
             "kill_ticks": []
           },
@@ -4125,6 +4210,15 @@
             "meetings": [
               0,
               1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 48,
+            "meetings": [
+              0,
+              1,
+              2
             ],
             "kill_ticks": []
           }
@@ -4144,32 +4238,32 @@
             "kill_ticks": []
           },
           {
-            "seed": 8,
-            "meetings": [],
-            "kill_ticks": []
-          },
-          {
-            "seed": 9,
-            "meetings": [],
-            "kill_ticks": []
-          },
-          {
-            "seed": 13,
-            "meetings": [],
-            "kill_ticks": []
-          },
-          {
             "seed": 15,
             "meetings": [],
             "kill_ticks": []
           },
           {
-            "seed": 16,
+            "seed": 17,
             "meetings": [],
             "kill_ticks": []
           },
           {
             "seed": 18,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 20,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 26,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
+            "seed": 28,
             "meetings": [],
             "kill_ticks": []
           },
@@ -4184,12 +4278,12 @@
             "kill_ticks": []
           },
           {
-            "seed": 38,
+            "seed": 41,
             "meetings": [],
             "kill_ticks": []
           },
           {
-            "seed": 41,
+            "seed": 45,
             "meetings": [],
             "kill_ticks": []
           }
@@ -4214,6 +4308,11 @@
             "kill_ticks": []
           },
           {
+            "seed": 9,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
             "seed": 10,
             "meetings": [],
             "kill_ticks": []
@@ -4229,22 +4328,12 @@
             "kill_ticks": []
           },
           {
-            "seed": 17,
-            "meetings": [],
-            "kill_ticks": []
-          },
-          {
-            "seed": 20,
+            "seed": 16,
             "meetings": [],
             "kill_ticks": []
           },
           {
             "seed": 27,
-            "meetings": [],
-            "kill_ticks": []
-          },
-          {
-            "seed": 34,
             "meetings": [],
             "kill_ticks": []
           },
@@ -4264,6 +4353,11 @@
             "kill_ticks": []
           },
           {
+            "seed": 47,
+            "meetings": [],
+            "kill_ticks": []
+          },
+          {
             "seed": 49,
             "meetings": [],
             "kill_ticks": []
@@ -4277,13 +4371,6 @@
             "seed": 0,
             "meetings": [
               3
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 1,
-            "meetings": [
-              2
             ],
             "kill_ticks": []
           },
@@ -4323,6 +4410,13 @@
             "kill_ticks": []
           },
           {
+            "seed": 16,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
             "seed": 19,
             "meetings": [
               2
@@ -4330,7 +4424,14 @@
             "kill_ticks": []
           },
           {
-            "seed": 20,
+            "seed": 21,
+            "meetings": [
+              2
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 23,
             "meetings": [
               1
             ],
@@ -4344,13 +4445,6 @@
             "kill_ticks": []
           },
           {
-            "seed": 34,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
             "seed": 37,
             "meetings": [
               2
@@ -4358,7 +4452,14 @@
             "kill_ticks": []
           },
           {
-            "seed": 48,
+            "seed": 45,
+            "meetings": [
+              3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 47,
             "meetings": [
               1
             ],
@@ -4386,14 +4487,6 @@
             "kill_ticks": []
           },
           {
-            "seed": 1,
-            "meetings": [
-              1,
-              2
-            ],
-            "kill_ticks": []
-          },
-          {
             "seed": 7,
             "meetings": [
               1
@@ -4410,7 +4503,14 @@
           {
             "seed": 9,
             "meetings": [
-              2
+              0
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 13,
+            "meetings": [
+              0
             ],
             "kill_ticks": []
           },
@@ -4424,6 +4524,7 @@
           {
             "seed": 16,
             "meetings": [
+              0,
               1
             ],
             "kill_ticks": []
@@ -4443,16 +4544,16 @@
             "kill_ticks": []
           },
           {
-            "seed": 20,
+            "seed": 21,
             "meetings": [
-              1
+              0
             ],
             "kill_ticks": []
           },
           {
-            "seed": 24,
+            "seed": 28,
             "meetings": [
-              0
+              2
             ],
             "kill_ticks": []
           },
@@ -4464,9 +4565,9 @@
             "kill_ticks": []
           },
           {
-            "seed": 34,
+            "seed": 33,
             "meetings": [
-              0
+              1
             ],
             "kill_ticks": []
           },
@@ -4478,13 +4579,6 @@
             "kill_ticks": []
           },
           {
-            "seed": 38,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
             "seed": 40,
             "meetings": [
               1
@@ -4492,16 +4586,31 @@
             "kill_ticks": []
           },
           {
-            "seed": 44,
+            "seed": 41,
             "meetings": [
               0
             ],
             "kill_ticks": []
           },
           {
-            "seed": 47,
+            "seed": 45,
             "meetings": [
               3
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 46,
+            "meetings": [
+              1
+            ],
+            "kill_ticks": []
+          },
+          {
+            "seed": 47,
+            "meetings": [
+              0,
+              1
             ],
             "kill_ticks": []
           }
@@ -4511,21 +4620,7 @@
         "name": "decided_without_proof_wrong",
         "members": [
           {
-            "seed": 2,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 8,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 9,
+            "seed": 1,
             "meetings": [
               0
             ],
@@ -4541,12 +4636,12 @@
           {
             "seed": 13,
             "meetings": [
-              0
+              1
             ],
             "kill_ticks": []
           },
           {
-            "seed": 21,
+            "seed": 17,
             "meetings": [
               1
             ],
@@ -4562,26 +4657,20 @@
           {
             "seed": 23,
             "meetings": [
-              0
+              0,
+              1
             ],
             "kill_ticks": []
           },
           {
             "seed": 24,
             "meetings": [
-              2
+              1
             ],
             "kill_ticks": []
           },
           {
             "seed": 25,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 28,
             "meetings": [
               0
             ],
@@ -4616,7 +4705,7 @@
             "kill_ticks": []
           },
           {
-            "seed": 39,
+            "seed": 38,
             "meetings": [
               0
             ],
@@ -4626,28 +4715,6 @@
             "seed": 43,
             "meetings": [
               0
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 45,
-            "meetings": [
-              1
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 46,
-            "meetings": [
-              0
-            ],
-            "kill_ticks": []
-          },
-          {
-            "seed": 48,
-            "meetings": [
-              0,
-              1
             ],
             "kill_ticks": []
           }
@@ -4682,30 +4749,6 @@
       },
       {
         "seed": 1,
-        "ending": "CREWMATE_EJECT",
-        "distance": {
-          "counts": "kills_short_of_parity",
-          "steps": 2,
-          "start": 5
-        },
-        "sabotage_starts": [
-          39
-        ],
-        "tasks_done": 12,
-        "tasks_assigned": 14,
-        "ejections": [
-          {
-            "meeting": 1,
-            "right": true
-          },
-          {
-            "meeting": 2,
-            "right": true
-          }
-        ]
-      },
-      {
-        "seed": 2,
         "ending": "IMPOSTOR_PARITY",
         "distance": {
           "counts": "tasks_left",
@@ -4721,6 +4764,19 @@
             "right": false
           }
         ]
+      },
+      {
+        "seed": 2,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 5,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 9,
+        "tasks_assigned": 14,
+        "ejections": []
       },
       {
         "seed": 3,
@@ -4827,26 +4883,22 @@
       },
       {
         "seed": 8,
-        "ending": "IMPOSTOR_PARITY",
+        "ending": "CREWMATE_TASKS",
         "distance": {
-          "counts": "tasks_left",
-          "steps": 1,
-          "start": 14
+          "counts": "kills_short_of_parity",
+          "steps": 2,
+          "start": 5
         },
         "sabotage_starts": [
           27,
           42
         ],
-        "tasks_done": 13,
+        "tasks_done": 14,
         "tasks_assigned": 14,
         "ejections": [
           {
             "meeting": 0,
             "right": true
-          },
-          {
-            "meeting": 1,
-            "right": false
           }
         ]
       },
@@ -4855,21 +4907,17 @@
         "ending": "CREWMATE_EJECT",
         "distance": {
           "counts": "kills_short_of_parity",
-          "steps": 1,
+          "steps": 3,
           "start": 5
         },
         "sabotage_starts": [
-          32
+          26
         ],
         "tasks_done": 12,
         "tasks_assigned": 14,
         "ejections": [
           {
             "meeting": 0,
-            "right": false
-          },
-          {
-            "meeting": 1,
             "right": true
           },
           {
@@ -4942,26 +4990,26 @@
       },
       {
         "seed": 13,
-        "ending": "IMPOSTOR_PARITY",
+        "ending": "CREWMATE_TASKS",
         "distance": {
-          "counts": "tasks_left",
-          "steps": 1,
-          "start": 14
+          "counts": "kills_short_of_parity",
+          "steps": 2,
+          "start": 5
         },
         "sabotage_starts": [
-          35,
-          40
+          29,
+          34
         ],
-        "tasks_done": 13,
+        "tasks_done": 14,
         "tasks_assigned": 14,
         "ejections": [
           {
             "meeting": 0,
-            "right": false
+            "right": true
           },
           {
             "meeting": 1,
-            "right": true
+            "right": false
           }
         ]
       },
@@ -5003,19 +5051,22 @@
       },
       {
         "seed": 16,
-        "ending": "IMPOSTOR_PARITY",
+        "ending": "CREWMATE_EJECT",
         "distance": {
-          "counts": "tasks_left",
-          "steps": 1,
-          "start": 14
+          "counts": "kills_short_of_parity",
+          "steps": 3,
+          "start": 5
         },
         "sabotage_starts": [
-          35,
-          44
+          34
         ],
         "tasks_done": 13,
         "tasks_assigned": 14,
         "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
           {
             "meeting": 1,
             "right": true
@@ -5027,12 +5078,12 @@
         "ending": "CREWMATE_TASKS",
         "distance": {
           "counts": "kills_short_of_parity",
-          "steps": 3,
+          "steps": 1,
           "start": 5
         },
         "sabotage_starts": [
-          32,
-          39
+          42,
+          57
         ],
         "tasks_done": 14,
         "tasks_assigned": 14,
@@ -5040,6 +5091,10 @@
           {
             "meeting": 0,
             "right": true
+          },
+          {
+            "meeting": 1,
+            "right": false
           }
         ]
       },
@@ -5090,33 +5145,32 @@
       },
       {
         "seed": 20,
-        "ending": "CREWMATE_EJECT",
+        "ending": "IMPOSTOR_PARITY",
         "distance": {
-          "counts": "kills_short_of_parity",
-          "steps": 3,
-          "start": 5
+          "counts": "tasks_left",
+          "steps": 1,
+          "start": 14
         },
-        "sabotage_starts": [],
-        "tasks_done": 11,
+        "sabotage_starts": [
+          32,
+          62
+        ],
+        "tasks_done": 13,
         "tasks_assigned": 14,
         "ejections": [
           {
             "meeting": 0,
-            "right": true
-          },
-          {
-            "meeting": 1,
             "right": true
           }
         ]
       },
       {
         "seed": 21,
-        "ending": "IMPOSTOR_PARITY",
+        "ending": "CREWMATE_EJECT",
         "distance": {
-          "counts": "tasks_left",
+          "counts": "kills_short_of_parity",
           "steps": 2,
-          "start": 14
+          "start": 5
         },
         "sabotage_starts": [
           27
@@ -5125,8 +5179,12 @@
         "tasks_assigned": 14,
         "ejections": [
           {
-            "meeting": 1,
-            "right": false
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 2,
+            "right": true
           }
         ]
       },
@@ -5159,6 +5217,46 @@
         "ending": "IMPOSTOR_PARITY",
         "distance": {
           "counts": "tasks_left",
+          "steps": 5,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 9,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": false
+          },
+          {
+            "meeting": 1,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 24,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
+          "steps": 4,
+          "start": 14
+        },
+        "sabotage_starts": [],
+        "tasks_done": 10,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 1,
+            "right": false
+          }
+        ]
+      },
+      {
+        "seed": 25,
+        "ending": "IMPOSTOR_PARITY",
+        "distance": {
+          "counts": "tasks_left",
           "steps": 3,
           "start": 14
         },
@@ -5173,66 +5271,19 @@
         ]
       },
       {
-        "seed": 24,
-        "ending": "IMPOSTOR_PARITY",
-        "distance": {
-          "counts": "tasks_left",
-          "steps": 2,
-          "start": 14
-        },
-        "sabotage_starts": [],
-        "tasks_done": 12,
-        "tasks_assigned": 14,
-        "ejections": [
-          {
-            "meeting": 0,
-            "right": true
-          },
-          {
-            "meeting": 2,
-            "right": false
-          }
-        ]
-      },
-      {
-        "seed": 25,
-        "ending": "IMPOSTOR_PARITY",
-        "distance": {
-          "counts": "tasks_left",
-          "steps": 2,
-          "start": 14
-        },
-        "sabotage_starts": [
-          37
-        ],
-        "tasks_done": 12,
-        "tasks_assigned": 14,
-        "ejections": [
-          {
-            "meeting": 0,
-            "right": false
-          }
-        ]
-      },
-      {
         "seed": 26,
-        "ending": "IMPOSTOR_PARITY",
+        "ending": "CREWMATE_TASKS",
         "distance": {
-          "counts": "tasks_left",
+          "counts": "kills_short_of_parity",
           "steps": 1,
-          "start": 14
+          "start": 5
         },
         "sabotage_starts": [
           21
         ],
-        "tasks_done": 13,
+        "tasks_done": 14,
         "tasks_assigned": 14,
-        "ejections": [
-          {
-            "meeting": 2,
-            "right": false
-          }
-        ]
+        "ejections": []
       },
       {
         "seed": 27,
@@ -5260,19 +5311,22 @@
       },
       {
         "seed": 28,
-        "ending": "IMPOSTOR_PARITY",
+        "ending": "CREWMATE_TASKS",
         "distance": {
-          "counts": "tasks_left",
-          "steps": 4,
-          "start": 14
+          "counts": "kills_short_of_parity",
+          "steps": 1,
+          "start": 5
         },
-        "sabotage_starts": [],
-        "tasks_done": 10,
+        "sabotage_starts": [
+          28,
+          44
+        ],
+        "tasks_done": 14,
         "tasks_assigned": 14,
         "ejections": [
           {
-            "meeting": 0,
-            "right": false
+            "meeting": 2,
+            "right": true
           }
         ]
       },
@@ -5357,40 +5411,40 @@
         "ending": "IMPOSTOR_PARITY",
         "distance": {
           "counts": "tasks_left",
-          "steps": 4,
+          "steps": 2,
           "start": 14
         },
-        "sabotage_starts": [],
-        "tasks_done": 10,
-        "tasks_assigned": 14,
-        "ejections": [
-          {
-            "meeting": 0,
-            "right": false
-          }
-        ]
-      },
-      {
-        "seed": 34,
-        "ending": "CREWMATE_EJECT",
-        "distance": {
-          "counts": "kills_short_of_parity",
-          "steps": 4,
-          "start": 5
-        },
-        "sabotage_starts": [],
+        "sabotage_starts": [
+          39
+        ],
         "tasks_done": 12,
         "tasks_assigned": 14,
         "ejections": [
           {
             "meeting": 0,
-            "right": true
+            "right": false
           },
           {
             "meeting": 1,
             "right": true
           }
         ]
+      },
+      {
+        "seed": 34,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 2,
+          "start": 5
+        },
+        "sabotage_starts": [
+          26,
+          37
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": []
       },
       {
         "seed": 35,
@@ -5452,38 +5506,34 @@
         "ending": "IMPOSTOR_PARITY",
         "distance": {
           "counts": "tasks_left",
-          "steps": 1,
-          "start": 14
-        },
-        "sabotage_starts": [
-          29,
-          57
-        ],
-        "tasks_done": 13,
-        "tasks_assigned": 14,
-        "ejections": [
-          {
-            "meeting": 1,
-            "right": true
-          }
-        ]
-      },
-      {
-        "seed": 39,
-        "ending": "IMPOSTOR_PARITY",
-        "distance": {
-          "counts": "tasks_left",
-          "steps": 3,
+          "steps": 5,
           "start": 14
         },
         "sabotage_starts": [],
-        "tasks_done": 11,
+        "tasks_done": 9,
         "tasks_assigned": 14,
         "ejections": [
           {
             "meeting": 0,
             "right": false
-          },
+          }
+        ]
+      },
+      {
+        "seed": 39,
+        "ending": "CREWMATE_TASKS",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 2,
+          "start": 5
+        },
+        "sabotage_starts": [
+          28,
+          39
+        ],
+        "tasks_done": 14,
+        "tasks_assigned": 14,
+        "ejections": [
           {
             "meeting": 1,
             "right": true
@@ -5587,42 +5637,31 @@
       },
       {
         "seed": 45,
-        "ending": "IMPOSTOR_PARITY",
+        "ending": "CREWMATE_EJECT",
         "distance": {
-          "counts": "tasks_left",
-          "steps": 2,
-          "start": 14
+          "counts": "kills_short_of_parity",
+          "steps": 1,
+          "start": 5
         },
-        "sabotage_starts": [],
-        "tasks_done": 12,
+        "sabotage_starts": [
+          41,
+          57
+        ],
+        "tasks_done": 13,
         "tasks_assigned": 14,
         "ejections": [
           {
-            "meeting": 1,
-            "right": false
+            "meeting": 2,
+            "right": true
+          },
+          {
+            "meeting": 3,
+            "right": true
           }
         ]
       },
       {
         "seed": 46,
-        "ending": "IMPOSTOR_PARITY",
-        "distance": {
-          "counts": "tasks_left",
-          "steps": 3,
-          "start": 14
-        },
-        "sabotage_starts": [],
-        "tasks_done": 11,
-        "tasks_assigned": 14,
-        "ejections": [
-          {
-            "meeting": 0,
-            "right": false
-          }
-        ]
-      },
-      {
-        "seed": 47,
         "ending": "CREWMATE_TASKS",
         "distance": {
           "counts": "kills_short_of_parity",
@@ -5630,14 +5669,36 @@
           "start": 5
         },
         "sabotage_starts": [
-          34,
-          52
+          21,
+          39
         ],
         "tasks_done": 14,
         "tasks_assigned": 14,
         "ejections": [
           {
-            "meeting": 3,
+            "meeting": 1,
+            "right": true
+          }
+        ]
+      },
+      {
+        "seed": 47,
+        "ending": "CREWMATE_EJECT",
+        "distance": {
+          "counts": "kills_short_of_parity",
+          "steps": 4,
+          "start": 5
+        },
+        "sabotage_starts": [],
+        "tasks_done": 9,
+        "tasks_assigned": 14,
+        "ejections": [
+          {
+            "meeting": 0,
+            "right": true
+          },
+          {
+            "meeting": 1,
             "right": true
           }
         ]
@@ -5647,22 +5708,13 @@
         "ending": "IMPOSTOR_PARITY",
         "distance": {
           "counts": "tasks_left",
-          "steps": 5,
+          "steps": 3,
           "start": 14
         },
         "sabotage_starts": [],
-        "tasks_done": 9,
+        "tasks_done": 11,
         "tasks_assigned": 14,
-        "ejections": [
-          {
-            "meeting": 0,
-            "right": false
-          },
-          {
-            "meeting": 1,
-            "right": false
-          }
-        ]
+        "ejections": []
       },
       {
         "seed": 49,
@@ -5693,47 +5745,47 @@
       {
         "name": "the_reporter_saw_it_happen",
         "games": 50,
-        "members": 14,
+        "members": 13,
         "rows": [
           {
             "fact": "CREWMATE_TASKS",
-            "a": 2,
-            "b": 12,
-            "c": 11,
-            "d": 25,
-            "p": 0.30298630988925124
+            "a": 4,
+            "b": 9,
+            "c": 15,
+            "d": 22,
+            "p": 0.7415038036299595
           },
           {
             "fact": "CREWMATE_EJECT",
-            "a": 5,
+            "a": 4,
             "b": 9,
-            "c": 8,
-            "d": 28,
-            "p": 0.4737046555620967
-          },
-          {
-            "fact": "IMPOSTOR_PARITY",
-            "a": 7,
-            "b": 7,
-            "c": 17,
-            "d": 19,
+            "c": 10,
+            "d": 27,
             "p": 1.0
           },
           {
+            "fact": "IMPOSTOR_PARITY",
+            "a": 5,
+            "b": 8,
+            "c": 12,
+            "d": 25,
+            "p": 0.7413358398896281
+          },
+          {
             "fact": "some_meeting_ejected_someone",
-            "a": 14,
+            "a": 13,
             "b": 0,
-            "c": 32,
-            "d": 4,
-            "p": 0.5659574468085107
+            "c": 29,
+            "d": 8,
+            "p": 0.09278753215461259
           },
           {
             "fact": "a_crewmate_was_ejected",
-            "a": 7,
+            "a": 6,
             "b": 7,
-            "c": 14,
-            "d": 22,
-            "p": 0.5343537712293822
+            "c": 8,
+            "d": 29,
+            "p": 0.14891653015805517
           }
         ],
         "classification": "shelf"
@@ -5745,42 +5797,42 @@
         "rows": [
           {
             "fact": "CREWMATE_TASKS",
-            "a": 1,
-            "b": 6,
-            "c": 12,
-            "d": 31,
-            "p": 0.6596068455134135
+            "a": 2,
+            "b": 5,
+            "c": 17,
+            "d": 26,
+            "p": 0.6947512824825498
           },
           {
             "fact": "CREWMATE_EJECT",
             "a": 1,
             "b": 6,
-            "c": 12,
-            "d": 31,
-            "p": 0.6596068455134135
+            "c": 13,
+            "d": 30,
+            "p": 0.6565402405180388
           },
           {
             "fact": "IMPOSTOR_PARITY",
-            "a": 5,
-            "b": 2,
-            "c": 19,
-            "d": 24,
-            "p": 0.2387031408308004
+            "a": 4,
+            "b": 3,
+            "c": 13,
+            "d": 30,
+            "p": 0.20976697061803445
           },
           {
             "fact": "some_meeting_ejected_someone",
             "a": 6,
             "b": 1,
-            "c": 40,
-            "d": 3,
-            "p": 0.4641337386018237
+            "c": 36,
+            "d": 7,
+            "p": 1.0
           },
           {
             "fact": "a_crewmate_was_ejected",
-            "a": 3,
-            "b": 4,
-            "c": 18,
-            "d": 25,
+            "a": 2,
+            "b": 5,
+            "c": 12,
+            "d": 31,
             "p": 1.0
           }
         ],
@@ -5789,47 +5841,47 @@
       {
         "name": "slow_burn",
         "games": 50,
-        "members": 11,
+        "members": 15,
         "rows": [
           {
             "fact": "CREWMATE_TASKS",
-            "a": 4,
-            "b": 7,
-            "c": 9,
-            "d": 30,
-            "p": 0.4446238382970114
+            "a": 9,
+            "b": 6,
+            "c": 10,
+            "d": 25,
+            "p": 0.05639616272512878
           },
           {
             "fact": "CREWMATE_EJECT",
-            "a": 3,
-            "b": 8,
+            "a": 4,
+            "b": 11,
             "c": 10,
-            "d": 29,
+            "d": 25,
             "p": 1.0
           },
           {
             "fact": "IMPOSTOR_PARITY",
-            "a": 4,
-            "b": 7,
-            "c": 20,
-            "d": 19,
-            "p": 0.5010025395369526
+            "a": 2,
+            "b": 13,
+            "c": 15,
+            "d": 20,
+            "p": 0.055530506358010844
           },
           {
             "fact": "some_meeting_ejected_someone",
-            "a": 11,
-            "b": 0,
-            "c": 35,
-            "d": 4,
-            "p": 0.5634867564046895
+            "a": 14,
+            "b": 1,
+            "c": 28,
+            "d": 7,
+            "p": 0.40742780514740157
           },
           {
             "fact": "a_crewmate_was_ejected",
-            "a": 4,
-            "b": 7,
-            "c": 17,
-            "d": 22,
-            "p": 0.7412258507306368
+            "a": 2,
+            "b": 13,
+            "c": 12,
+            "d": 23,
+            "p": 0.17869786318697908
           }
         ],
         "classification": "shelf"
@@ -5837,50 +5889,50 @@
       {
         "name": "two_kills_after_one_regroup",
         "games": 50,
-        "members": 6,
+        "members": 8,
         "rows": [
           {
             "fact": "CREWMATE_TASKS",
-            "a": 0,
-            "b": 6,
-            "c": 13,
-            "d": 31,
-            "p": 0.319213691026827
+            "a": 1,
+            "b": 7,
+            "c": 18,
+            "d": 24,
+            "p": 0.13430342219792127
           },
           {
             "fact": "CREWMATE_EJECT",
             "a": 1,
-            "b": 5,
-            "c": 12,
-            "d": 32,
-            "p": 1.0
+            "b": 7,
+            "c": 13,
+            "d": 29,
+            "p": 0.41425467375169417
           },
           {
             "fact": "IMPOSTOR_PARITY",
-            "a": 5,
-            "b": 1,
-            "c": 19,
-            "d": 25,
-            "p": 0.09250253292806485
+            "a": 6,
+            "b": 2,
+            "c": 11,
+            "d": 31,
+            "p": 0.013412010330453632
           },
           {
             "fact": "some_meeting_ejected_someone",
             "a": 4,
-            "b": 2,
-            "c": 42,
-            "d": 2,
-            "p": 0.0655015197568389
+            "b": 4,
+            "c": 38,
+            "d": 4,
+            "p": 0.015836772425202605
           },
           {
             "fact": "a_crewmate_was_ejected",
-            "a": 2,
-            "b": 4,
-            "c": 19,
-            "d": 25,
-            "p": 1.0
+            "a": 3,
+            "b": 5,
+            "c": 11,
+            "d": 31,
+            "p": 0.6698526342964094
           }
         ],
-        "classification": "shelf"
+        "classification": "leaks"
       },
       {
         "name": "a_close_call",
@@ -5889,46 +5941,46 @@
         "rows": [
           {
             "fact": "CREWMATE_TASKS",
-            "a": 3,
-            "b": 13,
-            "c": 10,
-            "d": 24,
-            "p": 0.507503439149852
+            "a": 2,
+            "b": 14,
+            "c": 17,
+            "d": 17,
+            "p": 0.013386744059284715
           },
           {
             "fact": "CREWMATE_EJECT",
-            "a": 4,
-            "b": 12,
+            "a": 5,
+            "b": 11,
             "c": 9,
             "d": 25,
-            "p": 1.0
+            "p": 0.7455303938373639
           },
           {
             "fact": "IMPOSTOR_PARITY",
             "a": 9,
             "b": 7,
-            "c": 15,
-            "d": 19,
-            "p": 0.5470008575622625
+            "c": 8,
+            "d": 26,
+            "p": 0.02993604494358509
           },
           {
             "fact": "some_meeting_ejected_someone",
-            "a": 14,
-            "b": 2,
-            "c": 32,
-            "d": 2,
-            "p": 0.5842640034737299
+            "a": 15,
+            "b": 1,
+            "c": 27,
+            "d": 7,
+            "p": 0.4091554208758348
           },
           {
             "fact": "a_crewmate_was_ejected",
-            "a": 7,
-            "b": 9,
-            "c": 14,
-            "d": 20,
-            "p": 1.0
+            "a": 8,
+            "b": 8,
+            "c": 6,
+            "d": 28,
+            "p": 0.03959120135661495
           }
         ],
-        "classification": "shelf"
+        "classification": "leaks"
       },
       {
         "name": "suspicion_moved",
@@ -5937,43 +5989,43 @@
         "rows": [
           {
             "fact": "CREWMATE_TASKS",
-            "a": 3,
-            "b": 13,
+            "a": 9,
+            "b": 7,
             "c": 10,
             "d": 24,
-            "p": 0.507503439149852
+            "p": 0.11712810609151342
           },
           {
             "fact": "CREWMATE_EJECT",
-            "a": 5,
-            "b": 11,
-            "c": 8,
-            "d": 26,
-            "p": 0.7309892734852133
+            "a": 3,
+            "b": 13,
+            "c": 11,
+            "d": 23,
+            "p": 0.5012395719212333
           },
           {
             "fact": "IMPOSTOR_PARITY",
-            "a": 8,
-            "b": 8,
-            "c": 16,
-            "d": 18,
-            "p": 1.0
+            "a": 4,
+            "b": 12,
+            "c": 13,
+            "d": 21,
+            "p": 0.5241087884750701
           },
           {
             "fact": "some_meeting_ejected_someone",
-            "a": 16,
-            "b": 0,
-            "c": 30,
-            "d": 4,
-            "p": 0.29194963091619625
+            "a": 13,
+            "b": 3,
+            "c": 29,
+            "d": 5,
+            "p": 0.6993948632526177
           },
           {
             "fact": "a_crewmate_was_ejected",
-            "a": 8,
-            "b": 8,
-            "c": 13,
-            "d": 21,
-            "p": 0.542730475873933
+            "a": 5,
+            "b": 11,
+            "c": 9,
+            "d": 25,
+            "p": 0.7455303938373639
           }
         ],
         "classification": "shelf"
@@ -5981,47 +6033,47 @@
       {
         "name": "a_third_round",
         "games": 50,
-        "members": 19,
+        "members": 22,
         "rows": [
           {
             "fact": "CREWMATE_TASKS",
-            "a": 6,
-            "b": 13,
-            "c": 7,
-            "d": 24,
-            "p": 0.5213033400554806
+            "a": 11,
+            "b": 11,
+            "c": 8,
+            "d": 20,
+            "p": 0.15007620334915445
           },
           {
             "fact": "CREWMATE_EJECT",
-            "a": 6,
-            "b": 13,
+            "a": 7,
+            "b": 15,
             "c": 7,
-            "d": 24,
-            "p": 0.5213033400554806
+            "d": 21,
+            "p": 0.7527257957562926
           },
           {
             "fact": "IMPOSTOR_PARITY",
-            "a": 7,
-            "b": 12,
-            "c": 17,
-            "d": 14,
-            "p": 0.2549092492319273
+            "a": 4,
+            "b": 18,
+            "c": 13,
+            "d": 15,
+            "p": 0.06962507197358334
           },
           {
             "fact": "some_meeting_ejected_someone",
-            "a": 18,
-            "b": 1,
-            "c": 28,
-            "d": 3,
+            "a": 19,
+            "b": 3,
+            "c": 23,
+            "d": 5,
             "p": 1.0
           },
           {
             "fact": "a_crewmate_was_ejected",
-            "a": 5,
-            "b": 14,
-            "c": 16,
-            "d": 15,
-            "p": 0.1390794108758531
+            "a": 3,
+            "b": 19,
+            "c": 11,
+            "d": 17,
+            "p": 0.06053369031848444
           }
         ],
         "classification": "shelf"
@@ -6033,43 +6085,43 @@
         "rows": [
           {
             "fact": "CREWMATE_TASKS",
-            "a": 3,
-            "b": 16,
-            "c": 10,
-            "d": 21,
-            "p": 0.32025074287878247
+            "a": 4,
+            "b": 15,
+            "c": 15,
+            "d": 16,
+            "p": 0.07420743012027986
           },
           {
             "fact": "CREWMATE_EJECT",
             "a": 12,
             "b": 7,
-            "c": 1,
-            "d": 30,
-            "p": 4.478266577159874e-6
+            "c": 2,
+            "d": 29,
+            "p": 0.000025892469445134647
           },
           {
             "fact": "IMPOSTOR_PARITY",
-            "a": 4,
-            "b": 15,
-            "c": 20,
-            "d": 11,
-            "p": 0.00379284700187003
+            "a": 3,
+            "b": 16,
+            "c": 14,
+            "d": 17,
+            "p": 0.06320092033920498
           },
           {
             "fact": "some_meeting_ejected_someone",
             "a": 19,
             "b": 0,
-            "c": 27,
-            "d": 4,
-            "p": 0.2838905775075988
+            "c": 23,
+            "d": 8,
+            "p": 0.01774392593186561
           },
           {
             "fact": "a_crewmate_was_ejected",
-            "a": 4,
-            "b": 15,
-            "c": 17,
-            "d": 14,
-            "p": 0.03738378564593551
+            "a": 1,
+            "b": 18,
+            "c": 13,
+            "d": 18,
+            "p": 0.007948737513388215
           }
         ],
         "classification": "leaks"
@@ -6077,47 +6129,47 @@
       {
         "name": "one_line_two_readings",
         "games": 50,
-        "members": 20,
+        "members": 24,
         "rows": [
           {
             "fact": "CREWMATE_TASKS",
-            "a": 2,
-            "b": 18,
+            "a": 8,
+            "b": 16,
             "c": 11,
-            "d": 19,
-            "p": 0.04976260475430642
+            "d": 15,
+            "p": 0.5700459929994073
           },
           {
             "fact": "CREWMATE_EJECT",
-            "a": 8,
-            "b": 12,
-            "c": 5,
-            "d": 25,
-            "p": 0.10035003243102401
+            "a": 11,
+            "b": 13,
+            "c": 3,
+            "d": 23,
+            "p": 0.011047109223573423
           },
           {
             "fact": "IMPOSTOR_PARITY",
-            "a": 10,
-            "b": 10,
-            "c": 14,
-            "d": 16,
-            "p": 1.0
+            "a": 5,
+            "b": 19,
+            "c": 12,
+            "d": 14,
+            "p": 0.07753923601909989
           },
           {
             "fact": "some_meeting_ejected_someone",
-            "a": 19,
-            "b": 1,
-            "c": 27,
-            "d": 3,
-            "p": 0.6411202778983934
+            "a": 22,
+            "b": 2,
+            "c": 20,
+            "d": 6,
+            "p": 0.25028156735232443
           },
           {
             "fact": "a_crewmate_was_ejected",
-            "a": 8,
-            "b": 12,
-            "c": 13,
-            "d": 17,
-            "p": 1.0
+            "a": 4,
+            "b": 20,
+            "c": 10,
+            "d": 16,
+            "p": 0.11916833414884367
           }
         ],
         "classification": "leaks"
@@ -6125,47 +6177,47 @@
       {
         "name": "struck_after_the_regroup",
         "games": 50,
-        "members": 40,
+        "members": 41,
         "rows": [
           {
             "fact": "CREWMATE_TASKS",
-            "a": 8,
-            "b": 32,
+            "a": 14,
+            "b": 27,
             "c": 5,
-            "d": 5,
-            "p": 0.1009396339195904
+            "d": 4,
+            "p": 0.2729048667302591
           },
           {
             "fact": "CREWMATE_EJECT",
             "a": 10,
-            "b": 30,
-            "c": 3,
-            "d": 7,
-            "p": 0.7068395627374253
+            "b": 31,
+            "c": 4,
+            "d": 5,
+            "p": 0.24472959392220198
           },
           {
             "fact": "IMPOSTOR_PARITY",
-            "a": 22,
-            "b": 18,
-            "c": 2,
-            "d": 8,
-            "p": 0.07656269203231672
+            "a": 17,
+            "b": 24,
+            "c": 0,
+            "d": 9,
+            "p": 0.01982179133297361
           },
           {
             "fact": "some_meeting_ejected_someone",
-            "a": 36,
-            "b": 4,
-            "c": 10,
+            "a": 33,
+            "b": 8,
+            "c": 9,
             "d": 0,
-            "p": 0.5709943551888841
+            "p": 0.3216205785050309
           },
           {
             "fact": "a_crewmate_was_ejected",
-            "a": 18,
-            "b": 22,
-            "c": 3,
-            "d": 7,
-            "p": 0.48798697738147406
+            "a": 13,
+            "b": 28,
+            "c": 1,
+            "d": 8,
+            "p": 0.4138199833426045
           }
         ],
         "classification": "saturated"
