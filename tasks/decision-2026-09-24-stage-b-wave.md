@@ -1582,6 +1582,22 @@ the step rule may take the impostor win share as one of its conditions. The pre-
 from the amended card; Q, the dated addendum, quotes this confirmation; the recording starts once P and Q are
 pushed and P is reviewed. The step after the round stays the owner's to take or override.
 
+### 8.8 The step after round 3, delegated to the orchestrator (2026-10-09)
+
+The owner ruled, verbatim: "I will let this session, as the orchestrator, decide about promoting round 3. Keep what
+I want for the project in mind. I lean towards wanting to promote round 3, but if there is an issue you find with
+recording, or think it is really a step down in terms of gameplay, you can make the decision to keep round 2."
+
+So the step the record card pre-registers (promote round 3 as the shown set by the era-keyed path if every
+conformance cell is 0, the win share is inside the band and the misjudged route-charge count did not rise;
+otherwise round 2 stays shown and round 3 is a comparison record) is taken by the orchestrator, on the owner's
+criteria and leaning: round 3 is promoted unless the recording carries an issue (a stop rule fired, a conformance
+cell above 0, a gate or scan failure, a ceiling breached, a seed outside the pre-registered protocol) or its
+gameplay is a real step down against the direction (grounded votes, honest process, the genre shape, showability,
+read on the pre-registered table and the census, never on role-correctness). The decision is written into the
+round-3 audit with the readings it rests on, and a promotion is one card and one merge (8.7, item 3), the merge
+still the owner's because it publishes.
+
 ## Appendix: reproduction
 
 The scratch scripts named here are session aids and are not committed; the load-bearing counts are
