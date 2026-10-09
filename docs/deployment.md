@@ -126,7 +126,7 @@ pre-rendered ANSWERS, not a query surface. It ships:
   shelves, chip and facets) with the profile's provenance and catalogue, and no
   set-level size, table or count; a stale profile ships no entry, while the
   curated games remain playable;
-* no `tournament-eval-report.json` (the 9p2i one is 33 MB — that is the corpus,
+* no `tournament-eval-report.json` (the 9p2i one is 35 MB — that is the corpus,
   not a demo), so the Dashboard tab renders a card written for this artifact:
   what the demo ships, and where the eval report lives. That card renders no
   part of the failed request. It has to be said explicitly, because the natural

@@ -230,7 +230,12 @@ from _manifest_writer import parse_manifest  # noqa: E402
 from _verify_samples import sample_paths  # noqa: E402
 from paired_stats import compute_paired_stats  # noqa: E402
 
-from eval.eras import LADDER_TIP_ERA, Era, era_of  # noqa: E402
+from eval.eras import LADDER_TIP_ERA, STAGE_B_R2, Era, era_of  # noqa: E402
+from eval.process_scorecard import (  # noqa: E402
+    BeforeColumnsError,
+    before_column_of,
+    read_before_columns,
+)
 from eval.report_io import REPORT_FILENAME, open_report_text  # noqa: E402
 from meetings.evidence_profile import (  # noqa: E402
     EXPERIMENT_ENV_NAMES,
@@ -639,13 +644,23 @@ _DIRECT_PROOF_POOLED: Final = re.compile(
 # carried at the recording it replaced, then the rate it records. A before-column
 # win-rate claim is held to the first column of its own set's row, read from its
 # own era's record (``eval/eras.py`` names the record). The header literal tracks
-# the record: baseline 9's history column is baseline 8's rate, and the promoted
-# set's is baseline 9's.
+# the record: baseline 9's history column is baseline 8's rate, round 2's
+# promoted set's is baseline 9's, and round 3's is round 2's. Round 2's record is
+# still read once its set left: it owns the recording round 3's replaced.
 _WIN_SPLIT_HEADERS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
     {
         "baseline-9": ("set", "baseline-8 impostor rate"),
         "stage-b-r2": ("set", "baseline-9 impostor rate", "promoted impostor rate"),
+        "stage-b-r3": ("set", "round-2 impostor rate", "promoted impostor rate"),
     }
+)
+# The era whose recording each later era's shown set replaced, by the later
+# era's id: that era's record owns the set's before cells. The process
+# scorecard's frozen before column names the same era for the set
+# (:func:`check_replaced_era` holds the two to each other). The ladder tip
+# replaced nothing the front door reads.
+_REPLACED_ERAS: Final[Mapping[str, Era]] = MappingProxyType(
+    {"stage-b-r2": LADDER_TIP_ERA, "stage-b-r3": STAGE_B_R2}
 )
 _WIN_SPLIT_ROW: Final = "samples/{name}"
 _PROOF_CLAIM: Final = (
@@ -1055,6 +1070,7 @@ def check_facts(repo_root: Path) -> list[str]:
         check_populated_report_example(repo_root, readme, errors)
         check_volatile_stamps(readme, errors)
     check_ladder_tip(repo_root, errors)
+    check_replaced_era(repo_root, errors)
     # One read for both registry checks, so a missing template is reported
     # once rather than once per registry it would have been audited against.
     environment = read_document(repo_root, _ENV_EXAMPLE, errors)
@@ -1602,14 +1618,25 @@ def check_repeated_claims(
 
     The results tables' before column is checked rather than skipped: those
     cells state what each set read at the recording it replaced, so they are
-    held to its era's record's win-split table. So is a sentence that names the
-    ladder tip's baseline while stating the rate of a set a later era replaced:
-    that sentence is about the replaced recording. A live figure written into a
+    held to its era's record's win-split table. A sentence that names the
+    ladder tip's baseline while stating the rate of a set a later era holds is
+    about the tip's own recording of that set, so it is held to the rate the
+    tip's record published for it (the before cell too, until a second
+    promotion replaced the set's bytes again). A live figure written into a
     history cell, or a history figure written into a live one, fails either way.
     """
 
     rates = {name: (fact.wins, fact.total) for name, fact in facts.items()}
     historical_rates = record_win_rates(repo_root, facts, errors)
+    tip_found: list[str] = []
+    tip_rates: dict[str, tuple[int, int]] = {}
+    for name, fact in facts.items():
+        if fact.era == LADDER_TIP_ERA:
+            continue
+        tip_split = era_win_split(repo_root, LADDER_TIP_ERA, name, tip_found)
+        if tip_split is not None:
+            tip_rates[name] = tip_split[1]
+    errors.extend(error for error in dict.fromkeys(tip_found) if error not in errors)
     # Which recording is current is the ladder tip's own question, and
     # :func:`check_ladder_tip` already reports it when the audit cannot answer.
     tip = recorded_ladder_tip(repo_root, [])
@@ -1635,8 +1662,13 @@ def check_repeated_claims(
                         and facts[name].era != LADDER_TIP_ERA
                         and names_tip
                     )
-                    from_history = historical or replaced
-                    expected_rates = historical_rates if from_history else rates
+                    expected_rates = (
+                        historical_rates
+                        if historical
+                        else tip_rates
+                        if replaced
+                        else rates
+                    )
                     if name not in expected_rates:
                         continue
                     wins, total = expected_rates[name]
@@ -1645,7 +1677,9 @@ def check_repeated_claims(
                         continue
                     source = (
                         f"{facts[name].era.record}'s win-split table"
-                        if from_history
+                        if historical
+                        else f"{LADDER_TIP_ERA.record}'s win-split table"
+                        if replaced
                         else _MANIFEST_PATH.format(name=name)
                     )
                     where = (
@@ -1798,8 +1832,8 @@ def record_win_rates(
     the manifest while we are here: a record that disagreed with the bytes it
     recorded would make every before/after pair on the front door meaningless.
     A set a later era replaced is checked once more: its before column must be
-    the after column the ladder tip's own record published for it, the
-    recording it replaced.
+    the after column published for it by the record of the era it replaced
+    (:func:`replaced_era`), the recording it replaced.
     """
 
     previous: dict[str, tuple[int, int]] = {}
@@ -1820,16 +1854,64 @@ def record_win_rates(
             )
         if fact.era == LADDER_TIP_ERA:
             continue
-        tip_split = era_win_split(repo_root, LADDER_TIP_ERA, name, found)
-        if tip_split is not None and tip_split[1] != before:
+        replaced = replaced_era(fact.era)
+        replaced_split = era_win_split(repo_root, replaced, name, found)
+        if replaced_split is not None and replaced_split[1] != before:
             errors.append(
                 f"{fact.era.record}: the win-split table's before cell for {name} "
-                f"reads {before[0]}/{before[1]}, but {LADDER_TIP_ERA.record} "
-                f"published {tip_split[1][0]}/{tip_split[1][1]} for the "
+                f"reads {before[0]}/{before[1]}, but {replaced.record} "
+                f"published {replaced_split[1][0]}/{replaced_split[1][1]} for the "
                 "recording it replaced."
             )
     errors.extend(dict.fromkeys(found))
     return previous
+
+
+def replaced_era(era: Era) -> Era:
+    """The era whose recording ``era``'s shown set replaced; an unnamed era raises.
+
+    The ladder tip is not a later era: its sets' before cells are read from the
+    record the tip replaced (:data:`_PROOF_PARTITION_AUDIT`), never through here.
+    """
+
+    if era.id not in _REPLACED_ERAS:
+        raise KeyError(
+            f"no replaced era is named for the {era.id} era; a later era's shown "
+            "set names the era its recording replaced"
+        )
+    return _REPLACED_ERAS[era.id]
+
+
+def check_replaced_era(repo_root: Path, errors: list[str]) -> None:
+    """The replaced era the front door reads is the one the scorecard's before column names.
+
+    The process scorecard keeps each replaced recording's published entry as a
+    frozen before block, and a set shows the block of the era its bytes replaced
+    (:func:`eval.process_scorecard.before_column_of`). The proof row and the win
+    split read that same era's record here, so the two before columns cannot
+    describe different recordings.
+    """
+
+    name = _PROOF_SET
+    path = _SAMPLE_REPLAY_DIR.format(name=name)
+    era = era_of(path)
+    if era == LADDER_TIP_ERA:
+        return
+    try:
+        blocks = read_before_columns(repo_root)
+    except (BeforeColumnsError, OSError) as error:
+        errors.append(f"the process scorecard's before column cannot be read: {error}")
+        return
+    block = before_column_of(path, era.id, blocks)
+    named = replaced_era(era)
+    if block is None or block.era_id != named.id:
+        errors.append(
+            f"scripts/check_doc_facts.py: the front door reads {name}'s before "
+            f"cells from the {named.id} era's record, but the process scorecard's "
+            "before column for "
+            f"{path} is the "
+            f"{'no' if block is None else block.era_id} era's block."
+        )
 
 
 def era_win_split(
@@ -3060,15 +3142,15 @@ def proof_set_records() -> tuple[str, str]:
     """``(after, before)``: the records the proof row's two columns read.
 
     The after record is the one that owns :data:`_PROOF_SET`'s era. The before
-    record is the one that owns the recording it replaced: the ladder tip's own
-    record for a set a later era holds, or the record the tip replaced for a set
-    the tip still holds.
+    record is the one that owns the recording it replaced: the record of the era
+    a later era's set replaced (:func:`replaced_era`), or the record the tip
+    replaced for a set the tip still holds.
     """
 
     era = era_of(_SAMPLE_REPLAY_DIR.format(name=_PROOF_SET))
     if era == LADDER_TIP_ERA:
         return era.record, _PROOF_PARTITION_AUDIT
-    return era.record, LADDER_TIP_ERA.record
+    return era.record, replaced_era(era).record
 
 
 def set_partition(audit: str, label: str) -> _Partition | None:

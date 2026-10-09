@@ -102,9 +102,13 @@ _COPIED = (
     "audits/audit-2026-09-22-process-rerecord.md",
     "audits/audit-phase-21-rerecord.md",
     "audits/audit-phase-21-adopting-record.md",
-    # ...and the promoted 9p2i set's own era record, whose section 9 publishes
-    # that set's win split and the proof row's cells (eval/eras.py names it).
+    # ...and the promoted 9p2i set's own era record, whose section 12 publishes
+    # that set's win split and the proof row's cells (eval/eras.py names it),
+    # and the record of the round it replaced, whose section 9 owns the before
+    # cells; the scorecard's frozen before column names that round's era.
+    "audits/audit-2026-10-09-stage-b-r3.md",
     "audits/audit-2026-10-01-stage-b-r2.md",
+    "docs/process-scorecard-before.json",
     # ...and the memo that registered the four targets before the bytes
     # existed, which the adopting record's copies of them are held to.
     "audits/audit-phase-21-preregistration.md",
@@ -240,8 +244,9 @@ _FINDING_POWERED_SET_ROW = (
 _FINDING_ACCURACY_SECTION_POOLED = "| pooled | 50/96 = 0.5208 | **46/66 = 0.6970** |"
 _FINDING_INNOCENT_SECTION_POOLED = "| pooled | 46 | **20** |"
 # The history cell both front-door tables carry for the conviction partition:
-# the 9p2i set's own read at baseline 9, the recording the promotion replaced.
-_PREVIOUS_PARTITION_CELL = "70 / 70 = 1.0000 vs 11 / 20 = 0.5500"
+# the 9p2i set's own read on round 2, the recording round 3's promotion replaced
+# (was baseline 9's "70 / 70 = 1.0000 vs 11 / 20 = 0.5500", before it).
+_PREVIOUS_PARTITION_CELL = "24 / 24 = 1.0000 vs 20 / 42 = 0.4762"
 _ML_PAGE = "docs/ml-program.md"
 _ML_ARM_ROW = "| `ea4bc955…` (put to the bar) | 26/50 = 0.52 | 13/50 = 0.26 |"
 _ML_DROPPED_ARM_ROW = (
@@ -271,21 +276,29 @@ _TIP_SET_ACCURACY_ROW = (
     "| `samples/9p2i` | 14/27 = 0.5185 | **11/20 = 0.5500** [0.3421, 0.7418] |"
 )
 _TIP_SUMMANDS = "pooled (70 + 211 +\n19 + 26)"
-# The promoted 9p2i set's era record (eval/eras.py), whose section 9 publishes
-# the proof row's after column for that set alone.
-_PROMOTION_AUDIT = "audits/audit-2026-10-01-stage-b-r2.md"
+# The promoted 9p2i set's era record (eval/eras.py), whose section 12 publishes
+# the proof row's after column for that set alone (was round 2's, section 9).
+_PROMOTION_AUDIT = "audits/audit-2026-10-09-stage-b-r3.md"
+# The record of the round the promoted set replaced: its section 9 owns the
+# proof row's before column and the win split's before cell.
+_REPLACED_AUDIT = "audits/audit-2026-10-01-stage-b-r2.md"
 _SET_ACCURACY_HEADING = "#### Published cell 1 — non-direct conviction accuracy"
-_SET_ACCURACY_ROW = (
+_SET_ACCURACY_ROW = "| `samples/9p2i` | 20/42 = 0.4762 | **22/37 = 0.5946** [0.4349, 0.7365] |"  # was "| `samples/9p2i` | 11/20 = 0.5500 | **20/42 = 0.4762** [0.3336, 0.6228] |"
+_SET_INNOCENT_ROW = "| `samples/9p2i` | 22 | **15** |"  # was "| ... | 9 | **22** |"
+_SET_DIRECT = "stays perfect: **24/24 = 1.0000**"
+# ...and the replaced record's own samples/9p2i rows, the proof row's before
+# column since round 3's promotion.
+_REPLACED_SET_ACCURACY_ROW = (
     "| `samples/9p2i` | 11/20 = 0.5500 | **20/42 = 0.4762** [0.3336, 0.6228] |"
 )
-_SET_INNOCENT_ROW = "| `samples/9p2i` | 9 | **22** |"
-_SET_DIRECT = "stays perfect: **24/24 = 1.0000**"
 _CITATION_ROW_CLAIM = (
     "Eject ballots carrying a valid citation, a turn or an observation id (9p2i)"
 )
 # The reading guide's §3 cross-tab, as committed.
 _FLAGGED_ROW = "| yes (24 meetings) | 24 | 0 |"
-_UNFLAGGED_ROW = "| no (93 meetings) | 20 | 22 |"
+_UNFLAGGED_ROW = (
+    "| no (95 meetings) | 22 | 15 |"  # was "| no (93 meetings) | 20 | 22 |"
+)
 # The two dialect terms the front door keeps, and the links that define them.
 # Their first uses are in the line under the results heading.
 _BASELINE_LINK = "[baseline 9](docs/glossary.md#baseline-n-the-reference-recording)"
@@ -405,25 +418,25 @@ def test_stale_sample_date_detected(doc_tree: Path) -> None:
     # place the README dates the 9p2i recording is held to that set's own
     # manifest, so a blanket rewrite is named once per claim rather than once
     # per file.
-    _substitute(doc_tree, _README, "2026-10-01", "2026-08-19")
+    _substitute(doc_tree, _README, "2026-10-09", "2026-08-19")
     # The set's record's file name carries the date too; the blanket rewrite
     # is about the claims, so the link is put back rather than broken.
     _substitute(
         doc_tree,
         _README,
-        "audit-2026-08-19-stage-b-r2.md",
-        "audit-2026-10-01-stage-b-r2.md",
+        "audit-2026-08-19-stage-b-r3.md",
+        "audit-2026-10-09-stage-b-r3.md",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert all(_README in error for error in errors)
     paragraph = [
-        error for error in errors if "'regenerated 2026-10-01 (9p2i)'" in error
+        error for error in errors if "'regenerated 2026-10-09 (9p2i)'" in error
     ]
     assert len(paragraph) == 1
     dated = [
         error
         for error in errors
-        if "dates the 9p2i recording '2026-08-19'" in error and "'2026-10-01'" in error
+        if "dates the 9p2i recording '2026-08-19'" in error and "'2026-10-09'" in error
     ]
     assert len(dated) == len(errors) - 1 >= 1
 
@@ -435,20 +448,20 @@ def test_paragraph_date_drift_not_alibied_elsewhere(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "regenerated 2026-10-01 (9p2i)",
+        "regenerated 2026-10-09 (9p2i)",
         "regenerated 2026-08-19 (9p2i)",
     )
     _write(
         doc_tree,
         _README,
         _read(doc_tree, _README)
-        + "\nAn unrelated historical note mentioning 2026-10-01.\n",
+        + "\nAn unrelated historical note mentioning 2026-10-09.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert any(
-        "'regenerated 2026-10-01 (9p2i)'" in error
-        and "newest refresh on 2026-10-01" in error
+        "'regenerated 2026-10-09 (9p2i)'" in error
+        and "newest refresh on 2026-10-09" in error
         for error in errors
     )
     # The same clause is a dated claim wherever it appears, so the widened
@@ -478,13 +491,13 @@ def test_date_claim_naming_no_set_detected(doc_tree: Path) -> None:
     # The two sets were recorded on different days, so a dated claim names the
     # set it dates; one naming neither is refused, whatever date it carries.
     _substitute(
-        doc_tree, _README, "regenerated 2026-10-01 (9p2i)", "regenerated 2026-10-01"
+        doc_tree, _README, "regenerated 2026-10-09 (9p2i)", "regenerated 2026-10-09"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "'regenerated 2026-10-01' names no sample set" in error for error in errors
+        "'regenerated 2026-10-09' names no sample set" in error for error in errors
     )
-    assert any("'regenerated 2026-10-01 (9p2i)'" in error for error in errors)
+    assert any("'regenerated 2026-10-09 (9p2i)'" in error for error in errors)
 
 
 def test_date_claim_naming_both_sets_detected(doc_tree: Path) -> None:
@@ -498,7 +511,7 @@ def test_date_claim_naming_both_sets_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'the 2026-09-22 record' dates the 9p2i recording '2026-09-22'" in errors[0]
-    assert "records '2026-10-01'" in errors[0]
+    assert "records '2026-10-09'" in errors[0]
 
 
 def test_baseline_9_date_for_the_promoted_set_detected(doc_tree: Path) -> None:
@@ -506,7 +519,7 @@ def test_baseline_9_date_for_the_promoted_set_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "the 2026-10-01 record (9p2i) — [instrument]",
+        "the 2026-10-09 record (9p2i) — [instrument]",
         "the 2026-09-22 record (9p2i) — [instrument]",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -577,7 +590,7 @@ def test_wrong_prompt_set_version_detected(doc_tree: Path) -> None:
 
 def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
     # Losing the paragraph anchor is format drift, not a vacuous pass.
-    for name, day in (("4p1i", "2026-09-22"), ("9p2i", "2026-10-01")):
+    for name, day in (("4p1i", "2026-09-22"), ("9p2i", "2026-10-09")):
         _substitute(
             doc_tree,
             _README,
@@ -592,7 +605,7 @@ def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
 def test_repeated_claims_survive_a_lost_provenance_paragraph(doc_tree: Path) -> None:
     # ...and it must not take the rest of the front door's gate down with it:
     # the other documents repeat these facts on their own account.
-    for name, day in (("4p1i", "2026-09-22"), ("9p2i", "2026-10-01")):
+    for name, day in (("4p1i", "2026-09-22"), ("9p2i", "2026-10-09")):
         _substitute(
             doc_tree,
             _README,
@@ -602,7 +615,7 @@ def test_repeated_claims_survive_a_lost_provenance_paragraph(doc_tree: Path) -> 
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 36% (4p1i), 48% (9p2i) |",
+        "| 36% (4p1i), 34% (9p2i) |",
         "| 36% (4p1i), 30% (9p2i) |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -625,32 +638,35 @@ def test_wrong_win_rate_detected(doc_tree: Path) -> None:
 
 
 def test_promoted_rate_held_to_its_own_manifest(doc_tree: Path) -> None:
-    # Planted: the 9p2i set's baseline-9 rate left in a live claim.
-    _substitute(doc_tree, _README, "rate 48% (9p2i)", "rate 22% (9p2i)")
+    # Planted: the 9p2i set's round-2 rate left in a live claim (was its
+    # baseline-9 rate, 22%, before round 3's promotion).
+    _substitute(doc_tree, _README, "rate 34% (9p2i)", "rate 48% (9p2i)")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
-    assert any("'48% (9p2i)'" in error and "24/50" in error for error in errors)
+    assert any("'34% (9p2i)'" in error and "17/50" in error for error in errors)
     assert any(
-        "claim '22% (9p2i)' disagrees" in error and "24/50 = 48%" in error
+        "claim '48% (9p2i)' disagrees" in error and "17/50 = 34%" in error
         for error in errors
     )
 
 
 def test_promoted_rate_in_a_baseline_9_sentence_detected(doc_tree: Path) -> None:
     # Planted: a sentence naming the ladder tip's baseline states the set's
-    # promoted rate. That sentence is about the replaced recording, so it is
-    # held to the record's before column: 22%, not 48%.
+    # promoted rate. That sentence is about the tip's own recording of the set,
+    # so it is held to the rate the tip's record published: 22%, not 34%. (It
+    # was held to round 2's record's before column, the same 22%, while round 2
+    # was shown; round 3's before column is round 2's 48%.)
     _write(
         doc_tree,
         _README,
         _read(doc_tree, _README)
-        + "\nAt baseline 9 the impostors won 48% (9p2i) of the games.\n",
+        + "\nAt baseline 9 the impostors won 34% (9p2i) of the games.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "claim '48% (9p2i)' in a sentence naming baseline 9" in errors[0]
+    assert "claim '34% (9p2i)' in a sentence naming baseline 9" in errors[0]
     assert "11/50 = 22%" in errors[0]
-    assert "audit-2026-10-01-stage-b-r2.md" in errors[0]
+    assert _LADDER_TIP_AUDIT in errors[0]
 
 
 def test_stale_ladder_tip_sentence_detected(doc_tree: Path) -> None:
@@ -679,7 +695,7 @@ def test_stray_win_rate_claim_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "win-rate claim '36% (9p2i)'" in errors[0]
-    assert "24/50 = 48%" in errors[0]
+    assert "17/50 = 34%" in errors[0]
 
 
 def test_in_paragraph_stale_claim_detected(doc_tree: Path) -> None:
@@ -688,13 +704,13 @@ def test_in_paragraph_stale_claim_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "rate 48% (9p2i)",
-        "rate 48% (9p2i) (an earlier draft misquoted 25% (9p2i))",
+        "rate 34% (9p2i)",
+        "rate 34% (9p2i) (an earlier draft misquoted 25% (9p2i))",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "win-rate claim '25% (9p2i)' disagrees" in errors[0]
-    assert "24/50 = 48%" in errors[0]
+    assert "17/50 = 34%" in errors[0]
 
 
 def test_long_ladder_tip_sentence_detected(doc_tree: Path) -> None:
@@ -964,21 +980,22 @@ def test_unparseable_manifest_fails_loud(doc_tree: Path) -> None:
 def test_vote_correctness_stamp_drift_detected(doc_tree: Path) -> None:
     # The module's per-set stamp is bound to that set's committed report: a
     # numerator drifting away from the recorded one is named on both sides.
-    _substitute(doc_tree, _VOTE_CORRECTNESS, "35/44 = 0.7955", "34/44 = 0.7727")
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "36/46 = 0.7826", "35/46 = 0.7609")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert _VOTE_CORRECTNESS in errors[0]
     assert "replays/samples/9p2i" in errors[0]
-    assert "34/44 = 0.7727" in errors[0]
-    assert "records 35/44 = 0.7955" in errors[0]
+    assert "35/46 = 0.7609" in errors[0]
+    assert "records 36/46 = 0.7826" in errors[0]
 
 
 def test_baseline_9_stamp_left_on_the_promoted_set_detected(doc_tree: Path) -> None:
-    # Planted: the set's baseline-9 rate, still stamped after the promotion.
-    _substitute(doc_tree, _VOTE_CORRECTNESS, "35/44 = 0.7955", "76/81 = 0.9383")
+    # Planted: the set's round-2 rate, still stamped after round 3's promotion
+    # (was its baseline-9 rate, 76/81, after round 2's).
+    _substitute(doc_tree, _VOTE_CORRECTNESS, "36/46 = 0.7826", "35/44 = 0.7955")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "records 35/44 = 0.7955" in errors[0]
+    assert "records 36/46 = 0.7826" in errors[0]
 
 
 def test_structural_pin_prose_detected(doc_tree: Path) -> None:
@@ -994,7 +1011,7 @@ def test_structural_pin_prose_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'structurally pinned'" in errors[0]
-    assert "replays/samples/9p2i (35/44)" in errors[0]
+    assert "replays/samples/9p2i (36/46)" in errors[0]
 
 
 def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
@@ -1004,7 +1021,7 @@ def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _EVAL_REPORT_9P2I,
-        '"vote_correctness_rate": 0.7954545454545454',
+        '"vote_correctness_rate": 0.782608695652174',
         '"vote_correctness_rate": 0.99',
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -1013,7 +1030,7 @@ def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
     # report it points a reader at.
     assert len(errors) == 2
     assert any(
-        _EVAL_REPORT_9P2I in error and "35/44 = 0.7955" in error for error in errors
+        _EVAL_REPORT_9P2I in error and "36/46 = 0.7826" in error for error in errors
     )
     assert any("vote correctness 0.990" in error for error in errors)
 
@@ -1032,7 +1049,7 @@ def test_vote_correctness_provenance_drift_detected(doc_tree: Path) -> None:
         for error in errors
     } == {
         "baseline-9",
-        "stage-b-r2",
+        "stage-b-r3",
     }
 
 
@@ -1089,11 +1106,11 @@ def test_vote_correctness_baseline_attribution_drift_detected(doc_tree: Path) ->
 def test_lead_in_missing_one_era_id_detected(doc_tree: Path) -> None:
     # Planted: the promoted set's era named nowhere in the lead-in.
     _substitute(
-        doc_tree, _VOTE_CORRECTNESS, "the later ``stage-b-r2`` era", "a later era"
+        doc_tree, _VOTE_CORRECTNESS, "the later ``stage-b-r3`` era", "a later era"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "does not name the 'stage-b-r2' era" in errors[0]
+    assert "does not name the 'stage-b-r3' era" in errors[0]
     assert "replays/samples/9p2i" in errors[0]
 
 
@@ -1108,7 +1125,7 @@ def test_lead_in_missing_one_era_token_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert (
-        "stage-b-r2 era's prompt set 'qwen3_6_27b.v8.ballot_kill_row_v1'" in errors[0]
+        "stage-b-r3 era's prompt set 'qwen3_6_27b.v8.ballot_kill_row_v1'" in errors[0]
     )
 
 
@@ -1272,17 +1289,35 @@ def test_composite_stamp_split_before_the_token_parse() -> None:
 def test_composite_stamp_names_every_arm_in_the_provenance_paragraph(
     doc_tree: Path,
 ) -> None:
-    # The arms the promoted manifest records are claims the README makes.
+    # The arms the promoted manifest records are claims the README makes (was two
+    # arms, before round 3 added the route lines).
     _substitute(
         doc_tree,
         _README,
-        "`impostor_ballot_v1` and `ballot_kill_row_v1`",
-        "two settings",
+        "`impostor_ballot_v1`, `ballot_kill_row_v1` and `route_lines_v1`",
+        "three settings",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 2
+    assert len(errors) == 3
     assert any("prompt arm 'ballot_kill_row_v1'" in error for error in errors)
     assert any("prompt arm 'impostor_ballot_v1'" in error for error in errors)
+    assert any("prompt arm 'route_lines_v1'" in error for error in errors)
+
+
+def test_the_route_arm_dropped_from_the_promoted_manifest_fails_loud(
+    doc_tree: Path,
+) -> None:
+    # Planted: one row of the promoted manifest without the route lines' arm, so
+    # its prompt stamp is round 2's composite. The composite parse reads the arm
+    # token, so the row no longer agrees with the set it sits in.
+    manifest = "replays/samples/9p2i/MANIFEST.md"
+    text = _read(doc_tree, manifest)
+    arm = "+vote_ballot.qwen3_6_27b.v8.route_lines_v1"
+    assert text.count(arm) == 50
+    _write(doc_tree, manifest, text.replace(arm, "", 1))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors
+    assert any("route_lines_v1" in error for error in errors)
 
 
 def test_one_row_on_a_different_prompt_stamp_fails_loud(doc_tree: Path) -> None:
@@ -1335,7 +1370,7 @@ def test_evidence_count_above_its_denominator_fails_loud(doc_tree: Path) -> None
     _substitute(
         doc_tree,
         _EVAL_REPORT_9P2I,
-        '"evidence_backed_impostor_ejections": 35,',
+        '"evidence_backed_impostor_ejections": 36,',
         '"evidence_backed_impostor_ejections": 52,',
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -1502,18 +1537,18 @@ def test_citation_figure_derived_from_the_committed_instrument(
     _substitute(
         doc_tree,
         _README,
-        "| 410 / 410, zero dangling |",
-        "| 409 / 410, zero dangling |",
+        "| 397 / 397, zero dangling |",
+        "| 396 / 397, zero dangling |",
     )
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 410 / 410, zero dangling |",
-        "| 409 / 410, zero dangling |",
+        "| 397 / 397, zero dangling |",
+        "| 396 / 397, zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'409 / 410, zero dangling'" in errors[0]
+    assert "'396 / 397, zero dangling'" in errors[0]
     assert _CITATION_INSTRUMENT in errors[0]
 
 
@@ -1528,19 +1563,19 @@ def test_instrument_pin_move_reaches_the_front_door(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'410 / 410, 3 dangling'" in errors[0]
+    assert "'397 / 397, 3 dangling'" in errors[0]
 
 
 def test_vent_headline_derived_from_the_crosstab(doc_tree: Path) -> None:
     # The headline is arithmetic over the cross-tab under it, so the two cannot
-    # drift: 24 of 24 + 20 correct ejections rode a vent flag.
+    # drift: 24 of 24 + 22 correct ejections rode a vent flag.
     _substitute(
         doc_tree, _READING_GUIDE, _FLAGGED_ROW, "| yes (24 meetings) | 14 | 0 |"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
-    assert "'24 / 44 = 55%'" in errors[0]
-    assert "'14 / 34 = 41%'" in errors[0]
+    assert "'24 / 46 = 52%'" in errors[0]
+    assert "'14 / 36 = 39%'" in errors[0]
     # ...and the drifted cell is no longer the one the instrument pins.
     assert "cross-tab's 'yes' row reads 14 impostor / 0 innocent" in errors[1]
 
@@ -1572,11 +1607,11 @@ def test_vent_crosstab_read_by_label_not_position(doc_tree: Path) -> None:
 
 def test_swapped_vent_crosstab_labels_detected(doc_tree: Path) -> None:
     # ...while swapping which population is flagged does change the
-    # headline, and is caught: 20 of 44 correct ejections would then be
+    # headline, and is caught: 22 of 46 correct ejections would then be
     # the vent-backed ones.
     text = _read(doc_tree, _READING_GUIDE)
     assert _FLAGGED_ROW + "\n" + _UNFLAGGED_ROW in text
-    swapped = "| no (24 meetings) | 24 | 0 |\n| yes (93 meetings) | 20 | 22 |"
+    swapped = "| no (24 meetings) | 24 | 0 |\n| yes (95 meetings) | 22 | 15 |"
     _write(
         doc_tree,
         _READING_GUIDE,
@@ -1584,12 +1619,12 @@ def test_swapped_vent_crosstab_labels_detected(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "'24 / 44 = 55%'" in error and "'20 / 44 = 45%'" in error for error in errors
+        "'24 / 46 = 52%'" in error and "'22 / 46 = 48%'" in error for error in errors
     )
     # The pins name the same swap in their own terms: the flagged row is the
     # one the instrument recorded 24/0 for, whichever way round it is written.
     assert any(
-        "cross-tab's 'yes' row reads 20 impostor / 22 innocent" in e for e in errors
+        "cross-tab's 'yes' row reads 22 impostor / 15 innocent" in e for e in errors
     )
 
 
@@ -1606,52 +1641,125 @@ def test_mislabelled_vent_crosstab_row_fails_loud(doc_tree: Path) -> None:
 
 def test_proof_partition_derived_from_the_previous_record(doc_tree: Path) -> None:
     # The before column is the read the recording this one replaced published,
-    # for the same set: the ladder tip's samples/9p2i rows, its direct-proof
-    # share read off the pooled sentence's per-set summands. A moved summand
-    # moves the history the front door states rather than being absorbed.
+    # for the same set: round 2's record's samples/9p2i rows, its direct-proof
+    # pair read off the sentence naming the set (was the ladder tip's rows, its
+    # pair read off the pooled sentence's per-set summands, while round 2 was
+    # shown). A moved pair moves the history the front door states rather than
+    # being absorbed.
     _substitute(
-        doc_tree, _LADDER_TIP_AUDIT, _TIP_SUMMANDS, "pooled (69 + 212 +\n19 + 26)"
+        doc_tree, _REPLACED_AUDIT, _SET_DIRECT, "stays perfect: **23/23 = 1.0000**"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     figure = [error for error in errors if _PREVIOUS_PARTITION_CELL in error]
     assert len(figure) == 1
-    assert "'69 / 69 = 1.0000 vs 11 / 20 = 0.5500'" in figure[0]
+    assert "'23 / 23 = 1.0000 vs 20 / 42 = 0.4762'" in figure[0]
 
 
-def test_summands_that_do_not_sum_fail_loud(doc_tree: Path) -> None:
-    # Summands give each set's share only when they sum to the pooled cell.
-    _substitute(
-        doc_tree, _LADDER_TIP_AUDIT, _TIP_SUMMANDS, "pooled (71 + 211 +\n19 + 26)"
-    )
-    errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert _LADDER_TIP_AUDIT in errors[0]
-    assert "conviction-partition cells cannot be located" in errors[0]
+def test_summands_split_the_pooled_direct_cell_per_set() -> None:
+    # A record's pooled direct-proof sentence gives each set's share through its
+    # per-set summands, read in the order of the accuracy table's rows: the
+    # ladder tip's samples/9p2i share is the first summand. A moved summand
+    # moves the share.
+    tip = (_REPO_ROOT / _LADDER_TIP_AUDIT).read_text(encoding="utf-8")
+    label = "samples/9p2i"
+    read = check_doc_facts.set_partition(tip, label)
+    assert read is not None and read[0] == (70, 70)
+    moved = tip.replace(_TIP_SUMMANDS, "pooled (69 + 212 +\n19 + 26)")
+    assert moved != tip
+    read = check_doc_facts.set_partition(moved, label)
+    assert read is not None and read[0] == (69, 69)
+
+
+def test_summands_that_do_not_sum_fail_loud() -> None:
+    # Summands give each set's share only when they sum to the pooled cell (was
+    # read through the front door while the tip owned the before column).
+    tip = (_REPO_ROOT / _LADDER_TIP_AUDIT).read_text(encoding="utf-8")
+    broken = tip.replace(_TIP_SUMMANDS, "pooled (71 + 211 +\n19 + 26)")
+    assert broken != tip
+    assert check_doc_facts.set_partition(tip, "samples/9p2i") is not None
+    assert check_doc_facts.set_partition(broken, "samples/9p2i") is None
 
 
 def test_previous_set_row_reaches_the_before_column(doc_tree: Path) -> None:
-    # The tip's samples/9p2i non-direct row is the before cell's second half,
-    # and the promotion record's own before cells are held to it as well.
+    # Round 2's samples/9p2i non-direct row is the before cell's second half,
+    # and the promotion record's own before cells are held to it as well (was
+    # the ladder tip's row, while round 2 was shown).
     _substitute(
         doc_tree,
-        _LADDER_TIP_AUDIT,
-        _TIP_SET_ACCURACY_ROW,
-        "| `samples/9p2i` | 14/27 = 0.5185 | **12/20 = 0.6000** [0.3421, 0.7418] |",
+        _REPLACED_AUDIT,
+        _REPLACED_SET_ACCURACY_ROW,
+        "| `samples/9p2i` | 11/20 = 0.5500 | **21/42 = 0.5000** [0.3336, 0.6228] |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert any("'70 / 70 = 1.0000 vs 12 / 20 = 0.6000'" in error for error in errors)
+    assert any("'24 / 24 = 1.0000 vs 21 / 42 = 0.5000'" in error for error in errors)
     assert any(
         error.startswith(_PROMOTION_AUDIT)
-        and "before cells for samples/9p2i read 11/20" in error
-        and "published 12/20" in error
+        and "before cells for samples/9p2i read 20/42" in error
+        and "published 21/42" in error
         for error in errors
     )
 
 
-# The README as it stood at d41c9006, the last commit before the promotion,
-# kept as the hunks that differ from the committed page: each pair is
-# (the committed text, the d41c9006 text). Applied in order, they rebuild the
-# whole d41c9006 front door inside the promoted tree.
+# The README as it stood at 2eed2e92, the last commit before round 3's
+# promotion, kept as the hunks that differ from the committed page: each pair
+# is (the committed text, the 2eed2e92 text). Applied in order, they rebuild
+# the whole round-2 front door inside the promoted tree.
+_ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
+    (
+        """*9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-09 record (9p2i): at tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. [Media provenance](docs/media/README.md#provenance) records the source and asset identities; the [short clip](docs/media/spectator-journey.webm) walks the same game.*
+""",
+        """*9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-01 record (9p2i): at tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. [Media provenance](docs/media/README.md#provenance) records the source and asset identities; the [short clip](docs/media/spectator-journey.webm) walks the same game.*
+""",
+    ),
+    (
+        """The shown 9-player set was recorded 2026-10-09 under the adopted gameplay changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity); the 4-player set and the ML corpus stay at [baseline 9](docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22. No figure pools the two. Each before cell is what that set's replaced recording read.
+""",
+        """The shown 9-player set was recorded 2026-10-01 under the adopted gameplay changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity); the 4-player set and the ML corpus stay at [baseline 9](docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22. No figure pools the two. Each before cell is what that set's replaced recording read.
+""",
+    ),
+    (
+        """| Impostor win rate, committed samples | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
+| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 397 / 397, zero dangling | 410 / 410, zero dangling | the 2026-10-09 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
+| Ejection accuracy with engine-certified proof of the ejectee's role, against without (9p2i) | 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | the 2026-10-09 record (9p2i) — [the record](audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](audits/audit-2026-10-01-stage-b-r2.md) §9.6; 15 of 15 innocent ejections sit in the no-proof cell |
+| Correct 9p ejections riding an ejectee-specific vent sighting | 24 / 46 = 52% | 24 / 44 = 55% | the 2026-10-09 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
+""",
+        """| Impostor win rate, committed samples | 36% (4p1i), 48% (9p2i) | 36% (4p1i), 22% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-01 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
+| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 410 / 410, zero dangling | 496 / 496, zero dangling | the 2026-10-01 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
+| Ejection accuracy with engine-certified proof of the ejectee's role, against without (9p2i) | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | 70 / 70 = 1.0000 vs 11 / 20 = 0.5500 | the 2026-10-01 record (9p2i) — [the record](audits/audit-2026-10-01-stage-b-r2.md) §9.6, against [baseline 9's](audits/audit-2026-09-22-process-rerecord.md) §6.2; 22 of 22 innocent ejections sit in the no-proof cell |
+| Correct 9p ejections riding an ejectee-specific vent sighting | 24 / 44 = 55% | 70 / 81 = 86% | the 2026-10-01 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
+""",
+    ),
+    (
+        """*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 46 correct ejections follow certified vent evidence; without it, 22 of 37 ejections target impostors and 15 convict crewmates. This demonstrates processing of certified facts and deception, **not general social deduction**. The [reading guide](docs/reading-guide.md) reads these 50 games alone.
+""",
+        """*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 44 correct ejections follow certified vent evidence; without it, 20 of 42 ejections target impostors and 22 convict crewmates. This demonstrates processing of certified facts and deception, **not general social deduction**. The [reading guide](docs/reading-guide.md) reads these 50 games alone.
+""",
+    ),
+    (
+        """report openings no longer carry it (0 of 115). The full temporal repair stays
+""",
+        """report openings no longer carry it (0 of 114). The full temporal repair stays
+""",
+    ),
+    (
+        """**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections, vote correctness 0.783, and ejection accuracy 0.754. The demo publishes a smaller, strictly validated summary; reported usage is separate from verified outcomes and is not a billing guarantee.
+""",
+        """**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 66 ejections, vote correctness 0.795, and ejection accuracy 0.667. The demo publishes a smaller, strictly validated summary; reported usage is separate from verified outcomes and is not a billing guarantee.
+""",
+    ),
+    (
+        """**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts with a `v8` ballot, each in its own era. The 4-player set was regenerated 2026-09-22 (4p1i) at [baseline 9](audits/audit-2026-09-22-process-rerecord.md), every experimental switch off: impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the route lines, a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)), its ballot stamped `impostor_ballot_v1`, `ballot_kill_row_v1` and `route_lines_v1`: impostor win rate 34% (9p2i). Each manifest records per-game provenance. The picture above is from the 9-player game the guided tour opens on.
+""",
+        """**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts with a `v8` ballot, each in its own era. The 4-player set was regenerated 2026-09-22 (4p1i) at [baseline 9](audits/audit-2026-09-22-process-rerecord.md), every experimental switch off: impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-01 (9p2i) under the adopted gameplay changes ([its record](audits/audit-2026-10-01-stage-b-r2.md)), its ballot stamped `impostor_ballot_v1` and `ballot_kill_row_v1`: impostor win rate 48% (9p2i). Each manifest records per-game provenance. The picture above is from the 9-player game the guided tour opens on.
+""",
+    ),
+)
+
+
+# The README as it stood at d41c9006, the last commit before round 2's
+# promotion, kept as the hunks that differ from the round-2 page: each pair is
+# (the 2eed2e92 text, the d41c9006 text). Applied after the round-2 hunks, they
+# rebuild the whole d41c9006 front door inside the promoted tree.
 _D41C9006_README_HUNKS: tuple[tuple[str, str], ...] = (
     (
         """**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [Inspect results and decisions](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read an ownership decision](docs/ownership-case-study.md)
@@ -1721,27 +1829,53 @@ experiment; it is not adopted. [Observation contract and limitations](docs/obser
 )
 
 
-def test_the_d41c9006_front_door_fails_on_the_promoted_tree(doc_tree: Path) -> None:
-    # Planted: the whole README as it stood before the promotion, dropped into
-    # the promoted tree. It fails naming at least the 9p2i set's date, its win
-    # rate and the era sentence, each from the set's own manifest and record.
+def _readme_rebuilt(doc_tree: Path, *steps: tuple[tuple[str, str], ...]) -> list[str]:
     readme = _read(doc_tree, _README)
-    for current, previous in _D41C9006_README_HUNKS:
-        assert readme.count(current) == 1, current[:60]
-        readme = readme.replace(current, previous)
+    for hunks in steps:
+        for current, previous in hunks:
+            assert readme.count(current) == 1, current[:60]
+            readme = readme.replace(current, previous)
     _write(doc_tree, _README, readme)
     errors = check_doc_facts.check_facts(doc_tree)
-    readme_errors = [error for error in errors if error.startswith(_README)]
-    assert any("'regenerated 2026-10-01 (9p2i)'" in error for error in readme_errors)
+    return [error for error in errors if error.startswith(_README)]
+
+
+def test_the_round_2_front_door_fails_on_the_promoted_tree(doc_tree: Path) -> None:
+    # Planted: the whole README as it stood before round 3's promotion, dropped
+    # into the promoted tree. It fails naming at least the 9p2i set's date, its
+    # win rate and the era sentence, each from the set's own manifest and record.
+    readme_errors = _readme_rebuilt(doc_tree, _ROUND_2_README_HUNKS)
+    assert any("'regenerated 2026-10-09 (9p2i)'" in error for error in readme_errors)
     assert any(
-        "'48% (9p2i)'" in error and "24/50 games" in error for error in readme_errors
+        "'34% (9p2i)'" in error and "17/50 games" in error for error in readme_errors
     )
     assert any(
-        "claim '22% (9p2i)' disagrees" in error and "24/50 = 48%" in error
+        "claim '48% (9p2i)' disagrees" in error and "17/50 = 34%" in error
         for error in readme_errors
     )
     assert any(
-        "does not link the 9p2i set's era, stage-b-r2" in error
+        "does not link the 9p2i set's era, stage-b-r3" in error
+        for error in readme_errors
+    )
+
+
+def test_the_d41c9006_front_door_fails_on_the_promoted_tree(doc_tree: Path) -> None:
+    # Planted: the whole README as it stood before round 2's promotion, dropped
+    # into the promoted tree; it fails on the same three facts (it failed on the
+    # round-2 tree too, against 24/50 and stage-b-r2).
+    readme_errors = _readme_rebuilt(
+        doc_tree, _ROUND_2_README_HUNKS, _D41C9006_README_HUNKS
+    )
+    assert any("'regenerated 2026-10-09 (9p2i)'" in error for error in readme_errors)
+    assert any(
+        "'34% (9p2i)'" in error and "17/50 games" in error for error in readme_errors
+    )
+    assert any(
+        "claim '22% (9p2i)' disagrees" in error and "17/50 = 34%" in error
+        for error in readme_errors
+    )
+    assert any(
+        "does not link the 9p2i set's era, stage-b-r3" in error
         for error in readme_errors
     )
 
@@ -1758,7 +1892,7 @@ def test_samples_paragraph_dropping_only_the_promoted_sets_record_detected(
     assert f"]({_LADDER_TIP_AUDIT})" in paragraph
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "does not link the 9p2i set's era, stage-b-r2" in errors[0]
+    assert "does not link the 9p2i set's era, stage-b-r3" in errors[0]
     assert f"({_PROMOTION_AUDIT})" in errors[0]
 
 
@@ -1790,12 +1924,12 @@ def test_four_set_figure_kept_as_the_current_figure_detected(doc_tree: Path) -> 
         _substitute(
             doc_tree,
             document,
-            "| 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 |",
+            "| 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 |",
             "| 326 / 326 = 1.0000 vs 43 / 85 = 0.5059 |",
         )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "'24 / 24 = 1.0000 vs 20 / 42 = 0.4762'" in error and _PROMOTION_AUDIT in error
+        "'24 / 24 = 1.0000 vs 22 / 37 = 0.5946'" in error and _PROMOTION_AUDIT in error
         for error in errors
     )
 
@@ -1807,14 +1941,14 @@ def test_published_partition_derived_from_the_record(doc_tree: Path) -> None:
         doc_tree,
         _PROMOTION_AUDIT,
         _SET_ACCURACY_ROW,
-        "| `samples/9p2i` | 11/20 = 0.5500 | **23/42 = 0.5476** [0.3336, 0.6228] |",
+        "| `samples/9p2i` | 20/42 = 0.4762 | **23/37 = 0.6216** [0.4349, 0.7365] |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert any("'24 / 24 = 1.0000 vs 23 / 42 = 0.5476'" in error for error in errors)
+    assert any("'24 / 24 = 1.0000 vs 23 / 37 = 0.6216'" in error for error in errors)
     # ...and the record's two published cells now contradict each other.
     assert any(
         error.startswith(_PROMOTION_AUDIT)
-        and "its non-direct accuracy cell reads 23/42" in error
+        and "its non-direct accuracy cell reads 23/37" in error
         for error in errors
     )
 
@@ -1823,7 +1957,10 @@ def test_record_innocent_bar_reaches_the_front_door(doc_tree: Path) -> None:
     # The wrongful-ejection count the row publishes is the record's own cell
     # for the set, not a number this page remembers.
     _substitute(
-        doc_tree, _PROMOTION_AUDIT, _SET_INNOCENT_ROW, "| `samples/9p2i` | 9 | **20** |"
+        doc_tree,
+        _PROMOTION_AUDIT,
+        _SET_INNOCENT_ROW,
+        "| `samples/9p2i` | 22 | **20** |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
@@ -1842,13 +1979,14 @@ def test_record_direct_proof_cell_reaches_the_front_door(doc_tree: Path) -> None
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("1 proof-present innocent ejection(s)" in error for error in errors)
-    assert any("'23 / 24 = 0.9583 vs 20 / 42 = 0.4762'" in error for error in errors)
+    assert any("'23 / 24 = 0.9583 vs 22 / 37 = 0.5946'" in error for error in errors)
 
 
 def test_missing_record_bar_fails_loud(doc_tree: Path) -> None:
     # Losing the tip's cell heading must not read as "nothing to derive from":
-    # both its reads go, the 9p2i set's before column and the pooled cells the
-    # history paragraph quotes, and each is named.
+    # its read goes, the pooled cells the history paragraph quotes, and it is
+    # named. (While round 2 was shown the tip also owned the 9p2i set's before
+    # column, so the loss was named twice.)
     _substitute(
         doc_tree,
         _LADDER_TIP_AUDIT,
@@ -1856,12 +1994,24 @@ def test_missing_record_bar_fails_loud(doc_tree: Path) -> None:
         "#### The first cell — non-direct conviction accuracy",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 2
-    assert all(_LADDER_TIP_AUDIT in error for error in errors)
-    assert any("conviction-partition cells cannot be located" in e for e in errors)
-    assert any(
-        "pooled conviction-partition cells cannot be located" in e for e in errors
+    assert len(errors) == 1
+    assert _LADDER_TIP_AUDIT in errors[0]
+    assert "pooled conviction-partition cells cannot be located" in errors[0]
+
+
+def test_missing_replaced_record_cell_fails_loud(doc_tree: Path) -> None:
+    # Losing the replaced record's cell heading leaves the 9p2i set's before
+    # column with nothing to derive from, and it is named.
+    _substitute(
+        doc_tree,
+        _REPLACED_AUDIT,
+        _SET_ACCURACY_HEADING,
+        "#### The first cell — non-direct conviction accuracy",
     )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors
+    assert all(_REPLACED_AUDIT in error for error in errors)
+    assert any("conviction-partition cells cannot be located" in e for e in errors)
 
 
 def test_missing_promotion_record_cell_fails_loud(doc_tree: Path) -> None:
@@ -1960,18 +2110,18 @@ def test_renamed_previous_record_pooled_row_fails_loud(doc_tree: Path) -> None:
 
 
 def test_innocent_ejections_moved_to_the_wrong_cell_detected(doc_tree: Path) -> None:
-    # The count alone is not the claim. A row stating the same 22 of 22 but
+    # The count alone is not the claim. A row stating the same 15 of 15 but
     # putting them in the proof-present cell states the opposite finding, so
     # matching the number without the placement would gate shape, not meaning.
     _substitute(
         doc_tree,
         _README,
-        "22 of 22 innocent ejections sit in the no-proof cell",
-        "22 of 22 innocent ejections sit in the proof-present cell",
+        "15 of 15 innocent ejections sit in the no-proof cell",
+        "15 of 15 innocent ejections sit in the proof-present cell",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'22 of 22 innocent ejections sit in the no-proof cell'" in errors[0]
+    assert "'15 of 15 innocent ejections sit in the no-proof cell'" in errors[0]
 
 
 def test_ml_arm_win_count_derived_from_the_finalist_jsonl(doc_tree: Path) -> None:
@@ -2461,7 +2611,7 @@ def test_stale_guide_win_rate_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 36% (4p1i), 48% (9p2i) |",
+        "| 36% (4p1i), 34% (9p2i) |",
         "| 34% (4p1i), 24% (9p2i) |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -2491,7 +2641,7 @@ def test_ml_page_baseline_9_sentence_held_to_history(doc_tree: Path) -> None:
     # The ML page's sentence names baseline 9, so its 9p2i rate is that
     # recording's: the promoted rate there is drift.
     _substitute(
-        doc_tree, _ML_PAGE, "(36% (4p1i), 22% (9p2i)", "(36% (4p1i), 48% (9p2i)"
+        doc_tree, _ML_PAGE, "(36% (4p1i), 22% (9p2i)", "(36% (4p1i), 34% (9p2i)"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -2505,14 +2655,14 @@ def test_stale_guide_record_date_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "the 2026-10-01 record (9p2i) — [instrument]",
+        "the 2026-10-09 record (9p2i) — [instrument]",
         "the 2026-07-20 record (9p2i) — [instrument]",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
     assert "'the 2026-07-20 record' dates the 9p2i recording" in errors[0]
-    assert "'2026-10-01'" in errors[0]
+    assert "'2026-10-09'" in errors[0]
 
 
 def test_numbered_tip_date_held_to_the_tip_era(doc_tree: Path) -> None:
@@ -2571,8 +2721,8 @@ def test_moved_figure_quoted_without_its_baseline_stamp_detected(
     _substitute(
         doc_tree,
         _README,
-        "| 410 / 410, zero dangling | 496 / 496, zero dangling |",
-        "| 410 / 410, zero dangling |",
+        "| 397 / 397, zero dangling | 410 / 410, zero dangling |",
+        "| 397 / 397, zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
@@ -2605,12 +2755,12 @@ def test_before_column_drift_between_the_two_tables_detected(doc_tree: Path) -> 
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 410 / 410, zero dangling | 496 / 496, zero dangling |",
-        "| 410 / 410, zero dangling | 512 / 512, zero dangling |",
+        "| 397 / 397, zero dangling | 410 / 410, zero dangling |",
+        "| 397 / 397, zero dangling | 512 / 512, zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'496 / 496, zero dangling'" in errors[0]
+    assert "'410 / 410, zero dangling'" in errors[0]
     assert "'512 / 512, zero dangling'" in errors[0]
 
 
@@ -2620,8 +2770,8 @@ def test_before_column_win_rate_held_to_the_record(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "| 36% (4p1i), 48% (9p2i) | 36% (4p1i), 22% (9p2i) |",
-        "| 36% (4p1i), 48% (9p2i) | 12% (4p1i), 22% (9p2i) |",
+        "| 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) |",
+        "| 36% (4p1i), 34% (9p2i) | 12% (4p1i), 48% (9p2i) |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
@@ -2633,19 +2783,20 @@ def test_before_column_win_rate_held_to_the_record(doc_tree: Path) -> None:
 
 def test_before_column_held_to_each_sets_own_record(doc_tree: Path) -> None:
     # Planted: the 9p2i before cell left at baseline 8's rate. The set's
-    # replaced recording is baseline 9's, published in its own era's record.
+    # replaced recording is round 2's, published in its own era's record (was
+    # baseline 9's, 11/50, while round 2 was shown).
     for document in (_README, _READING_GUIDE):
         _substitute(
             doc_tree,
             document,
-            "| 36% (4p1i), 48% (9p2i) | 36% (4p1i), 22% (9p2i) |",
-            "| 36% (4p1i), 48% (9p2i) | 36% (4p1i), 30% (9p2i) |",
+            "| 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) |",
+            "| 36% (4p1i), 34% (9p2i) | 36% (4p1i), 30% (9p2i) |",
         )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert all(
         "win-rate claim '30% (9p2i)' in the before column disagrees with "
-        f"{_PROMOTION_AUDIT}'s win-split table (11/50 = 22%)" in error
+        f"{_PROMOTION_AUDIT}'s win-split table (24/50 = 48%)" in error
         for error in errors
     )
 
@@ -2655,14 +2806,15 @@ def test_promotion_win_split_held_to_the_replaced_record(doc_tree: Path) -> None
     _substitute(
         doc_tree,
         _PROMOTION_AUDIT,
-        "| `samples/9p2i` | 22% (11/50) |",
-        "| `samples/9p2i` | 20% (10/50) |",
+        "| `samples/9p2i` | 48% (24/50) |",
+        "| `samples/9p2i` | 46% (23/50) |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
         error.startswith(_PROMOTION_AUDIT)
-        and "before cell for 9p2i reads 10/50" in error
-        and "published 11/50" in error
+        and "before cell for 9p2i reads 23/50" in error
+        and "published 24/50" in error
+        and _REPLACED_AUDIT in error
         for error in errors
     )
 
@@ -2685,8 +2837,8 @@ def test_missing_promotion_win_split_table_fails_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _PROMOTION_AUDIT,
-        "| set | baseline-9 impostor rate | promoted impostor rate |",
-        "| leg | baseline-9 impostor rate | promoted impostor rate |",
+        "| set | round-2 impostor rate | promoted impostor rate |",
+        "| leg | round-2 impostor rate | promoted impostor rate |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -2702,7 +2854,7 @@ def test_missing_promotion_win_split_table_fails_loud(doc_tree: Path) -> None:
 def test_stale_guide_ballot_prose_detected(doc_tree: Path) -> None:
     # The exact drift an earlier recording left behind: the table moved and
     # the paragraph under it kept saying 520.
-    _substitute(doc_tree, _READING_GUIDE, "all 410 eject", "all 520 eject")
+    _substitute(doc_tree, _READING_GUIDE, "all 397 eject", "all 520 eject")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -2713,7 +2865,7 @@ def test_stale_guide_ballot_prose_detected(doc_tree: Path) -> None:
 def test_stale_guide_crosstab_prose_detected(doc_tree: Path) -> None:
     # ...and the same class one paragraph down: the cross-tab re-quoted, the
     # sentence introducing it left at the previous recording's total.
-    _substitute(doc_tree, _READING_GUIDE, "all 117\ncommitted", "all 165\ncommitted")
+    _substitute(doc_tree, _READING_GUIDE, "all 119\ncommitted", "all 165\ncommitted")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'all 165 committed 9p2i meetings'" in errors[0]
@@ -2723,7 +2875,7 @@ def test_stale_guide_crosstab_prose_detected(doc_tree: Path) -> None:
 def test_deleted_guide_narrative_fails_loud(doc_tree: Path) -> None:
     # A paragraph that quietly loses its figure must fail rather than leave
     # the pin bound to nothing.
-    _substitute(doc_tree, _READING_GUIDE, "all 410 eject ballots", "every eject ballot")
+    _substitute(doc_tree, _READING_GUIDE, "all 397 eject ballots", "every eject ballot")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "no longer narrated anywhere" in errors[0]
@@ -2747,8 +2899,8 @@ def test_unpinned_crosstab_fails_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _DEDUCTION_INSTRUMENT,
-        "assert cross_tab.meetings_total == 117",
-        "assert cross_tab.meeting_count == 117",
+        "assert cross_tab.meetings_total == 119",
+        "assert cross_tab.meeting_count == 119",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -2761,31 +2913,29 @@ def test_contradicting_crosstab_pins_fail_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _DEDUCTION_INSTRUMENT,
-        "    assert cross_tab.meetings_total == 117",
-        "    assert cross_tab.meetings_total == 117\n"
+        "    assert cross_tab.meetings_total == 119",
+        "    assert cross_tab.meetings_total == 119\n"
         "    assert cross_tab.meetings_total == 150",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert any("pins meetings_total at both 117 and 150" in error for error in errors)
+    assert any("pins meetings_total at both 119 and 150" in error for error in errors)
 
 
 def test_stale_guide_no_proof_ratio_detected(doc_tree: Path) -> None:
     # The most-quoted sentence on the page is the unflagged half read as a
     # ratio, and it is read off the cross-tab's own cells.
     _substitute(
-        doc_tree, _READING_GUIDE, "coin flip — 20 of 42", "coin flip — 21 of 42"
+        doc_tree, _READING_GUIDE, "coin flip — 22 of 37", "coin flip — 23 of 37"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "narrated ratio 21 of 42" in errors[0]
-    assert "pins at 20 of 42" in errors[0]
+    assert "narrated ratio 23 of 37" in errors[0]
+    assert "pins at 22 of 37" in errors[0]
 
 
 def test_deleted_guide_no_proof_ratio_fails_loud(doc_tree: Path) -> None:
     # Dropping the sentence must fail rather than leave the reading unbound.
-    _substitute(
-        doc_tree, _READING_GUIDE, "close to a coin flip — 20 of 42", "close to chance"
-    )
+    _substitute(doc_tree, _READING_GUIDE, "near a coin flip — 22 of 37", "near chance")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "no longer narrated anywhere" in errors[0]
@@ -2794,11 +2944,11 @@ def test_deleted_guide_no_proof_ratio_fails_loud(doc_tree: Path) -> None:
 def test_stale_partner_ballot_denominator_detected(doc_tree: Path) -> None:
     # The teammate-firewall row lives only in the guide, so README agreement
     # cannot reach it; the instrument that counts those ballots owns it.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 200 |", "| 0 of 199 |")
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 |", "| 0 of 197 |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'0 of 199'" in errors[0]
-    assert "pins '0 of 200'" in errors[0]
+    assert "'0 of 197'" in errors[0]
+    assert "pins '0 of 198'" in errors[0]
 
 
 def test_partner_ballot_row_without_its_pin_fails_loud(doc_tree: Path) -> None:
@@ -2816,7 +2966,7 @@ def test_partner_ballot_row_without_its_pin_fails_loud(doc_tree: Path) -> None:
 
 def test_guide_only_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
     # The guide carries rows the README does not, and they state history too.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 200 | 0 of 210 |", "| 0 of 200 |  |")
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 | 0 of 200 |", "| 0 of 198 |  |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -2828,7 +2978,7 @@ def test_truncated_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
     # Removing the cell AND its delimiter must fail like an emptied one: a row
     # narrower than the header has no history cell, and reading whatever cell
     # happens to sit at the index would check it against the wrong column.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 200 | 0 of 210 |", "| 0 of 200 |")
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 | 0 of 200 |", "| 0 of 198 |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -2886,7 +3036,7 @@ def test_verdict_wrongful_ejection_count_drift_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "a wrongful-ejection sentence names none of the counts" in errors[0]
-    assert "(pooled 42 and 46; 9p2i 22 and 9)" in errors[0]
+    assert "(pooled 42 and 46; 9p2i 15 and 22)" in errors[0]
 
 
 def test_verdict_fraction_rewritten_consistently_detected(doc_tree: Path) -> None:
@@ -3913,7 +4063,8 @@ def test_history_cell_naming_the_recording_before_the_previous_one_detected(
     # The before cell is the set's replaced recording, so a history cell
     # holding the value from the recording BEFORE that — correct once, and
     # still internally consistent between the two tables — has to fail.
-    stale = "68 / 68 = 1.0000 vs 14 / 27 = 0.5185"
+    # baseline 9's read (was baseline 8's "68 / 68 = 1.0000 vs 14 / 27 = 0.5185")
+    stale = "70 / 70 = 1.0000 vs 11 / 20 = 0.5500"
     for document in (_README, _READING_GUIDE):
         _substitute(doc_tree, document, _PREVIOUS_PARTITION_CELL, stale)
     errors = check_doc_facts.check_facts(doc_tree)
@@ -3990,25 +4141,25 @@ def test_missing_featured_list_fails_loud(doc_tree: Path) -> None:
 def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:
     # The example exists because the fake provider's report is empty; its
     # scalars come from the committed report, not from prose.
-    _substitute(doc_tree, _README, "records 66 ejections", "records 92 ejections")
+    _substitute(doc_tree, _README, "records 61 ejections", "records 92 ejections")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'66 ejections'" in errors[0]
+    assert "'61 ejections'" in errors[0]
     assert "total_ejections" in errors[0]
 
 
 def test_report_example_rate_drift_detected(doc_tree: Path) -> None:
-    _substitute(doc_tree, _README, "vote correctness 0.795", "vote correctness 0.938")
+    _substitute(doc_tree, _README, "vote correctness 0.783", "vote correctness 0.938")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'vote correctness 0.795'" in errors[0]
+    assert "'vote correctness 0.783'" in errors[0]
 
 
 def test_report_example_accuracy_drift_detected(doc_tree: Path) -> None:
-    _substitute(doc_tree, _README, "ejection accuracy 0.667", "ejection accuracy 0.900")
+    _substitute(doc_tree, _README, "ejection accuracy 0.754", "ejection accuracy 0.900")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'ejection accuracy 0.667'" in errors[0]
+    assert "'ejection accuracy 0.754'" in errors[0]
 
 
 def test_missing_report_example_paragraph_fails_loud(doc_tree: Path) -> None:

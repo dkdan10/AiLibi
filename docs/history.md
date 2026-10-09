@@ -233,7 +233,7 @@ The phase closed on 2026-09-05 behind that finding.
 
 The 100 committed replays under `replays/samples/` sit in two eras, named in
 `eval/eras.py`. On 2026-10-02 the owner promoted candidate round 2 as the shown
-9-player set: `replays/samples/9p2i` holds its fifty games, recorded 2026-10-01
+9-player set: `replays/samples/9p2i` held its fifty games, recorded 2026-10-01
 under one declared config that switches on the seven adopted gameplay settings,
 the kept vent exit and a six-tick kill cooldown, with that config beside the
 replays. The ladder tip stays at baseline 9, because no substrate setting moved.
@@ -241,6 +241,15 @@ Baseline 10 is reserved for the full re-record. The set's previous games remain
 at `d41c9006`
 ([`audits/audit-2026-10-01-stage-b-r2.md`](../audits/audit-2026-10-01-stage-b-r2.md)
 §9).
+
+On 2026-10-09 the orchestrator, under the owner's delegation, promoted candidate
+round 3: `replays/samples/9p2i` now holds its fifty games, recorded 2026-10-09
+on round 2's config plus the route lines, a line on each ballot about which
+stated changes of room the doors or the regroup allow. Round 2's games stay in
+the tree as `replays/candidates/stage-b-r2`, the comparison record for that one
+change, and the ladder tip stays at baseline 9
+([`audits/audit-2026-10-09-stage-b-r3.md`](../audits/audit-2026-10-09-stage-b-r3.md)
+§12).
 
 The 4-player set and both corpus sets are reference recording 9,
 made 2026-09-22. It re-recorded the same four sets at the same seeds after three

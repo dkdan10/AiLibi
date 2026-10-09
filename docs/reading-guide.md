@@ -8,7 +8,7 @@ take precedence over summaries. See the [glossary](glossary.md) for terms and
 
 ## 1. The numbers worth knowing
 
-The shown 9-player set was recorded 2026-10-01 under the adopted gameplay
+The shown 9-player set was recorded 2026-10-09 under the adopted gameplay
 changes, in its own [era](glossary.md#era-recordings-that-share-one-recorded-identity);
 the 4-player set and the ML corpus stay at baseline 9, recorded 2026-09-22.
 Before is what each set's replaced recording read.
@@ -17,11 +17,11 @@ Before is what each set's replaced recording read.
 |---|---|---|---|
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | 100 of 100 | every commit — `bash scripts/verify_samples.sh` |
 | Observation boundary checks | import rules and planted/recursive leak checks | import rules and planted/recursive leak checks | bounded mechanisms, described below |
-| Impostor win rate, committed samples | 36% (4p1i), 48% (9p2i) | 36% (4p1i), 22% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-01 record (9p2i) — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
-| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 410 / 410, zero dangling | 496 / 496, zero dangling | the 2026-10-01 record (9p2i) — [instrument](../tests/eval/test_vj_instruments.py) |
-| Ejection accuracy with engine-certified proof of the ejectee's role, against without (9p2i) | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | 70 / 70 = 1.0000 vs 11 / 20 = 0.5500 | the 2026-10-01 record (9p2i) — [the record](../audits/audit-2026-10-01-stage-b-r2.md) §9.6, against [baseline 9's](../audits/audit-2026-09-22-process-rerecord.md) §6.2 |
-| Correct 9p ejections riding an ejectee-specific vent sighting | 24 / 44 = 55% | 70 / 81 = 86% | the 2026-10-01 record (9p2i) — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
-| Impostor ballots cast against a partner (9p2i) | 0 of 200 | 0 of 210 | enforced by the meeting layer, not shown by the model — §3 |
+| Impostor win rate, committed samples | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
+| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 397 / 397, zero dangling | 410 / 410, zero dangling | the 2026-10-09 record (9p2i) — [instrument](../tests/eval/test_vj_instruments.py) |
+| Ejection accuracy with engine-certified proof of the ejectee's role, against without (9p2i) | 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | the 2026-10-09 record (9p2i) — [the record](../audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](../audits/audit-2026-10-01-stage-b-r2.md) §9.6 |
+| Correct 9p ejections riding an ejectee-specific vent sighting | 24 / 46 = 52% | 24 / 44 = 55% | the 2026-10-09 record (9p2i) — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
+| Impostor ballots cast against a partner (9p2i) | 0 of 198 | 0 of 200 | enforced by the meeting layer, not shown by the model — §3 |
 | Pre-registered emergence rulings demonstrated, phase 18 | 0 of 14 | 0 of 14 | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
 | Learned tactical policies that became the default | none, ruled twice | none, ruled twice | [phase 17](../audits/audit-phase-17-close.md), [18](../audits/audit-phase-18-close.md) |
 
@@ -47,7 +47,7 @@ sweep in [eval/leak_scan.py](../eval/leak_scan.py) test imports and entitled
 packets. They do not establish complete privacy: in the baseline-9 recordings,
 default meeting openings expose a hidden death tick through a body identifier;
 the shown 9-player set's report openings no longer carry it (body handle 0 of
-114). The full temporal repair stays default-off. The
+115). The full temporal repair stays default-off. The
 [observation contract](observation-contract.md) states the exact boundary.
 
 ## 2. What to run, and what to watch
@@ -88,7 +88,7 @@ every flag alike as verified proof, and the crew convicted on the difference.
 ## 3. What the corpus demonstrates — and what it does not
 
 **Evidence-processing: demonstrated.** Deliberation is typed, and of
-all 410 eject ballots in the 9p2i samples, every one cites a line the voter
+all 397 eject ballots in the 9p2i samples, every one cites a line the voter
 could really see.
 
 **Deception: demonstrated, and the strongest capability on display.**
@@ -100,18 +100,18 @@ firewall holding, not restraint the model showed.
 
 **General social deduction: NOT demonstrated.** A *flag* is a contradiction the
 meeting layer detects and shows the voters; a vent flag is the one class only an
-impostor can produce, resting on an engine-certified observation. Over all 117
+impostor can produce, resting on an engine-certified observation. Over all 119
 committed 9p2i meetings:
 
 | Meeting contains a vent flag | impostor ejected | innocent ejected |
 |---|---|---|
 | yes (24 meetings) | 24 | 0 |
-| no (93 meetings) | 20 | 22 |
+| no (95 meetings) | 22 | 15 |
 
 With the certified evidence in front of it the table never convicted a crewmate.
-Without it, ejection accuracy is close to a coin flip — 20 of 42 — which is why
-the pre-registered bar for exactly this cell, 0.60 pooled across the four
-recorded sets, is one of the two baseline 7 missed. The worst class of evidence
+Without it, ejection accuracy stays near a coin flip — 22 of 37 — still short
+of the pre-registered bar for exactly this cell, 0.60 pooled across the four
+recorded sets, one of the two baseline 7 missed. The worst class of evidence
 did not stay closed: the flag that convicted 70 innocents on a single
 alibi-versus-sighting was empty on baseline 7
 ([the phase-20 record](../audits/audit-phase-20-baseline-7.md) §3, bars 4 and 7),

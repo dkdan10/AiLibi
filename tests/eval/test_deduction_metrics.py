@@ -154,18 +154,19 @@ def test_samples_9p2i_meeting_flag_partition(
 
     §8 row 3: "165 meetings, flagged 70 -> 68 imp/2 inn; unflagged 95 -> 10/21",
     unflagged-meeting accuracy 10/31 = 32.3%. The unit here is the MEETING. The
-    pins read the promoted stage-b-r2 bytes; the baseline-9 bytes read 145
+    pins read the promoted stage-b-r3 bytes; round 2's bytes read 117 meetings,
+    24 flagged (24 / 0) and 93 unflagged (20 / 22), and the baseline-9 bytes 145
     meetings, 70 flagged (70 / 0) and 75 unflagged (11 / 9).
     """
 
     cross_tab = samples_9p2i.deduction.meeting_flag_cross_tab
-    assert cross_tab.meetings_total == 117  # was 145
-    assert cross_tab.flagged_meetings == 24  # was 70
-    assert cross_tab.unflagged_meetings == 93  # was 75
-    assert cross_tab.flagged_ejections_impostor == 24  # was 70
+    assert cross_tab.meetings_total == 119  # was 117
+    assert cross_tab.flagged_meetings == 24  # was 24
+    assert cross_tab.unflagged_meetings == 95  # was 93
+    assert cross_tab.flagged_ejections_impostor == 24  # was 24
     assert cross_tab.flagged_ejections_innocent == 0
-    assert cross_tab.unflagged_ejections_impostor == 20  # was 11
-    assert cross_tab.unflagged_ejections_innocent == 22  # was 9
+    assert cross_tab.unflagged_ejections_impostor == 22  # was 20
+    assert cross_tab.unflagged_ejections_innocent == 15  # was 22
     # The lines above are the reading guide's committed source, parsed by
     # scripts/check_doc_facts.py, so they stay literal; the cell below is derived.
     accuracy = cross_tab.unflagged_meeting_accuracy
@@ -1088,7 +1089,7 @@ def test_scaffold_leakage_reproduces_the_19_8_disclosure(
 ) -> None:
     """The MODEL-originated nets behind ``replays/ml_corpus/README.md`` item 7.
 
-    10/200 and 124/651 impostor-voter ballots name a partner, with a crew
+    10/198 and 124/651 impostor-voter ballots name a partner, with a crew
     false-positive control of 0; 0, 36 and 3 ballots state the role outright;
     player-visible ``free_text`` carries no leak on either 9p2i set. (The
     corpus README's item 7 still reads 41/210 for samples-9p2i: its S9 column is
@@ -1096,10 +1097,11 @@ def test_scaffold_leakage_reproduces_the_19_8_disclosure(
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    # was (41, 210). Kept on ONE line with no trailing comma: this is the pin
-    # scripts/check_doc_facts.py reads to hold the reading guide's partner-ballot
-    # row, and its pattern needs the tuple literal contiguous.
-    assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (10, 200)
+    # was (10, 200) on round 2's bytes, (41, 210) on the baseline-9 bytes. Kept on
+    # ONE line with no trailing comma: this is the pin scripts/check_doc_facts.py
+    # reads to hold the reading guide's partner-ballot row, and its pattern needs
+    # the tuple literal contiguous.
+    assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (10, 198)
     assert samples.crew_partner_naming_ballots == 0
     assert samples.player_visible_leak_turns == 0
 

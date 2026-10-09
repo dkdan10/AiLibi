@@ -40,13 +40,13 @@ wave's code, registered no bars and decided nothing
 back to baseline 7, which was adopted by explicit owner override of a FINDING
 verdict, its record having missed two of its own pre-registered bars
 (``audits/audit-phase-20-baseline-7.md`` §6.1). The shown 9-player set sits in
-the later ``stage-b-r2`` era: recorded 2026-10-01 on the same model and the same
+the later ``stage-b-r3`` era: recorded 2026-10-09 on the same model and the same
 three ``qwen3_6_27b.v6`` templates under one declared experiment config, whose
-two ballot arms stamp ``vote_ballot`` as ``qwen3_6_27b.v8.ballot_kill_row_v1``
-and ``qwen3_6_27b.v8.impostor_ballot_v1``
-(``audits/audit-2026-10-01-stage-b-r2.md`` §9).
+three ballot arms stamp ``vote_ballot`` as ``qwen3_6_27b.v8.ballot_kill_row_v1``,
+``qwen3_6_27b.v8.impostor_ballot_v1`` and ``qwen3_6_27b.v8.route_lines_v1``
+(``audits/audit-2026-10-09-stage-b-r3.md`` §12).
 
-* ``replays/samples/9p2i``: 35/44 = 0.7955
+* ``replays/samples/9p2i``: 36/46 = 0.7826
 * ``replays/samples/4p1i``: 19/20 = 0.9500
 * ``replays/ml_corpus/9p2i``: 219/241 = 0.9087
 * ``replays/ml_corpus/4p1i``: 26/27 = 0.9630
@@ -55,15 +55,16 @@ and ``qwen3_6_27b.v8.impostor_ballot_v1``
 reports and the model and prompt-set tokens from the four manifests, era by
 era, and fails when a stamp or the provenance drifts, or when this module claims
 a structural pin the data contradicts -- so a re-record re-stamps these lines
-rather than rotting them. The nine samples/9p2i ejections behind the shortfall
-are censused seed by seed -- and classified -- in
-``tests/eval/test_vote_correctness.py``. Mind the two populations: **20** of
-those 44 impostor ejections carry no naming ``ContradictionRef`` at all, and 11
-of the 20 are evidence-backed anyway through the kill-witness disjunct, so
-"zero-flag" is a strictly wider set than "not evidence-backed" -- 20 zero-flag
-against 9 unbacked. (The set's baseline-9 recording read 10 of 81, 5 rescued, 5
-unbacked; baseline 8 read 13 of 82, 6 rescued, 7 unbacked; baseline 6 read 8 of
-78, 2 rescued, 6 unbacked.)
+rather than rotting them. The ten samples/9p2i ejections behind the shortfall
+are censused seed by seed in ``tests/eval/test_vote_correctness.py``, which also
+keeps round 2's classification of its nine, read at that round's candidate copy.
+Mind the two populations: **22** of those 46 impostor ejections carry no naming
+``ContradictionRef`` at all, and 12 of the 22 are evidence-backed anyway through
+the kill-witness disjunct, so "zero-flag" is a strictly wider set than "not
+evidence-backed" -- 22 zero-flag against 10 unbacked. (Round 2's recording read
+20 of 44, 11 rescued, 9 unbacked; the set's baseline-9 recording 10 of 81, 5
+rescued, 5 unbacked; baseline 8 13 of 82, 6 rescued, 7 unbacked; baseline 6 8
+of 78, 2 rescued, 6 unbacked.)
 
 The module reads only :mod:`eval.report_schema` data (composed of
 :mod:`meetings.schemas` leaf types) and the post-game ``roles`` ground truth on

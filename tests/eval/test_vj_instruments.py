@@ -560,8 +560,9 @@ def test_row_predicates_classify_raw_clamp_and_breach() -> None:
 
 
 def test_9p2i_citation_compliance_pins(nine: VJInstrumentReport) -> None:
-    # No citation dangles, and every one of the 410 eject ballots carries a
-    # citation (compliance 410/410; the baseline-9 bytes read 496/496). No gate
+    # No citation dangles, and every one of the 397 eject ballots carries a
+    # citation (compliance 397/397; round 2's bytes read 410/410, the baseline-9
+    # bytes 496/496). No gate
     # nulled a rendered reason id or observation id, and no zero-flag rationale
     # was coerced.
     #
@@ -570,8 +571,8 @@ def test_9p2i_citation_compliance_pins(nine: VJInstrumentReport) -> None:
     # and the reading guide's ballot figure, so they stay in that shape -- no
     # trailing comment -- as the front door's committed source. Every other
     # cell is derived from them and from the recorded rows.
-    assert nine.eject_ballots == 410
-    assert nine.cited_eject_ballots == 410
+    assert nine.eject_ballots == 397
+    assert nine.cited_eject_ballots == 397
     assert nine.turn_citations_dangling == 0
     assert nine.observation_citations_dangling == 0
     shown_rows = recorded_counts(_NINE)
