@@ -355,7 +355,7 @@ class ReconstructedMeeting:
     re-record. The baseline-9 record was written after D6, so no committed
     ballot carries either retired reason and nothing moves: the census
     :func:`test_every_reconstruction_divergence_is_a_retired_guard` holds per
-    set (:func:`_retired_guard_row`) reads zero moved ballots in every walked
+    set (:func:`_retired_guard_pin`) reads zero moved ballots in every walked
     set (``(39, 117, 0, 0)`` for samples/4p1i). Every
     consumer of this walk therefore reads the decision the recording actually
     made, which is what each of them was already asserting about.
@@ -1355,35 +1355,64 @@ _RETIRED_REWRITE_REASONS: Final[frozenset[str]] = frozenset(
     {"under_gate_redirect", "uncited_coerced"}
 )
 
-#: Pinned for the frozen sets, through the production path, as
-#: ``(meetings, ballots, ballots whose target moved, meetings holding one)``.
-#: Keyed by the set's path under ``replays/``, never by its base name: a
-#: candidate set takes its roster's name, so it shares that name with a sample
-#: set. A walked set without a frozen row (the shown samples/9p2i set, and a
-#: retired round's candidate copy) reads its recorded meetings and ballots with
-#: nothing moved (samples/9p2i read (145, 845, 0, 0) on the baseline-9 bytes,
-#: and (151, 869, 23, 14) on baseline 8's).
-_RETIRED_GUARD_PINS: Final[Mapping[str, tuple[int, int, int, int]]] = {
+
+@dataclass(frozen=True)
+class _Counted:
+    """A census row whose meetings and ballots are counted off the set's replay files.
+
+    The shown set's meeting and ballot counts move at every legitimate
+    re-record, so its row reads them from an independent count of the recorded
+    rows. The two moved-ballot cells stay literals: they are the semantic zeros
+    (no committed ballot carries a retired guard's reason), which a count of the
+    recorded rows could not assert.
+    """
+
+    moved_ballots: int
+    meetings_holding_one: int
+
+
+#: Every walked set's row, as
+#: ``(meetings, ballots, ballots whose target moved, meetings holding one)``:
+#: a literal for a frozen set, measured through the production path, and a
+#: :class:`_Counted` row for the shown set. Keyed by the set's path under
+#: ``replays/``, never by its base name: a candidate set takes its roster's
+#: name, so it shares that name with a sample set. Every directory the golden
+#: walks has its own key, and a walked set without one raises.
+#: History (2026-10-09): samples/9p2i's row is counted, no longer transcribed;
+#: it read (117, 691, 0, 0) on round 2's bytes, (145, 845, 0, 0) on
+#: baseline 9's and (151, 869, 23, 14) on baseline 8's.
+_RETIRED_GUARD_PINS: Final[Mapping[str, tuple[int, int, int, int] | _Counted]] = {
+    "samples/9p2i": _Counted(moved_ballots=0, meetings_holding_one=0),
     "samples/4p1i": (39, 117, 0, 0),  # was (39, 117, 1, 1)
     "candidates/stage-b-r1/9p2i": (124, 717, 0, 0),
 }
 
 
-def _retired_guard_row(set_dir: Path) -> tuple[int, int, int, int]:
-    """``set_dir``'s census row, by its path under ``replays/``; an unwalked set raises.
+def _retired_guard_pin(
+    set_dir: Path,
+    pins: Mapping[str, tuple[int, int, int, int] | _Counted] = _RETIRED_GUARD_PINS,
+) -> tuple[int, int, int, int]:
+    """``set_dir``'s census row, by its path under ``replays/``; a set without a key raises.
 
-    A frozen set reads its pinned row; any other walked set reads its recorded
-    meetings and ballots and the semantic zeros: no committed ballot carries a
-    retired guard's reason, so no target moves.
+    A literal row is returned as written. A :class:`_Counted` row reads the
+    set's recorded meetings and ballots off its replay files beside its literal
+    semantic zeros. Nothing is derived for a set without a key: a new walked
+    set (a promotion's candidate copy among them) raises until its row lands.
     """
 
     key = set_dir.relative_to(_REPO_ROOT / "replays").as_posix()
-    if key in _RETIRED_GUARD_PINS:
-        return _RETIRED_GUARD_PINS[key]
-    if set_dir not in golden_directories():
-        raise KeyError(f"no retired-guard row for {key}")
-    rows = recorded_counts(set_dir)
-    return (rows.meetings, rows.ballots, 0, 0)
+    if key not in pins:
+        raise KeyError(f"no retired-guard pin for {key}")
+    pin = pins[key]
+    if isinstance(pin, _Counted):
+        counted = recorded_counts(set_dir)
+        return (
+            counted.meetings,
+            counted.ballots,
+            pin.moved_ballots,
+            pin.meetings_holding_one,
+        )
+    return pin
 
 
 def test_every_reconstruction_divergence_is_a_retired_guard(
@@ -1456,7 +1485,7 @@ def test_every_reconstruction_divergence_is_a_retired_guard(
     # and no target moves: today's chain re-decides every recorded ballot to its
     # recorded target. The moved-ballot branch above is therefore unexercised on
     # these bytes; it held on baseline 8's 23 and 1 redirects.
-    expected = _retired_guard_row(set_walk.set_dir)
+    expected = _retired_guard_pin(set_walk.set_dir)
     assert (
         meetings,
         ballots,
@@ -1469,8 +1498,9 @@ def test_the_retired_guard_pins_are_keyed_by_the_path_under_replays() -> None:
     """Planted: two sets that share the base name ``9p2i`` read different rows.
 
     Keyed by base name, the candidate round was held to the sample set's row.
-    Keyed by path, each walked set reads its own row, every frozen row names a
-    set the golden walks, and an unwalked set raises instead of borrowing one.
+    Keyed by path, each walked set reads its own row, every walked set has a
+    key and no key names a set the golden does not walk, and a set without a
+    key raises instead of borrowing one.
     """
 
     replays = _REPO_ROOT / "replays"
@@ -1478,18 +1508,33 @@ def test_the_retired_guard_pins_are_keyed_by_the_path_under_replays() -> None:
     candidate = replays / "candidates" / "stage-b-r1" / "9p2i"
     assert sample.name == candidate.name
     shown = recorded_counts(sample)
-    assert _retired_guard_row(sample) == (shown.meetings, shown.ballots, 0, 0)
-    assert _retired_guard_row(candidate) == (124, 717, 0, 0)
+    assert _retired_guard_pin(sample) == (shown.meetings, shown.ballots, 0, 0)
+    assert _retired_guard_pin(candidate) == (124, 717, 0, 0)
     # The defect this keying removes: by base name, two rows collapse into one.
-    walked = {
-        directory.relative_to(replays).as_posix(): _retired_guard_row(directory)
-        for directory in golden_directories()
-    }
-    by_base_name = {Path(key).name: row for key, row in walked.items()}
-    assert len(by_base_name) < len(walked)
-    assert set(_RETIRED_GUARD_PINS) <= set(walked)
+    by_base_name = {Path(key).name: pin for key, pin in _RETIRED_GUARD_PINS.items()}
+    assert len(by_base_name) < len(_RETIRED_GUARD_PINS)
+    assert {
+        directory.relative_to(replays).as_posix() for directory in golden_directories()
+    } == set(_RETIRED_GUARD_PINS)
     with pytest.raises(KeyError, match="candidates/round-2/9p2i"):
-        _retired_guard_row(replays / "candidates" / "round-2" / "9p2i")
+        _retired_guard_pin(replays / "candidates" / "round-2" / "9p2i")
+
+
+@pytest.mark.parametrize("dropped", ["samples/9p2i", "candidates/stage-b-r1/9p2i"])
+def test_a_walked_set_whose_row_is_deleted_raises(dropped: str) -> None:
+    """Planted: a walked set's row deleted raises ``KeyError`` naming the set.
+
+    Neither a counted row nor a literal one is replaced by a count made on the
+    spot: the lookup derives nothing for a set without a key, so a promotion
+    that moves a set must land its row.
+    """
+
+    walked = _REPO_ROOT / "replays" / dropped
+    assert walked in golden_directories()
+    assert _retired_guard_pin(walked)[2:] == (0, 0)
+    pins = {key: pin for key, pin in _RETIRED_GUARD_PINS.items() if key != dropped}
+    with pytest.raises(KeyError, match=dropped):
+        _retired_guard_pin(walked, pins)
 
 
 # --------------------------------------------------------------------------- #
