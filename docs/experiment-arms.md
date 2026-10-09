@@ -144,6 +144,13 @@ keeps its historical meaning, which is what lets the baseline-9 sets keep verify
 byte-identically. `vent_exit_policy = look_and_wait` is kept in every round as well;
 its balance effect is the subject of round 2, which adds one dial and nothing else.
 
+On 2026-10-09 the orchestrator, under the owner's delegation, took the step the
+round-3 record names and promoted candidate round 3
+(`audits/audit-2026-10-09-stage-b-r3.md`, section 11), so the shown set also
+records `route_lines_version = 1`, named like the kept vent exit and the six-tick
+kill cooldown as a setting these recordings carry rather than an adopted rule,
+with graduation waiting for a full re-record.
+
 ## Candidate round 1
 
 The ladder tip stands at baseline 9.
@@ -151,22 +158,28 @@ The ladder tip stands at baseline 9.
 is candidate round 1, recorded with the experimental switches its README
 names; it adopts nothing and is not a canonical sample set.
 
-## Candidate round 2, the shown set
+## Candidate round 2
 
 Candidate round 2 was recorded with the adopted switches, the kept vent exit
 and a six-tick kill cooldown, under one declared config. On 2026-10-02 the owner
-promoted it: it is now [`replays/samples/9p2i`](../replays/samples/9p2i/MANIFEST.md),
-the shown 9-player set, in its own era (`eval/eras.py`), with that config beside
+promoted it as the shown 9-player set, in its own era
+([the record](../audits/audit-2026-10-01-stage-b-r2.md), section 9), with one
+flag its record states: reporters ejected per report meeting read 17/114, above
+the pre-registered 0.104, so the round's own rule named no promotion step; the
+owner's ruling promoted it regardless. Since round 3's promotion its bytes are
+[`replays/candidates/stage-b-r2/9p2i`](../replays/candidates/stage-b-r2/README.md),
+moved there without a byte changed with its config at the round's root: the
+comparison record for the route lines, which round 3 adds and nothing else. It
+adopts nothing and is not a canonical sample set.
+
+## Candidate round 3, the shown set
+
+Candidate round 3 was recorded with round 2's rules and one more switch that
+gives each voter a plain line about the places stated at the table. On
+2026-10-09 the orchestrator, under the owner's delegation, promoted it: it is now
+[`replays/samples/9p2i`](../replays/samples/9p2i/MANIFEST.md), the shown
+9-player set, in its own era (`eval/eras.py`), with its declared config beside
 its replays as `experiment-config.json`, and its candidate copy is deleted
-([the record](../audits/audit-2026-10-01-stage-b-r2.md), section 9). Promotion
-moves no default. The set carries one flag its record states: reporters ejected
-per report meeting read 17/114, above the pre-registered 0.104, so the round's
-own rule named no promotion step; the owner's ruling promotes it regardless. The
-ladder tip stands at baseline 9.
-
-## Candidate round 3
-
-[`replays/candidates/stage-b-r3/9p2i`](../replays/candidates/stage-b-r3/README.md)
-is candidate round 3, recorded with the shown set's rules and one more switch
-that gives each voter a plain line about the places stated at the table, as its
-README names; it adopts nothing and is not a canonical sample set.
+([the record](../audits/audit-2026-10-09-stage-b-r3.md), sections 11 and 12).
+Promotion moves no default and deletes no switch. The ladder tip stands at
+baseline 9.

@@ -192,10 +192,29 @@ describe("public result interpretation", () => {
     expect(groupLines(config)).toEqual([
       "Built-in agents with recorded tactical settings · 1 recording.",
       "Rules adopted for the current game: vent use seen only in the room where it happens; impostors enter a vent only beside a body they have just killed; after each meeting, the survivors start again from the meeting room with the bodies cleared; one reply to a late accusation; body reports without the time of death; witnessed kills listed on the voter's ballot; impostor ballots cast by strategy.",
-      "Also in place: impostors in a vent wait briefly for the rooms they can see to clear before coming out, set for these recordings; a kill cooldown of 6 ticks set for these recordings.",
+      // was without the route lines, while round 2's config was the shown set's
+      "Also in place: impostors in a vent wait briefly for the rooms they can see to clear before coming out, set for these recordings; a kill cooldown of 6 ticks set for these recordings; each ballot lists which changes of room stated at the meeting the doors, or the restart after a meeting, allow, set for these recordings.",
       "Impostor policy: not recorded. Crew policy: not recorded. Rule settings: not recorded.",
       "Observation clock: not recorded.",
     ]);
+    expect(declared.route_lines_version).toBe(1);
+  });
+
+  it("names the route lines as set for these recordings, never adopted or experimental", () => {
+    const routes = groupLines({ ...OLDER, route_lines_version: 1 });
+    expect(routes).toContain("Also in place: each ballot lists which changes of room stated at the meeting the doors, or the restart after a meeting, allow, set for these recordings.");
+    expect(routes.join("\n")).not.toMatch(/experiment|adopted/i);
+    expect(routes).not.toContain("No enabled experiments recorded. This alone does not certify the default behavior.");
+    // Beside the cooldown, after it.
+    expect(groupLines({ ...OLDER, kill_cooldown_ticks: 6, route_lines_version: 1 })).toContain(
+      "Also in place: a kill cooldown of 6 ticks set for these recordings; each ballot lists which changes of room stated at the meeting the doors, or the restart after a meeting, allow, set for these recordings.",
+    );
+    // Planted: a config without the field, or with it null, says nothing of routes.
+    for (const config of [OLDER, { ...OLDER, route_lines_version: null }]) {
+      const lines = groupLines(config);
+      expect(lines.join("\n")).not.toContain("changes of room");
+      expect(lines).toContain("No enabled experiments recorded. This alone does not certify the default behavior.");
+    }
   });
 
   it("over every combination, calls exactly the adopted values adopted and nothing else", () => {

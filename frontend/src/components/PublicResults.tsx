@@ -22,6 +22,8 @@ export function recordedSettings(config: ExperimentConfigView | null | undefined
   if (config.vent_exit_policy === "look_and_wait") setForRecordings.push(COPY.ventExitWaits);
   // A missing or null cooldown is the map's own value; any recorded value is named.
   if (config.kill_cooldown_ticks != null) setForRecordings.push(fmt(config.kill_cooldown_ticks === 1 ? COPY.killCooldownOne : COPY.killCooldownMany, { ticks: String(config.kill_cooldown_ticks) }));
+  // Recorded only at version 1; a missing or null key is the field off.
+  if (config.route_lines_version === 1) setForRecordings.push(COPY.routeLines);
   const experiments: string[] = [];
   if (config.evidence_reasoning_version) experiments.push(fmt(COPY.evidenceReasoning, { version: String(config.evidence_reasoning_version) }));
   if (config.investigation_version) experiments.push(COPY.investigation);
