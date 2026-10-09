@@ -120,7 +120,7 @@ const PROFILE_SEEDS = Array.from({ length: 24 }, (_, i) => i * 2 + 5);
 const PROFILE_VIEW: GameProfileView = {
   viewModelVersion: "6",
   rubric_version: 2,
-  era: "stage-b-r2",
+  era: "stage-b-r3", // was stage-b-r2
   manifest_key: "1e48c40",
   source_fingerprint: "sha256:0",
   seedset: "9p2i",

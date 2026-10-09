@@ -62,11 +62,11 @@ _RESULTS_PATH = _REPO_ROOT / "training" / "reports" / "results-finalist-eval.jso
 
 #: The same-seed scripted-FSM comparator (9p2i, seeds 0-49) as the baseline-9
 #: samples MANIFEST read it at ``d41c9006``: 11 IMPOSTORS wins of 50. Since the
-#: promotion of candidate round 2 (2026-10-02) ``replays/samples/9p2i`` holds a
-#: later era (``eval/eras.py``) recorded under the adopted gameplay changes, so
-#: it is no longer a same-substrate comparator, and the finalist ruling's
-#: figures stay where they stood under the ML hold. A re-record at the ladder
-#: tip re-derives it.
+#: promotion of candidate round 2 (2026-10-02), and of round 3 since 2026-10-09,
+#: ``replays/samples/9p2i`` holds a later era (``eval/eras.py``) recorded under
+#: the adopted gameplay changes, so it is no longer a same-substrate comparator,
+#: and the finalist ruling's figures stay where they stood under the ML hold. A
+#: re-record at the ladder tip re-derives it.
 FSM_COMPARATOR_AT_D41C9006: tuple[int, int] = (11, 50)
 
 _GENERATED_BY = (

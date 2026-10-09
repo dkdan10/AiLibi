@@ -411,7 +411,7 @@ export const SPECTATOR_COPY = Object.freeze({
     // The recorded weighing artefact: who this voter wrote down while choosing.
     // The heading deliberately claims NOTHING about who those are — an earlier
     // "Also weighed" said the OTHER players, and the bytes falsify that. Over
-    // `replays/samples/9p2i`, 28 of 691 ballots list the voter ITSELF (measured
+    // `replays/samples/9p2i`, 27 of 702 ballots list the voter ITSELF (measured
     // by `scripts/measure_featured_criterion.py --alternatives`); none lists the
     // target the vote applied to, which the ballot schema still admits, and the
     // recordings also admit an id no longer in the game and the literal `SKIP`.
