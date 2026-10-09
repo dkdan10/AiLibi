@@ -414,9 +414,12 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   the first seed and the owner's confirmation of them, then records the spend
   against the owner's ceilings, the gates and the operating events, and reads
   the round in three columns, the first round, the shown set and this one,
-  never pooled. It gives no verdict and adopts nothing; the step its rule names
-  is taken by the orchestrator on the owner's criteria, and a promotion is
-  merged by the orchestrator under the owner's delegation.
+  never pooled. Its readings give no verdict and it adopts nothing. Its dated
+  section 11 records the step its rule names, taken by the orchestrator on the
+  owner's criteria on 2026-10-09: round 3 is to be promoted as the shown set by
+  a later card, which the orchestrator merges under the owner's delegation;
+  until that card merges, the shown set stays `replays/samples/9p2i`, round 2's
+  bytes.
 
 ## Cleanup measurements
 
