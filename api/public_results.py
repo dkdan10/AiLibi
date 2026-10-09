@@ -33,25 +33,25 @@ from orchestrator.replay import (
 
 # Each set's source link is rooted at a commit that holds exactly the bytes its
 # fingerprint certifies. The shown 9-player set's bytes landed in
-# 148fa211 (the promotion of candidate round 2); the 4-player set's replays are
+# 5095a1c2 (the promotion of candidate round 3); the 4-player set's replays are
 # unchanged since 9bae2b03, so its link, and the bundle bytes that carry it, do
 # not move.
 _REPOSITORY_BLOB = "https://github.com/dkdan10/AiLibi/blob/"
 _SOURCE_ROOT_9P2I = (
-    _REPOSITORY_BLOB + "148fa211a5851c288eeaf1a9591197f8ba13bdcc/replays/samples/9p2i/"
+    _REPOSITORY_BLOB + "5095a1c210d890d289405564d2af2607d2fbd4e9/replays/samples/9p2i/"
 )
 _SOURCE_ROOT_4P1I = (
     _REPOSITORY_BLOB + "9bae2b03032cede6a180c0888fde3b4e47f9a5f1/replays/samples/4p1i/"
 )
 _SOURCE_ROOTS: dict[str, str] = {
-    "sha256:ebb629f67c36607e39733660db7e069729fff198adcf34c091a4d6252d796ae2": (
+    "sha256:ea53a00f4c59aa23dd6c014c92443b36049ee192ec8a33e07d3ca69301f55329": (
         _SOURCE_ROOT_9P2I
     ),
     "sha256:2abab5c07eafb01c5efeef4d1234a77a6b57939a6923f3aee240349e0c0b1566": (
         _SOURCE_ROOT_4P1I
     ),
 }
-_SEED_19_SHA = "3c2f045f761eeb5bb5d02c8bfeeae9559cd7999b75937f25572e772949b31e64"
+_SEED_19_SHA = "01bbbd8b31c6aee0703bffc1fb8943682b825a181a2b8391bdbb71b89c11f31c"
 MAX_PUBLIC_RESULTS_BYTES = 50 * 1024
 
 

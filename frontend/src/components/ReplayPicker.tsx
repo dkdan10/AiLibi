@@ -95,18 +95,22 @@ export interface FeaturedGame {
 // typed vent-witness record. Each set therefore leads with a game whose FIRST
 // meeting, the one the viewer's auto-follow opens, ejects on such a flag: the
 // tour opens on a table that established something rather than on one that did
-// not. Of the eleven 9p2i games that qualify, seed 19 is the one that shows
-// both vent behaviours the map draws before its first meeting, the stretch the
+// not. Of the eleven 9p2i games that qualify, three (6, 19 and 20) show both
+// vent behaviours the map draws before their first meeting, the stretch the
 // tour plays before it pauses: a wait of three ticks inside a vent, and a dive
-// that meeting's regroup closes.
+// that meeting's regroup closes. Seed 19 is the one of those whose sighting is a
+// second voice: a player other than the body's reporter describes the vent use,
+// and that player's ballot and other voters' ballots rest on it.
 //
 // The second 9p2i card is a measured kind of game too: its first meeting
 // ejects an impostor while no flag is raised anywhere in the game and no vent
-// event happens at or before that meeting (two games qualify; seed 14 records
-// no vent event at all). The two 4p1i cards behind that set's head are
-// editorial. Both criteria read the ejected player's recorded role; that read
-// is curation: it describes the strip and gates no record, instrument or
-// adoption. Reproduce the bands, the eligible openers and both lists with
+// event happens at or before that meeting (five games qualify; seed 14 is the
+// one that records no vent event at all, and it is not among the games decided
+// wrongly without proof). No featured game ejects a crewmate. The two 4p1i
+// cards behind that set's head are editorial. Both criteria read the ejected
+// player's recorded role; that read is curation: it describes the strip and
+// gates no record, instrument or adoption. Reproduce the bands, the eligible
+// openers and both lists with
 //   uv run python scripts/measure_featured_criterion.py --list
 // and see tests/api/test_sets.py, which pins EACH SET'S head and the 9p2i
 // second card against these criteria rather than against seeds — per set

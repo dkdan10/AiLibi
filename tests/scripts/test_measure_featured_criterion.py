@@ -49,10 +49,10 @@ _criterion: Any = importlib.import_module("measure_featured_criterion")
     "seed,shape,why",
     [
         # (ballots, recorded entries, ballots naming the voter, naming the target)
-        (2, (7, 10, 2, 0), "two voters list THEMSELVES in the only meeting"),
-        (13, (13, 22, 1, 0), "one voter lists itself; none lists its own target"),
-        (3, (19, 26, 1, 0), "the tour's landing game: one voter lists itself"),
-        (23, (12, 24, 0, 0), "the old landing game carries neither shape"),
+        (8, (16, 26, 2, 0), "two voters list THEMSELVES across its meetings"),
+        (38, (7, 9, 1, 0), "one voter lists itself; none lists its own target"),
+        (19, (16, 20, 1, 0), "the tour's landing game: one voter lists itself"),
+        (3, (19, 24, 0, 0), "the holding strip's landing game carries neither shape"),
     ],
 )
 def test_alternatives_shape_reads_the_committed_duplicates(
@@ -64,15 +64,17 @@ def test_alternatives_shape_reads_the_committed_duplicates(
     # identical pill beside the one in the ballot's header.
     #
     # The TARGET shape is recorded by no committed ballot — 0 of the promoted
-    # 9p2i set's 691 ballots (candidate round 2, since 2026-10-02) and 0 in each
-    # of the three baseline-9 sets
+    # 9p2i set's 702 ballots (candidate round 3, since 2026-10-09; 0 of round 2's
+    # 691 before it) and 0 in each of the three baseline-9 sets
     # (`scripts/measure_featured_criterion.py --alternatives`, and the same count
     # over `--parent replays/ml_corpus`) — so no game here can name it, and the
     # "(the vote cast)" note is proved only by its constructed case in
     # `frontend/src/components/PrivateReasoning.test.tsx`.
-    # (Was 2: (7, 9, 1, 0); 13: (7, 10, 1, 0); 23: (26, 29, 0, 0) on the
-    # baseline-9 bytes, and 2: (7, 13, 2, 0); 13: (18, 35, 1, 2);
-    # 23: (26, 36, 0, 0) on baseline 8.)
+    # (Re-derived on round 3's bytes, 2026-10-09, where seed 2 lists no voter
+    # itself. Was 2: (7, 10, 2, 0); 13: (13, 22, 1, 0); 3: (19, 26, 1, 0); 23:
+    # (12, 24, 0, 0) on round 2's bytes; 2: (7, 9, 1, 0); 13: (7, 10, 1, 0); 23:
+    # (26, 29, 0, 0) on the baseline-9 bytes, and 2: (7, 13, 2, 0); 13: (18, 35,
+    # 1, 2); 23: (26, 36, 0, 0) on baseline 8.)
     replay = SetLoaderRegistry(_PARENT).get("9p2i").load_replay(f"headless-seed-{seed}")
     assert _criterion.alternatives_shape(replay) == shape
 
@@ -100,24 +102,26 @@ def test_the_list_names_the_candidates_on_the_promoted_bytes(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # The seeds the strip is drawn from, re-measured on the set the spectator
-    # serves since 2026-10-02. The head is one of the eligible openers, the
+    # serves since 2026-10-09. The head is one of the eligible openers, the
     # second 9p2i card one of the non-vent openers; the third list is what a
     # card about a crewmate ejected on believable evidence would come from.
+    # (Round 2's bytes read other flag 2, no flag 40 with 20 role-correct,
+    # non-vent openers [14, 44], crewmate openers [2, 12, 13, 22, 25] and other
+    # flag ejections 2:0 8:1.)
     assert _criterion.main(["--set", "9p2i", "--list"]) == 0
     lines = capsys.readouterr().out.splitlines()
     for expected in (
         "    role_proof flag   24 ejections  24 role-correct",
-        "    other flag         2 ejections   0 role-correct",
-        "    no flag           40 ejections  20 role-correct",
+        "    other flag         1 ejections   0 role-correct",
+        "    no flag           36 ejections  22 role-correct",
         "  first meeting ejects on a role_proof flag: 11 of 50 games",
         "  the games behind each count (seed:meeting)",
         "  first meeting ejects on a role_proof flag: seeds "
         "[3, 5, 6, 7, 10, 11, 19, 20, 27, 42, 49]",
         "  first meeting ejects an impostor, no flag anywhere and no vent at or "
-        "before it: seeds [14, 44]",
-        "  first meeting ejects a crewmate who did not open it: seeds "
-        "[2, 12, 13, 22, 25]",
-        "    other flag ejections: 2:0 8:1",
+        "before it: seeds [13, 14, 17, 44, 47]",
+        "  first meeting ejects a crewmate who did not open it: seeds [12, 22, 25, 33]",
+        "    other flag ejections: 12:0",
         "    other flag role-correct: none",
     ):
         assert expected in lines, expected
@@ -133,14 +137,14 @@ def test_the_list_names_the_candidates_on_the_promoted_bytes(
         by_label["role_proof flag role-correct"]
         == by_label["role_proof flag ejections"]
     )
-    assert len(by_label["no flag ejections"]) == 40
-    assert len(by_label["no flag role-correct"]) == 20
+    assert len(by_label["no flag ejections"]) == 36  # was 40
+    assert len(by_label["no flag role-correct"]) == 22  # was 20
     assert "19:0" in by_label["role_proof flag ejections"]
     assert "14:0" in by_label["no flag role-correct"]
     # Without --list the counts print alone.
     assert _criterion.main(["--set", "9p2i"]) == 0
     plain = capsys.readouterr().out
-    assert "seeds [14, 44]" not in plain
+    assert "seeds [13, 14, 17, 44, 47]" not in plain
     assert "(seed:meeting)" not in plain
 
 
@@ -235,7 +239,13 @@ def test_a_flipped_role_or_a_planted_flag_leaves_the_non_vent_list() -> None:
     assert not _criterion.opens_on_non_vent_impostor_ejection(flipped)
     assert _criterion.first_meeting_ejects_a_crewmate_not_the_opener(flipped)
 
-    flag = _replay(2).meetings[0].contradictions[0]
+    # A flag from the first game whose first meeting carries one (was seed 2's,
+    # which raises none on round 3's bytes).
+    flag = next(
+        replay_.meetings[0].contradictions[0]
+        for replay_ in (_replay(seed) for seed in range(50))
+        if replay_.meetings and replay_.meetings[0].contradictions
+    )
     assert isinstance(flag, ContradictionView)
     flagged = replay.model_copy(
         update={"meetings": (first.model_copy(update={"contradictions": (flag,)}),)}
@@ -244,17 +254,23 @@ def test_a_flipped_role_or_a_planted_flag_leaves_the_non_vent_list() -> None:
 
 
 def test_the_crewmate_list_reads_the_role_and_the_opener() -> None:
-    # Seed 2's first meeting, which p-1 opened, ejects crewmate p-5. Read as an
-    # impostor, or as the opener, p-5 leaves the list.
-    replay = _replay(2)
+    # Seed 25's first meeting, which p-1 opened, ejects crewmate p-4. Read as an
+    # impostor, or as the opener, p-4 leaves the list. (Was seed 2's p-5 on
+    # round 2's bytes; seed 2's one meeting skips on round 3's.)
+    replay = _replay(25)
     first = replay.meetings[0]
-    assert (first.triggered_by, first.ejected_player_id) == ("p-1", "p-5")
+    assert (first.triggered_by, first.ejected_player_id) == ("p-1", "p-4")
     assert _criterion.first_meeting_ejects_a_crewmate_not_the_opener(replay)
     assert not _criterion.first_meeting_ejects_a_crewmate_not_the_opener(
-        _with_role(replay, "p-5", "IMPOSTOR")
+        _with_role(replay, "p-4", "IMPOSTOR")
     )
     opened_by_ejected = replay.model_copy(
-        update={"meetings": (first.model_copy(update={"triggered_by": "p-5"}),)}
+        update={
+            "meetings": (
+                first.model_copy(update={"triggered_by": "p-4"}),
+                *replay.meetings[1:],
+            )
+        }
     )
     assert not _criterion.first_meeting_ejects_a_crewmate_not_the_opener(
         opened_by_ejected

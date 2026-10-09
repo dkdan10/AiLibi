@@ -482,7 +482,7 @@ def test_a_mixed_provenance_manifest_still_keys_on_a_multi_fingerprint(
 
 
 def test_the_promoted_set_ships_its_profile_on_its_own_key() -> None:
-    # The served 9p2i set holds candidate round 2's bytes since 2026-10-02 and
+    # The served 9p2i set holds candidate round 3's bytes since 2026-10-09 and
     # ships the game-shape profile, stamped with the key the loader derives from
     # the set's own MANIFEST and the fingerprint of its recordings, so the loader
     # serves it fresh. No version-1 served file is shipped beside it. Was the
@@ -493,10 +493,10 @@ def test_the_promoted_set_ships_its_profile_on_its_own_key() -> None:
     assert not (set_dir / "results-rubric-score.json").exists()
     served = json.loads((set_dir / _PROFILE_FILENAME).read_text(encoding="utf-8"))
     manifest_sha = _manifest_git_sha(set_dir)
-    assert manifest_sha == "43b5ee45"
+    assert manifest_sha == "641b4254"  # was 43b5ee45, round 2's recording sha
     assert served["manifest_key"] == manifest_sha
     assert served["source_fingerprint"] == recording_fingerprint(set_dir)
-    assert served["era"] == "stage-b-r2"
+    assert served["era"] == "stage-b-r3"  # was stage-b-r2
     assert SetLoaderRegistry(_PARENT).get("9p2i").game_profile().stale is False
 
 
@@ -862,12 +862,14 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
     # from with `uv run python scripts/measure_featured_criterion.py`.
     featured = _parse_featured_games()
     assert {game[0] for game in featured} == {"4p1i", "9p2i"}
-    # On the recordings the set holds since 2026-10-02, eleven of fifty 9p2i
-    # games open on a role-proof ejection and two open on an impostor ejection
+    # On the recordings the set holds since 2026-10-09, eleven of fifty 9p2i
+    # games open on a role-proof ejection and five open on an impostor ejection
     # with no vent evidence about (`scripts/measure_featured_criterion.py
-    # --list`). The head is seed 19 of the first list and the second card seed
-    # 14 of the second. The holding strip featured 9p2i {3}; the baseline-9
-    # bytes {23, 0, 29, 2}; baseline 8 {2, 13, 23, 46}.
+    # --list`; on round 2's bytes eleven and two). The head is seed 19 of the
+    # first list and the second card seed 14 of the second, as on round 2's
+    # bytes, re-picked by the criterion and the reasons below. The holding strip
+    # featured 9p2i {3}; the baseline-9 bytes {23, 0, 29, 2}; baseline 8 {2,
+    # 13, 23, 46}.
     assert featured[0] == ("9p2i", 19)  # the tour's landing game (the curated head)
     nine = [seed for set_name, seed in featured if set_name == "9p2i"]
     assert nine == [19, 14]
@@ -891,12 +893,149 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
     _assert_non_vent_opener(registry, "9p2i", nine[1])
 
 
+def _wrong_shelf_problems(
+    featured: list[tuple[str, int]], served: dict[str, Any]
+) -> list[str]:
+    """Each featured 9p2i seed the served profile puts on the wrong shelf.
+
+    "Decided without proof: wrong on what it held" is a reveal-only shelf: a
+    wrong-but-believable ejection. The strip renders before any game opens, so
+    no featured game may be one of its members.
+    """
+
+    wrong = served["reveal"]["decided_without_proof"]["wrong"]
+    assert wrong["name"] == "decided_without_proof_wrong"
+    members = {member["seed"] for member in wrong["members"]}
+    return [
+        f"9p2i seed {seed} is on the wrong shelf"
+        for set_name, seed in featured
+        if set_name == "9p2i" and seed in members
+    ]
+
+
+def test_no_featured_game_is_a_wrong_but_believable_ejection() -> None:
+    """The strip holds no member of the served profile's wrong shelf.
+
+    Planted: a strip naming one of the shelf's members fails, naming it.
+    """
+
+    served = json.loads(
+        (_PARENT / "9p2i" / _PROFILE_FILENAME).read_text(encoding="utf-8")
+    )
+    featured = _parse_featured_games()
+    assert [seed for set_name, seed in featured if set_name == "9p2i"]
+    assert _wrong_shelf_problems(featured, served) == []
+    member = served["reveal"]["decided_without_proof"]["wrong"]["members"][0]["seed"]
+    planted = [*featured, ("9p2i", member)]
+    assert _wrong_shelf_problems(planted, served) == [
+        f"9p2i seed {member} is on the wrong shelf"
+    ]
+
+
+def _vent_trips_before_the_first_meeting(
+    replay: ReplayView,
+) -> list[tuple[str, int, int | None]]:
+    """Each impostor's vent trip up to the first meeting: (actor, entered, exited).
+
+    ``exited`` is ``None`` for a trip still open when the meeting is called, which
+    that meeting's return to the meeting room closes.
+    """
+
+    first = replay.meetings[0].tick
+    trips: list[tuple[str, int, int | None]] = []
+    open_trips: dict[str, int] = {}
+    for frame in replay.ticks:
+        for event in frame.events:
+            if event.type != "vent" or event.tick > first:
+                continue
+            if event.phase == "enter":
+                open_trips[event.actor_id] = event.tick
+            elif event.actor_id in open_trips:
+                trips.append(
+                    (event.actor_id, open_trips.pop(event.actor_id), event.tick)
+                )
+    trips.extend((actor, entered, None) for actor, entered in open_trips.items())
+    return trips
+
+
+def _shows_both_vent_behaviours(replay: ReplayView) -> bool:
+    """A stay of three ticks or more inside a vent, and a dive the meeting closes."""
+
+    trips = _vent_trips_before_the_first_meeting(replay)
+    stays = any(
+        exited is not None and exited - entered >= 3 for _, entered, exited in trips
+    )
+    return stays and any(exited is None for _, _, exited in trips)
+
+
+def _second_voice_sighting(replay: ReplayView) -> bool:
+    """The first meeting's vent sighting comes from a player other than its caller.
+
+    That player's turn describes the ejected player using a vent, its own
+    ballot rests on that observation, and another voter's ballot cites its turn.
+    """
+
+    first = replay.meetings[0]
+    ejected = first.ejected_player_id
+    for turn in first.turns:
+        if turn.speaker == first.triggered_by or not any(
+            item.type == "saw_vent" and item.subject == ejected
+            for item in turn.observations
+        ):
+            continue
+        own = any(
+            ballot.voter == turn.speaker
+            and ballot.target == ejected
+            and ballot.primary_reason_observation_id is not None
+            for ballot in first.ballots
+        )
+        cited = any(
+            ballot.voter != turn.speaker
+            and ballot.target == ejected
+            and ballot.primary_reason_id == turn.turn_id
+            for ballot in first.ballots
+        )
+        if own and cited:
+            return True
+    return False
+
+
+def test_the_head_is_the_one_eligible_game_its_stated_reasons_pick() -> None:
+    """The strip comment's reasons, measured on the served bytes.
+
+    Of the eleven games whose first meeting ejects on a role-proof flag, three
+    show both vent behaviours the map draws before that meeting (6, 19 and 20),
+    and of those only seed 19's sighting is a second voice: a player other than
+    the body's reporter describes the vent use, its ballot rests on it and other
+    ballots cite its turn, which is the supported case's shape on the landing
+    game. Planted: the head moved to seed 20 reads the same first filter and
+    fails the second.
+    """
+
+    loader = SetLoaderRegistry(_PARENT).get("9p2i")
+    eligible = []
+    for seed in range(50):
+        try:
+            _assert_opens_on_role_proof(SetLoaderRegistry(_PARENT), "9p2i", seed)
+        except AssertionError:
+            continue
+        eligible.append(seed)
+    assert eligible == [3, 5, 6, 7, 10, 11, 19, 20, 27, 42, 49]
+    replays = {seed: loader.load_replay(f"headless-seed-{seed}") for seed in eligible}
+    both = [seed for seed in eligible if _shows_both_vent_behaviours(replays[seed])]
+    assert both == [6, 19, 20]
+    picked = [seed for seed in both if _second_voice_sighting(replays[seed])]
+    assert picked == [_featured_heads()[0][1]] == [19]
+    assert _shows_both_vent_behaviours(replays[20])
+    assert not _second_voice_sighting(replays[20])
+
+
 @pytest.mark.parametrize(
     "set_name,seed,why,message",
     [
         ("9p2i", 4, "no ejection anywhere in the game", "SKIPPED"),
         ("9p2i", 36, "no ejection anywhere in the game", "SKIPPED"),
-        ("9p2i", 1, "the first meeting skips", "SKIPPED"),
+        ("9p2i", 32, "the first meeting skips", "SKIPPED"),
         (
             "9p2i",
             0,
@@ -911,9 +1050,9 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
         ),
         (
             "9p2i",
-            12,
+            25,
             "the first meeting ejects a CREWMATE on no flag at all",
-            r"'9p2i', 12, \[\]",
+            r"'9p2i', 25, \[\]",
         ),
         (
             "9p2i",
@@ -929,15 +1068,15 @@ def test_featured_seeds_exist_in_their_committed_sets() -> None:
         ),
         (
             "9p2i",
-            17,
-            "the first meeting ejects an IMPOSTOR on weak flags naming others",
-            "weak_signal",
+            1,
+            "the first meeting ejects a CREWMATE while weak flags name others",
+            r"'9p2i', 1, \[\('alibi_vs_sighting', 'weak_signal', \('p-1',\)\)",
         ),
         (
             "9p2i",
-            2,
-            "the first meeting ejects a CREWMATE that two contradictions name",
-            "cross_statement",
+            12,
+            "the first meeting ejects a CREWMATE that a weak flag names",
+            r"'9p2i', 12, \[\('alibi_vs_sighting', 'weak_signal', \('p-2',\)\)\]",
         ),
         ("4p1i", 29, "the one meeting skips: no ejection anywhere", "SKIPPED"),
         (
@@ -966,21 +1105,23 @@ def test_featured_head_criterion_rejects_a_head_that_establishes_nothing(
     # 4p1i game can isolate the category clause.
     #
     # No 9p2i game isolates it either on the recordings the set holds since
-    # 2026-10-02 (no first meeting ejects an impostor that a non-role-proof flag
-    # names), so the clause rests on the planted case below,
+    # 2026-10-09 (no first meeting ejects an impostor that only a
+    # non-role-proof flag names), so the clause rests on the planted case below,
     # `test_the_role_proof_clause_rejects_a_recategorised_head`: the head's own
     # served first meeting with its role-proof flag recategorised.
     #
     # The rest bracket it. 8 and 14 (the strip's own second card) eject an
     # IMPOSTOR in their first meeting on no flag at all, so a pin checking only
     # "the head ejects" or "the head ejects correctly" would wave them through;
-    # 12 and 23 (the baseline-9 head) eject a CREWMATE on no flag; 17 ejects an
-    # IMPOSTOR while its flags name others, and 2 ejects a CREWMATE that two
-    # contradictions name; 0 establishes something only in a LATER meeting,
-    # which the tour's auto-follow does not open first; 1 skips its first
-    # meeting and 4 and 36 eject nobody at all.
-    # (Re-derived on the promoted bytes, 2026-10-02; the baseline-9 cases were
-    # 2, 10, 46, 36, 44, 12, 13 and 7.)
+    # 25 and 23 (the baseline-9 head) eject a CREWMATE on no flag; 1 ejects a
+    # CREWMATE while weak flags name others, and 12 a CREWMATE that a weak flag
+    # names; 0 establishes something only in a LATER meeting, which the tour's
+    # auto-follow does not open first; 32 skips its first meeting and 4 and 36
+    # eject nobody at all.
+    # (Re-derived on the promoted bytes, 2026-10-09; round 2's cases were 1, 12,
+    # 17 and 2 where these read 32, 25, 1 and 12, and no first meeting on round
+    # 3's bytes ejects anyone a cross-statement flag names. The baseline-9 cases
+    # were 2, 10, 46, 36, 44, 12, 13 and 7.)
     registry = SetLoaderRegistry(_PARENT)
     with pytest.raises(AssertionError, match=message):
         _assert_opens_on_role_proof(registry, set_name, seed)
@@ -1061,9 +1202,9 @@ def test_the_role_proof_clause_rejects_a_recategorised_head() -> None:
 @pytest.mark.parametrize(
     "seed,why,message",
     [
-        (24, "an impostor ejected, no flag anywhere, a vent trip before", "vent at"),
-        (8, "an impostor ejected, a flag raised in a later meeting", "'flags'"),
-        (34, "an impostor ejected, no vent before, a later flag", "'flags'"),
+        (16, "an impostor ejected, no flag anywhere, a vent trip before", "vent at"),
+        (21, "an impostor ejected, a flag raised in a later meeting", "'flags'"),
+        (9, "an impostor ejected, no vent before, a later flag", "'flags'"),
         (19, "the head: its first meeting carries role proof", "'flags'"),
         (23, "the first meeting ejects a CREWMATE", "CREWMATE"),
         (0, "the first meeting skips", "SKIPPED"),
@@ -1073,12 +1214,14 @@ def test_the_non_vent_criterion_rejects_a_card_with_vent_evidence(
     seed: int, why: str, message: str
 ) -> None:
     # THE PLANTED CASES for the second card's criterion, each a committed game
-    # it must reject through the clause named. 24 isolates the vent clause
-    # (nothing else fails); 34 isolates the flag clause (no vent before its
-    # first meeting); 8 is the card's named case for a later flag; 19 shows the
+    # it must reject through the clause named. 16 isolates the vent clause
+    # (nothing else fails); 9 isolates the flag clause (no vent before its
+    # first meeting); 21 is the card's named case for a later flag; 19 shows the
     # head itself could not be this card; 23 and 0 fail earlier clauses. No
     # committed game ejects a crewmate with no flag anywhere and no vent before,
     # so the role clause rests on the perturbation in the next test.
+    # (Re-derived on the promoted bytes, 2026-10-09; round 2's cases were 24, 8
+    # and 34, whose first meetings now skip or meet a vent first.)
     registry = SetLoaderRegistry(_PARENT)
     with pytest.raises(AssertionError, match=message):
         _assert_non_vent_opener(registry, "9p2i", seed)
@@ -1284,12 +1427,14 @@ def test_current_featured_claims_match_source_and_gate_bites(
             with pytest.raises(AssertionError, match=claim):
                 _assert_featured_counts(label, _without_flags(replay, claim))
     # The no-flags promise bites the other way: one flag planted in the first
-    # meeting, copied from a game that carries one, and the same label fails.
+    # meeting, copied from the featured head's first meeting, which carries one
+    # by its criterion (was 9p2i seed 2's, which raises none on round 3's bytes).
     if "no flagged contradictions" in label.lower():
+        head_set, head_seed = _featured_heads()[0]
         flag = (
             SetLoaderRegistry(_PARENT)
-            .get("9p2i")
-            .load_replay("headless-seed-2")
+            .get(head_set)
+            .load_replay(f"headless-seed-{head_seed}")
             .meetings[0]
             .contradictions[0]
         )
