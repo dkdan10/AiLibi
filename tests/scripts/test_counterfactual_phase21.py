@@ -557,7 +557,8 @@ def test_a_committed_set_of_another_era_is_refused_by_its_resolved_directory(
         with pytest.raises(
             SystemExit,
             match=(
-                rf"^{re.escape(spelling)} is a committed set of the stage-b-r2 era; "
+                # was "of the stage-b-r2 era", before round 3's promotion
+                rf"^{re.escape(spelling)} is a committed set of the stage-b-r3 era; "
                 r"this counterfactual reads the baseline-9 era's sets only "
                 r"\(ml_corpus/9p2i, samples/4p1i, ml_corpus/4p1i\)$"
             ),

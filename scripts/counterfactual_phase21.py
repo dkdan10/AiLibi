@@ -5,8 +5,9 @@ bytes recorded BOTH ways.
 
 ``--sets`` is the committed-record mode: the baseline-9 era's three committed
 replay sets, whose bytes were recorded with every lever OFF (``samples/9p2i``
-moved to the stage-b-r2 era on 2026-10-02 and is refused, however it is spelled,
-by the era registry's entry for its resolved directory).
+left the era on 2026-10-02, for the stage-b-r2 era and since 2026-10-09 the
+stage-b-r3 era, and is refused, however it is spelled, by the era registry's
+entry for its resolved directory).
 ``--recording <dir> --recorded-slate on`` is the LEVER-ON mode: one directory
 of ``replay-seed-*.jsonl`` recorded with
 the Wave-2 slate up -- 21.23's smoke and 21.24's record write exactly that, into
