@@ -99,6 +99,20 @@ re-record and prove no defect. The four ML files read role or outcome on frozen 
 Each item names its enforcing mechanism and the planted or perturbed case proving it bites. `B` is the merge base
 with `main` after `main` is merged in following the round-3 record's merge; `H` is the PR head.
 
+- [x] Review correction: the shown set's honesty cells are held again (review round 2). The first build's sweep
+  had deleted their literals from `tests/eval/test_evidence_honesty.py` with no gate holding them (no honesty report is
+  committed), and two listed-class mutants of the fold survived at `7ae55b51` that the base killed. Every shown-set
+  literal that left is restored (57 assertions, 27 of them widening a sliced list back to all four sets) beside the
+  partitions and row counts the sweep added, until the orchestrator answers the PR's Question.
+  `test_the_agent_frame_reads_its_own_two_ticks_not_the_engine_frame` and
+  `test_the_render_budget_counts_rendered_memory_rows_not_prompt_lines` hold the two named computations without the
+  shown bytes. Proof: the two named mutants (P1, P2) and ten more mutants of the fold, nine of them in the listed
+  classes, each fail that file at H; five of the twelve survived the file at `7ae55b51`, and each of those five
+  also fails the two planted cases alone (`bin/mutate.py`, `bin/mutate_planted.py`).
+- [x] Review correction: `scripts/check_doc_facts.py`'s module docstring (item 20) and `check_corpus_disclosures`
+  say six coverage pairs, a crew and an impostor pair for each set in the tree, and that the corpus README's S9
+  figures are a dated history record the check does not read (review round 2). Proof: `check_doc_facts.py` exits
+  0; a count-only search for "eight roll-call" under `scripts/` gives 0.
 - [x] Review correction: the shown set's supply gauges are held to a second surface. The first build's sweep had
   swapped their literals for bounds no gate held (the committed report has no supply block).
   `test_the_supply_gauges_equal_a_fold_of_the_recorded_rows` in `tests/eval/test_gate_spec_metrics.py` now requires
@@ -546,7 +560,7 @@ by the shape their test needs. The frozen sets (`replays/ml_corpus/*` and `repla
 | file | derived | deleted (gate) | kept |
 |---|---|---|---|
 | `tests/_helpers/recorded_counts.py` (new), `tests/_helpers/committed.py` | the count fold; the movement-decided list names only the frozen sets' 51 meetings | | |
-| `tests/eval/test_evidence_honesty.py` | the shown set's denominators against the recorded rows (prompts, turns, ballots and meetings, by `tests/_helpers/recorded_counts.py`); its other I-2 to I-10, clock, render budget, trail and lever cells as partitions and nestings inside the honesty report | none: no honesty report is committed, so no byte-identity gate holds the shown cells (corrected 2026-10-09: the first ledger named `build_sample_report.py --check`, which does not read this instrument). The shown numerators whose literal left are held only by those partitions, nestings and semantic zeros and by the instrument's synthetic cases | frozen sets; the semantic zeros |
+| `tests/eval/test_evidence_honesty.py` | the shown set's turns, prompts, ballots and meetings against the recorded rows (`tests/_helpers/recorded_counts.py`), and its testimony rows against a count of the tagged meeting frame in the recorded bytes; partitions and nestings beside every shown literal | none: no honesty report is committed, so no byte-identity gate holds the shown cells (corrected 2026-10-09: the first ledger named `build_sample_report.py --check`, which does not read this instrument) | the shown set's other cells as literals, restored in review round 2 because no gate holds them and none has a second surface short of re-implementing the fold (the card's stop-and-ask, raised in the PR's Questions); two planted cases for the agent-frame window and the rendered-row count; frozen sets; the semantic zeros |
 | `tests/eval/test_gate_spec_metrics.py` (added 2026-10-09; the first ledger missed it) | the decomposition, the multi-signal fold and the committed report's impostor ejections agree; the supply gauges equal an independent fold of the recorded meeting rows (non-vent flags, weak and strong, zero-flag meetings, subject roles, accused-impostor meetings), the genuine-subject count is re-folded, and the flag census sits inside the committed report's taxonomy | the W0 to W2 anchor tests and the whole-derivation pin left with their mechanism (G27, not transcription). The committed report carries no supply block, so `build_sample_report.py --check` holds none of the gauges; the over-gate listener count is held by its synthetic case alone | the synthetic cases |
 | `tests/eval/test_deduction_metrics.py` | the report-block cells as partitions and cross-checks (rows, DTO rule, kill-craft, impostor ejections); the weak-only exhibit found | shown literals (`build_sample_report.py --check`) | the meeting-flag cross-tab lines and the partner-ballot tuple, which `check_doc_facts.py` parses as the reading guide's source (front-door owned) |
 | `tests/eval/test_gameplay_census.py` | the shown JSON figures as partitions and cross-checks; the harness, double-kill and trigger-tick games found | the shown literals (`publish_gameplay_census.py --check`) | round 1's legs; era pins |
@@ -584,7 +598,8 @@ transcription and exhibit pins above. Every failure left at H is one of these, b
 counts below sum to 342, pytest's own total (the full list is reproducible from the rehearsal's output). The
 23 errors are 17 in `tests/experiments/test_route_check_replay.py` and 6 in
 `tests/experiments/test_route_lines_replay.py`, the same count at B (round 1 of review re-ran H only; B's
-bytes did not move):
+bytes did not move). Review round 2 restored the shown honesty literals, so 23 of these 193 fail again at
+`d66eb34e`; that round's subsection gives the re-run and the new totals.
 
 - **Front door and era stamps the promotion or the front-door card owns** (195,
   `tests/scripts/test_check_doc_facts.py`, every test that runs the checker over the tree): the README and
@@ -610,7 +625,8 @@ bytes did not move):
   `tests/eval/test_vj_instruments.py` (1).
 - **Kept by classification**: `tests/eval/test_vote_correctness.py` (1, round 2's recorded finding),
   `tests/api/test_evidence_mechanisms.py` (5, the reserved decision's anchors), `tests/eval/test_watchability.py`
-  (7) and `test_watchability_reanchor.py` (1, the frozen referee).
+  (7) and `test_watchability_reanchor.py` (1, the frozen referee); from `d66eb34e`,
+  `tests/eval/test_evidence_honesty.py` (23, the shown cells restored pending the PR's Question).
 
 ### Bundle, mutation pass and CI
 
@@ -638,7 +654,11 @@ bytes, so no fix round followed:
 - G3, the frozen-row lookup made a None test: the round-1 row's pin equals its independent count.
 Each killing command passes unmutated (checked in the same worktree).
 
-**CI.** At `3aaa5966` (the Results commit; every later commit changes only this card): CI run 37917006312 green (project checks, frontend checks, frontend e2e), and the campaign workflow's run 37917006619 green on the same head, triggered by the new `pull_request` path filter. These are the gate record (memo 8.7 item 1).
+**CI.** At `3aaa5966`, the first Results commit: CI run 37917006312 green (project checks, frontend checks,
+frontend e2e), and the campaign workflow's run 37917006619 green on the same head, triggered by the new
+`pull_request` path filter. Each later head's two runs are cited by run id in the PR body, which carries the gate
+record (memo 8.7 item 1). (Corrected 2026-10-09: this paragraph first said every later commit changed only this
+card; review round 1 and round 2 changed tests and the checker.)
 
 ### Decisions and limitations
 
@@ -763,3 +783,105 @@ the rehearsal: 1 failed, 810 passed, the same declared-config copy as before.
 - The L9 acceptance box stays open. Its proof is the swap rehearsal on round 3's bytes, which do not exist yet,
   so it closes at the merge, when the rehearsal re-runs on them.
 - CI's run at this round's head is cited by run id in the PR body (memo 8.7 item 1); no card-only commit records it.
+
+### Review corrections, round 2 (2026-10-09)
+
+Three verifier lenses read `7ae55b51`. Two findings were blocking, one from the integrity lens and one from the
+documentation lens. This round's commits are `b4d972a0` (the honesty pins), `d66eb34e` (the checker's
+docstrings) and then this Results commit. Every figure below was measured at `d66eb34e`, whose tree differs from
+this commit's only in this card. Scratch work stayed under the session scratchpad
+(`retire-fix-r2-wf_4562b969-24c-9/`), nothing from it is committed, and every census was count-only.
+
+**What each finding asked, and what changed.**
+- *The shown honesty cells had no gate.* The first build's sweep replaced the shown set's literals in
+  `tests/eval/test_evidence_honesty.py` with partitions and nestings. No honesty report is committed, so no
+  byte-identity gate held those cells, and two listed-class mutants survived at `7ae55b51` that the base killed:
+  the agent-frame cell read over the engine window, and the render budget counted as prompt lines. The finding
+  offered three repairs: planted synthetic cases, a derivation from the recorded rows, or the literals restored
+  until the orchestrator answers the PR's Question. This round restores the literals for every cell and adds
+  planted cases for the two named computations. The restored cells are I-2 to I-7 and I-10, the agent clock, the
+  render budget's total, mean and buckets, the self-placement, trail and completed-task censuses, and the
+  movement, grounded-prosecution and corridor counterfactuals. That is 57 assertions. 27 of them widen a sliced or
+  baseline-only list back to all four sets, and each of the 27 assertions they replace is implied by its
+  replacement. The cells that already had a second surface stay derived and are not re-pinned: the turns,
+  prompts, ballots and meetings counted off the rows, and the testimony rows counted off the tagged meeting frame
+  in the recorded bytes. The two planted cases hold the named computations without the shown bytes.
+  `test_the_agent_frame_reads_its_own_two_ticks_not_the_engine_frame` has three cases: the spoken room in the
+  agent window only, in the engine window only, and an agent window with no recorded tick.
+  `test_the_render_budget_counts_rendered_memory_rows_not_prompt_lines` folds two six-line prompts, each with one
+  observation row and one testimony row. The rest of the cells are not derived, because a derivation would be a
+  second implementation of the fold inside the test, which is no independent surface. The card's stop-and-ask
+  covers a fact no gate holds, so the cells stay literal and the PR's Question stays with the orchestrator.
+- *The checker's docstrings promised eight recomputed coverage pairs.* Item 20 of the module docstring and
+  `check_corpus_disclosures` now say six pairs: a crew and an impostor pair for each of the three sets
+  `_DISCLOSURE_SETS` names. Both also say that the README's S9 figures are a dated history record the check does
+  not read. The finding's repro (an edited crew S9 cell leaves the checker at exit 0) is now the documented
+  behaviour. A count-only search for "eight roll-call" under `scripts/` gives 0.
+
+**Re-probe of the removed cells.** `bin/mutate.py` applied 12 mutants of `eval/evidence_honesty.py` in place,
+each restored afterwards, and byte-compared the source at the end. Each mutant ran against this round's test file
+and against `7ae55b51`'s copy of it in the same tree (killed means the file fails). `bin/mutate_planted.py` ran the
+same mutants against the two planted cases alone. Both test files pass unmutated.
+
+| id | span | class | H | `7ae55b51` | planted cases alone |
+|---|---|---|---|---|---|
+| P1 | the agent-frame cell's window | swapped collection (the engine window) | killed | survived | killed |
+| P2 | the render budget's row count | swapped collection (the prompt's lines) | killed | survived | killed |
+| R1 | the agent-frame cell's empty-window guard | dropped wrapper | killed | survived | killed |
+| R2 | the agent frame's tick offsets | dropped tuple member | killed | survived | killed |
+| R3 | the copyable self-location test | comparison inverted | killed | killed | survived |
+| R4 | the claim's speaker role | role read made a constant | killed | killed | survived |
+| R5 | the two lower living-roster buckets | swapped branches | killed | killed | killed |
+| R6 | the testimony-row match | comparison inverted (a None test) | killed | killed | killed |
+| R7 | the testimony row's living count | a read made a constant (no listed class) | killed | survived | killed |
+| R8 | the move's destination room | swapped collection (the origin field) | killed | killed | survived |
+| R9 | the move's tick against the sighting's | dropped filter | killed | killed | survived |
+| R10 | the venting meetings | dropped filter | killed | killed | survived |
+
+All 12 are killed at H. Eleven are in the listed classes. R7 reads the living count as a constant, which no class
+lists, so it is reported here and not counted in the pass. The five that survived `7ae55b51` (P1, P2, R1, R2,
+R7) each fail the planted cases alone, so they stay held after a re-record moves the literals.
+
+**The rehearsal, re-run for the changed files.** The scratch copy of `d66eb34e` had round 2's set moved to
+`replays/candidates/stage-b-r2/9p2i/` and round 1's bytes copied into `replays/samples/9p2i`, with its declared
+config written without `kill_cooldown_ticks`, as before. On that tree `tests/eval/test_evidence_honesty.py` reads
+23 failed and 95 passed. `7ae55b51`'s copy of the file reads 114 passed, and B's copy reads 26 failed and 88
+passed. By test id, the 23 are a subset of B's 26. The three B failures that now pass are the marker, persona and
+tagged-frame tests, whose shown cells stay derived. `tests/scripts/test_check_doc_facts.py` gives the same
+failure ids on that tree with this round's checker and with `7ae55b51`'s (187 failed each), so the docstrings move
+no test. No other test file changed after `d7360f27`. The default tier on the rehearsal therefore reads 342 + 23 =
+365 failed and the same 23 errors at `d66eb34e`. 170 of B's failures pass at H, and no test fails at H that passed
+at B. The 23 are kept by classification (the ledger row above) and fail until the promotion re-pins them or the
+orchestrator rules otherwise. The L9 box stays open, as before.
+
+**Validation at `d66eb34e`** (bare shell, `env | grep -c '^AILIBI_'` printed 0; exit codes as they came back):
+- `test_suite_tiers.py` 0.
+- Collection: `tests/training` default 376, `-m campaign` 439, the whole default tier 10,770. That is 10,766 plus
+  the four planted honesty cases.
+- `pytest -m campaign` 0 (439 passed).
+- `verify_ml_evidence.py`, offline, 0 (64 checks: 52 OK, 0 FAIL, 7 ABSENT, 5 INFO).
+- `check_doc_facts.py` 0 and `validate_task_docs.py` 0.
+- The scorecard, census and profile `--check`: 0, 0 and 0. `verify_samples.sh` 0.
+- `build_sample_report.py --check` on samples/4p1i, samples/9p2i, ml_corpus/4p1i, ml_corpus/9p2i and
+  candidates/stage-b-r1/9p2i: 0, 0, 0, 0 and 0.
+- `measure_baseline.py --honesty --json` on the four sets: 0, 0, 0 and 0. `--baseline-out` exits 2 with
+  "unrecognized arguments".
+- The nothing-moves diff from `9775c9d6` prints 0 lines, and under `replays/ml_corpus/` only the README moves.
+  The archive and before-column diff prints 0 lines.
+- `tests/fixtures` holds 25 files and 2,027,881 bytes, and `audits` holds 334 files and 31,425,810 bytes: the
+  rows' figures.
+- The extractor card's last commit is still the orchestrator's closure (`97549508`).
+- `tests/eval/test_evidence_honesty.py` 0 (118 passed). `tests/scripts/test_check_doc_facts.py` 0 (323 passed).
+
+**Demo bundle.** `bin/bundle_compare.sh` built the bundle at `d66eb34e` and at B (`9775c9d6`) in one checkout.
+For B it wrote B's bytes over all 96 differing paths, then restored the head, leaving a clean status. `diff -r`
+exits 0 over the bundle's 110 files. Nothing ships.
+
+**Decisions of this round.**
+- The honesty cells are restored as literals rather than derived. A derivation would need a second implementation
+  of the fold in the test, and the card's stop-and-ask covers a fact no gate holds. The PR's Question now asks
+  whether the promotion re-pins these literals, or whether they leave with the planted cases holding the
+  computations.
+- The CI paragraph above said every later commit changed only this card. It is corrected in place.
+- No follow-through outside Expected scope this round: `tests/eval/test_evidence_honesty.py` is in the re-pin
+  family, and `scripts/check_doc_facts.py` is in Expected scope.
