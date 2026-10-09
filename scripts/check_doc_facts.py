@@ -173,10 +173,12 @@ together, so one run names every drifted fact rather than the first.
     takes an owner-ratified contract.
 20. **The ML corpus's headline disclosures are re-derived from the reports.**
     ``replays/ml_corpus/README.md``'s capability-disclosures section states a
-    meeting total and eight roll-call coverage pairs; each is recomputed from
-    the recorded sets' own ``tournament-eval-report.json.gz``, so the section
-    cannot be relabelled onto a new substrate with the previous substrate's
-    arithmetic still in it.
+    meeting total and six roll-call coverage pairs, the crew and impostor pair
+    of each of the three recorded sets in the tree; each is recomputed from
+    those sets' own ``tournament-eval-report.json.gz``, so the section cannot be
+    relabelled onto a new substrate with the previous substrate's arithmetic
+    still in it. The section's S9 figures are a dated history record whose
+    bytes left the tree, and this check does not read them.
 21. **Experiment registry vs .env.example.** ``meetings.evidence_profile``
     owns the four independently versioned meeting experiments and the ambient
     env switch each one reads. Every switch must be documented IN the
@@ -1113,10 +1115,13 @@ def check_corpus_disclosures(repo_root: Path, errors: list[str]) -> None:
 
     ``replays/ml_corpus/README.md``'s capability-disclosures section may not
     state a headline cell the recorded bytes do not give: the crew-triggered
-    meeting cell and the eight roll-call coverage pairs. Every side of every
-    cell is re-derived from the recorded sets' ``tournament-eval-report.json.gz``,
-    never from a literal here, so a re-record only re-states the section. The
-    meeting cell's NUMERATOR is counted from the meeting rows' own
+    meeting cell and the six roll-call coverage pairs, a crew and an impostor
+    pair for each set in ``_DISCLOSURE_SETS``. Every side of every cell is
+    re-derived from those sets' ``tournament-eval-report.json.gz``, never from a
+    literal here, so a re-record only re-states the section. The section's S9
+    figures are a dated history record of bytes the tree no longer holds; they
+    are not in the labelled shape this check reads, and it does not read them.
+    The meeting cell's NUMERATOR is counted from the meeting rows' own
     ``triggered_by`` against each game's role map — the claim is that no meeting
     was impostor-triggered, and a numerator synthesised from the denominator
     would make that claim unfalsifiable.
