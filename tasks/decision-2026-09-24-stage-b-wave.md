@@ -1598,6 +1598,29 @@ read on the pre-registered table and the census, never on role-correctness). The
 round-3 audit with the readings it rests on, and a promotion is one card and one merge (8.7, item 3), the merge
 still the owner's because it publishes.
 
+### 8.9 The remaining merges delegated, and D14 ruled (2026-10-09)
+
+The owner ruled, verbatim: "Merge both when verified and retire the memo's D14 list". So: the promotion card's
+pull request, if the orchestrator takes the step (8.8), and the finish wave's front-door card's pull request are
+merged by the orchestrator once their reviews pass, each merge publishing through `.github/workflows/pages.yml`
+under this delegation; and the baselines memo's D14 list (its Part 4 D14, with D14-T1 to T3, and the RETIRE rows of
+its Part 3.1) is retired under craft rule 3: delete each mechanism with its coupled consumers, keep one history
+line where the memo asks for one, recompute the registry rows, and never move a recorded byte, the frozen corpus or
+an ML artifact. The retirement lands as one card whose merge waits for round 3's freeze to lift (the record's
+merge), and whose Results name every deleted path.
+
+**Amendment of 2026-10-09: the comparison records are kept.** Asked whether the D14 list should go, the orchestrator
+recommended keeping the round-1 candidate directory, because each era's candidate copy is the comparison record
+that isolates one dial (round 1 the cooldown, round 2 the route field) and the doctrine's reproducibility from
+committed evidence is worth more than the tree's tidiness. The owner ruled, verbatim: "Keep the comparison
+records". So `replays/candidates/stage-b-r1` stays; the decision memo's earlier proposal that round r+1 deletes
+round r is declined; and a promotion of round 3 keeps round 2's bytes as `replays/candidates/stage-b-r2` (the
+candidate copy of the promoted round retires, as before, because its bytes become the samples set). The D14
+retirement card drops the round-1 item; everything else on the list stands. Two defaults the orchestrator takes unless the owner says
+otherwise: no wrong-but-believable ejection is featured on the strip (D7, the current state), and the README leads
+with the process rows with the two role-correct figures kept below as the honest "not demonstrated" line (D8, the
+baselines memo's recommendation).
+
 ## Appendix: reproduction
 
 The scratch scripts named here are session aids and are not committed; the load-bearing counts are
