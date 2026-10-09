@@ -134,11 +134,37 @@ Recorded here so the tier map preserves results, not just machinery:
 | Surrogate RANKING channel (the WHO channel) | top-1 **76.7% (46/60)**, top-2 **91.7% (55/60)** on the held-out 30-game / 96-meeting split — `training/reports/report-ballot-surrogate.md:238-247`; ranking axes 1–2 PASS the GO bar (`:309-320`); reproduced exactly on the runner path (`:198-201`) | `training/surrogate/` (predictor, dataset, ballots); consumed by the composed runner and the bake-off harness (see the boundary, §2a) |
 | ES core + champion acceptance | ES re-runs reproduce committed champions byte-identically (`report-impostor-bakeoff.md:28-37`; `report-crew-track.md:27-35`); the digest pin (`tests/training/test_es.py`) and the acceptance gates stay always-on. The acceptance RULING stands: champion stays **opt-in**, scripted FSM stays default — "Neither finalist satisfies referee-PASS AND retained-win-edge" (`report-finalist-eval.md:268-279`); "no arm on this table clears a referee-PASS AND retained-edge bar" (`:1082-1107`) | `training/bakeoff/` (LIVE — es.py, harness.py, utility_es); the harness is also the surrogate factory's principal functional consumer |
 
-Always-on test families this map keeps un-marked (triage §7 item 19): champion
-acceptance, ES, determinism, artifact-digest, train/serve-parity, the leak
-property sweep, and prompt byte-golden.
-Campaign-only test families go behind opt-in markers in **19.27**, driven by
-the FREEZE column below.
+The always-on test families this map keeps un-marked, each classed by what its
+assertions judge: a family is always-on when it judges determinism, byte
+identity, the observation firewall or provenance, and belongs to the campaign
+tier when it reads role or outcome on a frozen record.
+
+| family | what it judges | files |
+|---|---|---|
+| champion acceptance | provenance: the stamp fields, the leak-mode scan and the factory double-run | `tests/training/test_learned_factory_acceptance.py` |
+| ES | determinism | `tests/training/test_es.py` |
+| determinism | determinism | `tests/training/test_determinism.py`, `eval/determinism_test.py` |
+| artifact-digest | byte identity | `tests/agents/test_learned_policy.py` |
+| train/serve parity | determinism | `tests/agents/test_learned_policy.py` |
+| leak property sweep | firewall | `tests/observation/test_leak_property.py` |
+| prompt byte-golden | byte identity | `tests/meetings/test_prompt_byte_golden.py` |
+
+History (2026-10-09): the list above was re-derived once from the direction's
+yardstick, replacing the Phase-19 list the triage ratified; the prompt-regression
+close gate left it, retired with its fixtures.
+
+The default gate carries no ML pin that reads role or outcome on a frozen record
+while the ML hold stands: the Goodhart probe and the reward pins run whole in the
+campaign tier, and the finalist-eval pins and the bake-off harness keep their
+prefix digest, row order, stamp, firewall, determinism, digest, round-trip,
+seed-set and objective-fence pins in the default gate while their win, loss,
+referee, baseline, floor and result-row pins carry the campaign mark.
+History (2026-10-09): those four files ran whole in the default gate until this
+date. Campaign-only test families go behind opt-in markers, driven by the FREEZE
+column below and by that rule; every campaign mark sits under `tests/training/`,
+and `tests/training/test_suite_tiers.py` pins the families, the files and each
+mixed file's split. The campaign workflow runs the tier weekly and on every pull
+request that changes `tests/training/**`.
 
 ### 2a. The standalone-vs-dependency boundary (the one disputed component, stated explicitly)
 

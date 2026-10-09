@@ -59,6 +59,12 @@ from training.env import TacticalRolloutEnv
 from training.surrogate.ballots import load_staleness_cap
 from training.surrogate.runner import SurrogateUseCounter, load_surrogate_runner_factory
 
+# Campaign tier since 2026-10-09: the probe's pins read outcome off the committed
+# ML artifacts, and the default gate carries no role or outcome ML pin while the
+# ML hold stands (training/README.md section 2). Runs weekly, on every pull
+# request that changes tests/training/**, and via `-m campaign`.
+pytestmark = pytest.mark.campaign
+
 # The COMMITTED re-grounded artifact (Task 17.10) the 17.15 re-run consumes —
 # read-only here; the probe never writes to it.
 _SURROGATE_ARTIFACT_DIR = Path("training/artifacts/surrogate")

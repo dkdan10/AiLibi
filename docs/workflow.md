@@ -90,7 +90,12 @@ next set; create the next card after its dependencies and evidence are clear.
    does not mean merged, deployed, or adopted as an experimental baseline.
 
 Run targeted checks while developing, then `bash scripts/check.sh` for final
-verification. A new invariant gate needs a planted or perturbed failure proving
+verification. The campaign tier (`uv run pytest -m campaign`) runs outside that
+gate, so a change to a campaign-tier file records the campaign count in its pull
+request and Results: from the campaign workflow's run at the exact head, cited by
+run id, or from `uv run pytest -m campaign` when no run exists. The campaign
+workflow runs on every pull request that changes `tests/training/**` and weekly
+on `main`. A new invariant gate needs a planted or perturbed failure proving
 that it detects the claimed defect. Do not check an acceptance item merely
 because its implementation exists. Reopen a done card as active if verification
 or review reveals unfinished work.

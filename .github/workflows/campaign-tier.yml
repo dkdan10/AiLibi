@@ -1,11 +1,11 @@
 # The campaign tier's standing automated home (Task 19.27;
 # audits/audit-phase-19-triage.md §7 item 19, the tiering half). `uv run
 # pytest` everywhere else runs the default tier — pyproject's
-# `addopts = -m "not campaign"` keeps the frozen campaign-only families
-# (training/README.md §2 FREEZE column) out of every per-change gate — so this
-# weekly scheduled job is what keeps `-m campaign` from becoming an orphan
-# anyone has to remember to run. The phase close (Task 19.28) runs both tiers
-# explicitly on top of this.
+# `addopts = -m "not campaign"` keeps the campaign families (training/README.md
+# §2: the frozen campaign machinery and the ML pins that read role or outcome on
+# a frozen record) out of every per-change gate — so this job is what keeps
+# `-m campaign` from becoming an orphan anyone has to remember to run. The phase
+# close (Task 19.28) runs both tiers explicitly on top of this.
 #
 # A SEPARATE workflow file, not a job in ci.yml (Codex review on PR #349): a
 # schedule/dispatch trigger shared with ci.yml would emit SKIPPED instances of
@@ -14,18 +14,25 @@
 # dispatch on a PR head could then "pass" Project checks without running them.
 # Its own file means the per-change jobs never materialize on these triggers.
 #
-# The tier runs weekly rather than behind a training/** path filter because it
-# must also catch rot introduced from OUTSIDE training/ — an engine or schema
-# change that breaks a frozen family — which no path filter can see. Schedules
-# fire on the default branch only, which is exactly the branch the frozen
-# families guard; workflow_dispatch gives operators an on-demand run (e.g.
-# pre-close or post-incident).
+# The weekly schedule is the tier's baseline cadence, because it must also catch
+# rot introduced from OUTSIDE tests/training/ — an engine or schema change that
+# breaks a frozen family — which no path filter can see. Schedules fire on the
+# default branch only, which is exactly the branch the frozen families guard.
+# The pull_request trigger is an ADDITIONAL per-change run: a change to a file
+# under tests/training/** (where every campaign mark sits) runs the tier on its
+# own head, so a re-pin there is executed before it merges rather than at the
+# next weekly fire (docs/workflow.md, the campaign re-run rule).
+# workflow_dispatch gives operators an on-demand run (e.g. pre-close or
+# post-incident).
 name: Campaign tier
 
 on:
   schedule:
     - cron: "17 6 * * 1" # weekly, Monday 06:17 UTC
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "tests/training/**"
 
 # Least privilege, as in ci.yml: the job only reads the repository.
 permissions:
@@ -33,7 +40,7 @@ permissions:
 
 jobs:
   campaign-tier:
-    name: Campaign-tier tests (weekly)
+    name: Campaign-tier tests
     runs-on: ubuntu-latest
 
     env:
