@@ -1,6 +1,6 @@
 # Retire the era-locked comparators, pins and fixtures the tree keeps by inertia
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
