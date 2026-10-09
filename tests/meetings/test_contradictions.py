@@ -3302,7 +3302,7 @@ def _committed_meeting_entries() -> tuple[tuple[str, int, MeetingReplayEntry], .
 def _living_roster(entry: MeetingReplayEntry) -> frozenset[str]:
     # A frozen exhibit line carries no world state, so its roster is read off the
     # ballots: every living participant cast one (equal to the living roster on
-    # all 648 committed meetings).
+    # all 650 committed meetings; 648 while round 2 was shown).
     return frozenset(ballot.voter for ballot in entry.ballots)
 
 
@@ -3718,13 +3718,13 @@ def _committed_lever_census() -> dict[str, _SetCensus]:
     return per_set
 
 
-# The exemption census, re-measured through the channels production threaded:
-# 4p1i on the baseline-9 bytes, 9p2i on candidate round 2's bytes since
-# 2026-10-02 (the baseline-9 9p2i bytes read {CREWMATE: 7} / {whereabouts: 7} /
-# 7 flags). Baseline 6 read {CREWMATE: 37, IMPOSTOR: 3} / {whereabouts: 38,
-# alibi: 2} / 48 flags on 9p2i and a single CREWMATE whereabouts claim on 4p1i,
-# every one of them STRONG. The class survives on 9p2i and is entirely
-# WEAK-banded; on 4p1i it is empty.
+# The exemption census, re-measured through the channels production threaded: 4p1i on
+# the baseline-9 bytes, 9p2i on candidate round 3's bytes since 2026-10-09 (round 3's
+# and round 2's bytes each read {CREWMATE: 3, IMPOSTOR: 1} / {whereabouts: 4} / 5 flags,
+# none STRONG; the baseline-9 9p2i bytes read {CREWMATE: 7} / {whereabouts: 7} / 7
+# flags). Baseline 6 read {CREWMATE: 37, IMPOSTOR: 3} / {whereabouts: 38, alibi: 2} / 48
+# flags on 9p2i and a single CREWMATE whereabouts claim on 4p1i, every one of them
+# STRONG. The class survives on 9p2i and is entirely WEAK-banded; on 4p1i it is empty.
 _SAMPLES_4P1I_EXEMPT_BY_ROLE: dict[str, int] = {}
 _SAMPLES_4P1I_EXEMPT_BY_CLASS: dict[str, int] = {}
 _SAMPLES_4P1I_EXEMPT_FLAGS = 0
@@ -3865,7 +3865,7 @@ def _band_census(flags: tuple[ContradictionRef, ...]) -> dict[str, int]:
 def _grounded_prosecution_census(
     *, with_movement: bool = True
 ) -> dict[str, _GroundedSetCensus]:
-    """One pass over the 648 committed meetings, three detector legs each.
+    """One pass over the 650 committed meetings, three detector legs each.
 
     ``with_movement=False`` is the perturbed control: the same legs with the
     movement channel dropped, which is what the records-free harness read.
@@ -3960,7 +3960,7 @@ _FULLY_GROUNDED_SIGHTING_BANDS: Final[tuple[int, int]] = (2, 33)
 
 
 class TestGroundedProsecutionCommittedCensus:
-    """The lever's price and its scope firewall, over all 648 committed meetings."""
+    """The lever's price and its scope firewall, over all 650 committed meetings."""
 
     @pytest.fixture(scope="class")
     def census(self) -> dict[str, _GroundedSetCensus]:
@@ -4140,7 +4140,7 @@ class TestGroundedProsecutionInjusticeShapes:
 # one and a sighting in the other at the window's edge are two honest accounts of
 # one transit. The lever teaches the detector that geometry; these tests pin the
 # resolver, the demotion and its two limits, the frozen neighbour table against
-# the map, and the whole class over the 648 committed meetings.
+# the map, and the whole class over the 650 committed meetings.
 
 _ROSTER_MAP = frozenset({"p-1", "p-9"})
 
@@ -4382,7 +4382,7 @@ class _MapAwareSetCensus:
 
 @functools.cache
 def _map_aware_census() -> dict[str, _MapAwareSetCensus]:
-    """One pass over the 648 committed meetings, three detector legs each.
+    """One pass over the 650 committed meetings, three detector legs each.
 
     Every leg passes the channels production threaded
     (:meth:`CommittedMeeting.rederive`); the lever key is no longer read, so the
@@ -4448,7 +4448,7 @@ def _map_aware_census() -> dict[str, _MapAwareSetCensus]:
 
 
 class TestMapAwareArbitrationCommittedCensus:
-    """The lever's price and its scope firewall, over all 648 committed meetings."""
+    """The lever's price and its scope firewall, over all 650 committed meetings."""
 
     @pytest.fixture(scope="class")
     def census(self) -> dict[str, _MapAwareSetCensus]:
@@ -4492,8 +4492,9 @@ class TestMapAwareArbitrationCommittedCensus:
     ) -> None:
         # Baseline 6 priced the corridor at 140 demotions of 234 STRONG flags.
         # The arbitration is UNCONDITIONAL here, so both legs already carry it and
-        # the env differential is zero: the recorded class, 1 STRONG and 44 WEAK
-        # on both sides (45 WEAK over the four baseline-9 sets), and nothing moves
+        # the env differential is zero: the recorded class, 1 STRONG and 43 WEAK
+        # on both sides (44 WEAK while round 2 was shown, 45 over the four
+        # baseline-9 sets), and nothing moves
         # BETWEEN the legs. The corridor's price
         # on these bytes is in the record audit, not in an env diff that no
         # longer exists.
@@ -5089,8 +5090,9 @@ class TestOneSegmentRoutesReadLikeTheEnvelope:
     The corpus-wide half of the same property is
     :meth:`TestLiveDetectorCommittedBytesByteIdentity.
     test_re_derivation_equals_recorded_on_every_committed_meeting`, which holds
-    the 648 committed meetings to their recorded flags; 74 of their 1,091 alibi
-    claims are one-segment routes (62 of 1,021 over the four baseline-9 sets;
+    the 650 committed meetings to their recorded flags; 73 of their 1,112 alibi
+    claims are one-segment routes (74 of 1,091 while round 2 was shown, 62 of
+    1,021 over the four baseline-9 sets;
     baseline 8's were all one segment).
     """
 

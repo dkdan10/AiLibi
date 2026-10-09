@@ -2525,11 +2525,11 @@ def test_self_placement_coverage_pins(
             census.crew_claims,
         )
     # On the shown set a claim older than the twelve most recent spans the trail
-    # renders can fall outside the cap: in seed 47's fourth meeting a crewmate
-    # places itself at tick 2, older than the twelve most recent spans (and one
-    # public-regroup step) the trail renders, so 631 of the 632 claim ticks reach
-    # the prompt (the record holds all 632). Both legs render the same, since the
-    # trail is unconditional.
+    # renders can fall outside the cap, so 664 of the 665 claim ticks reach the
+    # prompt (the record holds all 665). On round 2's bytes 631 of 632 did: in
+    # seed 47's fourth meeting a crewmate placed itself at tick 2, older than the
+    # twelve most recent spans (and one public-regroup step) the trail renders.
+    # Both legs render the same, since the trail is unconditional.
     samples = placement[_SAMPLES_9P2I]
     assert samples.rendered_off == samples.rendered_on <= samples.crew_claims
     assert (samples.rendered_off, samples.rendered_on) == (664, 664)  # was (631, 631)
@@ -3166,7 +3166,8 @@ def test_the_price_of_the_lever_in_the_other_direction(
     assert sum(movement[d].strong_alibi_vs_sighting_on for d in era) == 16
     # The shown set: its new flags split by subject, and the engine can back at
     # most every one of them. Here both name impostors on a placement the engine
-    # does not agree with, and a STRONG band of 9 reads 4 with the lever.
+    # does not agree with, and a STRONG band of 11 reads 4 with the lever (9
+    # read 4 on round 2's bytes).
     samples = movement[_SAMPLES_9P2I]
     assert samples.new_subject_crewmate + samples.new_subject_impostor == (
         samples.new_flags
@@ -3555,7 +3556,8 @@ def test_the_grounded_lever_prices_the_prosecution_class(
     # The pre-record proxy for precision, QUOTED not gated: OFF, the baseline-9
     # sets' class names 9 impostors among 34 distinct subjects, and the 5 it still
     # names under the grounded lever are all impostors; on samples/9p2i it names
-    # 1 impostor among 7, and the 2 it still names are crewmates. Both are far
+    # no impostor among 10 and nobody under the grounded lever (round 2's bytes
+    # named 1 impostor among 7, and 2 crewmates under the lever). Both are far
     # too small to read as precision — a record is what measures that.
     assert (
         sum(grounded[d].off_subjects for d in era),
@@ -3644,7 +3646,8 @@ def test_the_sole_flag_wrongful_ejections_lose_their_strong_flag(
     # crewmates. The baseline-9 sets hold 1, and it is an IMPOSTOR: no crewmate
     # is convicted on this class alone, so there is no wrongful ejection for the
     # lever to strip (baseline 8 held 4 crewmates, one of which kept its flag
-    # under the slate). The shown samples/9p2i bytes hold none.
+    # under the slate). The shown samples/9p2i bytes hold one, a crewmate, whose
+    # STRONG flag the slate strips (round 2's bytes held none).
     assert (victims, impostors) == (1, 1)
     assert victims - impostors == 0
     samples = grounded[_SAMPLES_9P2I]

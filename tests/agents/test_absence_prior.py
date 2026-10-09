@@ -864,14 +864,15 @@ class TestAbsencePriorOnCommittedBytes:
     (``_trigger_is_emergency``), and since the reporter damp is unconditional,
     getting this wrong is NOT inert -- a spuriously-threaded
     emergency reporter would have its soft lift zeroed on both sides of the
-    re-derivation (the committed set has 3 emergency meetings; the recorded
+    re-derivation (the committed set has 4 emergency meetings on round 3's
+    bytes, 3 on round 2's; the recorded
     ``MeetingReplayEntry`` carries no trigger description, so the kind rides
     the walk's reconstructed trigger via ``ReconstructedMeeting.trigger_kind``).
 
-    Since 2026-10-02 the committed 9p2i set holds candidate round 2's bytes (its
-    own era, eval/eras.py); the golden walk threads each recording's settings,
-    and every cell below is re-measured on those bytes, its ``was`` the
-    baseline-9 reading.
+    Since 2026-10-09 the committed 9p2i set holds candidate round 3's bytes (its
+    own era, eval/eras.py; round 2's held it from 2026-10-02); the golden walk
+    threads each recording's settings, and every cell below is derived from
+    those bytes rather than transcribed, the baseline-9 reading beside it.
 
     Absence only LIFTS (it never lowers), so a recorded conviction is never lost
     -- the counterfactual measures the NEW-must-vote channel (a candidate pushed
@@ -1322,7 +1323,8 @@ class TestAbsencePriorOnCommittedBytes:
         # graduated to unconditional-ON at baseline 6, so the OFF and ON legs fold
         # identically and neither the argmax nor its tie-break can differ. The
         # re-derivation uses the production-faithful reporter predicate
-        # (reporter=None on the 3 emergency meetings, where _collect_one_ballot
+        # (reporter=None on the emergency meetings, 4 on round 3's bytes and 3 on
+        # round 2's, where _collect_one_ballot
         # passes None); on the baseline-6 bytes threading a reporter into those
         # emergency meetings leaves this count unchanged at 0.
         assert counterfactual.top_candidate_change_meetings == 0

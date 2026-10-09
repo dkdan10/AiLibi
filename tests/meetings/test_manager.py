@@ -5502,8 +5502,9 @@ class TestCommittedBytes107FoldPins:
         # the fold. The audited suspicion-math (a corroboration drops the defended
         # subject below the §4.6 gate) is covered by the synthetic corroboration-
         # delta tests; here we pin that the bytes route the defended subject to the
-        # corroboration channel, not the fold. Re-anchored on the promoted bytes
-        # (candidate round 2, 2026-10-02) to seed 3 m0: the corroborated crewmate
+        # corroboration channel, not the fold. Re-anchored on candidate round 2's
+        # bytes (2026-10-02) to seed 3 m0, and true again on round 3's promoted
+        # bytes (2026-10-09): the corroborated crewmate
         # p-1 (the seed-3 impostors are p-2/p-6) is never folded while the impostor
         # p-6 takes the fold.
         entry = _committed_meeting(3, 0)

@@ -541,10 +541,11 @@ def test_roll_call_coverage_split_under_both_estimators(
     """VERIFY-THEN-FIX for the §7 item-24 roll-call split (source-specific).
 
     The two estimators genuinely differ, so both ship as separately named cells:
-    on these bytes the pooled turn-level impostor share is 46.5% (samples) and
-    45.8% (corpus), while the unweighted per-meeting macro-average of the same
-    turns reads 45.4% and 41.6%. ``replays/ml_corpus/README.md`` item 8
-    publishes the pooled pair as its headline and names the macro-average
+    on these bytes the pooled turn-level impostor share is 47.5% (samples; 46.5%
+    on round 2's bytes) and 45.8% (corpus), while the unweighted per-meeting
+    macro-average of the same turns reads 46.5% (45.4% on round 2's) and
+    41.6%. ``replays/ml_corpus/README.md`` item 8 publishes the pooled pair as
+    its headline and names the macro-average
     beside it; ``check_doc_facts.check_corpus_disclosures`` re-derives the
     corpus cells from the same reports these asserts read. The shown set's
     cells are derived here rather than transcribed.
@@ -1091,7 +1092,8 @@ def test_scaffold_leakage_reproduces_the_19_8_disclosure(
     """The MODEL-originated nets behind ``replays/ml_corpus/README.md`` item 7.
 
     10/198 and 124/651 impostor-voter ballots name a partner, with a crew
-    false-positive control of 0; 0, 36 and 3 ballots state the role outright;
+    false-positive control of 0; 1, 36 and 3 ballots state the role outright (0
+    on round 2's samples bytes);
     player-visible ``free_text`` carries no leak on either 9p2i set. (The
     corpus README's item 7 still reads 41/210 for samples-9p2i: its S9 column is
     the baseline-9 bytes, kept as history.)
@@ -1184,7 +1186,8 @@ def test_the_pre_guard_body_is_the_parsed_field_not_the_raw_envelope(
 
     The raw vote response carries ``"confidence": 0.NN``, which the
     quoted-decimal net would read as the model reproducing its own scoring grid.
-    Scanning the envelope would report 415 machinery quotations on this set
+    Scanning the envelope would report 389 machinery quotations on this set
+    (415 on round 2's bytes)
     against no real one — so the extraction is load-bearing, not cosmetic.
     """
 
@@ -1504,8 +1507,9 @@ def test_guard_originated_stale_rationales_are_rare_not_absent(
     preserve, and labels the path "dormant for committed bytes". Measured, that
     label was *rare*, not *absent*, on the earlier records (baseline 8 carried
     one instance on ``samples/9p2i``, baseline 6 one in the corpus). On the
-    current bytes it IS absent: zero on all four sets, over 17 target rewrites
-    on each 9p2i set (4 on the baseline-9 samples bytes). This test exists because the metric read 0
+    current bytes it IS absent: zero on all four sets, over 10 target rewrites
+    on the 9p2i sample set (17 on round 2's bytes, 4 on the baseline-9 samples
+    bytes) and 17 on the corpus. This test exists because the metric read 0
     everywhere until the self-kill net landed — a leakage predicate that saw
     only partner and role phrasing was blind to a voter narrating their own
     kill, which is the third shape 19.15's own contract names — so a zero here
@@ -1565,7 +1569,8 @@ def test_witnessed_supply_adopts_the_kill_craft_pins(
 ) -> None:
     """The committed supply cells ARE ``tests/eval/test_kill_craft.py:66-135``.
 
-    Corpus 550 kills / 16 crew-witnessed, samples-9p2i 195 / 14, samples-4p1i
+    Corpus 550 kills / 16 crew-witnessed, samples-9p2i 192 / 14 (195 / 14 on
+    round 2's bytes), samples-4p1i
     66 / 1, and ``co_present_histogram == {0: N}`` on every set — the
     "too-clean evidence economy" structural finding, which lands here as
     ``co_present_crew_kills == 0``.
@@ -1699,7 +1704,8 @@ def test_a_cross_tab_cell_cannot_carry_another_blocks_counts(
     """The no-mixing validator: one block's accuracy cell cannot ride another's.
 
     This is the C5 lesson enforced by the model rather than by prose. On the
-    current bytes both partitions happen to hold 42 non-direct / unflagged
+    current bytes both partitions happen to hold 37 (42 on round 2's) non-direct
+    / unflagged
     ejections, so swapping the cell across is no longer detectable by its
     counts alone -- the swap is perturbed by ONE ejection first, which is what
     the validator is for.

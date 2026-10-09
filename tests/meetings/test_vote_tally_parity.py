@@ -104,7 +104,8 @@ from meetings.voting import (
 _REPLAYS: Final[Path] = Path(__file__).resolve().parents[2] / "replays"
 
 # Every committed replay set: the samples AND the ML corpus, across both
-# recorded eras (samples/9p2i holds candidate round 2's bytes since 2026-10-02;
+# recorded eras (samples/9p2i holds candidate round 3's bytes since 2026-10-09,
+# round 2's from 2026-10-02;
 # the other three hold the baseline-9 record). "All four sets" is the contract's
 # scope, not a sample of it. The totals below count what the tree holds, the
 # tally rule's coverage, and are never read as a rate of either era.
@@ -176,8 +177,10 @@ _MARKER_TEMPLATES: Final[dict[str, str]] = {
 # retired by ruling D6, nothing mints them) and ``invalid_reason_id`` — read zero
 # on all four sets, so their synthetic fixtures carry them too;
 # ``teammate_coerced`` and ``invalid_target`` rose on ml_corpus/9p2i. The
-# promoted samples/9p2i (candidate round 2's bytes) reads the same zeros, with
-# ``teammate_coerced`` at 16 and ``invalid_target`` at 1.
+# promoted samples/9p2i (candidate round 3's bytes) reads the same zeros, with
+# ``teammate_coerced`` at 10 and ``invalid_target`` at 0 (16 and 1 on round
+# 2's bytes); the test holds the shown set's counts to its ballots instead of
+# transcribing them.
 #: The retired guards: no ballot of any set may carry their markers.
 _RETIRED_MARKERS: Final[tuple[str, ...]] = ("under_gate_redirect", "uncited_zero_flag")
 _EXPECTED_MARKERS: Final[dict[str, dict[str, int]]] = {

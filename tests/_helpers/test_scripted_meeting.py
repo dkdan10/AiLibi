@@ -387,8 +387,9 @@ def test_the_rule_the_owner_is_asked_to_confirm_projected_on_the_committed_sets(
     # the one reply goes to the opener in most meetings, and to a non-opener
     # (mostly an accused impostor) wherever an earlier new charge named someone
     # else. Every row of the card's table is pinned here, each set's meeting
-    # count included. The promoted samples/9p2i (candidate round 2, since
-    # 2026-10-02) recorded the setting at version 1, so its transcripts already
+    # count included. The promoted samples/9p2i (candidate round 3 since
+    # 2026-10-09, as round 2's from 2026-10-02) recorded the setting at version
+    # 1, so its transcripts already
     # hold the reply and a projection over them would count it twice; its
     # baseline-9 bytes projected to 145 meetings, 144 fires (123 to the opener,
     # 19 to an impostor, 2 to another crewmate), 125 opener-accused and 2 slots

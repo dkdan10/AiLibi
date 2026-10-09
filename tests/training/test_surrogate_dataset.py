@@ -107,7 +107,8 @@ _BRACKETED: Final[re.Pattern[str]] = re.compile(r"\[[^\]]*\]")
 
 #: The committed sets the frozen surrogate table reads: those recorded with
 #: every experiment off, the baseline-9 era's three. samples/9p2i holds
-#: candidate round 2's bytes since 2026-10-02 (eval/eras.py) and the table
+#: candidate round 3's bytes since 2026-10-09 (round 2's from 2026-10-02;
+#: eval/eras.py) and the table
 #: refuses it by name (``test_the_table_refuses_the_promoted_nine_player_set``).
 _TABLE_SETS: Final[tuple[Path, ...]] = tuple(
     path for path in _COMMITTED_SETS if path != Path("replays/samples/9p2i")

@@ -3753,8 +3753,9 @@ class TestEvidenceQualityLiftOnCommittedBytes:
 class TestReporterExculpationOnCommittedBytes:
     """The Task-15.5 reporter-exculpation lever (graduated to unconditional at Task
     15.7), measured on the committed 9p2i bytes (first on BASELINE 6, re-recorded at
-    Task 18.12; the pins below read the promoted set, candidate round 2, since
-    2026-10-02, each ``was`` the baseline-9 reading).
+    Task 18.12; the cells below read the promoted set, candidate round 3, since
+    2026-10-09, derived rather than transcribed, with round 2's readings and
+    the baseline-9 ones beside them).
 
     Baseline 6 was recorded WITH the lever unconditionally ON, so the committed
     fold IS the damped fold. The lever is no longer env-toggleable, so the
@@ -3925,7 +3926,8 @@ class TestReporterExculpationOnCommittedBytes:
         # both are also innocent-reporter ejections. The impostor self-report rate is
         # still EXACTLY ZERO (no report meeting had the killer as its reporter).
         # Every reporter ejected is innocent while impostors never report, and
-        # the counts are not transcribed (round 2 read 17 of 63; prior readings:
+        # the counts are not transcribed (round 3 reads 10 of 57; prior readings:
+        # 17 of 63 at round 2,
         # 7 of 80 at baseline 9, 7 of 85 at baseline 8, 10 of 91 at baseline 7,
         # 2 of 87 at baseline 6, 0 of 61 at baseline 5, 1 of 79 at baseline 4,
         # 4 of 95 at baseline 3, 22 of 106 at baseline 2).
@@ -3941,16 +3943,19 @@ class TestReporterExculpationOnCommittedBytes:
         funnel: InformationFunnelReport,
         roles_by_seed: dict[int, dict[str, str]],
     ) -> None:
-        # The recorded innocent-reporter census is SEVENTEEN on the promoted set
-        # (SEVEN at baselines 9 and 8, TEN at baseline 7, TWO at baseline 6). The
+        # The recorded innocent-reporter census is TEN on the promoted set, round 3
+        # (SEVENTEEN on round 2's bytes, SEVEN at baselines 9 and 8, TEN at
+        # baseline 7, TWO at baseline 6). The
         # census splits three ways, and the split is the finding: on ONE a standing
         # prior already carries the reporter over the §4.6 gate, so the damp -- one
         # accusation's worth of lift -- cannot reach the outcome, though it never
-        # raises the reporter's suspicion either. On SEVEN the soft accusation lift
+        # raises the reporter's suspicion either. On THREE (seven on round 2's
+        # bytes) the soft accusation lift
         # WAS the deciding one and the damp exculpates the reporter outright, which
         # is the case baseline 6 never produced (its two convictions were both
         # hard-flag-backed, so the damp had nothing it could win). The remaining
-        # NINE are already sub-gate before the damp runs at all -- a bucket
+        # SIX (nine on round 2's bytes) are already sub-gate before the damp runs
+        # at all -- a bucket
         # baseline 7 left empty; the render side handles them. NOTE the bucket name: ``hard_convicted`` means only
         # that the damp could not move the outcome; whether a HARD FLAG backs the
         # conviction is a stricter question, asked by the next test. The bucket split
@@ -3982,8 +3987,8 @@ class TestReporterExculpationOnCommittedBytes:
                 )
 
         # The three buckets partition the census; their sizes are not
-        # transcribed (round 2 read 7 exculpated, 9 already sub-gate, 1 the damp
-        # cannot reach).
+        # transcribed (round 3 reads 3 exculpated, 6 already sub-gate, 1 the damp
+        # cannot reach; round 2 read 7, 9 and 1).
         assert kept + already_sub_gate + hard_convicted == len(meetings)
 
     def test_no_innocent_reporter_conviction_is_hard_flag_backed(
@@ -3998,7 +4003,8 @@ class TestReporterExculpationOnCommittedBytes:
         # exemption promoted a single-tick roll-call self-alibi to a STRONG
         # alibi_vs_sighting false positive, and Task 18.12 adopted that as a
         # documented precision cost. On this record the census is EMPTY
-        # again -- across all seventeen innocent-reporter convictions, not one is carried
+        # again -- across all ten innocent-reporter convictions (seventeen on round
+        # 2's bytes), not one is carried
         # by a strong flag or a vent/kill prior; every one of them rests on
         # accumulated soft lift. The pin is the empty list, so a fresh false positive
         # of that class fails here loudly.
@@ -4041,7 +4047,8 @@ class TestReporterExculpationOnCommittedBytes:
         funnel: InformationFunnelReport,
     ) -> None:
         # The planted case behind the empty census above. There is no strong flag and
-        # no vent/kill prior anywhere in the seventeen innocent-reporter meetings -- which
+        # no vent/kill prior anywhere in the innocent-reporter meetings (ten on round
+        # 3's bytes, seventeen on round 2's) -- which
         # IS the finding -- so the plant supplies each in turn, on a real entry, and
         # asserts the predicate says yes to both. Without it, an empty census could
         # equally mean the predicate stopped working.
@@ -4102,9 +4109,10 @@ class TestReporterExculpationOnCommittedBytes:
         funnel: InformationFunnelReport,
         roles_by_seed: dict[int, dict[str, str]],
     ) -> None:
-        # The canary: over ALL 63 committed report-ejections, every hard-flag-
-        # backed ejectee (a STRONG contradiction or a witnessed vent/kill pin; 31
-        # of them on this record, 64 of 80 on the baseline-9 bytes) keeps its §4.6
+        # The canary: over ALL the committed report-ejections (57 on round 3's
+        # bytes, 63 on round 2's), every hard-flag-backed ejectee (a STRONG
+        # contradiction or a witnessed vent/kill pin; 28 of them on this record,
+        # 31 on round 2's, 64 of 80 on the baseline-9 bytes) keeps its §4.6
         # gate outcome under the damp --
         # ZERO outcome changes. On baseline 6 this included the seed-17 m0 and
         # seed-39 m0 p-1 cases: each STRONG-flag conviction stood damp-ON and
@@ -4132,7 +4140,7 @@ class TestReporterExculpationOnCommittedBytes:
             on_convicts = self._subject_max(on_rows, ejected) >= _GATE
             if off_convicts != on_convicts:
                 outcome_changes += 1
-        # Non-vacuous: there ARE hard convictions to guard (round 2 read 31; the
-        # baseline-9 bytes 64).
+        # Non-vacuous: there ARE hard convictions to guard (round 3 reads 28,
+        # round 2 read 31; the baseline-9 bytes 64).
         assert hard_backed > 0
         assert outcome_changes == 0  # the contract's hard line

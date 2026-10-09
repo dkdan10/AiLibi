@@ -211,7 +211,8 @@ def test_corpus_nine_is_the_audit_census(
 def test_sample_nine_is_refused_by_name() -> None:
     """The promoted 9p2i set is outside the instrument's reading; it says so.
 
-    samples/9p2i holds candidate round 2's bytes since 2026-10-02, recorded with
+    samples/9p2i holds candidate round 3's bytes since 2026-10-09 (round 2's
+    from 2026-10-02), recorded with
     the regroup reset, and the grounded-vouch split does not apply the regroup
     window, so the instrument refuses the set before folding it. Its baseline-9
     pins (145 meetings, 183 impostor accusations, 8 frame conversions of 142) are
