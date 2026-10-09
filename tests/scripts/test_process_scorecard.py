@@ -39,10 +39,12 @@ from eval.process_scorecard import (
     ROLE_CORRECTNESS_NOTE,
     ROW_DEFINITIONS,
     SCHEMA_VERSION,
+    BEFORE_COLUMNS_SHA256,
     BeforeColumnsError,
     EraScorecard,
     ProcessScorecard,
     ProcessTally,
+    before_column_of,
     compute_process_scorecard,
     read_before_columns,
     scorecard_from_tally,
@@ -209,38 +211,126 @@ def _before_tree(tmp_path: Path) -> Path:
     return root
 
 
-def test_the_before_column_is_the_replaced_sets_baseline_9_entry() -> None:
-    """The one before block: ``samples/9p2i`` at baseline 9, as published at d41c9006."""
+#: The before file's sha256 while it held the baseline-9 block alone, before
+#: round 3's promotion appended round 2's block (the grow form, 2026-10-09).
+_BASELINE_9_ONLY_SHA256 = (
+    "b6b8ecaa5ecdde48630a1cb5eec9628d799553fdd6911ab38efdb654e95e38a7"
+)
 
-    (block,) = read_before_columns(ROOT)
-    assert (block.set, block.era_id, block.commit) == (
+
+def test_the_before_columns_are_each_replaced_recordings_entry() -> None:
+    """Two blocks, oldest first: ``samples/9p2i`` at baseline 9, as published at
+    d41c9006, then at round 2, as published at 2eed2e92 (was the first alone)."""
+
+    first, second = read_before_columns(ROOT)
+    assert (first.set, first.era_id, first.commit) == (
         "replays/samples/9p2i",
         "baseline-9",
         "d41c9006",
     )
-    card = block.scorecard
+    card = first.scorecard
     assert (card.label, card.games, card.meetings, card.ballots) == (
         "samples/9p2i",
         50,
         145,
         845,
     )
+    assert (second.set, second.era_id, second.commit) == (
+        "replays/samples/9p2i",
+        "stage-b-r2",
+        "2eed2e92",
+    )
+    card = second.scorecard
+    assert (card.label, card.games, card.meetings, card.ballots) == (
+        "samples/9p2i",
+        50,
+        117,
+        691,
+    )
     published = json.loads((ROOT / command.JSON_PATH).read_text(encoding="utf-8"))
-    assert published["before"] == [
-        json.loads((ROOT / BEFORE_COLUMNS_PATH).read_text(encoding="utf-8"))[0]
-    ]
+    assert published["before"] == json.loads(
+        (ROOT / BEFORE_COLUMNS_PATH).read_text(encoding="utf-8")
+    )
 
 
+def test_the_grown_files_first_block_is_the_old_file_as_text() -> None:
+    """The grow form moved no frozen byte, and it is reversible.
+
+    The file without its appended block, written as the publisher writes it, is
+    byte for byte the file the old pin read: the first block is the baseline-9
+    block leaf for leaf and as text, and removing round 2's block restores the
+    old content and the old pin.
+    """
+
+    text = (ROOT / BEFORE_COLUMNS_PATH).read_text(encoding="utf-8")
+    blocks = json.loads(text)
+    assert len(blocks) == 2
+    first_only = json.dumps(blocks[:1], indent=2, sort_keys=True, ensure_ascii=False)
+    old_text = first_only + "\n"
+    assert hashlib.sha256(old_text.encode("utf-8")).hexdigest() == (
+        _BASELINE_9_ONLY_SHA256
+    )
+    assert text.startswith(old_text.removesuffix("\n]\n"))
+    assert hashlib.sha256(text.encode("utf-8")).hexdigest() == BEFORE_COLUMNS_SHA256
+    assert BEFORE_COLUMNS_SHA256 != _BASELINE_9_ONLY_SHA256
+
+
+def test_each_set_reads_the_block_of_the_era_its_bytes_replaced() -> None:
+    """``samples/9p2i`` in the stage-b-r3 era shows round 2's block; filed under
+    stage-b-r2 it would show baseline 9's; a set with no block shows none."""
+
+    blocks = read_before_columns(ROOT)
+    shown = before_column_of("replays/samples/9p2i", "stage-b-r3", blocks)
+    assert shown is not None and shown.era_id == "stage-b-r2"
+    stale = before_column_of("replays/samples/9p2i", "stage-b-r2", blocks)
+    assert stale is not None and stale.era_id == "baseline-9"
+    assert before_column_of("replays/samples/9p2i", "baseline-9", blocks) is None
+    assert before_column_of("replays/samples/4p1i", "baseline-9", blocks) is None
+
+
+def test_a_registry_filing_samples_9p2i_under_stage_b_r2_fails_the_pages_check() -> (
+    None
+):
+    """Planted: the committed fold with ``samples/9p2i`` filed under the era its
+    bytes replaced reads the baseline-9 block, so the page differs from the
+    committed one and ``--check`` would be red; the committed fold renders the
+    committed page."""
+
+    published = json.loads((ROOT / command.JSON_PATH).read_text(encoding="utf-8"))
+    committed = (ROOT / command.MARKDOWN_PATH).read_text(encoding="utf-8")
+    # The JSON's keys are sorted; the page lists the row definitions in their order.
+    scorecard = ProcessScorecard.model_validate(published).model_copy(
+        update={"row_definitions": dict(ROW_DEFINITIONS)}
+    )
+    assert command.render_markdown(scorecard) == committed
+    stale = scorecard.model_copy(
+        update={
+            "eras": tuple(
+                era.model_copy(update={"era_id": "stage-b-r2"})
+                if era.sets == ("replays/samples/9p2i",)
+                else era
+                for era in scorecard.eras
+            )
+        }
+    )
+    page = command.render_markdown(stale)
+    assert page != committed
+    assert "before: baseline-9, as published at `d41c9006`" in page
+    assert "before: stage-b-r2, as published at `2eed2e92`" not in page
+    assert "before: stage-b-r2, as published at `2eed2e92`" in committed
+
+
+@pytest.mark.parametrize("block", (0, 1), ids=("baseline-9", "stage-b-r2"))
 def test_one_edited_leaf_of_the_before_column_turns_check_red(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], block: int
 ) -> None:
-    """Planted: one integer of the frozen column moves; the fold refuses."""
+    """Planted: one integer of either frozen block moves; the fold refuses."""
 
     root = _before_tree(tmp_path)
     assert read_before_columns(root) == read_before_columns(ROOT)
     path = root / BEFORE_COLUMNS_PATH
     payload = json.loads(path.read_text(encoding="utf-8"))
-    payload[0]["scorecard"]["role_correct_ejection"]["numerator"] -= 1
+    payload[block]["scorecard"]["role_correct_ejection"]["numerator"] -= 1
     path.write_text(
         json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
         encoding="utf-8",
@@ -273,6 +363,20 @@ def test_a_before_file_that_is_not_a_list_is_refused(
 ) -> None:
     root = _pinned_planted(tmp_path, monkeypatch, {"set": "replays/samples/9p2i"})
     with pytest.raises(BeforeColumnsError, match="must hold one JSON list"):
+        read_before_columns(root)
+
+
+def test_a_replaced_recording_kept_twice_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: round 2's block appended a second time under the same era."""
+
+    blocks = json.loads((ROOT / BEFORE_COLUMNS_PATH).read_text(encoding="utf-8"))
+    root = _pinned_planted(tmp_path, monkeypatch, [*blocks, blocks[1]])
+    with pytest.raises(
+        BeforeColumnsError,
+        match="carries two stage-b-r2 blocks for replays/samples/9p2i",
+    ):
         read_before_columns(root)
 
 

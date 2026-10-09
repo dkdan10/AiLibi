@@ -1440,7 +1440,8 @@ def test_pooling_two_eras_is_refused_and_one_era_pools() -> None:
     right = ProcessTally(ballots=3, eject_ballots=3, grounded_eject=0)
     with pytest.raises(
         ValueError,
-        match="^mixed: its sets span the stage-b-r2 and baseline-9 eras; the "
+        # was "the stage-b-r2 and baseline-9 eras", before round 3's promotion
+        match="^mixed: its sets span the stage-b-r3 and baseline-9 eras; the "
         "scorecard never pools across eras$",
     ):
         pool(

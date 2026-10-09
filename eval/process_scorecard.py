@@ -91,13 +91,18 @@ rather than re-scoring history.
 Since the promotion of candidate round 2 (2026-10-02) the committed sets span
 two eras, and the era registry (:mod:`eval.eras`) is what groups them: the
 baseline-9 era pools its three sets, and ``samples/9p2i`` is published as its
-own era, with no nine-player pool left. Its before column is that set's entry
-of ``docs/process-scorecard.json`` at ``d41c9006``, the last commit whose
-``samples/9p2i`` held the baseline-9 bytes. It is carried verbatim from
-:data:`BEFORE_COLUMNS_PATH`, whose sha256 :data:`BEFORE_COLUMNS_SHA256` pins;
-the publisher copies it and never recomputes it, so the column cannot drift
-with today's code. :func:`pool` refuses a group whose registered sets span two
-eras.
+own era, with no nine-player pool left; since round 3's promotion (2026-10-09)
+that era is ``stage-b-r3``. Each replaced recording's published entry is kept
+as a frozen before block in :data:`BEFORE_COLUMNS_PATH`, whose sha256
+:data:`BEFORE_COLUMNS_SHA256` pins: ``samples/9p2i`` at ``d41c9006`` (baseline
+9, the last commit whose ``samples/9p2i`` held those bytes), then at
+``2eed2e92`` (round 2, the last commit that held its bytes there). The file
+grows by a block per promotion and no block is ever rewritten. A set shows as
+its before column the block of the era its bytes replaced
+(:func:`before_column_of`): ``samples/9p2i``, now ``stage-b-r3``, shows the
+``stage-b-r2`` block. The publisher copies the blocks and never recomputes
+them, so a column cannot drift with today's code. :func:`pool` refuses a group
+whose registered sets span two eras.
 """
 
 from __future__ import annotations
@@ -1847,15 +1852,18 @@ RECORDINGS_ROOT: Final[str] = "replays"
 COMMITTED_SETS: Final[tuple[str, ...]] = tuple(entry.path for entry in REGISTERED_SETS)
 
 #: The frozen before columns: each replaced set's entry of
-#: ``docs/process-scorecard.json`` as published before its bytes moved. Today one
-#: block, ``samples/9p2i`` at ``d41c9006`` (baseline 9).
+#: ``docs/process-scorecard.json`` as published before its bytes moved, oldest
+#: first. Today two blocks, both ``samples/9p2i``: at ``d41c9006`` (baseline 9)
+#: and at ``2eed2e92`` (round 2).
 BEFORE_COLUMNS_PATH: Final[str] = "docs/process-scorecard-before.json"
 
 #: The sha256 of :data:`BEFORE_COLUMNS_PATH`'s bytes. The publisher copies the
 #: file into every publication and never recomputes it; a byte that moves
 #: refuses the fold.
+#: 2026-10-09: grown by round 2's block at round 3's promotion; the file of the
+#: baseline-9 block alone read b6b8ecaa5ecdde48630a1cb5eec9628d799553fdd6911ab38efdb654e95e38a7.
 BEFORE_COLUMNS_SHA256: Final[str] = (
-    "b6b8ecaa5ecdde48630a1cb5eec9628d799553fdd6911ab38efdb654e95e38a7"
+    "df88d369d8c320c8b4180309cac4266a90308033231cc55bea1794340fec363b"
 )
 
 
@@ -1882,7 +1890,37 @@ def read_before_columns(root: Path) -> tuple[BeforeColumn, ...]:
     payload = json.loads(data.decode("utf-8"))
     if not isinstance(payload, list):
         raise BeforeColumnsError(f"{BEFORE_COLUMNS_PATH} must hold one JSON list")
-    return tuple(BeforeColumn.model_validate(block) for block in payload)
+    blocks = tuple(BeforeColumn.model_validate(block) for block in payload)
+    seen: set[tuple[str, str]] = set()
+    for block in blocks:
+        if (block.set, block.era_id) in seen:
+            raise BeforeColumnsError(
+                f"{BEFORE_COLUMNS_PATH} carries two {block.era_id} blocks for "
+                f"{block.set}; a replaced recording is kept once"
+            )
+        seen.add((block.set, block.era_id))
+    return blocks
+
+
+def before_column_of(
+    set_path: str, era_id: str, blocks: Sequence[BeforeColumn]
+) -> BeforeColumn | None:
+    """The before column a set of era ``era_id`` shows, or ``None``.
+
+    ``blocks`` hold each replaced recording oldest first, so a set's blocks are
+    the eras its bytes replaced in turn. The set shows the block of the era its
+    own bytes replaced: the last of its blocks recorded before ``era_id``'s own
+    block when the file carries one (a registry still naming a replaced era reads
+    the era that era replaced), and otherwise the last of its blocks. A set with
+    no block shows none.
+    """
+
+    own = [block for block in blocks if block.set == set_path]
+    for index, block in enumerate(own):
+        if block.era_id == era_id:
+            own = own[:index]
+            break
+    return own[-1] if own else None
 
 
 def scorecard_source_paths(root: Path) -> tuple[Path, ...]:
@@ -2006,6 +2044,7 @@ __all__ = [
     "fold_set",
     "load_set_inputs",
     "pool",
+    "before_column_of",
     "read_before_columns",
     "scorecard_from_tally",
     "scorecard_source_paths",

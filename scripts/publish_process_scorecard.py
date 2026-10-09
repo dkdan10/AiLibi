@@ -51,6 +51,7 @@ from eval.process_scorecard import (  # noqa: E402
     ProcessScorecard,
     RateCell,
     SetScorecard,
+    before_column_of,
     compute_process_scorecard,
     fold_set,
     load_set_inputs,
@@ -402,10 +403,16 @@ def render_markdown(scorecard: ProcessScorecard) -> str:
                     "",
                 ]
             )
-    before_by_set = {before.set: before for before in scorecard.before}
+    era_by_set = {source: era.era_id for era in scorecard.eras for source in era.sets}
     lines.extend(["## Per set", ""])
     for card in scorecard.sets:
-        lines.extend(_set_section(card, before_by_set.get(card.sources[0])))
+        source = card.sources[0]
+        lines.extend(
+            _set_section(
+                card,
+                before_column_of(source, era_by_set[source], scorecard.before),
+            )
+        )
     lines.extend(["## Row definitions", ""])
     for name, definition in scorecard.row_definitions.items():
         lines.extend([f"**{name}.** {definition}", ""])
