@@ -173,7 +173,7 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   | per seat | `reporter_seats_ejected`, `other_crewmate_seats_ejected`, `impostor_seats_ejected`; the same three `_without_vent_proof`; the same three `_with_vent_proof`; `reporters_among_ejected_crewmates`, `reporters_among_crewmate_seats` | 11/118, 2/372, 35/194; 11/98, 2/303, 15/160; 0/20, 0/69, 20/34; 11/13, 118/490 | 17/114, 5/367, 41/195; 17/93, 5/291, 20/158; 0/21, 0/76, 21/37; 17/22, 114/481 | reported; the flag below reads the reporter and other-crewmate cells without vent proof |
   | kill witness | `held_kill_witnesses_ejected`; table `held_kill_next_meeting_outcomes`; `held_kill_killers_ejected`, `held_kill_killers_ejected_at_any_later_meeting` | 0/3; killer ejected 3; 3/3, 3/3 | 5/14; witness 5, other 1, no one 2, killer 1, two or more killer 5; 6/14, 8/14 | reported |
   | counterfactual | `ejections_undone_with_impostor_ballots_as_skip`; `ejections_undone_with_impostor_ballots_removed`; `ejections_carried_only_by_impostor_ballots`; table `retally_outcome_changes` | 8/54; 2/54; 0/54 | 14/66; 5/66; 0/66 | reported |
-  | held data | `holds_nothing_skips_naming_no_candidate` (table `holds_nothing_skips_naming_a_candidate_by_source`); `cited_lines_true_to_the_route`, `cited_lines_false_to_the_route` (tables `cited_placements_by_kind_and_verdict`, `supported_ejects_not_checkable_by_reason`) | 0/256 at authoring; measured at F | 0/214 at authoring; measured at F | reported, each beside its definition |
+  | held data | `holds_nothing_skips_naming_no_candidate` (table `holds_nothing_skips_by_source`); `cited_lines_true_to_the_route`, `cited_lines_false_to_the_route` (tables `cited_placements_by_kind_and_verdict`, `supported_ejects_not_checkable_by_reason`) | 0/256 at authoring; measured at F | 0/214 at authoring; measured at F | reported, each beside its definition |
   | held data | `ejections_on_a_reconcilable_pair`; `ejections_charged_on_a_reconcilable_pair`; `witness_meeting_ejections_on_a_reconcilable_pair`; `witness_meeting_ejections_charged_on_a_reconcilable_pair`; `charges_on_a_reconcilable_pair` | 31/54; 29/54; measured at F; 0/3; 265/406, at authoring | 41/66; 40/66; measured at F; 7/12; 276/402, at authoring | reported; the charged count is the route-check replay's M and its witness form W |
   | held data | `skips_holding_nothing`; `ballots_citing_a_rebuttal` with `ballots_countering_with_a_rebuttal` beside | 256/330; 70/707, 150/707 | 214/281; 57/691, 175/691 | reported; for ballots citing a rebuttal the turn citation is the cell and the counter slot sits beside it, as the owner confirms |
   | envelope | impostor win share (`impostor_wins`) | 34/50 = 0.68 | 24/50 = 0.48 | non-gating; flagged outside 0.20-0.60 (route lines that save witnesses help the crew, so the floor is watched); read by the step rule |
@@ -190,6 +190,13 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
   staying shown; with the flag forced on (reporter numerator 60) or `role_correct_ejections` edited, the line
   beginning `step rule:` is byte-identical to the unedited run's. At authoring, the scratch command on hand-built
   copies at `76270d6c` (the not-yet-built cells added by hand) gave exactly these exits and lines.
+- [x] **Amendment of 2026-10-09 (the orchestrator, before P): the merged census table is named.** The held-data row
+  above and `readings.py` below named the table `holds_nothing_skips_naming_a_candidate_by_source`;
+  `census-held-data-cells` merged it as `holds_nothing_skips_by_source` (`eval/gameplay_census.py`,
+  `docs/gameplay-census.json`). The operator stopped before P on this card's rule that a key merged under another
+  name is a stop, never a silent edit. The name is corrected in both places, which changes `readings.py`'s sha256;
+  the cell read is the same, so the owner's confirmation of 2026-10-09 (decision memo 8.7) covers it. Every other
+  count the table states reproduced at F `7dfaa7f3` through the production path (the stopped operator's evidence).
 - [ ] **The reporter flag is re-keyed, with a proposed bar and its alternatives.** Mechanism: `readings.py` reads
   `reporter_seats_ejected_without_vent_proof` (k1/n1) against `other_crewmate_seats_ejected_without_vent_proof`
   (k2/n2); the relative rate is (k1/n1)/(k2/n2), compared by cross-multiplication in exact fractions, so no zero is
@@ -794,7 +801,7 @@ print("held data (reported, each beside its definition)")
 show("holds-nothing SKIPs whose inputs name no living candidate",
      "holds_nothing_skips_naming_no_candidate")
 table("holds-nothing SKIPs naming a candidate, by source",
-      "holds_nothing_skips_naming_a_candidate_by_source")
+      "holds_nothing_skips_by_source")
 show("cited lines true to the route", "cited_lines_true_to_the_route")
 show("cited lines false to the route", "cited_lines_false_to_the_route")
 table("cited placements by kind and verdict", "cited_placements_by_kind_and_verdict")
