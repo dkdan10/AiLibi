@@ -120,7 +120,8 @@ def test_the_module_exports_every_public_name_it_defines() -> None:
 
 def test_eras_is_the_registrys_eras_oldest_first() -> None:
     assert eras.ERAS == eras.registered_eras()
-    assert eras.registered_eras() == (eras.BASELINE_9, eras.STAGE_B_R3)  # was STAGE_B_R2
+    # was (BASELINE_9, STAGE_B_R2), before round 3's promotion
+    assert eras.registered_eras() == (eras.BASELINE_9, eras.STAGE_B_R3)
 
 
 #: An era no committed set belongs to, recorded after both committed eras.

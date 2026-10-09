@@ -10439,13 +10439,16 @@ def test_one_replay_changed_at_a_moved_columns_new_path_fails_by_name(
             shutil.move(item, destination)
 
     _commit_change(repo, _move)
-    kept = {"head_path": moved, "beside": (config,)}
-    assert recording_blob_problems(repo, sha=sha, path=_COLUMN, tree=tree, **kept) == []
+
+    def kept(at: Path) -> list[str]:
+        return recording_blob_problems(
+            at, sha=sha, path=_COLUMN, tree=tree, head_path=moved, beside=(config,)
+        )
+
+    assert kept(repo) == []
     clone = _shallow(repo, tmp_path)
     assert _run_git(clone, "cat-file", "-e", f"{sha}^{{commit}}").returncode != 0
-    assert (
-        recording_blob_problems(clone, sha=sha, path=_COLUMN, tree=tree, **kept) == []
-    )
+    assert kept(clone) == []
     # Without the lifted config the shallow reading cannot rebuild the tree.
     assert recording_blob_problems(
         clone, sha=sha, path=_COLUMN, tree=tree, head_path=moved
@@ -10454,11 +10457,9 @@ def test_one_replay_changed_at_a_moved_columns_new_path_fails_by_name(
     replay.write_bytes(replay.read_bytes() + b"\n")
     _git_write(repo, "add", "-A")
     _git_write(repo, "commit", "-q", "-m", "a replay changed at the new path")
-    assert recording_blob_problems(repo, sha=sha, path=_COLUMN, tree=tree, **kept) == [
-        f"{moved}/replay-seed-1.jsonl: a different blob at HEAD"
-    ]
+    assert kept(repo) == [f"{moved}/replay-seed-1.jsonl: a different blob at HEAD"]
     clone = _shallow(repo, tmp_path / "again")
-    assert recording_blob_problems(clone, sha=sha, path=_COLUMN, tree=tree, **kept) == [
+    assert kept(clone) == [
         f"{sha} is not in this clone, and no reading of HEAD:{moved} with only "
         f"files beside its recordings left out is the recorded tree {tree}"
     ]
@@ -10748,7 +10749,10 @@ _ROUND_HEAD_PATHS: Final[Mapping[str, tuple[str, tuple[str, ...]]]] = MappingPro
 def _round_head_path(label: str, column: Mapping[str, Any]) -> str:
     """The HEAD path of a round column's recordings."""
 
-    return _ROUND_HEAD_PATHS.get(label, (column["path"], ()))[0]
+    if label in _ROUND_HEAD_PATHS:
+        return _ROUND_HEAD_PATHS[label][0]
+    path: str = column["path"]
+    return path
 
 
 def _round_blob_problems(label: str, column: Mapping[str, Any]) -> list[str]:
