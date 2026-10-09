@@ -72,11 +72,9 @@ this module (audit audit-2026-06-11-2218 C-C-6):
   over-gate listeners per accused-impostor meeting)
   (:func:`compute_supply_gauges` / :class:`SupplyGaugesReport`).
 
-Neither joins :class:`TournamentEvalReport` yet: the committed Wave-0
-sample reports stay single-era (no regeneration without a re-record), so
-the report builder publishes both and the corrected Wave-0 baseline
-fixture (``tests/fixtures/phase10/corrected_w0_baseline.json``) is their
-committed home until the 10.9 re-record.
+Neither joins :class:`TournamentEvalReport`: the report builder computes
+both fresh from the committed report's games and prints them in its summary
+line.
 
 Phase 10 Wave 1 repair (Task 10.9.1, PR #147 F1) extends the SKIP
 partition with a DEFAULTED class in this module:
@@ -1926,11 +1924,8 @@ def _rendered_suspicion_by_target(meeting: MeetingReport) -> dict[PlayerId, floa
 # gate. ``compute_multi_signal_conversion`` makes that pipeline measurable;
 # ``compute_supply_gauges`` publishes the evidence-supply context every
 # conversion number must be read against. Neither joins
-# :class:`TournamentEvalReport` — the committed Wave-0 sample reports stay
-# single-era (no regeneration without a re-record); the report builder
-# publishes both, and the corrected Wave-0 baseline fixture
-# (``tests/fixtures/phase10/corrected_w0_baseline.json``) is their one
-# committed home until the 10.9 re-record folds them into the wrapper.
+# :class:`TournamentEvalReport`: the report builder computes both fresh from
+# the committed report's games and prints them in its summary line.
 # ---------------------------------------------------------------------------
 
 # The four §6.3 design channels an ejection's rendered pre-vote lift can
@@ -2613,58 +2608,18 @@ def _rendered_suspicion_by_target_per_voter(
 
 
 # ---------------------------------------------------------------------------
-# Task 10.16 Wave-2 metrics + gate spec (DESIGN.md §9, §11; audit
-# 2026-06-13-1816 B-B-2 pacing inversion / C-C-1 conversion / D-D-1 toolkit /
-# D-D-2 active-deflection; experiments/lab/report-deception-battery*.md). The
-# gate the 10.17 re-record is judged on.
+# Task 10.16 Wave-2 metrics (DESIGN.md §9, §11; audit 2026-06-13-1816 B-B-2
+# pacing inversion / C-C-1 conversion / D-D-1 toolkit / D-D-2
+# active-deflection; experiments/lab/report-deception-battery*.md).
 #
-# The Wave-2 re-record measures TWO adversarial changes at once (the impostor
-# toolkit AND the crew belief-spread lever) in ONE record, so the outcome win
-# split is CONFOUNDED and is a GUARDRAIL, not a signal: the gate reads
+# The Wave-2 re-record measured TWO adversarial changes at once (the impostor
+# toolkit AND the crew belief-spread lever) in ONE record, so its outcome win
+# split was CONFOUNDED and a GUARDRAIL, not a signal: its gate read
 # attribution-decomposed conversion + indistinguishability, never the split.
-# Like the gp-7 companions these ship STANDALONE off the frozen
-# TournamentEvalReport wrapper until the 10.17 re-record turns the era over;
-# the metric CODE is independent of the source tasks — it reads whatever the
-# bytes carry (do_task impostor = 0 on the committed W1 bytes, > 0 after the
-# toolkit; inform conversions = 0 on W1 bytes, > 0 after the crew lever).
+# Like the gp-7 companions these ship STANDALONE off the TournamentEvalReport
+# wrapper; the metric CODE is independent of the source tasks — it reads
+# whatever the bytes carry.
 # ---------------------------------------------------------------------------
-
-WAVE2_GATE_SPEC: Final[str] = """\
-Wave-2 (10.17) gate spec — the THREE tiers are read SEPARATELY (audit
-2026-06-13-1816; tasks/phase-10.md Stage 5). Two adversarial changes ride one
-re-record (impostor toolkit + crew belief-spread), so the outcome win split is
-confounded: it is a GUARDRAIL, never a directional signal.
-
-HARD lines (validity — any red STOPS the re-record, nothing frozen is touched
-to chase a number): game_over 50/50 on BOTH committed sets; friendly-fire 0;
-betrayal 0 (the §7.12 teammate firewall holds); byte-identical reconstruction;
-threshold_inversions 0 over every ballot (the §4.6 gate render + threshold are
-frozen — a freshly-informed MUST-vote ballot is NOT an inversion); no
-emergency-no-body fail-loud crash.
-
-Wave-2 DIRECTIONAL gates (the attribution-decomposed signal, read against the
-W1 baseline this module pins): impostor do_task > 0 and impostor wait-share
-moving toward crew levels (IndistinguishabilityReport — the D-D-1 "never-tasks"
-fingerprint the toolkit must erase, W1 baseline impostor do_task 0 / wait-share
-~0.52 vs crew ~0.10); effective_deflection UP vs the ~5-9 W1 baseline
-(EffectiveDeflectionReport — the active-deflection subcount, NOT the raw 27
-counter-accused, which is dominated by SKIP-saved survivals, audit D-D-2);
-conversion_per_meeting UP (ConversionPerMeetingReport — the pacing-inversion-
-proof KPI, since raw meeting COUNT correlates with impostor wins, audit B-B-2);
-the 10.15 single-witness inform conversions REALIZED vs the offline 37-bloc
-prediction (decompose_ejection_channels' single_witness_inform channel — 0 on
-W1 by construction, the crew-lever credit legible from the toolkit's effects);
-the anti-railroad condition holds (wrong-ejection games do not rise even as
-meetings lengthen).
-
-Balance GUARDRAIL (reported, explicitly NOT a hard gate): impostor win rate in
-a sane band. The split is a constant of the race structure with the W1
-adversarial changes confounded into one record, so a single number cannot be
-read as a Wave-2 signal — it is published with a NON-GATE label and bounds
-sanity only. An A/B that lengthens games without raising conversion_per_meeting
-REGRESSES the split (B-B-2); that is caught by the directional gates, not the
-guardrail.
-"""
 
 
 class ConversionPerMeetingReport(BaseModel):
@@ -3215,7 +3170,6 @@ __all__ = [
     "CHANNEL_PRIOR_MEETING_CARRY",
     "CHANNEL_SINGLE_WITNESS_INFORM",
     "CHANNEL_VENT_WITNESS",
-    "WAVE2_GATE_SPEC",
     "ActionRoleTally",
     "BallotTargetRedirectReport",
     "ConversionPerMeetingReport",

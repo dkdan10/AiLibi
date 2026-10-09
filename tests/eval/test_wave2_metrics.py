@@ -1,4 +1,4 @@
-"""Tests for the Task 10.16 Wave-2 metrics + gate spec (DESIGN.md §9, §11).
+"""Tests for the Task 10.16 Wave-2 metrics (DESIGN.md §9, §11).
 
 Audit anchor: audit-2026-06-13-1816-gameplay-data.md (B-B-2 pacing inversion,
 C-C-1 conversion, D-D-1 toolkit fingerprint, D-D-2 active-deflection);
@@ -40,7 +40,6 @@ from eval.action_ingest import ingest_actions_by_role, tally_actions_by_role
 from eval.meeting_quality import (
     CHANNEL_BODY_PROXIMITY,
     CHANNEL_SINGLE_WITNESS_INFORM,
-    WAVE2_GATE_SPEC,
     ActionRoleTally,
     ConversionPerMeetingReport,
     EffectiveDeflectionReport,
@@ -680,17 +679,3 @@ class TestSingleWitnessInformChannel:
         # survives the qwen3_6_27b restyle and the ballot arms.)
         result = compute_multi_signal_conversion(committed_9p2i_report.report.games)
         assert result.conversions_with_single_witness_inform == 0  # was 2
-
-
-def test_gate_spec_states_the_three_tiers_separately() -> None:
-    spec = WAVE2_GATE_SPEC
-    assert "HARD" in spec
-    assert "DIRECTIONAL" in spec
-    assert "GUARDRAIL" in spec
-    # the guardrail (win split) is explicitly NOT a hard gate
-    assert "NOT a hard gate" in spec
-    # the directional gates name the Wave-2 levers
-    assert "do_task" in spec
-    assert "effective_deflection" in spec
-    assert "conversion_per_meeting" in spec
-    assert "inform" in spec

@@ -70,6 +70,9 @@ deciding anything. [Contract](../tasks/phase-8.md).
 **Phase 10 — the conviction engine.** Repair of the flag-to-ballot-to-tally
 pipeline, plus the crew's evidence economy — what the table is actually handed
 to reason with. [Contract](../tasks/phase-10.md).
+Retired on 2026-10-09: the three corrected-baseline fixtures with their anchor
+tests, the Wave-2 gate spec and the report builder's baseline derivation; the
+fixtures' last version is at `83148aa6`.
 
 **Phase 11 — the impostor's information economy.** Vents and sabotage became
 real impostor moves rather than decoration, then were balanced against the
