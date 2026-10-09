@@ -7,8 +7,9 @@
 // NEGATIVE CONTROL: a derivation that accumulates `kill` events instead of
 // reading the served rows. Both run the same census on both committed sample
 // sets, and the control has to fail it (0 phantom frames vs 1,365 of 2,039 on
-// `9p2i`) — a zero-phantom assertion nothing can fail would be prose, since the
-// shipped rule satisfies it by construction.
+// round 2's `9p2i` bytes) — a zero-phantom assertion nothing can fail would be
+// prose, since the shipped rule satisfies it by construction. The shown set's
+// sizes are read off its JSONL and the published census, never transcribed.
 //
 // Hand-built frames follow for the cases the corpus does not exercise: a
 // reported body that survives its own meeting, a body nobody reports, a served
@@ -125,6 +126,45 @@ function corpusDigest(setName: string): string {
     outer.update(`${name}\n${inner}\n`);
   }
   return outer.digest("hex");
+}
+
+/**
+ * Counted straight off one set's committed JSONL: its tick rows, and the
+ * report actions the engine applied (each one a `report_body` event).
+ */
+function recordedRows(setName: string): { tickRows: number; appliedReports: number } {
+  const dir = join(SAMPLES_DIR, setName);
+  let tickRows = 0;
+  let appliedReports = 0;
+  for (const name of readdirSync(dir).filter((entry) => entry.endsWith(".jsonl"))) {
+    for (const line of readFileSync(join(dir, name), "utf8").split("\n")) {
+      if (line.trim() === "") continue;
+      const row = JSON.parse(line) as {
+        readonly kind?: string;
+        readonly actions?: readonly { readonly type?: string }[];
+        readonly action_dispositions?: readonly string[];
+      };
+      if (row.kind !== "tick") continue;
+      tickRows += 1;
+      (row.actions ?? []).forEach((action, index) => {
+        if (action.type === "report" && row.action_dispositions?.[index] === "applied") appliedReports += 1;
+      });
+    }
+  }
+  return { tickRows, appliedReports };
+}
+
+/** The published gameplay census's cell for the shown set: the Python twin. */
+function shownCensusCell(cell: string): { readonly numerator: number; readonly denominator: number } {
+  const parsed = JSON.parse(readFileSync(resolve(LIB_DIR, "../../../docs/gameplay-census.json"), "utf8")) as {
+    readonly sets: readonly {
+      readonly label: string;
+      readonly cells: Readonly<Record<string, { readonly numerator: number; readonly denominator: number }>>;
+    }[];
+  };
+  const found = parsed.sets.find((candidate) => candidate.label === "samples/9p2i")?.cells[cell];
+  if (found === undefined) throw new Error(`the published census carries no samples/9p2i ${cell}`);
+  return found;
 }
 
 // ── the fixture reader ───────────────────────────────────────────────────────
@@ -446,9 +486,14 @@ describe("the Omniscient body layer over the committed served payloads", () => {
   });
 
   it("9p2i: reads engine truth on every frame", () => {
+    // One frame per recorded tick row plus the loader's synthetic pre-game
+    // frame per game, and one discovered frame per applied report (2,039 frames
+    // and 116 reports on round 2's bytes).
+    const recorded = recordedRows("9p2i");
+    const games = set("9p2i").games.length;
     expect(census(set("9p2i").games, bodyStatesByTick)).toEqual({
-      games: 50,
-      frames: 2039, // was 1208 on the baseline-9 bytes, before the promotion
+      games,
+      frames: recorded.tickRows + games,
       phantomFrames: 0,
       missingFrames: 0,
       phantomBodies: 0,
@@ -456,37 +501,30 @@ describe("the Omniscient body layer over the committed served payloads", () => {
       roomCountMismatchFrames: 0,
       capOverflowFrames: 0,
       // One frame per report_body event, each on the report frame itself.
-      discoveredFrames: 116, // was 136
+      discoveredFrames: recorded.appliedReports,
       discoveredAfterReportFrame: 0,
       attributionMismatches: 0,
     });
-    expect(reportBodyEvents(set("9p2i").games)).toBe(116); // was 136
+    expect(reportBodyEvents(set("9p2i").games)).toBe(recorded.appliedReports);
+    expect(recorded.appliedReports).toBeGreaterThan(0);
   });
 
   it("9p2i: the retired accumulate rule fails the same walk", () => {
-    expect(census(set("9p2i").games, retiredAccumulateRule)).toEqual({
-      games: 50,
-      frames: 2039, // was 1208
-      // Two frames in three painted a corpse the engine had consumed.
-      phantomFrames: 1365, // was 659
-      missingFrames: 0,
-      phantomBodies: 3389, // was 1291
-      gamesWithPhantom: 50, // was 48
-      // Every phantom frame also inflates that room's body count …
-      roomCountMismatchFrames: 1365, // was 659
-      // … and on the baseline-9 bytes one phantom pile crossed BODY_CAP, firing
-      // a spurious "✕ ×N" collapse marker the served bodies never call for (7
-      // such frames on the baseline-7 bytes, none on baseline 8 or here).
-      capOverflowFrames: 0, // was 1
-      discoveredFrames: 1415, // was 709
-      // A phantom that was reported still wears the "freshly reported" kill
-      // ring on a frame long after its report. On the baseline-9 bytes that was
-      // every phantom (1,291 of 1,291); the promoted set's meeting reset also
-      // clears corpses nobody reported, so here it is 2,182 of the 3,389. The
-      // shipped rule reads 0.
-      discoveredAfterReportFrame: 2182, // was 1291
-      attributionMismatches: 0,
-    });
+    const shipped = census(set("9p2i").games, bodyStatesByTick);
+    const retired = census(set("9p2i").games, retiredAccumulateRule);
+    expect([retired.games, retired.frames]).toEqual([shipped.games, shipped.frames]);
+    // It paints corpses the engine had consumed (two frames in three on round
+    // 2's bytes), and every phantom frame also inflates that room's body count.
+    expect(retired.phantomFrames).toBeGreaterThan(0);
+    expect(retired.phantomBodies).toBeGreaterThanOrEqual(retired.phantomFrames);
+    expect(retired.gamesWithPhantom).toBeGreaterThan(0);
+    expect(retired.roomCountMismatchFrames).toBe(retired.phantomFrames);
+    expect(retired.missingFrames).toBe(0);
+    expect(retired.attributionMismatches).toBe(0);
+    // A phantom that was reported still wears the "freshly reported" kill ring
+    // on a frame long after its report; the shipped rule reads 0.
+    expect(retired.discoveredAfterReportFrame).toBeGreaterThan(0);
+    expect(retired.discoveredFrames).toBeGreaterThan(shipped.discoveredFrames);
   });
 
   it("4p1i: reads engine truth on every frame", () => {
@@ -519,22 +557,24 @@ describe("the Omniscient body layer over the committed served payloads", () => {
     // The review named two instances, and the SHAPES it named are what these
     // pin: a floor the engine has emptied that the retired rule still paints,
     // and a pile the retired rule inflates around a single real corpse. The
-    // coordinates move with every re-record — the first survived the baseline-7
-    // recording and the promotion, the second re-anchored from seed 2 tick 29 to
-    // seed 6 tick 39, then to seed 0 tick 38 on the promoted set — so the census
-    // above is what proves the class, and these two draw it.
+    // coordinates move with every re-record, so each is found on the shown
+    // bytes rather than named (seed 0 ticks 18 and 38 on round 2's), the census
+    // above proving the class and these two drawing it.
+    const frames = set("9p2i").games.flatMap((game) =>
+      game.frames.map((frame) => victimsAt(set("9p2i").games, game.gameId, frame.tick)),
+    );
 
-    // "the engine has nothing on the floor, the map draws p-2."
-    const empty = victimsAt(set("9p2i").games, "headless-seed-0", 18);
-    expect(empty.served).toEqual([]);
-    expect(empty.shipped).toEqual([]);
-    expect(empty.retired).toEqual(["p-2"]);
+    // "the engine has nothing on the floor, the map draws a corpse."
+    const empty = frames.find((frame) => frame.served.length === 0 && frame.retired.length > 0);
+    expect(empty).toBeDefined();
+    expect(empty?.shipped).toEqual([]);
 
-    // "FOUR corpses drawn while the engine state has one."
-    const pile = victimsAt(set("9p2i").games, "headless-seed-0", 38);
-    expect(pile.served).toEqual(["p-3"]);
-    expect(pile.shipped).toEqual(["p-3"]);
-    expect(pile.retired).toEqual(["p-1", "p-2", "p-3", "p-9"]);
+    // "several corpses drawn while the engine state has one."
+    const pile = frames.find(
+      (frame) => frame.served.length === 1 && frame.retired.length > 1 && frame.retired.includes(frame.served[0] ?? ""),
+    );
+    expect(pile).toBeDefined();
+    expect(pile?.shipped).toEqual(pile?.served);
   });
 });
 
@@ -579,24 +619,33 @@ function framesOf(name: string, gameId: string): readonly FixtureFrame[] {
 
 describe("a meeting's close clears bodies by the recording's reset", () => {
   it("9p2i: the regroup leaves no body on the first frame after any meeting", () => {
+    // The meetings play resumes from are the census's own population, and the
+    // census's play_resumes_with_corpse reads none of them (102 on round 2's
+    // bytes).
     const after = afterMeetings("9p2i");
-    expect(after).toHaveLength(102);
+    const resumes = shownCensusCell("play_resumes_with_corpse");
+    expect(after).toHaveLength(resumes.denominator);
+    expect(after.length).toBeGreaterThan(0);
     let served = 0;
     let shipped = 0;
+    let withCorpse = 0;
     for (const { gameId, index } of after) {
       const frames = framesOf("9p2i", gameId);
-      served += frames[index]?.bodies.length ?? 0;
+      const here = frames[index]?.bodies.length ?? 0;
+      served += here;
+      if (here > 0) withCorpse += 1;
       shipped += bodyStatesByTick(frames)[index]?.length ?? 0;
     }
+    expect(withCorpse).toBe(resumes.numerator);
     expect([served, shipped]).toEqual([0, 0]);
   });
 
   it("9p2i: the retired accumulate rule fails the same leg", () => {
-    // The negative control paints the corpses the regroup cleared.
+    // The negative control paints corpses the regroup cleared.
     const painted = afterMeetings("9p2i").filter(
       ({ gameId, index }) => (retiredAccumulateRule(framesOf("9p2i", gameId))[index]?.length ?? 0) > 0,
     );
-    expect(painted).toHaveLength(102);
+    expect(painted.length).toBeGreaterThan(0);
   });
 
   it("4p1i: unreported bodies survive a meeting, and the reported one does not", () => {

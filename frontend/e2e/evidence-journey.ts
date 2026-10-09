@@ -39,11 +39,10 @@ interface ServedSummary {
   source_url: string | null;
 }
 
-// The commits that hold each set's published bytes: the shown 9-player set's
-// landed in the promotion of candidate round 2; the 4-player replays are
-// unchanged since 9bae2b03.
-const NINE_SOURCE = /\/blob\/148fa211a5851c288eeaf1a9591197f8ba13bdcc\/replays\/samples\/9p2i\//;
-const FOUR_SOURCE = /\/blob\/9bae2b03032cede6a180c0888fde3b4e47f9a5f1\/replays\/samples\/4p1i\/$/;
+// The commit that holds each set's published bytes is typed once, in
+// tests/api/test_public_results.py; this journey asserts that every rendered
+// source link is the one the served summary carries. History: the two commit
+// literals left this file on 2026-10-09.
 
 function isPath(response: { url(): string }, suffix: string): boolean {
   const path = decodeURIComponent(new URL(response.url()).pathname);
@@ -104,7 +103,10 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
       "aria-expanded",
       "false",
     );
-    await expect(card.getByRole("link", { name: "Pinned recording source" })).toHaveAttribute("href", NINE_SOURCE);
+    await expect(card.getByRole("link", { name: "Pinned recording source" })).toHaveAttribute(
+      "href",
+      example.source_url,
+    );
     await expect(card.getByRole("link", { name: "Pinned recording source" })).toHaveAttribute(
       "href",
       new RegExp(`replay-seed-${example.game_id.replace("headless-seed-", "")}\\.jsonl$`),
@@ -112,20 +114,27 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   }
   await results.getByText("Recording provenance and reported usage").click();
   await expect(results).toContainText("Source fingerprint");
+  expect(summary.source_url).not.toBeNull();
   await expect(results.getByRole("link", { name: "Inspect this pinned source set and manifest" })).toHaveAttribute(
     "href",
-    NINE_SOURCE,
+    summary.source_url ?? "",
   );
 
   // The 4-player set publishes no case, and its set link stays where its
   // replays were recorded.
+  const fourSummaryResponse = page.waitForResponse(
+    (response) => isPath(response, "/eval/summary") && response.url().includes("4p1i"),
+  );
   await page.goto(`${origin}/?set=4p1i&view=tournament`);
+  const fourSummary = (await (await fourSummaryResponse).json()) as ServedSummary;
   await expect(results).toContainText("No source-matched editorial cases are published for this set.");
   await expect(results.getByRole("article")).toHaveCount(0);
   await results.getByText("Recording provenance and reported usage").click();
+  expect(fourSummary.source_url).not.toBeNull();
+  expect(fourSummary.source_url).not.toBe(summary.source_url);
   await expect(results.getByRole("link", { name: "Inspect this pinned source set and manifest" })).toHaveAttribute(
     "href",
-    FOUR_SOURCE,
+    fourSummary.source_url ?? "",
   );
 
   const evidence = page.getByRole("region", { name: "Selected evidence" });

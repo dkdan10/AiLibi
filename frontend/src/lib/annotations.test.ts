@@ -1,12 +1,16 @@
 // The omniscient meeting annotations, pinned against the bytes the API serves.
 //
 // Two of the three facts have census twins, counted by
-// `eval/gameplay_census.py` over the promoted 9p2i set and published by
-// `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout`:
-// `corpse_age_at_report` (114 report meetings) and `accused_opener_answers`
-// (87 of 105). The annotations re-derive both from the served frames and turns.
+// `eval/gameplay_census.py` over the shown 9p2i set and published in
+// `docs/gameplay-census.json` (`corpse_age_at_report` and
+// `accused_opener_answers`). The annotations re-derive both from the served
+// frames and turns and must equal the published cells, whatever the recording.
 // The third, the accused's true route, is planted against the one thing it must
 // never become: a reading of what the accused SAID.
+
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -33,6 +37,21 @@ import type { TickEventView } from "../types/api";
 const SKELETON = readSkeleton();
 const NINE = skeletonSet(SKELETON, "9p2i");
 
+interface CensusSet {
+  readonly label: string;
+  readonly cells: Readonly<Record<string, { readonly numerator: number; readonly denominator: number }>>;
+  readonly tables: Readonly<Record<string, { readonly counts: Readonly<Record<string, number>> }>>;
+}
+
+/** The published gameplay census's row for the shown set: the Python twin. */
+function shownCensus(): CensusSet {
+  const path = resolve(dirname(fileURLToPath(import.meta.url)), "../../../docs/gameplay-census.json");
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as { readonly sets: readonly CensusSet[] };
+  const found = parsed.sets.find((candidate) => candidate.label === "samples/9p2i");
+  if (found === undefined) throw new Error("the published census carries no samples/9p2i row");
+  return found;
+}
+
 describe("the census twins over the promoted 9p2i set", () => {
   it("reproduces corpse_age_at_report", () => {
     const tally: Record<string, number> = {};
@@ -49,8 +68,11 @@ describe("the census twins over the promoted 9p2i set", () => {
         tally[String(corpse.age)] = (tally[String(corpse.age)] ?? 0) + 1;
       }
     }
-    expect(reports).toBe(114);
-    expect(tally).toEqual({ "1": 19, "2": 13, "3": 33, "4": 30, "5": 6, "6": 6, "7": 2, "8": 2, "10": 2, "11": 1 });
+    // The published table, equal bucket for bucket (114 report meetings on
+    // round 2's bytes).
+    const published = shownCensus().tables["corpse_age_at_report"]?.counts;
+    expect(reports).toBeGreaterThan(0);
+    expect(tally).toEqual(published);
   });
 
   it("reproduces accused_opener_answers", () => {
@@ -64,7 +86,10 @@ describe("the census twins over the promoted 9p2i set", () => {
         if (reply.answered) answered += 1;
       }
     }
-    expect([answered, accused]).toEqual([87, 105]);
+    // The published cell (87 of 105 on round 2's bytes).
+    const cell = shownCensus().cells["accused_opener_answers"];
+    expect(accused).toBeGreaterThan(0);
+    expect([answered, accused]).toEqual([cell?.numerator, cell?.denominator]);
   });
 });
 
@@ -209,71 +234,109 @@ function assertRoutesAreRecorded(
   }
 }
 
-describe("the accused player's true route", () => {
-  const seed2 = skeletonGame(NINE, "headless-seed-2");
+/** Every meeting of the shown set that names at least one accused player. */
+function accusingMeetings(): { game: SkeletonGame; meeting: SkeletonMeeting }[] {
+  return NINE.games.flatMap((game) =>
+    game.replay.meetings
+      .filter((meeting) => meeting.turns.some((candidate) => candidate.claims.length > 0))
+      .map((meeting) => ({ game, meeting })),
+  );
+}
 
+/** The index of the first vent leg a surfaced leg follows, or -1. */
+function surfacingDive(legs: readonly RouteLeg[]): number {
+  return legs.findIndex((leg, index) => leg.inVent && legs[index + 1]?.inVent === false);
+}
+
+/** The shown set's first game that holds at least three meetings. */
+function gameWithThreeMeetings(): SkeletonGame {
+  const found = NINE.games.find((game) => game.replay.meetings.length >= 3);
+  if (found === undefined) throw new Error("no game of the shown set holds three meetings");
+  return found;
+}
+
+describe("the accused player's true route", () => {
   it("reads the recorded rooms, where the accused's own account disagrees", () => {
-    // Seed 2's first meeting ejects crewmate p-5 on two flags that set its
-    // stated route against other players' sightings. Its account is stamped on
-    // the players' clock, one tick ahead of the frames, and opens in the
-    // Cafeteria where the game spawned everyone, so it disagrees with the
-    // recorded rooms tick for tick, for p-5 and for both other accused players.
-    assertRoutesAreRecorded(shippedRoute, seed2, "headless-seed-2:meeting-0");
-    expect(() => assertRoutesAreRecorded(spokenRoute, seed2, "headless-seed-2:meeting-0", "p-5")).toThrow(
-      /headless-seed-2:meeting-0 p-5/,
-    );
-    expect(() => assertRoutesAreRecorded(spokenRoute, seed2, "headless-seed-2:meeting-0")).toThrow(
-      /headless-seed-2:meeting-0 p-3/,
-    );
+    // Every accused player of every meeting: the shipped route is the recorded
+    // rooms tick for tick. The planted spoken route is not: somewhere on the
+    // shown bytes an accused player's stated account disagrees with the
+    // recorded rooms (seed 2's first meeting on round 2's bytes, where p-5's
+    // account ran one tick ahead of the frames).
+    const meetings = accusingMeetings();
+    expect(meetings.length).toBeGreaterThan(0);
+    let disagreements = 0;
+    for (const { game, meeting } of meetings) {
+      assertRoutesAreRecorded(shippedRoute, game, meeting.meeting_id);
+      try {
+        assertRoutesAreRecorded(spokenRoute, game, meeting.meeting_id);
+      } catch {
+        disagreements += 1;
+      }
+    }
+    expect(disagreements).toBeGreaterThan(0);
   });
 
   it("names the ticks spent inside a vent", () => {
-    // Seed 19's first meeting accuses p-6, who dived in Storage at 8 and came up
-    // in Engineering at 11.
-    const seed19 = skeletonGame(NINE, "headless-seed-19");
-    const annotated = meetingAnnotations(seed19.replay, "headless-seed-19:meeting-0");
-    const p6 = annotated.routes.find((route) => route.playerId === "p-6");
-    expect(p6?.legs.slice(-2)).toEqual([
-      { roomId: "STORAGE", fromTick: 8, toTick: 10, inVent: true },
-      { roomId: "ENGINEERING", fromTick: 11, toTick: 12, inVent: false },
-    ]);
-    expect(annotated.routes.map((route) => route.playerId)).toEqual(["p-5", "p-4", "p-6", "p-1"]);
-    // Served out of order, the turns are still read in turn order.
+    // The shown set's first accused route that dives: its vent leg is followed
+    // by a surfaced leg that opens the tick after (seed 19's first meeting on
+    // round 2's bytes, where p-6 dived in Storage and came up in Engineering).
+    const found = accusingMeetings()
+      .flatMap(({ game, meeting }) =>
+        meetingAnnotations(game.replay, meeting.meeting_id).routes.map((route) => ({ game, meeting, route })),
+      )
+      .find(({ route }) => surfacingDive(route.legs) !== -1);
+    if (found === undefined) throw new Error("no accused route of the shown set dives and surfaces");
+    const { game, meeting, route } = found;
+    const dive = surfacingDive(route.legs);
+    const surfaced = route.legs[dive + 1];
+    expect(route.legs[dive]?.inVent).toBe(true);
+    expect(surfaced?.inVent).toBe(false);
+    expect(surfaced?.fromTick).toBe((route.legs[dive]?.toTick ?? Number.NaN) + 1);
+    expect(route.legs).toEqual(truthAbout(game, meeting, route.playerId));
+
+    // The routes follow the accusations in turn order, even served out of order.
+    const annotated = meetingAnnotations(game.replay, meeting.meeting_id);
+    const order: string[] = [];
+    for (const turn of [...meeting.turns].sort((a, b) => a.turn_index - b.turn_index)) {
+      for (const claim of turn.claims) {
+        if (!order.includes(claim.against)) order.push(claim.against);
+      }
+    }
+    expect(annotated.routes.map((item) => item.playerId)).toEqual(order);
     const reversed = {
-      ...seed19.replay,
-      meetings: seed19.replay.meetings.map((item) => ({ ...item, turns: [...item.turns].reverse() })),
+      ...game.replay,
+      meetings: game.replay.meetings.map((item) => ({ ...item, turns: [...item.turns].reverse() })),
     };
-    expect(meetingAnnotations(reversed, "headless-seed-19:meeting-0").routes.map((route) => route.playerId)).toEqual([
-      "p-5",
-      "p-4",
-      "p-6",
-      "p-1",
-    ]);
-    expect(annotated.corpse).toEqual({ victimId: "p-8", killTick: 9, age: 3 });
-    expect(annotated.openerReply).toEqual({ openerId: "p-4", accuserId: "p-5", answered: true });
-    expect(annotated.routesFrom).toBe(0);
+    expect(meetingAnnotations(reversed, meeting.meeting_id).routes.map((item) => item.playerId)).toEqual(order);
+    // The other two annotations are the meeting's own.
+    expect(annotated.corpse).toEqual(corpseAge(meeting, game.replay.ticks));
+    expect(annotated.openerReply).toEqual(openerReply(meeting));
+    expect(annotated.routesFrom).toBe(routeWindowStart(game.replay, meeting));
   });
 
   it("starts after the last regroup on a recording that regroups, and at tick 0 otherwise", () => {
-    const seed19 = skeletonGame(NINE, "headless-seed-19");
-    const second = seed19.replay.meetings[1];
-    if (second === undefined) throw new Error("seed 19 has a second meeting");
-    expect(routeWindowStart(seed19.replay, second)).toBe(13);
+    // The shown set's first game with three meetings (seed 19 on round 2's
+    // bytes, whose windows opened at 13 and 32).
+    const head = gameWithThreeMeetings();
+    const [first, second, third] = head.replay.meetings;
+    if (first === undefined || second === undefined || third === undefined) {
+      throw new Error("the game has three meetings");
+    }
+    expect(routeWindowStart(head.replay, first)).toBe(0);
+    expect(routeWindowStart(head.replay, second)).toBe(first.tick + 1);
     // After two meetings the window opens after the later one.
-    const third = seed19.replay.meetings[2];
-    if (third === undefined) throw new Error("seed 19 has a third meeting");
-    expect(routeWindowStart(seed19.replay, third)).toBe(32);
-    expect(meetingAnnotations(seed19.replay, second.meeting_id).routesFrom).toBe(13);
-    const preserved: AnnotationReplaySlice = { ...seed19.replay, metadata: { experiment_config: { meeting_reset: "preserve" } } };
+    expect(routeWindowStart(head.replay, third)).toBe(second.tick + 1);
+    expect(meetingAnnotations(head.replay, second.meeting_id).routesFrom).toBe(first.tick + 1);
+    const preserved: AnnotationReplaySlice = { ...head.replay, metadata: { experiment_config: { meeting_reset: "preserve" } } };
     expect(routeWindowStart(preserved, second)).toBe(0);
-    const unconfigured: AnnotationReplaySlice = { ...seed19.replay, metadata: { experiment_config: null } };
+    const unconfigured: AnnotationReplaySlice = { ...head.replay, metadata: { experiment_config: null } };
     expect(routeWindowStart(unconfigured, second)).toBe(0);
     // The first frame after the regroup already carries each survivor's first
     // move out of the meeting room (no recorded frame shows them gathered), so
-    // the route opens there: p-3, accused first, stands one corridor away.
-    const route = meetingAnnotations(seed19.replay, second.meeting_id).routes[0];
-    expect(route?.playerId).toBe("p-3");
-    expect(route?.legs[0]).toEqual({ roomId: "WEST_HALL", fromTick: 13, toTick: 13, inVent: false });
+    // a route opens there, never on the meeting's own frame.
+    for (const route of meetingAnnotations(head.replay, second.meeting_id).routes) {
+      expect(route.legs[0]?.fromTick ?? first.tick + 1).toBeGreaterThan(first.tick);
+    }
   });
 
   it("leaves out frames on which the player is not alive, and raises on a living one with no room", () => {

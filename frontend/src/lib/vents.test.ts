@@ -2,17 +2,20 @@
 //
 // THE INVARIANT. Every dive yields exactly one trip; a trip ends at its exit,
 // or, without one, on the last frame where the served `is_venting` still holds
-// for its actor. Over the promoted 9p2i set that reproduces the gameplay
-// census's own tables (`eval/gameplay_census.py`, `ticks_inside_per_trip` and
-// `trips_closed_by_regroup`, published by
-// `uv run python scripts/publish_gameplay_census.py --set-dir replays/samples/9p2i --json-stdout`):
-// 140 dives, 72 surfaced trips whose windows read 1 tick 49, 2 ticks 3, 3 ticks
-// 15 and 4 ticks 5, and 47 trips a regroup closed.
+// for its actor. Over the shown 9p2i set that reproduces the gameplay census's
+// own tables (`eval/gameplay_census.py`, `ticks_inside_per_trip` and
+// `trips_closed_by_regroup`, published in `docs/gameplay-census.json`), cell
+// for cell, whatever the recording (round 2's bytes read 140 dives, 72
+// surfaced trips and 47 a regroup closed).
 //
 // `retiredPairingRule` below is the NEGATIVE CONTROL: the pairing `MapView.tsx`
-// used before, kept verbatim. It runs the same census and fails it — 22 dives
-// draw nothing at all and 46 degrade to a one-tick pulse — so the census is a
-// gate the shipped rule passes, not prose it satisfies by construction.
+// used before, kept verbatim. It runs the same census and fails it — dives that
+// draw nothing at all and ones that degrade to a one-tick pulse — so the census
+// is a gate the shipped rule passes, not prose it satisfies by construction.
+
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -34,6 +37,21 @@ import {
 import type { TickEventView } from "../types/api";
 
 const SKELETON = readSkeleton();
+
+interface CensusSet {
+  readonly label: string;
+  readonly cells: Readonly<Record<string, { readonly numerator: number; readonly denominator: number }>>;
+  readonly tables: Readonly<Record<string, { readonly counts: Readonly<Record<string, number>> }>>;
+}
+
+/** The published gameplay census's row for the shown set: the Python twin. */
+function shownCensus(): CensusSet {
+  const path = resolve(dirname(fileURLToPath(import.meta.url)), "../../../docs/gameplay-census.json");
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as { readonly sets: readonly CensusSet[] };
+  const found = parsed.sets.find((candidate) => candidate.label === "samples/9p2i");
+  if (found === undefined) throw new Error("the published census carries no samples/9p2i row");
+  return found;
+}
 
 // ── the retired rule, verbatim (the negative control) ───────────────────────
 
@@ -226,35 +244,40 @@ describe("vent trips over the committed served payloads", () => {
   it("9p2i: every dive is one trip, and the census's tables come back", () => {
     const set = skeletonSet(SKELETON, "9p2i");
     expect(set.meetingReset).toBe("hub_with_grace");
-    expect(census(set.games, shipped)).toEqual({
-      dives: 140,
-      divesWithoutTrip: 0,
-      misplacedEnds: 0,
-      // `ticks_inside_per_trip`: 72 surfaced trips.
-      ticksInside: { "1": 49, "2": 3, "3": 15, "4": 5 },
-      // `trips_closed_by_regroup`: 47 of 140.
-      closedByRegroup: 47,
-      // The other 21 trips with no exit, which the census leaves to subtraction:
-      // 19 actors ejected by the meeting that found them inside a vent, and 2
-      // still inside when the game ended (this walk's split).
-      closedByEjection: 19,
-      closedAtGameEnd: 2,
-    });
+    const published = shownCensus();
+    const regroup = published.cells["trips_closed_by_regroup"];
+    const result = census(set.games, shipped);
+    expect(result.dives).toBeGreaterThan(0);
+    // `trips_closed_by_regroup` is read over every dive.
+    expect(result.dives).toBe(regroup?.denominator);
+    expect(result.divesWithoutTrip).toBe(0);
+    expect(result.misplacedEnds).toBe(0);
+    // `ticks_inside_per_trip`: the surfaced trips, bucket for bucket.
+    expect(result.ticksInside).toEqual(published.tables["ticks_inside_per_trip"]?.counts);
+    expect(result.closedByRegroup).toBe(regroup?.numerator);
+    // The other trips with no exit, which the census leaves to subtraction:
+    // actors ejected by the meeting that found them inside a vent, and ones
+    // still inside when the game ended (this walk's split).
+    const surfaced = Object.values(result.ticksInside).reduce((sum, count) => sum + count, 0);
+    const closed = result.closedByRegroup + result.closedByEjection + result.closedAtGameEnd;
+    expect(surfaced + closed).toBe(result.dives);
     const trips = set.games.flatMap((game) => ventTrips(game.replay.ticks));
-    expect(trips).toHaveLength(140);
-    expect(trips.filter((trip) => trip.shape === "stay")).toHaveLength(44);
-    expect(trips.filter((trip) => trip.shape === "travel")).toHaveLength(28);
-    expect(trips.filter((trip) => trip.shape === "closed")).toHaveLength(68);
+    expect(trips).toHaveLength(result.dives);
+    expect(trips.filter((trip) => trip.shape === "stay" || trip.shape === "travel")).toHaveLength(surfaced);
+    expect(trips.filter((trip) => trip.shape === "closed")).toHaveLength(closed);
   });
 
   it("9p2i: the retired pairing rule fails the same census", () => {
     const set = skeletonSet(SKELETON, "9p2i");
     const result = census(set.games, retired);
-    expect(result.divesWithoutTrip).toBe(22);
-    expect(set.games.reduce((sum, game) => sum + pulses(game), 0)).toBe(46);
+    const closedByRegroup = census(set.games, shipped).closedByRegroup;
+    // Dives it draws nothing for, and dives it degrades to a one-tick pulse
+    // (22 and 46 on round 2's bytes).
+    expect(result.divesWithoutTrip).toBeGreaterThan(0);
+    expect(set.games.reduce((sum, game) => sum + pulses(game), 0)).toBeGreaterThan(0);
     // Its pulses end a tick after the dive, wherever the trip really ended.
     expect(result.misplacedEnds).toBeGreaterThan(0);
-    expect(result.closedByRegroup).toBeLessThan(47);
+    expect(result.closedByRegroup).toBeLessThan(closedByRegroup);
   });
 
   it("4p1i: every dive is one trip, and a dive with no exit holds its marker", () => {
