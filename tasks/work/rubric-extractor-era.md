@@ -159,156 +159,20 @@ recording (Acceptance, the first item and the arm item).
 
 ## Acceptance
 
-  - No test is weakened. Results names each re-targeted test's old assertion and the strength it keeps.
-  - It reads `eval.recorded_settings.READABLE_SETTINGS` (`eval/recorded_settings.py:40-53`), looked up at call
-    time, as `REFEREE_READS` is (`eval/watchability.py:1604`). An immutable module constant maps each field to one
-    line of reason from the arm table. A test holds its keys equal to `READABLE_SETTINGS`, so a field another card
-    adds fails until its row lands. `route-lines-field`'s field is the known one, and its row is this card's (the arm
-    table's last row), since this card dispatches from a `main` that holds that field.
-  - Before the first advance, a seed with a recorded setting outside that list is refused through
-    `refuse_unread_settings` (`:68`). The message names the seed, the reader and the field.
-  - `refuse_experiment_settings` is deleted, together with its consumers.
-  - Mechanism: the new test module, plus a Hypothesis property over the closed config space (every field, every
-    value, every valid format). The extractor refuses exactly when that function refuses, names the same field, and
-    never advances first.
-  - Planted:
-    - a `self_report` true config, a `crew_idle_policy` patrol config and a format-2 config are each refused by
-      name;
-    - a tick row whose `experiment_config` carries a key the model does not know is refused at parse, naming it;
-    - with `READABLE_SETTINGS` narrowed by `kill_cooldown_ticks`, the extractor refuses the cooldown game with
-      `kill_cooldown_ticks=6` in the message (it joins `INSTRUMENTS`, `tests/eval/test_kill_cooldown_readers.py:579`);
-    - with `READABLE_SETTINGS` widened by a planted field, the reason-table test fails, naming the field.
-- [ ] **The re-simulation runs the recorded engine and reset.**
-  - The seeding, every advance and every applied meeting take their values from the engine-arguments helper.
-    Every applied meeting also takes the recorded `meeting_reset` and redistribution rule.
-  - On `replays/samples/9p2i` the extraction completes with every self-check OK and no invariant failure. With the
-    refusal bypassed and nothing threaded, the run records 1,885 failures (probe 1).
-  - Mechanism:
-    - the extractor joins `_RESIMULATION_MODULES` (`tests/orchestrator/test_experiment_arms.py:428`), whose `ast`
-      scan fails any engine call made without the helper's arguments;
-    - the cooldown gate and its site table (`test_kill_cooldown_readers.py:375`, `:492-516`) gain the extractor's
-      three calls, as `extractor: seeding`, `advance` and `meeting`.
-  - Planted: `_forgotten_at` at each of the three sites makes the gate name that site. The scan's own planted
-    sources stay.
-- [ ] **The chain re-walk reads the recorded rebuttal.**
-  - With `bounded_rebuttal_version` 1, the re-walk accepts one trailing reply when, and only when, it equals the
-    selector's pick. It reads that through the one home, `walk_chain` or `select_bounded_rebuttal`, never a replica.
-    Every other chain finding keeps its meaning.
-  - Mechanism: a count test on the shown set. `OPTIN` and `TERM` read 0; the rejections stay at 44 and 99.
-  - Planted:
-    - the scripted rebuttal recording (`tests/_helpers/scripted_meeting.py`, `ACCUSE_THE_OPENER`) yields no chain
-      finding;
-    - read with the version as `None`, it yields one;
-    - with the rebuttal's speaker swapped, or a second trailing reply appended, it still yields one.
-- [ ] **The contradiction re-derivation sees the regroup.**
-  - Each meeting's re-derivation receives the ticks `orchestrator.replay.derive_regroup_ticks`
-    (`orchestrator/replay.py:1498`) derives from the meetings that resumed play: the set the live manager passes.
-  - On the shown set no re-derived flag changes (67 meetings carry ticks; 78 flags). Results states this as a no-op
-    on these bytes.
-  - Planted: a constructed meeting whose alibi falls inside a regroup window mints the flag without the ticks, and
-    does not mint it with them.
-- [ ] **Prompt-derived facts classify on the era.**
-  - On the shown set every meeting call classifies to a named slot (120, 420, 271 and 691; none unclassified), and
-    every vote call parses at least one suspicion row (3,101).
-  - Mechanism: a count test on the committed set.
-  - Planted (source change): with the era's header removed from `_SUSPICION_GRAPH_HEADERS` (`:299-302`), the vote
-    count falls to 0 and the test fails; an era vote prompt whose first header is rewritten lands in the
-    unclassified slot.
-  - The route-lines row: on a scripted route-lines recording (the field on, `record_game` with the fake provider),
-    every ballot prompt that carries the routes block classifies to the vote slot and parses its suspicion rows.
-    Planted: that recording read with the route-lines row dropped from the read list is refused by name (the first
-    item); a copy of one of its ballot prompts with the vote slot's header rewritten lands in the unclassified slot
-    and fails the test.
-- [ ] **Each arm changes only what it affects.**
-  - For each readable setting, a fake recording of one seed with that setting alone off its default extracts with
-    every self-check OK.
-  - For the cooldown, the reset and the rebuttal, the same seed recorded without the setting yields facts that
-    differ in the fields the arm table names: kill and meeting ticks, post-meeting positions, chain turns.
-  - For each setting the table marks "nothing", the reason table states why, and dropping the setting from the read
-    list makes that recording refused by name.
-  - Mechanism: the new test module, on fixed seeds with the fake provider (`record_game`,
-    `tests/_helpers/scripted_meeting.py`).
-  - Planted: dropping the reset from the meeting call turns the post-meeting self-check red on the reset recording;
-    dropping the cooldown at any one site turns the tick-hash self-check red.
-- [ ] **The era's facts stay a temp file, and version 1 is never served for `stage-b-r2`.**
-  - The extractor gains `--sample-dir` (default `replays/samples/9p2i`, hardcoded today at `:180-181`). Its facts go
-    to `${TMPDIR:-/tmp}/ailibi-gameplay-facts-9p2i.json` (`:4648-4652`) and nowhere under the set. The embedded
-    R1-R7 rows (`:4626`, from `rubric_score.score`, imported at `:164`) stay a temp-file lab reading.
-  - No path writes a version-1 served file for the era. The profile card deletes `regen_for_set` and `--set-dir` and
-    holds the deletion with its own test (its item 17: `rubric_score.main` with `--set-dir` on a `tmp_path` copy of
-    the era exits non-zero and writes no `results-rubric-score.json`). This card keeps that test green and never
-    edits it.
-  - Mechanism: the profile card's deletion test, and an extraction in `tmp_path` after which the set's file listing
-    is unchanged. Planted: an extraction whose facts path is redirected into the copied set directory changes the
-    listing and fails the listing test.
-- [ ] **The era's one lab output is the geomean witness, and history is never rewritten.**
-  - `rubric_score.main` resolves the facts' `sample_dir` through the era registry (`eval.eras.committed_set`,
-    `eval/eras.py:106-123`). For `replays/samples/9p2i` it writes `experiments/lab/results-rubric-geomean.<era id>.json`,
-    stamped with the set's MANIFEST key, whatever the era. Today that is `results-rubric-geomean.stage-b-r2.json` at
-    `43b5ee45`, committed.
-  - The witness is itself the era's per-game version-1 geomean reading: each game's score, floor multiplier and r1,
-    r2, r3 and r7 sub-scores, in the shape of `results-rubric-geomean.json`. It is lab only and never served, the
-    labelled-history option of the design memo's Part 3. Beside it this card writes no other version-1 file for any
-    era: no code path writes `experiments/lab/results-rubric-score.json` or `results-rubric-geomean.json` again, both
-    stay byte-identical to `d41c9006` (`git_head` `27646d67`), and no interestingness file of the era (the served
-    file's shape) is committed. Any other directory (a baseline-9 set, a candidate round, a scratch export) gets no lab
-    file and one line naming it.
-  - Mechanism:
-    - a currency test re-runs the extraction on the committed set into `tmp_path`, and asserts that the committed
-      witness equals `geomean_validation(facts)` with the set's own stamp;
-    - a Hypothesis property of the naming over generated registries: the name always carries the set's era id and
-      is never the unkeyed name.
-  - Planted: a registry that names the set under another era id changes the name; a naming that returns the
-    unkeyed name fails; a `tmp_path` witness with one cell changed fails currency; a MANIFEST copy with another key
-    fails the stamp.
-- [ ] **The parity pin is keyed by era.** The historical pin in `test_watchability.py` becomes a table keyed by
-  era id.
-  - `stage-b-r2`: the committed witness equals `compute_game_score(..., historical_15_2=True)` over
-    `replays/samples/9p2i` for every game and every `_PARITY_KEYS` key, to 1e-6 (50 of 50 at `76270d6c`). It is
-    re-derived on every run.
-  - `baseline-9`: what D14 decides at dispatch. Either it is held to itself and to `27646d67` as today (`:130-168`,
-    assertions unchanged), or it retires with one history line. It is never re-derived.
-  - The docstring's "does not read the promoted era" goes; the bytes-gone reason stays.
-  - Planted: one cell changed in a `tmp_path` copy fails the pin, and so does a copy stamped with another key.
-- [ ] **The W0 -> W1 -> W2 rows retire (the G27 extractor half).**
-  - `_cross_era_trajectory`, its call, the facts' `cross_era_trajectory` key and the self-check's "W2 fixture
-    match" clause are deleted. The module docstring keeps one history line. The extractor reads no file under
-    `tests/fixtures/phase10/`.
-  - The three fixtures, their anchor tests, `WAVE2_GATE_SPEC` and `--baseline-out` are untouched: their retirement
-    is D14's own card (the baselines memo, Part 3.1, the G27 row).
-  - Mechanism: an `ast` scan in the new module finds no string constant in the extractor naming `phase10` or
-    `corrected_w`, and the era's facts carry no `cross_era_trajectory` key at any depth.
-  - Planted: a `tmp_path` copy of the source with the fixture read restored fails the scan, naming the line; facts
-    with the key planted fail the key check.
-- [ ] **Baseline 9 reproduces from its own bytes.** The input is a `git archive` export of `d41c9006`'s
-  `replays/samples/9p2i`.
-  - The widened extractor, given that directory as `--sample-dir`, exits 0. `interestingness(facts)` and the set's
-    three stamps equal the retired served file's four keys, and the JSON rebuilt from them is byte-identical to it.
-    `geomean_validation(facts)` equals the frozen fixture's body.
-  - The export carries the retired file at the path the scorer used to write. It is deleted right after the export,
-    and the run checks that it is gone.
-  - Mechanism: the Validation commands, quoted in Results with their exit codes; the bytes are not in the tree, so
-    no test can read them. Planted: against a copy of the retired file with one per-game score changed the
-    comparison reports the difference, and with the facts file deleted it fails; Results quotes both red runs.
-- [ ] **No sentence says the extractor refuses the era.** At the head the Validation scan (a `git grep` for the
-  phrases it names, over tracked files outside `audits/`, `tasks/`, `agent_prompts/` and `design/`, plus the
-  extractor) finds nothing. Every sentence it found on this card's base is fixed in the same pull request and named
-  in Results; on a profile-card surface only a surviving comment or copy line is touched. Planted: the scan on
-  `76270d6c` lists 17 lines in 10 files plus 1 in the extractor, the sites Evidence names; Results quotes it.
-- [ ] **The registry rows follow the bytes.** In `docs/artifacts.md`, two rows are recomputed as the last step,
-  after the final merge of `main`, with no figure carried from authoring: the `experiments/lab/`,
-  `experiments/model_probe/` row (167 files at `76270d6c`, `:118`; this card adds one, so it states one more than it
-  reads at that merge) and the `audits/` row (`:113`, exact tracked bytes; the extractor's bytes move, its file
-  count stays). Mechanism: `test_every_counted_registry_row_matches_the_index`
-  (`tests/scripts/test_verify_ml_evidence.py:2166`) and the offline `scripts/verify_ml_evidence.py`, never with
-  `--complete`. Planted: with a row left stale the test fails; Results quotes the red run.
-- [ ] **The wave lessons hold.**
-  - The neuter pass: every production line this card adds or changes is neutered alone, and its suite goes red.
-    Results lists the probes.
-  - One bounded mutation pass, over the changed spans, with exactly the eight listed classes: F drop a filter,
-    S swap a collection, N None test, K read to constant, M message argument, T drop a tuple member, B swap
-    branches, L loaded source to literal. Every survivor is killed or named equivalent.
-  - No test is weakened. Results names each re-targeted test's old assertion and the strength it keeps.
+- [x] **Closed unexecuted on 2026-10-09, as superseded; nothing was built.** The extractor still refuses the shown
+  era by name (`refuse_experiment_settings`, `audits/workflows/extract_gameplay_facts.py:184`, called at `:2152`, at
+  `225d2b77`). No read list, threading, `--sample-dir`, lab witness, registry row or test was added or changed. Its
+  W0 -> W1 -> W2 rows (`_cross_era_trajectory`, `:673`, reading `tests/fixtures/phase10/` at `:698-703`) are left to
+  the D14 retirement card, under the baselines memo's G27 row.
+  - Mechanism: at the closing commit, which lands before the D14 retirement card merges, a count-only `git grep -c`
+    for the two `def` lines in the extractor prints 2, and `git ls-files` for the era's witness file prints nothing
+    (both commands are in Results, as readings at that commit; once the retirement merges, the grep prints 1).
+    `scripts/validate_task_docs.py` (`:160-164`) accepts a `done` card only with every box checked and a non-empty
+    `## Results`.
+  - Planted: this card with one former item restored unchecked fails that validator with "done card has unchecked
+    acceptance items", and with its Results emptied fails with "done card needs ## Results with evidence".
+  - The fourteen items this card carried are in the repository history:
+    `git show 225d2b77:tasks/work/rubric-extractor-era.md`.
 
 ## Constraints
 
