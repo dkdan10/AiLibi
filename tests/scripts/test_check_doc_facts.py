@@ -24,6 +24,7 @@ from xml.etree import ElementTree
 import pytest
 
 import check_doc_facts
+from eval.process_scorecard import read_before_columns
 from eval.report_io import REPORT_FILENAME, read_report_text, write_report_text
 from meetings.evidence_profile import EXPERIMENT_ENV_NAMES, MeetingEvidenceProfile
 
@@ -2037,7 +2038,7 @@ def test_the_scorecards_before_block_and_the_front_door_name_one_era(
     # block, as it stood before round 3's promotion grew it. The scorecard would
     # then show baseline 9's entry as the set's before column while the front
     # door reads round 2's record, and the check names the disagreement.
-    blocks = check_doc_facts.read_before_columns(doc_tree)
+    blocks = read_before_columns(doc_tree)
     assert [block.era_id for block in blocks] == ["baseline-9", "stage-b-r2"]
     assert check_doc_facts.check_facts(doc_tree) == []
     monkeypatch.setattr(check_doc_facts, "read_before_columns", lambda root: blocks[:1])
