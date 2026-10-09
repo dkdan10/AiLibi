@@ -113,6 +113,26 @@ tree differs from `F`'s only in the audit, its `audits/README.md` row and the `a
 `Q` is the later `coordination:` commit adding the owner's confirmation as a dated addendum. `C` is
 `replays/candidates/stage-b-r3/9p2i`, `R1` round 1's set, `R2` `replays/samples/9p2i`, `CFG` the round's config.
 
+- [x] Review correction (round 2): the `audits/` row of `docs/artifacts.md` states the audit record's tracked bytes
+  at the head that carries it. `13370e5c` appended section 11 (2,549 bytes) and left the row at 31,571,362, so the
+  offline evidence check exited 1 and CI run 37937850895 at `13370e5c` read Project checks 2 failed; `6b014cba`
+  re-derives it to 31,573,911 / 335 files (`git ls-tree -r -l 13370e5c audits`), and `08362561` again to 31,574,099 /
+  335 files for its index edit. Proven by offline `scripts/verify_ml_evidence.py` (exit 0: OK 52, FAIL 0) and
+  `tests/scripts/test_verify_ml_evidence.py` (90 passed, among them `test_every_counted_registry_row_matches_the_index`
+  and `test_main_runs_the_cheap_legs_green_at_head`, the two red at `13370e5c`).
+- [x] Review correction (round 2): the declared-round walk compares the loaded config's own sha256 and reads each
+  declared set by its own name. Proven by
+  `tests/meetings/test_route_lines_arm.py::test_only_a_declared_round_recording_the_field_on_may_read_it_on`
+  (fourteen plants, `93ecd5f8`): a round holding other ON bytes than it declares is listed, and one declaring those
+  bytes is not; a round declaring its seeds under `4p1i` is not listed, and one declaring `9p2i` and `4p1i` with its
+  `4p1i` seed recorded OFF is. Both survivors of the review (the sha256 replaced by round 3's literal line; the set
+  name by the literal `9p2i`) now fail 2 cases each; scratch probe, 18 mutants, 13 killed, 5 equivalent.
+- [x] Review correction (round 2): the card, the audit index and the pull request body match the head. The step
+  subsection no longer claims CI green at a head whose run failed; the index row says section 11 records the step
+  (Codex 4230751225); the pull request body cites the green run at its pushed head by id and marks its draft and
+  step-not-written statements superseded by `13370e5c`. Proven by `scripts/validate_task_docs.py` and
+  `scripts/check_doc_facts.py` (exit 0 each), `copy_problems` 0 and the identifier scan 0 on the index row's prose,
+  and `gh run view` on the run the body cites (its `headSha` the pull request's head, conclusion success).
 - [x] Review correction: the route-lines card's committed-payload case asserts, at the strength it had, that every
   committed payload, every listed set and every `experiment-config.json` under `replays/` reads `route_lines_version`
   OFF, leaving out only a candidate round's declared config whose round recorded the field ON, enumerated from the
@@ -1289,4 +1309,78 @@ and the pull request stays a draft until the step is written.
 The orchestrator took the step the rule names, under decision memo 8.8: round 3 is promoted as the shown set by the
 era-keyed path, in one card with the tour's re-curation, keeping round 2's bytes as a candidate copy. The decision
 and the readings it rests on are audit section 11; the one stop (audit 7.5) was resolved by the test-only re-scope
-recorded in review round 1 above, with CI green at the head. Nothing here moves a recorded byte.
+recorded in review round 1 above, with CI green at `368109f7` (run 37932710107) and `002bb56b` (run 37935832774);
+the gate record is CI's green run at the pull request's head, cited by run id in its body (review round 2 below:
+the run at `13370e5c` itself was red on a stale `docs/artifacts.md` row). Nothing here moves a recorded byte.
+
+### Review corrections, round 2 (2026-10-09)
+
+Three lenses over `13370e5c` (the whole record, the re-scope and the orchestrator's step) returned seven blocking
+findings, three defects; Codex reviewed the same commit with four comments. The orchestrator's round-2 dispatch
+assigns each repair, including two outside a fix round's audit text, card and pull request body: `docs/artifacts.md`,
+whose two rows this card re-derives as the file's last writer in the round, and the route-lines card's test file, as
+it assigned `368109f7`. No recorded byte, no production code and no text of section 11 moved.
+
+1. *The `audits/` row of `docs/artifacts.md` is stale* (the correctness, integrity and documentation lenses; Codex
+   4230751203). `13370e5c` appended section 11 to the audit (138,669 bytes at `002bb56b`, 141,218 at `13370e5c`)
+   and left the row at 31,571,362, the `32b96529` value; offline `verify_ml_evidence.py` exited 1 (the in-tree family
+   inventory) and CI run 37937850895 at `13370e5c` read Project checks 2 failed
+   (`test_main_runs_the_cheap_legs_green_at_head`, `test_every_counted_registry_row_matches_the_index`), 10,860 passed.
+   `6b014cba` (`docs:`) re-derives the row from `git ls-tree -r -l 13370e5c audits`: 31,573,911 tracked bytes / 335
+   files; `08362561` re-derives it again for its index edit (finding 3): 31,574,099 / 335, the sum of
+   `git ls-files audits` sizes at the head. Offline `uv run python scripts/verify_ml_evidence.py` (never
+   `--complete`): exit 0 at both, 64 checks, OK 52, FAIL 0, ABSENT 7, INFO 5; `uv run pytest
+   tests/scripts/test_verify_ml_evidence.py -n 6`: 90 passed.
+2. *Two survivors of the class a loaded source read replaced by its literal* (the correctness and integrity lenses).
+   In `_declared_configs_recording_the_field_on`, the sha256 of the loaded config bytes replaced by round 3's literal
+   line and the declared set name replaced by the literal `9p2i` each survived every plant, since every plant held
+   round 3's 342 bytes and declared only `9p2i`; memo 8.7 item 2 keeps that class blocking. `93ecd5f8` (`test:`,
+   test-only) adds four plants to the ten: "holds on bytes it does not declare" (the round's config holds other ON
+   bytes, the field's key first, while its declaration names round 3's bytes: the config is listed); "declares the
+   other on bytes it holds" (nothing listed); "declares another set" (the round declares `4p1i seeds 0-1`, recorded
+   ON under `4p1i`: nothing listed); "a second set recorded off" (`9p2i seeds 0-1` and `4p1i seeds 0-0`, the `4p1i`
+   seed recorded OFF: the config is listed). The helper, the committed case and every other test are unchanged.
+   *Mutation probe* (scratch, 18 mutants over the helper and the listing it feeds, run by
+   `pytest tests/meetings/test_route_lines_arm.py -k "declared_round or walk_refuses or every_committed_payload"`,
+   the file restored after): 13 killed, both survivors among them (2 failed each), and the walk narrowed to the
+   first declared set (killed by the second-set plant). Five survive, each equivalent: the file name in the compared
+   line made the literal `experiment-config.json` (the helper reads only that name); `== value` made `is not None`
+   and the read value made the literal 1 (the field validates only to 1 or None,
+   `test_a_value_other_than_one_or_none_is_refused`, and an OFF file is never listed whether or not it is left out);
+   the `value is None` skip dropped (the same reason); `blocks[0]` made `blocks[-1]` (exactly one block is required
+   on the line before).
+3. *The card, the gate record and the pull request body did not match the head* (the integrity and documentation
+   lenses; Codex 4230751225 on the audit index). The step subsection said the stop was resolved "with CI green at
+   the head" while the run at `13370e5c` failed; the pull request body cited run 37935832774 (head `002bb56b`) as the
+   head's run and still said the step was not written and the pull request stayed a draft; the index row said the
+   audit gives no verdict and that the step is taken, with section 11 already written. The step subsection now names
+   the green runs at `368109f7` and `002bb56b` and leaves the head's run to the pull request body; `08362561` makes
+   the index row say its readings give no verdict and that its dated section 11 records the step (round 3 to be
+   promoted by a later card, which the orchestrator merges; the shown set stays `replays/samples/9p2i` until then),
+   with `copy_problems` 0 and the identifier scan 0 on its prose; the pull request body cites the green run at its
+   pushed head by id and marks its draft and step-not-written statements superseded by `13370e5c`.
+
+*Codex comments refuted, not edited.* 4230751212 (the MANIFEST's `git_sha` orphaned if the record lands squashed):
+the comment reviewed a squashed commit (`7471688`, whose one parent is `9775c9d6`); this record is delivered by merge
+commit or fast-forward, never a squash (`AGENTS.md` Delivery, this card's Constraints), a procedure the merger
+follows, since the repository's settings allow a squash; `git merge-base --is-ancestor 641b4254 HEAD` exits 0, so a
+merge keeps P and every checkpoint on `main`. 4230751233 (the card's `Status: ready`): the Status line and
+`tasks/README.md`'s inventory sentence are the orchestrator's on `main` (`AGENTS.md`, this card's Constraints), so
+they are not edited here; dispatch reads `tasks/README.md`, whose active ownership the orchestrator keeps.
+
+*Superseded statements, kept as dated history.* Phase 2's "The stop (open)" paragraph, its Limitations' "The CI gate
+at the head is red until the stop is resolved", its Decision 8's "the stop keeps the card from being done", and
+round 1's "The step (ruling 2) is not written here" with its "the pull request stays a draft until the step is
+written": the stop was resolved by `368109f7`, the step was written by `13370e5c` (audit section 11), and the pull
+request is ready. Audit 7.5 and the menu's last bullet are history of the same kind; section 11 records the
+resolution, so the audit file does not move.
+
+*Gates at this section's commit* (bare shell, `env | grep -c '^AILIBI_'` 0, count-only): the route-lines arm, field
+and instrument suites, `tests/scripts/test_candidate_sets.py`, `tests/eval/test_gameplay_census.py`,
+`tests/scripts/test_verify_ml_evidence.py`, `tests/scripts/test_check_doc_facts.py` and the arms and config suites,
+1,442 passed, 0 failed; the golden `-k "retired_guard or stage-b-r3"`, 12 passed; `check_doc_facts.py`,
+`validate_task_docs.py` and offline `verify_ml_evidence.py`, exit 0 each; the frozen pathspec over `e4fc6cbf..HEAD`
+and `e4fc6cbf..origin/main`, 0 commits; the nothing-moves diff over `e4fc6cbf..HEAD`, empty; `13370e5c..HEAD`
+touches only `docs/artifacts.md`, `audits/README.md`, `tests/meetings/test_route_lines_arm.py` and this card. The
+house gate (memo 8.7 item 1) is CI's green run at the pull request's head, cited by run id in its body; this card
+cannot name the run of the commit that carries it.
