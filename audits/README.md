@@ -404,8 +404,9 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   the first round and this one, never pooled. It gives no verdict and adopts
   nothing; the step its balance rule names, and any adoption, are the owner's.
   Its dated section 9 records the owner's promotion of the round on 2026-10-02:
-  its bytes are now `replays/samples/9p2i`, the shown 9-player set, in its own
-  era, with the reporter flag stated and the ladder tip still at baseline 9.
+  its bytes were `replays/samples/9p2i`, the shown 9-player set, in its own era,
+  with the reporter flag stated and the ladder tip still at baseline 9, until
+  round 3's promotion kept them as `replays/candidates/stage-b-r2`.
 - [audit-2026-10-09-stage-b-r3.md](audit-2026-10-09-stage-b-r3.md) —
   candidate round 3: the same 50 seeds recorded once more on the shown set's
   rules with one more switch, which gives each voter a plain line about the
@@ -416,10 +417,10 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   the round in three columns, the first round, the shown set and this one,
   never pooled. Its readings give no verdict and it adopts nothing. Its dated
   section 11 records the step its rule names, taken by the orchestrator on the
-  owner's criteria on 2026-10-09: round 3 is to be promoted as the shown set by
-  a later card, which the orchestrator merges under the owner's delegation;
-  until that card merges, the shown set stays `replays/samples/9p2i`, round 2's
-  bytes.
+  owner's criteria on 2026-10-09, and its dated section 12 the promotion: its
+  bytes are now `replays/samples/9p2i`, the shown 9-player set, in its own era,
+  round 2's bytes are kept as `replays/candidates/stage-b-r2`, and the ladder
+  tip stays at baseline 9.
 
 ## Cleanup measurements
 
