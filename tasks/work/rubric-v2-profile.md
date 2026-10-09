@@ -1334,4 +1334,11 @@ command on its own and logged its exit code directly).
 - The bundle was not rebuilt: this round changes no viewer, recording, featured-list or served byte, so the diff
   round 2 measured in one checkout at `e59047ca` is the diff at this head.
 
-**The gate, round 3.** Recorded by the commit after this one, which changes only this card.
+**The gate, round 3.** `bash scripts/check.sh` ran once, whole, at the pushed head `66160947` in a clean
+full-history worktree with `frontend/node_modules` installed, the exit code read directly from the run: exit 0. Its
+legs: `ruff check` all passed; `ruff format --check` 567 files already formatted; `lint-imports` 5 contracts kept, 0
+broken; task docs validated (390 phase tasks, 390 prompts, 102 work cards); 390 prompts in sync; strict `mypy` no
+issues in 538 source files; `pytest` 10,863 passed, 20 skipped, 3 xfailed in 461.9 s; frontend lint, types, 27 test
+files with 811 tests passed, and the build. This paragraph is the only change of the commit that carries it; the
+orchestrator ran the gate and wrote the record after the round-3 worker was stopped between its Results commit and
+this one. CI at `66160947` succeeded on all three jobs.
