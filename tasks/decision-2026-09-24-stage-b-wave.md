@@ -1621,6 +1621,11 @@ otherwise: no wrong-but-believable ejection is featured on the strip (D7, the cu
 with the process rows with the two role-correct figures kept below as the honest "not demonstrated" line (D8, the
 baselines memo's recommendation).
 
+**Closure (2026-10-09).** `rubric-extractor-era` closes unexecuted as superseded by this ruling: its widening is not
+dispatched, and its W0, W1 and W2 rows go with G27 into the retirement card; the closing commit lands before that
+card merges, and the card's Results give the basis. `retire-temporal-evidence-v1` stays `ready` and blocked: whether
+it waits or closes is the owner's D15 word, which neither 8.5 nor this section gives.
+
 ## Appendix: reproduction
 
 The scratch scripts named here are session aids and are not committed; the load-bearing counts are

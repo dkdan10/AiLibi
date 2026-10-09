@@ -1,8 +1,16 @@
-# Widening the gameplay-facts extractor to a declared era, and retiring its Phase-10 rows
+# Closed unexecuted: the gameplay-facts extractor was not widened to a declared era
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
+
+CLOSED UNEXECUTED on 2026-10-09, as superseded. That day the owner ruled, verbatim: "Merge both when verified and
+retire the memo's D14 list" (decision memo 8.9). The ruling retires the list, G27 among it, and does not dispatch this
+card's optional widening, which its Constraints left to the owner's word under D14. Its other job, the W0 -> W1 -> W2
+rows, is on the retired list: the baselines memo's G27 row (Part 3.1) deletes the three Phase-10 fixtures and first
+replaces the extractor's reading of them with one history line, and 8.9 lands the whole list as one retirement card.
+Nothing below was built. The rest of this card is the contract as it stood at `225d2b77`, kept unchanged as the
+record of what was proposed; the Results say what closed and what stays.
 
 On 2026-10-06 the owner ruled on the shown set's rubric, verbatim: "Profile as recommended, decisive, and ship the
 shelf". Rubric version 2 is the role-blind game-shape profile of the design memo
@@ -151,7 +159,7 @@ recording (Acceptance, the first item and the arm item).
 
 ## Acceptance
 
-- [ ] **The extractor names what it reads and refuses the rest by name.**
+  - No test is weakened. Results names each re-targeted test's old assertion and the strength it keeps.
   - It reads `eval.recorded_settings.READABLE_SETTINGS` (`eval/recorded_settings.py:40-53`), looked up at call
     time, as `REFEREE_READS` is (`eval/watchability.py:1604`). An immutable module constant maps each field to one
     line of reason from the arm table. A test holds its keys equal to `READABLE_SETTINGS`, so a field another card
@@ -305,12 +313,13 @@ recording (Acceptance, the first item and the arm item).
 ## Constraints
 
 **Status and dispatch.** The validator accepts three statuses, `ready`, `active` and `done`
-(`scripts/validate_task_docs.py:45`, `_CARD_STATUSES`). `active` would say work began and `done` that it finished,
-so `ready` is the honest one. Here it means the contract is complete, not that dispatch is authorized. **This card
-dispatches only on the owner's word under D14** (Part 4, D14, the G27 item, of the baselines memo,
-`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/baselines-2026-10-03/baselines-memo.md`).
-If the owner declines, it closes as superseded with one history line, and D14's G27 card deletes
-`_cross_era_trajectory` itself.
+(`scripts/validate_task_docs.py:45`, `_CARD_STATUSES`). Until 2026-10-09 this card was `ready`, meaning the contract
+was complete, not that dispatch was authorized: it was to dispatch only on the owner's word under D14 (Part 4, D14,
+the G27 item, of the baselines memo,
+`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/baselines-2026-10-03/baselines-memo.md`),
+and otherwise to close as superseded with one history line, D14's G27 card deleting `_cross_era_trajectory` itself.
+The word was "retire the memo's D14 list" (decision memo 8.9), so it closed that way on 2026-10-09: `done`, with a
+title and Results that say it closed unexecuted, the form the house used for `held-out-prefix-freeze-6` (`034cad1d`).
 
 **Order.**
 - It dispatches from a `main` that holds the merge of `rubric-v2-profile`. That card deletes `regen_for_set` and
@@ -461,4 +470,63 @@ Run `check.sh` to the end rather than stopping at the first failure, because `se
 
 ## Results
 
-Not started.
+### Closed unexecuted, 2026-10-09
+
+**The ruling.** On 2026-10-09 the owner ruled, verbatim: "Merge both when verified and retire the memo's D14 list"
+(`tasks/decision-2026-09-24-stage-b-wave.md:1601-1622`, section 8.9, at `335cbdc9`). Section 8.9 reads the list as
+the baselines memo's Part 4 D14, with D14-T1 to T3, and the RETIRE rows of its Part 3.1, and lands the retirement as
+one card whose merge waits for round 3's freeze to lift; its amendment of the same day, verbatim "Keep the
+comparison records", takes only the round-1 item off the list. This card's Constraints left its dispatch to the
+owner's word under D14 and named the other branch: close as superseded, with D14's G27 card deleting
+`_cross_era_trajectory` itself. The word retires and does not widen, so the card closes on that branch, and nothing
+in it ran. The closure lands before the retirement card merges, so this card is closed while that card deletes the
+rows.
+
+**What supersedes each of its three reasons.**
+- The W fixtures. The baselines memo's row "RETIRE, after D6 and D14" (G27, Part 3.1) deletes the three
+  `corrected_w*_baseline.json` files with their anchor tests, `WAVE2_GATE_SPEC` and `--baseline-out`, and first
+  replaces the extractor's W0 -> W1 -> W2 rows with their one-line history. The profile card, the D6 card, left
+  them, so at `225d2b77` they stand at `audits/workflows/extract_gameplay_facts.py:673`, `:698-703`, `:3520`,
+  `:3827` and `:4548`. They are the D14 retirement card's: the extractor's reading of the fixtures retires with
+  the fixtures.
+- The facts path. Since the profile card (PR #504) rewired the refresh script's rubric step to its own publisher,
+  the refresh script runs no extractor: `git grep -c extract_gameplay_facts -- scripts/refresh_samples.sh` prints
+  nothing at `225d2b77`. The dated audit workflows still start from the extractor (Limitations).
+- The referee's historical mode. The era-keyed parity row was option (a) in Evidence; this closure is option (b),
+  which never builds it. The baseline-9 pin (`tests/eval/test_watchability.py:131`, held to itself) stays as it is
+  unless the D14 retirement card's list retires it; this closure does not decide that.
+
+**What did not move.** No line of the extractor, the lab scorer, its report, a test, `docs/artifacts.md` or any
+recording moved, and no lab file was written. The sentences this card would have fixed stay true, because the
+extractor still refuses the era: the refusal's own tests and the pin's docstring ("does not read the promoted era",
+`tests/eval/test_watchability.py:139-140`). The profile card's open point 4 (`tasks/work/rubric-v2-profile.md:492`)
+left this card's fate to the owner's D14 word; section 8.9 and its dated closure line answer it, and that done card
+is not edited.
+
+**Delivery states.** Implemented, verified and independently reviewed: not applicable, as no implementation exists.
+Merged: the closure is a `docs:` commit on `main`, the AGENTS.md route for contract documents, checked by the
+documentation lens alone (decision memo 8.7, item 4). Adopted: not applicable.
+
+**Verification.** At the closing commit, which precedes the D14 retirement card's merge, each command below gives
+the output beside it. These are readings at that commit, not standing claims: once the retirement merges,
+`_cross_era_trajectory` and the three `tests/fixtures/phase10/corrected_w*_baseline.json` files are gone, the grep
+prints `audits/workflows/extract_gameplay_facts.py:1`, `git ls-files tests/fixtures/phase10` no longer lists the three
+files, and that card's Results name every path it deleted.
+
+```sh
+uv run python scripts/validate_task_docs.py      # passes; tasks/README.md carries the derived inventory sentence
+uv run python scripts/check_doc_facts.py         # passes
+git grep -c -E 'def (refuse_experiment_settings|_cross_era_trajectory)\(' -- audits/workflows/extract_gameplay_facts.py
+                                                 # audits/workflows/extract_gameplay_facts.py:2
+git ls-files -- experiments/lab/results-rubric-geomean.stage-b-r2.json   # prints nothing
+```
+
+Planted, the validator fails on this card with one former item restored unchecked, and again with this section
+emptied, printing the two messages Acceptance quotes.
+
+**Limitations.** The audit workflows that start from the extractor
+(`audits/workflows/gameplay-data-audit-v2.workflow.js:603`) still cannot point it at the shown era; an audit of the
+era starts from the census carrier (`eval/gameplay_census.py`), which reads it, or from a new card. If the D14
+retirement card deleted the fixtures without the extractor's rows, the rows would read each missing file as
+`{"present": False}` (`:702-703`), the silent degradation Evidence names, so the extractor half of the G27 row has
+to land with the fixtures, in the same card.
