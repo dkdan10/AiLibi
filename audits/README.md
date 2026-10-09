@@ -415,7 +415,8 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   against the owner's ceilings, the gates and the operating events, and reads
   the round in three columns, the first round, the shown set and this one,
   never pooled. It gives no verdict and adopts nothing; the step its rule names
-  is taken on the owner's criteria, and any promotion is the owner's merge.
+  is taken by the orchestrator on the owner's criteria, and a promotion is
+  merged by the orchestrator under the owner's delegation.
 
 ## Cleanup measurements
 

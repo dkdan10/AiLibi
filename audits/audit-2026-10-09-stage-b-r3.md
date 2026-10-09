@@ -1358,6 +1358,15 @@ round 1's directory stays holds under 8.9, and 8.9's note on round 2's bytes
 is a follow-up for a promotion card, beside 1.12's list, not a change to the
 table, the bar, the step rule or the config.
 
+Memo 8.9 also delegates the merge: the promotion card's pull request, if the
+orchestrator takes the step (8.8), is merged by the orchestrator once its
+reviews pass, publishing through `.github/workflows/pages.yml` under the
+owner's delegation. Where section 2 quotes memo 8.8 ("the merge still the
+owner's because it publishes"), a promotion's merge is now the
+orchestrator's under 8.9; section 2 stays as quoted, since it records the
+words of that date, and this paragraph records the later ruling. (This
+paragraph was added with the recording phase's delivery, after section 2.)
+
 ### 3.8 What the recording phase runs first
 
 Before the probe, in the recording phase the orchestrator dispatches after
@@ -1368,3 +1377,721 @@ config and the tactical lab rows against
 `audits/tactical-gameplay/stage-b-r1-frozen-head.json`; a fresh recording
 checkout at P with its own dry run; the key's programmatic copy and the
 count-only key scan with each planted pattern; then the probe and its gates.
+
+## 4. Before the probe: the rehearsals, the dry run, the pause and the key (2026-10-09)
+
+The recording phase ran in three checkouts, as 1.4 sets them: a recording
+worktree detached at P (`641b4254`) outside the repository's working tree,
+with `uv sync --frozen`, no `.env` and an untracked copy of the declared file
+at `replays/candidates/stage-b-r3/experiment-config.json`, which ran only the
+recorder; a verification worktree detached at `F` (`e4fc6cbf`), with no copy
+of the declared file, for the rehearsals and the planted suites; and this
+branch's worktree for delivery, which received each checkpoint's bytes and
+ran every gate in a bare shell (`env | grep -c '^AILIBI_'` printed 0 before
+each). No provider was called before the probe. Every census and scan below
+is count-only; no prompt, transcript text or seed-band prefix was printed.
+
+### 4.1 The fake dress rehearsal, at `F`
+
+Seeds 0-49 on the declared file, with `AILIBI_LLM_PROVIDER=fake`, into a
+scratch directory outside the repository (four workers, `env -i` with only
+the fake provider, the prompt set, the roster and the scratch targets exported): exit 0, 50 of 50 seeds in
+19 s, `$0.0000`, 132 meetings, the report rebuilt, every MANIFEST row naming
+`e4fc6cbf`. The same rehearsal on round 2's declared file: exit 0, 50 of 50,
+19 s, `$0.0000`. Each instrument then exited 0 on the declared file's set:
+
+| instrument | result |
+|---|---|
+| `validity_gate.py <dir> --require-zero-cost --expected-prompt-versions <the four pairs> --expected-experiment-config <declared file> --expected-seeds 0-49 --require-one-recording-sha` | exit 0; all ten checks PASS |
+| `bash scripts/verify_samples.sh <dir>` | exit 0; "All 50 samples verified clean." |
+| the golden's directory walk (`walk_directory`, a count-only runner) | exit 0; 50 seeds, 132 meetings, 1,652 prompts, 0 not reproduced, 0 miscounted meetings |
+| `publish_gameplay_census.py --set-dir <dir> --json-stdout` | exit 0; the 20 Conf. cells `readings.py` names read 0; the cooldown cell 0/591 with writes at all three writers (round start 100, after a kill 227, at a regroup 264); the route cells in scope with `meetings_with_a_route_line` 0/132 and `ballots_carrying_route_lines` 0/826: a fake turn states no place, so no block is served |
+| `publish_process_scorecard.py --set-dir <dir> --json-stdout` | exit 0 |
+| `measure_baseline.py <dir> --honesty --json` | exit 0; no raise |
+| `scan_recording_packets.py <dir>` | exit 0 |
+| both route instruments with an `r3` column, on a throwaway commit of a scratch clone holding the fake set and the declared file at the round's paths (never pushed; the clone had no remote) | `route_check_replay` exit 0, r3 M 0; `route_lines_replay` exit 0, r3 in served mode with 0 ballots carrying a block and 0 lines served |
+
+The fake tally reads `1652 6409973 94990 0.0` on the declared file and on
+round 2's file alike, and the two sets' 2,433 replay rows are equal once the
+config key and the `vote_ballot` stamp suffix are removed: the field is inert
+where no place is stated, the inertness the field card proved. The route lines'
+added input for planning stays the field card's projection on round-2 bytes
+(1.5: 331,015 added input tokens, 9,518,895 in all), gating nothing.
+
+`readings.py --after` was not run on the fake set (its presence check is for
+the hosted round). One departure from the Validation's literal command:
+`route_lines_replay` refuses an `r1` or `r2` column at any commit other than
+the one the committed route-check JSON pins ("the route-check replay pins
+other bytes for it"), so its `r1` and `r2` columns ran at that pinned commit,
+`5877adb4`, whose set bytes are the same; the `route_check_replay` columns ran
+at `F` as written.
+
+**Proof:** the declared file's fake set gated against round 2's declared file
+exits 1, failing `cost_and_provenance_exact` alone, with 50 lines naming the
+recorded `route_lines_version` round 2's file lacks; round 2's fake set against
+its own file exits 0.
+
+### 4.2 The scripted rehearsal and the lab, at `F`
+
+**The field is served.** The route-lines card's scripted game
+(`tests/_helpers/scripted_routes.py`: its seed, placements and ejection),
+recorded through `record_game` from the declared file as the declared file's
+own loader reads it (`scripts/_declared_experiment.py`), into scratch:
+
+| check | result |
+|---|---|
+| the recording | 2 meetings; the recorded config `a788b9eb…6d57d` |
+| `verify_samples.sh <dir>` | "All 1 samples verified clean." |
+| `validity_gate.py <dir> --require-zero-cost --expected-prompt-versions <the four pairs> --expected-experiment-config <declared file> --expected-seeds 0 --require-one-recording-sha` | exit 0; ten checks PASS |
+| the golden's directory walk | 2 meetings, 26 prompts, 0 not reproduced, 0 miscounted meetings |
+| census `--set-dir` | exit 0; every Conf. cell 0, `route_lines_false_to_the_map` 0/15 and `route_lines_off_the_table` 0/15; presence `meetings_with_a_route_line` 2/2, `ballots_carrying_route_lines` 12/13; lines per meeting 1 line 1, 2 lines 1; steps "walking fits" 2, "regroup between" 1; the cooldown cell written at all three writers (2, 4, 4) |
+| scorecard, honesty and the packet scan | exit 0 each |
+
+**Proof:** the golden's walk over the same game with the recorded evidence
+profile dropped (the module's `profile_from_config` replaced by an empty
+`MeetingEvidenceProfile`) leaves 13 of 26 prompts not reproduced and 2 meetings
+miscounted: the ballots render without their route block, so the recorded
+calls go unconsumed.
+
+**The cases at `F`.** In the verification worktree (no declared copy there):
+
+```
+.venv/bin/pytest -q -n 6 tests/meetings/test_route_lines_arm.py tests/meetings/test_route_lines.py \
+  tests/experiments/test_route_lines_replay.py tests/_helpers/test_scripted_meeting.py \
+  tests/meetings/test_ballot_arms.py tests/eval/test_recorded_arm_readers.py
+```
+
+457 passed, exit 0: the field card's planted cases and rehearsals and round
+2's scripted and ballot-arm cases. By name, among them:
+`test_the_fake_rehearsal_is_inert`,
+`test_the_scripted_rehearsal_serves_both_readings_and_no_step_for_the_left_out_change`,
+`test_the_scripted_on_game_walked_without_the_field_fails_at_every_block` and
+`test_the_manager_passing_no_lines_fails_the_scripted_on_golden`. The golden's
+scripted cases, `-k "scripted or dropping or kill_row_gate or retired_guard_pins"`:
+4 passed (`test_the_scripted_rebuttal_game_re_renders_byte_equal`, whose
+perturbed half drops the recorded profile,
+`test_dropping_the_recorded_reset_fails_the_meeting_post_hash`,
+`test_the_kill_row_gate_forced_on_fails_the_golden_at_the_kill_holders` and
+`test_the_retired_guard_pins_are_keyed_by_the_path_under_replays`).
+
+**The lab.** The ten round-1 arms on `--split development`, written to
+scratch:
+
+```
+.venv/bin/python -m experiments.tactical_gameplay --split development --arms baseline vent_risk \
+  vent_physical vent_look_and_wait vent_own_fresh_kill stage_b_full stage_b_full_minus_look_and_wait \
+  stage_b_full_minus_own_fresh_kill stage_b_full_minus_physical stage_b_full_minus_hub_with_grace \
+  --output <scratch>/lab-F.json
+```
+
+Exit 0 (36 s). Against `audits/tactical-gameplay/stage-b-r1-frozen-head.json`,
+rows matched by (arm, roster, seed) on the frozen file's own keys: 10 arms,
+160 rows, 14 top-level keys per row, `counts` compared on the frozen row's
+count keys, 13,622 fields compared, 0 differing. **Proof:** a scratch copy with
+one counter edited (`stage_b_full`, 9p2i seed 1000, `applied:IMPOSTOR:kill` 5
+to 6) prints that one field and exits 1. The field touches no tactical code.
+The field card's lab rows reproduce by its own command:
+`route_lines_replay --check` and `route_check_replay --check` at `F`, each
+"reproduced".
+
+### 4.3 The dry run, the pause and the key
+
+**The dry run**, in the recording checkout at P (`641b4254`), under `env -i`
+with only `HOME`, `PATH`, `TERM` and the recording shell's exports (1.7):
+exit 0, echoing `Experiment config: replays/candidates/stage-b-r3/experiment-config.json
+(sha256 a788b9eb…6d57d)`, the ten settings (`meeting_reset='hub_with_grace'`
+to `route_lines_version=1`), `Experiment switch exports: none`, provider
+featherless, model `Qwen/Qwen3.6-27B`, prompt set `qwen3_6_27b`, the bare
+slate, 2 workers and 8 attempts; `git status --porcelain
+--untracked-files=no` read 0 lines before and after. **Proof:** the same dry
+run with a stray `AILIBI_BOUNDED_REBUTTAL=1` exits 1: "Refused: the
+environment exports AILIBI_BOUNDED_REBUTTAL. ... Nothing was staged."
+
+**The pause.** The leg runner checks the pause file
+(`.../scratchpad/stage-b-record-r3/PAUSE`, outside the repository) before
+every leg, refuses a seed already on disk, checks the recording checkout's
+head is P with no tracked change and checks the declared copy's sha256.
+**Proof:** with a planted pause file and the recorder replaced by `true`, the
+runner exits 3, starts nothing and logs "PAUSE file present before leg
+pause-proof-batch-2-6 (seeds 2,3,4,5,6): no leg started"; with the file
+removed it runs `true` and exits 0. The pause file did not exist at any later
+leg.
+
+**The key.** `FEATHERLESS_API_KEY` lives only in the main checkout's untracked
+`.env`. Its one line was copied by a `grep` whose output went straight to a
+mode-0600 file in a mode-0700 directory outside every checkout, never printed:
+a count-only `grep -c` found 1 matching line in the source, and the copy holds
+1 line with a non-empty value. Every live leg ran `uv run --env-file <that
+file> bash scripts/refresh_samples.sh ...`; the recorder's run logs, which
+carry the key's first eight characters, stayed outside the repository. The
+scan (`keyscan.py`, count-only, gzip decompressed) counts seven patterns over
+every file changed since `F` (committed, staged or untracked): the exact value,
+its first eight characters, and five generic shapes (a key assignment, a bearer
+token, two secret-key prefixes and an API-key field). **Proof:** one plant per
+pattern, written inside the key's mode-0700 directory and scanned alone, fires
+its own pattern and exits 1 (the gzip-compressed exact-value plant also fires
+the prefix and one generic shape); the plants were deleted (0 left).
+
+## 5. The probe (2026-10-09)
+
+### 5.1 Seeds 0-1
+
+The sitting's 18 h window opened with the probe's first seed at
+2026-10-09T07:59:44Z, after Q (committed 2026-10-09T02:43:47-04:00, that is
+06:43:47Z); it closes at 2026-10-10T01:59:44Z. Seeds 0-1 recorded as one leg
+on the leg's two workers in the recording checkout at P:
+
+```
+<the 1.7 exports> uv run --env-file <key file> bash scripts/refresh_samples.sh \
+  --seeds 0,1 --expect-levers "" --experiment-config replays/candidates/stage-b-r3/experiment-config.json
+```
+
+It exited 0 at 08:10:17Z: "Refresh complete in 10m31s" (631 s), seed 0 in
+630 s and seed 1 in 209 s, `$0.0000`, no retry, no `WARN` and no `ERROR` line.
+Leg: 63 calls, 419,109 input, 18,430 output.
+
+### 5.2 The probe's gates
+
+In the delivery checkout on its copy of seeds 0-1, bare shell, the declared
+copy re-checked (`a788b9eb…6d57d`):
+
+| gate | result |
+|---|---|
+| `validity_gate.py <dir> --expected-model Qwen/Qwen3.6-27B --require-zero-cost --expected-prompt-versions <the four pairs> --expected-experiment-config <declared file> --expected-seeds 0-1 --require-one-recording-sha` | exit 0; all ten checks PASS |
+| `bash scripts/verify_samples.sh <dir>` | exit 0; "All 2 samples verified clean." |
+| the golden's directory walk | exit 0; 5 meetings, 63 prompts, 0 not reproduced, 0 miscounted meetings |
+| census `--set-dir <dir> --json-stdout` | exit 0; the 20 Conf. cells 0; the cooldown cell written at all three writers (4, 9, 7); the route field served in 5 of 5 meetings and on 28 of 29 ballots |
+| scorecard, `measure_baseline.py --honesty` (no raise) and `scan_recording_packets.py` | exit 0 each |
+| `grep -l deadline_default` | 0 files |
+| MANIFEST | one `git_sha`, `641b4254` (P) |
+| the key scan | 0 over the 11 files changed since `F` |
+
+Seeds 0-1 held meetings and served route lines, so the probe did not extend,
+and the batches ran the first list of 1.7. The counts of two games are no
+reading and none is drawn here.
+
+### 5.3 The re-projection after the probe
+
+By 1.5's rule over round 2's seeds 0-1 (85 calls, 546,811 input, 23,202
+output): calls 63 / 85 x 1,502 = 1,113 (44.2% of the 2,520 stop), input
+7,042,147 (44.7%), output 332,244 (49.2%), wall 631 s / 2 x 50 = 15,775 s =
+4.38 h against the 10.8 h stop; every `cost_usd` 0.0. Every figure was inside
+its stop. The probe's projected wall is 4.38 h, so 1.5 times it is 6.57 h
+(23,663 s): unlike rounds 1 and 2, that line binds before the 10.8 h stop, and
+the summed wall and every later projection stayed below it (6.3).
+
+The probe was checkpointed as `a09065cc` after a count-only key scan.
+
+## 6. The batches (2026-10-09, one sitting)
+
+### 6.1 The legs
+
+Each batch was `uv run --env-file <key file> bash scripts/refresh_samples.sh
+--seeds <the batch> --expect-levers "" --experiment-config
+replays/candidates/stage-b-r3/experiment-config.json` with the 1.7 exports,
+in the recording checkout still detached at P; the leg runner checked the
+pause file, the declared copy's sha256, the checkout's head and the seeds on
+disk before every leg. Wall is the recorder's own "Refresh complete in"
+figure; calls and tokens are the tally of the leg's seeds as committed. No
+leg ran pytest or `check.sh` in the recording checkout, and no commit was made
+there.
+
+| leg | seeds | UTC | recording wall | calls | input | output | checkpoint |
+|---|---|---|---|---|---|---|---|
+| probe | 0-1 | 07:59:44-08:10:17 | 631 s | 63 | 419,109 | 18,430 | `a09065cc` |
+| batch 1 | 2-6 | 08:11:40-08:27:16 | 935 s | 135 | 856,894 | 38,630 | `3800a6ce` |
+| batch 2 | 7-11 | 08:28:15-08:49:55 | 1,298 s | 160 | 972,451 | 41,224 | `d4ce0c6b` |
+| batch 3 | 12-16 | 08:51:14-09:06:51 | 934 s | 134 | 846,395 | 39,173 | `99950ebd` |
+| batch 4 | 17-21 | 09:07:42-09:33:29 | 1,544 s | 195 | 1,231,754 | 53,588 | `0d450119` |
+| batch 5 | 22-26 | 09:34:54-09:56:17 | 1,280 s | 154 | 1,002,275 | 45,886 | `d03a1a9d` |
+| batch 6 | 27-31 | 09:57:15-10:16:40 | 1,160 s | 134 | 832,796 | 36,848 | `48bdccbf` |
+| batch 7 | 32-36 | 10:18:25-10:36:47 | 1,098 s | 147 | 955,709 | 42,050 | `ddf45f4d` |
+| batch 8 | 37-41 | 10:37:45-10:56:03 | 1,094 s | 148 | 932,599 | 42,217 | `152c9bd0` |
+| batch 9 | 42-46 | 10:57:23-11:17:30 | 1,203 s | 143 | 893,354 | 37,920 | `502e70a8` |
+| batch 10 | 47-49 | 11:18:36-11:32:31 | 831 s | 110 | 709,970 | 30,150 | `97b68014` |
+| **the round** | 0-49 | | **12,008 s** | **1,523** | **9,653,306** | **426,116** | |
+
+After every batch, in the delivery checkout and a bare shell: the copy from
+the recording checkout (no committed seed file moved: `git diff --name-only
+HEAD` over the set listed only the MANIFEST and the report), the tally, the
+re-projection and the count-only key scan (0 at every push), then a pushed
+`record:` checkpoint carrying the set and the re-derived candidates row of
+`docs/artifacts.md` (offline `verify_ml_evidence.py` exit 0 at every
+checkpoint: 52 OK, 0 FAIL, 7 ABSENT, 5 INFO). After the probe and after every
+second batch (batches 2, 4, 6, 8 and 10), before that checkpoint, the full
+gate set on seeds `0-N`, each run exiting 0:
+
+| checkpoint | gate (ten checks) | verify | golden walk (prompts) | Conf. cells | cooldown writes (start, kill, regroup) | route presence (meetings; ballots) |
+|---|---|---|---|---|---|---|
+| probe, 0-1 | PASS | 2 clean | 63, 0 not reproduced | 20 at 0 | 4, 9, 7 | 5/5; 28/29 |
+| batch 2, 0-11 | PASS | 12 clean | 358, 0 | 20 at 0 | 24, 46, 28 | 28/28; 160/165 |
+| batch 4, 0-21 | PASS | 22 clean | 687, 0 | 20 at 0 | 44, 86, 57 | 55/55; 305/316 |
+| batch 6, 0-31 | PASS | 32 clean | 975, 0 | 20 at 0 | 64, 124, 92 | 75/77; 427/449 |
+| batch 8, 0-41 | PASS | 42 clean | 1,270, 0 | 20 at 0 | 84, 165, 126 | 98/100; 559/585 |
+| batch 10, 0-49 | PASS | 50 clean | 1,523, 0 | 20 at 0 | 100, 192, 150 | 117/119; 671/702 |
+
+At each of them the scorecard fold, `measure_baseline.py --honesty` (no raise)
+and `scan_recording_packets.py` exited 0, `grep -l deadline_default` counted
+0, and the MANIFEST named the one sha `641b4254`.
+
+### 6.2 Events
+
+1. **No failed seed.** No seed holds a `(deadline_default)` row or any
+   `failed_call` row, so the failed-seed rule never fired and no seed was
+   re-recorded; there is no husk.
+2. **No retry, no stall.** No leg log carries a `WARN` or `ERROR` line: no
+   seed needed a second attempt. No leg went 45 minutes without a completed
+   seed (the longest seed, 9, took 787 s).
+3. **No pause.** The pause file was absent before every leg; the sitting ran
+   whole.
+4. **No stop fired.** Every `cost_usd` is `0.0000`; no re-projection came near
+   a stop (6.3); the summed wall stayed below 1.5 times the probe's projected
+   wall.
+5. **`main` moved, outside the freeze.** During the sitting `main` gained
+   three document commits under `tasks/` (to `9775c9d6`: the finish-wave cards,
+   the extractor card's closure, and the memo's closure and the orchestrator's
+   default for the frozen before column). Nothing moved under the frozen
+   pathspec or the nothing-moves paths, so `main` was merged in after the last
+   seed (`7bdb490d`) and the gates re-ran at the merged head (7.1).
+6. **A stop at delivery, after the last seed.** Once the declared config
+   entered the tree, one test of the route-lines card turned red only because
+   the round exists (7.5). The card names that a stop; it touches no recorded
+   byte and no reading, and it is left open for the orchestrator.
+
+### 6.3 The re-projection at every checkpoint
+
+By 1.5's rule; each figure is the projected round total and its share of the
+90% stop. The pre-registered 10-seed re-projection is the first checkpoint
+holding at least 10 seeds, seeds 0-11.
+
+| checkpoint | seeds | calls | input | output | summed wall | projected wall |
+|---|---|---|---|---|---|---|
+| the probe | 0-1 | 1,113 (44.2%) | 7,042,147 (44.7%) | 332,244 (49.2%) | 631 s | 4.38 h |
+| batch 1 | 0-6 | 1,352 (53.6%) | 8,503,133 (54.0%) | 383,533 (56.8%) | 1,566 s | 3.11 h |
+| **batch 2, the 10-seed re-projection** | 0-11 | 1,445 (57.4%) | 9,098,115 (57.8%) | 406,604 (60.2%) | 2,864 s | 3.31 h |
+| batch 3 | 0-16 | 1,472 (58.4%) | 9,354,439 (59.4%) | 421,570 (62.5%) | 3,798 s | 3.10 h |
+| batch 4 | 0-21 | 1,540 (61.1%) | 9,758,530 (62.0%) | 435,070 (64.5%) | 5,342 s | 3.37 h |
+| batch 5 | 0-26 | 1,518 (60.2%) | 9,650,156 (61.3%) | 430,132 (63.7%) | 6,622 s | 3.41 h |
+| batch 6 | 0-31 | 1,546 (61.4%) | 9,835,070 (62.4%) | 434,385 (64.4%) | 7,782 s | 3.38 h |
+| batch 7 | 0-36 | 1,543 (61.2%) | 9,819,117 (62.3%) | 433,499 (64.2%) | 8,880 s | 3.33 h |
+| batch 8 | 0-41 | 1,508 (59.8%) | 9,569,876 (60.8%) | 424,789 (62.9%) | 9,974 s | 3.30 h |
+| batch 9 | 0-46 | 1,539 (61.1%) | 9,766,450 (62.0%) | 429,027 (63.6%) | 11,177 s | 3.30 h |
+| batch 10 | 0-49 | 1,523 (60.4%) | 9,653,306 (61.3%) | 426,116 (63.1%) | 12,008 s | 3.34 h |
+
+For context only: over all 50 seeds the round ran 1.014x round 2's calls,
+1.051x its input and 1.019x its output, and 0.979x, 1.033x and 0.983x round
+1's.
+
+## 7. The round's gates, and its spend
+
+### 7.1 The gates on the whole round
+
+In the delivery checkout, bare shell, at `45d28b68` (the declared config
+committed with P's sha256, the golden's pin row, `main` merged and the
+candidate sentence; no recorded byte changed after the last checkpoint):
+
+| gate | result |
+|---|---|
+| `validity_gate.py <round> --expected-model Qwen/Qwen3.6-27B --require-zero-cost --expected-prompt-versions <the four pairs> --expected-experiment-config <declared file> --expected-seeds 0-49 --require-one-recording-sha` | exit 0, ten checks PASS: `all_games_reach_game_over` (50/50), `meeting_rate_and_resolution` (1.0; 119 resolved, 0 unresolved), `no_duplicate_meeting_rows` (0 of 119), `no_tick_1_kills` (0), `no_friendly_fire_kills` (0), `no_betrayal_ballots_or_accusations` (0 of 702), `no_railroaded_crew_ejections` (0 of 2,397), `no_dangling_primary_reason_id` (0 of 702), `cost_and_provenance_exact` (one model, four prompt versions, the declared config, seeds 0-49, one sha), `byte_identical_reconstruction` (0 drifted) |
+| proof: the same gate with `--expected-seeds 0-50` | exit 1: `cost_and_provenance_exact` alone, "missing [50]" for the replay files and the MANIFEST rows |
+| proof: round 2 (`replays/samples/9p2i`) against this round's declared file | exit 1: `cost_and_provenance_exact`, 50 lines naming the `route_lines_version` round 2 did not record |
+| `bash scripts/verify_samples.sh` (bare), then once per set directory | bare: exit 0, four sets clean (the two sample sets and rounds 1 and 3); `samples/9p2i`, `samples/4p1i`, `ml_corpus/9p2i` (150), `ml_corpus/4p1i`, round 1 and this round: each exit 0, all clean |
+| `build_sample_report.py --sample-dir <dir> --check`, each of the six | exit 0 each; this round's report gz is the recorder's post-step rebuild through `eval/report_io.py` |
+| the golden's directory walk | exit 0: 50 seeds, 119 meetings, 1,523 prompts, 0 not reproduced, 0 miscounted meetings; retired-guard census (119, 702, 0, 0), the pin row added (7.3) |
+| census `--set-dir <round> --json-stdout` | exit 0: every Conf. cell reads 0, the route cells included (8.2, 8.3) |
+| scorecard `--set-dir <round> --json-stdout` | exit 0 |
+| `measure_baseline.py <round> --honesty --json` | exit 0; no raise |
+| `scan_recording_packets.py <round>` | exit 0 (50 games, 13,021 packets) |
+| `grep -l deadline_default` over the 50 replays; `failed_call` rows | 0 files; 0 rows |
+| MANIFEST columns | 50 rows, seeds 0-49, one value in every column but the seed and the winner: model `Qwen/Qwen3.6-27B`, the four prompt versions, policy `fsm-default`, `refreshed_at` 2026-10-09, `git_sha` `641b4254`, cost `0.0000`; the flags column equals round 2's (one value on every row of each) |
+| proof: the round pooled through the census (`fold_set` then `pool`) with round 2, and with round 1 | it folds alone; pooled, `GameplayCensusEraError`, "two eras differ in settings; the census never pools across eras", both times |
+| `git merge-base --is-ancestor 641b4254 641b4254` (P against the MANIFEST's one sha); F before P; P before Q; Q before the first `record:` checkpoint (`a09065cc`) | exit 0 each. Proof: the head in place of P, exit 1 |
+| Q's committer date (2026-10-09T06:43:47Z) against the probe's start in the operator log (07:59:44Z) and every MANIFEST `refreshed_at` (a UTC date, 2026-10-09 on all 50 rows) | the probe after Q, 0 rows before Q's date, exit 0. Proofs: a scratch MANIFEST with seed 7's `refreshed_at` set to 2026-10-08 exits 1 (1 row before); a probe start of 06:40:00Z exits 1 |
+| the pre-registration section at P against the head | sections 1 and 2 unchanged since P and Q (7.4) |
+| `route_check_replay --check`; `route_lines_replay --check` | exit 0 each, "reproduced": the committed outputs did not move |
+| `publish_process_scorecard.py --check`; `publish_gameplay_census.py --check` | exit 0 each |
+
+### 7.2 The spend against the ceilings
+
+| limit | spent | ceiling | share | 90% stop |
+|---|---|---|---|---|
+| model calls | 1,523 | 2,800 | 54.4% | 2,520 |
+| input tokens | 9,653,306 | 17,500,000 | 55.2% | 15,750,000 |
+| output tokens | 426,116 | 750,000 | 56.8% | 675,000 |
+| recording wall | 12,008 s (3.34 h), summed over the eleven legs | 12 h | 27.8% | 10.8 h |
+| marginal cost | $0.0000 | $0.00 | | any non-zero |
+
+There is no husk, so the set's tally, `1523 9653306 426116 0.0`, is the whole
+spend. The round ran in one sitting: its 18 h window opened at 07:59:44Z and
+the last seed finished at 11:32:31Z, 3 h 32 min 47 s into it. The round held
+119 meetings against round 2's 117 and round 1's 124 on the same seeds, at
+12.80 calls and 81,120 input tokens per meeting (round 2: 12.84 and 78,529).
+Its input ran 465,426 tokens above round 2's 9,187,880; the field card's
+planning projection was 331,015 added input on round 2's bytes, and the
+route-lines instrument reads the served blocks' share of round 3's own ballot
+input as 340,488 tokens (a share of prompt characters, not a tokenizer count).
+
+### 7.3 The derived views and the registration
+
+- The round's eval report is the recorder's post-step rebuild through
+  `eval/report_io.py` at every leg, and `build_sample_report.py --sample-dir
+  replays/candidates/stage-b-r3/9p2i --check` exits 0. No derived byte was
+  typed.
+- The round README (`replays/candidates/stage-b-r3/README.md`) holds the
+  `candidate-declaration` block: the sha256 line
+  `a788b9eb…6d57d  experiment-config.json` and `9p2i seeds 0-49`. The
+  declared config entered the tree only after the last seed, in the delivery
+  commit `f35ff99c`, byte-equal to the untracked copy every checkout checked;
+  with both in place the candidate test's shape check reads 0 problems for each
+  round and for the family.
+- The two `docs/artifacts.md` rows are re-derived with `git ls-files`: the
+  `replays/candidates/` row reads 72 MB / 111 files (the round's 55 files
+  beside round 1's 55 and the family README), and the `audits/` row its tracked bytes at the commit that
+  carries this section; offline `verify_ml_evidence.py` reads OK (never
+  `--complete`).
+- The golden's `_RETIRED_GUARD_PINS` row `candidates/stage-b-r3/9p2i` is
+  (119, 702, 0, 0), the production walk's census on the round. **Proof:**
+  without it, `test_every_reconstruction_divergence_is_a_retired_guard[candidates/stage-b-r3/9p2i]`
+  raises `KeyError: 'no retired-guard pin for candidates/stage-b-r3/9p2i'` and
+  `test_the_retired_guard_pins_are_keyed_by_the_path_under_replays` fails (2
+  failed, 10 passed under `-k "retired_guard or stage-b-r3"`); with it, 12
+  passed.
+
+### 7.4 Nothing publishes, the freeze held, and the key
+
+- `git log --oneline e4fc6cbf..HEAD` and `e4fc6cbf..origin/main` print 0
+  commits over `engine agents meetings observation orchestrator eval api
+  scripts llm experiments/lab/route_check_replay.py` (`main` is at
+  `9775c9d6`, merged in). Proof: the same pathspec over `76270d6c..e4fc6cbf`
+  prints 12 commits.
+- `git diff --stat e4fc6cbf..HEAD` is empty over `replays/samples`,
+  `replays/ml_corpus`, round 1's directory, `tests/fixtures`, `training`,
+  `api`, `frontend`, `experiments`, `audits/tactical-gameplay` and the census
+  and scorecard documents.
+- The demo bundle built at `F` (the verification worktree) and at the head,
+  each with the sample replays' mtimes pinned to one instant (the loader takes
+  `created_at` from the file mtime), holds 110 files each, and `diff -r` exits
+  0.
+- Sections 1 and 2 are unchanged: section 1 at P (`git show
+  641b4254:audits/audit-2026-10-09-stage-b-r3.md`) equals the head's, and
+  section 2 at Q equals the head's, line for line. Sections 4 to 10 and the
+  last paragraph of 3.7 are the only audit text added by the recording phase.
+- The key scan read 0 at every push, over every file changed since `F`. The
+  key file stayed mode 0600 outside every checkout until the last push, so that
+  push's scan could count the exact value, and was deleted right after it; the
+  card's Results record when.
+
+### 7.5 The stop: one test the round turns red
+
+At the delivery head the project's test tier is red in one case, and only
+because the round exists. CI run 37924867474 (`CI`, pull_request, head
+`45d28b68`): Project checks failed with 1 failed, 10,850 passed, 40 skipped
+and 3 xfailed; Frontend checks and Frontend e2e passed. The case is the
+route-lines card's
+`tests/meetings/test_route_lines_arm.py::test_every_committed_payload_reads_the_field_off`,
+which asserts that no committed payload, no `experiment-config.json` under
+`replays/` and none of the sets it lists reads `route_lines_version` ON. Its
+helper walks every `replays/**/experiment-config.json`, so it now finds
+`replays/candidates/stage-b-r3/experiment-config.json`, the round's declared
+config, which reads the field ON by design (1.3); it finds nothing else, since
+the round's replays are outside the payload files and sets it lists. The same
+case fails locally, and it is the only one: the targeted suites
+(`tests/scripts/test_candidate_sets.py`, `tests/eval/test_gameplay_census.py`,
+the route-lines arm, field and instrument suites, and the arms and config
+suites) read 1 failed, 861 passed; `pytest -m campaign` 337 passed; the
+golden's cases 12 passed.
+
+The card names this a stop ("Stop and ask ... if a test besides the golden pin
+turns red only because another round exists"), its scope allows one test edit
+(the golden's pin row, 7.3), and the failing file is the route-lines card's
+under the one-writer map. So this record does not edit it: the pull request
+stays a draft, and there is no green CI run at the head to cite as the gate
+record. Nothing recorded is touched by it: the bytes, the gates of 7.1 and the
+readings of section 8 stand, and the step rule (8.7) reads no test. Who edits
+the case, and how, is the question this record leaves open before it can merge
+(the card's Results and the pull request carry it).
+
+## 8. The assessment
+
+The round-3 column is this round alone, computed only from 1.12's named
+sources and never pooled with another column: the census and scorecard
+`--set-dir replays/candidates/stage-b-r3/9p2i --json-stdout`,
+`measure_baseline.py replays/candidates/stage-b-r3/9p2i --honesty --json`, the
+validity gate's `no_betrayal_ballots_or_accusations`, and the route-check
+replay run at the delivery head `45d28b68` with r1 and r2 at `F` and r3 at the
+head, into scratch. Each reading is what 1.13's command, unchanged (sha256
+`9e22e40c…57abc`), prints:
+
+```
+python3 readings.py census-stage-b-r1.json honesty-stage-b-r1.json route.json --column r1 --after     # exit 0
+python3 readings.py census-samples-9p2i.json honesty-samples-9p2i.json route.json --column r2 --after  # exit 0
+python3 readings.py census-stage-b-r3.json honesty-stage-b-r3.json route.json --column r3 \
+  --bar A --after --step                                                                                # exit 0
+```
+
+Rates carry Wilson 95% intervals. Rounds 2 and 3 differ in one key, but each
+is a single hosted recording of 50 games, so a difference between them is the
+field's only within hosted-generation noise; the Conf. cells and the scripted,
+fake and lab rows (4.1, 4.2) attribute a mechanism. Rounds 1 and 2 read exactly
+as 1.8 states them.
+
+### 8.1 The process cells
+
+The scorecard's rows. They move with the game, and none is a gate.
+
+| row | round 1 | round 2 | round 3 |
+|---|---|---|---|
+| games; meetings; ballots (EJECT, SKIP) | 50; 124; 717 (387, 330) | 50; 117; 691 (410, 281) | 50; 119; 702 (397, 305) |
+| 1 grounded decisions, EJECT | 384/387 = 0.992 (0.98-1.00) | 407/410 = 0.993 (0.98-1.00) | 394/397 = 0.992 (0.98-1.00) |
+| 1 grounded decisions, SKIP | 54/330 = 0.164 (0.13-0.21) | 44/281 = 0.157 (0.12-0.20) | 47/305 = 0.154 (0.12-0.20) |
+| 1 grounded decisions, all ballots | 438/717 = 0.611 (0.57-0.65) | 451/691 = 0.653 (0.62-0.69) | 441/702 = 0.628 (0.59-0.66) |
+| 2 EJECTs deviating from the voter's own suspicion argmax | 67/275 = 0.244 | 65/292 = 0.223 | 56/291 = 0.192 |
+| 2 role-correct, followers vs deviators (chance) | 200/208 vs 5/67 (0.327) | 215/227 vs 4/65 (0.340) | 215/235 vs 2/56 (0.328) |
+| 3 manufactured contradiction | 0/22, 22 not evaluable | 1/15, 14 not evaluable | 0/15, 15 not evaluable |
+| 4 unexplained decisions | 7/717 = 0.010 (0.00-0.02) | 11/691 = 0.016 (0.01-0.03) | 6/702 = 0.009 (0.00-0.02) |
+| 5 evidence-quality mix over ejections (contradiction flag, first hand, hearsay, vent flag) | 2, 27, 1, 24 (of 54) | 2, 39, 1, 24 (of 66) | 1, 35, 1, 24 (of 61) |
+| 6 rationale faithfulness (tokens) | 588/588 (129 not evaluable) | 580/580 (111 not evaluable) | 583/583 (119 not evaluable) |
+| 7 agent-authored share | 701/717 = 0.978 (teammate coerced 16) | 674/691 = 0.975 (invalid target 1, teammate coerced 16) | 692/702 = 0.986 (teammate coerced 10) |
+| 8 wrong-but-believable, reported and never penalised | 178/387 = 0.460 | 189/410 = 0.461 | 177/397 = 0.446 |
+| 9 role-correct ejection, reported and never a gate | 39/54 = 0.722 (0.59-0.82) | 44/66 = 0.667 (0.55-0.77) | 46/61 = 0.754 (0.63-0.84) |
+
+### 8.2 Each Conf. cell, and each carried reading
+
+**Every Conf. cell reads 0 as built**, the cooldown and route cells included.
+The census exits non-zero on any breach; it exited 0 on the round, and the
+readings command with `--after` exited 0 with no Conf. miss.
+
+| arm | Conf. cell | round 1 | round 2 | round 3 |
+|---|---|---|---|---|
+| physical witness | `vent_exits_seen_only_from_room_left` | 0/72 | 0/72 | **0/70** |
+| physical witness | `vent_band_resting_only_on_room_left` | 0/24 | 0/24 | **0/24** |
+| look and wait | `surfacings_before_cap_in_view` | 0/72 | 0/72 | **0/70** |
+| look and wait | `trips_longer_than_cap` | 0/63 | 0/66 | **0/70** |
+| own fresh kill | `vent_entries_not_after_own_fresh_kill` | 0/142 | 0/140 | **0/140** |
+| full reset | `stale_report_meetings` | 0/118 | 0/114 | **0/115** |
+| full reset | `report_corpses_older_than_last_close` | 0/68 | 0/64 | **0/65** |
+| full reset | `play_resumes_with_impostor_in_vent` | 0/110 | 0/102 | **0/104** |
+| full reset | `play_resumes_with_corpse` | 0/110 | 0/102 | **0/104** |
+| full reset | `kills_in_grace_window_after_regroup` (T+1 to T+6) | 0/139 | 0/109 | **0/106** |
+| full reset | `prompts_missing_a_regroup_notice` | 0/782 | 0/722 | **0/745** |
+| one reply | `rebuttals_differing_from_selector` | 0/121 | 0/117 | **0/119** |
+| one reply | `meetings_with_second_repeat_speaker` | 0/124 | 0/117 | **0/119** |
+| body handle | `report_openings_with_kill_tick_handle` | 0/118 | 0/114 | **0/115** |
+| kill row | `own_kill_rows_breaching` | 0/4 | 0/23 | **0/22** |
+| impostor ballot | `recorded_teammate_ballot_targets` | 0/203 | 0/200 | **0/198** |
+| impostor ballot | the gate's `no_betrayal_ballots_or_accusations` | 0 of 717 | 0 of 691 | **0 of 702** |
+| self-report off | `impostor_openers` | 0/124 | 0/117 | **0/119** |
+| kill cooldown | `kill_cooldowns_differing_from_recorded` | 0/487 against 4 | 0/447 against 6 | **0/442 against 6** |
+| route lines | `route_lines_false_to_the_map`; `route_lines_off_the_table` | n/a | n/a | **0/7,956 steps; 0/2,416 lines** |
+
+**Look and wait.** Exits seen from the exit room: 8/72, 8/72 and **7/70 =
+0.100 (0.05-0.19)**. By round 2's rule (0.30 or below) the reading is
+**effective**. Beside it: exits into a room the impostor could see a crewmate
+in, 0/72, 0/72 and 0/70.
+
+**One reply.** Opener rebuttals answering the charged tick: 19/19 (82 not
+evaluable), 17/18 (69) and **20/20 = 1.000 (0.84-1.00), 70 not evaluable**;
+rebuttals that only redirect: 17/121, 27/117 and **25/119 = 0.210
+(0.15-0.29)**. By round 2's rule (half or more answer; redirect-only below
+half) the reading is **effective**, resting on the 20 evaluable of 90 opener
+rebuttals.
+
+**Kill row.** Conf. cell 0/22. Presence: **present**, 22 own-kill rows served
+(round 1: 4; round 2: 23).
+
+**Impostor ballot.** Impostor EJECTs whose only citation is a neutral row
+(honesty cell 3): 0/107, 0/111 and **0/101 = 0.000 (0.00-0.04)**. By round 2's
+rule (0.10 or below), **the wording holds**.
+
+**The carried cells.** As the owner confirmed (1.10):
+- false resume perceptions are carried by the one resume helper
+  (`compose_resume_events`) and the golden's byte-equal re-render of every
+  recorded prompt: 1,523 of 1,523 reproduced, 0 meetings miscounted;
+- the regroup notice is the Conf. cell `prompts_missing_a_regroup_notice`,
+  0/745 above;
+- ballots citing a rebuttal: the turn citation is the cell,
+  `ballots_citing_a_rebuttal` 70/707, 57/691 and **67/702 = 0.095
+  (0.08-0.12)**, with the counter slot beside it,
+  `ballots_countering_with_a_rebuttal` 150/707, 175/691 and **158/702**;
+- holds-nothing SKIPs: `skips_holding_nothing` 256/330, 214/281 and
+  **235/305 = 0.770 (0.72-0.81)**; of them, `holds_nothing_skips_naming_no_candidate`
+  0/256, 0/214 and **0/235** (8.8).
+
+### 8.3 The route cells
+
+Round 3's own field, read on its own cells (out of scope on rounds 1 and 2,
+which did not record it):
+
+| cell | round 3 |
+|---|---|
+| `route_lines_false_to_the_map` (Conf.) | **0/7,956** steps served |
+| `route_lines_off_the_table` (Conf.) | **0/2,416** lines served |
+| presence `meetings_with_a_route_line` | **117/119 = 0.983 (0.94-1.00)**: present |
+| `ballots_carrying_route_lines` | 671/702 = 0.956 (0.94-0.97) |
+| table `route_lines_per_meeting` | no line 2, one line 21, two lines 19, three or more 77 |
+| table `route_steps_by_reading` | "walking fits" 1,421, "regroup between" 29 |
+
+Both Conf. cells read 0 as built and the presence is above 0, so the field
+reads present and in scope; the readings command's r3 checks pass.
+
+### 8.4 The kill cooldown cell
+
+`kill_cooldowns_differing_from_recorded`: round 1 0/487 against 4 (round
+start 100, after a kill 227, at a regroup 160), round 2 0/447 against 6 (100,
+195, 152), and **round 3 0/442 against 6, with a count at each of the three
+writers: round start 100, after a kill 192, at a regroup 150**. Conf. 0 as
+built; no writer is empty. The grace-window cell, read at the recorded 6,
+counted 0 kills at T+1 to T+6 after any of the round's regroups (0/106).
+
+### 8.5 The envelope and the flag (non-gating)
+
+| cell | round 1 | round 2 | round 3 | envelope |
+|---|---|---|---|---|
+| impostor win share (`impostor_wins`) | 34/50 = 0.68 (0.54-0.79), flagged above 0.60 | 24/50 = 0.48 (0.35-0.61) | **17/50 = 0.34 (0.22-0.48)** | inside 0.20-0.60, not flagged |
+| the re-keyed reporter flag, bar A (above 21.28): `reporter_seats_ejected_without_vent_proof` against `other_crewmate_seats_ejected_without_vent_proof` | 11/98 against 2/303: 17.0, not flagged | 17/93 against 5/291: 10.6, not flagged | **10/95 against 5/302: 6.4, not flagged** | non-gating; never read by the step rule |
+
+Round 2's reading under the old 0.104 line stands as recorded (its audit 6.4);
+the readings command does not compute that line, and nothing re-scores
+round 2.
+
+### 8.6 The route-check count
+
+A process count, never a bar on correctness: the route-check replay's
+`rule_inputs` on each column.
+
+| count | round 1 | round 2 | round 3 |
+|---|---|---|---|
+| misjudged cases M (ejections charged on a pair the map or the regroup reconciles) | 29 | 40 | **29** |
+| at kill-witness meetings, W | 0 | 7 | **7** |
+| reach over M: (a), (b), (b-snapshot), (c) | 8, 8, 15, 20 | 15, 16, 20, 29 | **8, 15, 18, 25** |
+| reach of (c) over W | 0 | 7 | **7** |
+| ejections; charges; charges on a reconcilable pair | 54; 406; 265 | 66; 402; 276 | **61; 376; 226** |
+
+The census's own form agrees: `ejections_charged_on_a_reconcilable_pair`
+reads 29/54, 40/66 and **29/61**, and its witness form 0/3, 7/12 and **7/13**.
+Beside them, the route-lines instrument's served reach on round 3 (its r3
+column, mode "served", read off the blocks the voters were shown): of the 29
+misjudged cases, the ejected player's route line was served to its voters in
+**26**, and in **7 of 7** at witness meetings; by class, 15 of 15 innocent
+ejections, 11 of 14 misjudged impostor ejections, and 6 of 6 ejected kill witnesses carried a served line.
+The route lines served 2,416 lines on 671 ballots. Reaching is showing a
+line, not changing a vote, and the step reads M alone.
+
+### 8.7 The step the rule names
+
+The readings command's last line, verbatim:
+
+```
+step rule: names the era-keyed promotion of round 3 as the shown set, the owner's to take or override (Conf. misses 0; impostor wins 17/50; M 29 against round 2's 40)
+```
+
+Every Conf. cell is at 0; the point share of impostor wins, 17/50 = 0.34, is
+neither above 0.60 nor below 0.20; and M, 29, is at or below round 2's 40. So
+the pre-registered rule (1.11) names **the era-keyed promotion of round 3 as
+the shown set**. The rule read no reporter flag and no role-correct figure:
+the flag and `role_correct_ejections` were shown in 3.3 to leave the `step
+rule:` line byte-identical when edited. The step itself is taken by the
+orchestrator, on the owner's criteria and leaning (memo 8.8, section 2.3), and
+written into this audit with the readings it rests on, after it reads the
+round; this section takes no step.
+
+### 8.8 The reported rows
+
+Reported, gating nothing, each beside its definition in the census.
+
+| cell | round 1 | round 2 | round 3 |
+|---|---|---|---|
+| `forced_surfacings` | 13/72 | 5/72 | 5/70 |
+| table `ticks_inside_per_trip` (1, 2, 3, 4 ticks) | 51, 6, 2, 13 | 49, 3, 15, 5 | 47, 3, 15, 5 |
+| `in_place_surfacings_near_crew` | 2/37 | 2/44 | 2/42 |
+| `kills_soon_after_surfacing` | 0/227 | 0/195 | 0/192 |
+| `skipped_report_meetings` | 70/118 | 51/114 | 58/115 |
+| `trips_closed_by_regroup` | 46/142 | 47/140 | 47/140 |
+| `kill_witness_button_calls_soon_after_regroup` | 0/6 | 0/3 | 0/4 |
+| table `trigger_tick_events_dropped_by_regroup` (Moved, TaskProgressed, TaskCompleted) | 51, 26, 6 | 46, 22, 10 | 50, 19, 10 |
+| `meetings_opening_with_impostor_in_vent` (beside it `post_meeting_kills_soon_after`) | 66/124 (0/139) | 66/117 (0/109) | 67/119 (0/106) |
+| `accused_opener_answers` | 101/112 | 87/105 | 90/109 |
+| `rebuttals_with_alibi`, `_with_whereabouts`, `_with_sighting` | 104/121, 104/121, 91/121 | 89/117, 89/117, 79/117 | 94/119, 94/119, 84/119 |
+| `rebuttal_accusations_against_earlier_speakers` | 121/121 | 116/116 | 119/119 |
+| table `rebuttal_beneficiaries` (the opener answering an impostor, the opener answering a crewmate, another impostor answering a crewmate, another crewmate answering an impostor, another crewmate answering a crewmate) | 71, 30, 17, 3, 0 | 59, 28, 28, 1, 1 | 60, 30, 25, 0, 4 |
+| `own_kill_rows_cited_by_holder`; honesty cell 5 (holders, citing) | 3/4; 4, 3 of 4 | 21/23; 23, 21 of 23 | 20/22; 22, 20 of 22 |
+| `impostor_eject_ballots`; `impostor_ejects_labelled_supported`; `authored_teammate_ballot_targets` | 107/203; 107/107; 16/203 | 111/200; 111/111; 16/200 | 101/198; 100/101; 10/198 |
+| `reporter_seats_ejected`, `other_crewmate_seats_ejected`, `impostor_seats_ejected` | 11/118, 2/372, 35/194 | 17/114, 5/367, 41/195 | 10/115, 5/375, 42/191 |
+| the same three without vent proof | 11/98, 2/303, 15/160 | 17/93, 5/291, 20/158 | 10/95, 5/302, 22/157 |
+| the same three with vent proof | 0/20, 0/69, 20/34 | 0/21, 0/76, 21/37 | 0/20, 0/73, 20/34 |
+| `reporters_among_ejected_crewmates`; `reporters_among_crewmate_seats` | 11/13; 118/490 | 17/22; 114/481 | 10/15; 115/490 |
+| `held_kill_witnesses_ejected` | 0/3 | 5/14 | 6/14 |
+| table `held_kill_next_meeting_outcomes` (non-zero rows) | one witness, the killer ejected 3 | one witness: a witness ejected 5, another player 1, no one 2, the killer 1; two or more: the killer 5 | one witness: a witness ejected 6, no one 1, the killer 2; two or more: the killer 5 |
+| `held_kill_killers_ejected`; `..._at_any_later_meeting` | 3/3; 3/3 | 6/14; 8/14 | 7/14; 8/14 |
+| `ejections_undone_with_impostor_ballots_as_skip`; `..._removed`; `ejections_carried_only_by_impostor_ballots` | 8/54; 2/54; 0/54 | 14/66; 5/66; 0/66 | 8/61; 3/61; 0/61 |
+| `holds_nothing_skips_naming_no_candidate` | 0/256 | 0/214 | 0/235 |
+| table `holds_nothing_skips_by_source` (a flag, a route line, a spoken turn line, an evidence row, an observation row perceived since the previous meeting) | 13, 0, 256, 256, 184 | 22, 0, 214, 214, 166 | 39, 230, 234, 235, 166 |
+| `cited_lines_true_to_the_route`; `cited_lines_false_to_the_route` | 244/259; 15/259 | 278/281; 3/281 | 245/248; 3/248 |
+| table `supported_ejects_not_checkable_by_reason` (cites no turn; places the target nowhere checkable; every placement unverifiable) | 17, 108, 0 | 29, 97, 0 | 26, 119, 1 |
+| `ejections_on_a_reconcilable_pair`; `ejections_charged_on_a_reconcilable_pair` | 31/54; 29/54 | 41/66; 40/66 | 29/61; 29/61 |
+| `witness_meeting_ejections_on_a_reconcilable_pair`; `..._charged_...` | 0/3; 0/3 | 7/12; 7/12 | 7/13; 7/13 |
+| `charges_on_a_reconcilable_pair` | 265/406 | 276/402 | 226/376 |
+
+One row is new in kind: a holds-nothing SKIP is counted by each source of a
+line that names a living candidate in the voter's own inputs, and on round 3
+a route line is one of those sources in 230 of 235 such SKIPs; the line names
+a candidate's stated changes of room, never a charge.
+
+### 8.9 Role-correct ejection, the balance and the win split, gating nothing
+
+Role-correct ejections 39/54 = 0.722, 44/66 = 0.667 and **46/61 = 0.754
+(0.63-0.84)**; innocent ejections 15 of 54, 22 of 66 and **15 of 61**. Kills
+(the denominator of `kills_seen_by_crew`): 227, 195 and **192**. Meetings with
+vent proof: 26/124, 24/117 and **24/119**. Impostors able to kill when a
+meeting opened (`impostor_cooldown_zero_at_open`): 84/203, 54/200 and
+**53/198 = 0.268 (0.21-0.33)**. The win split: 16 crew and 34 impostor wins in
+round 1, 26 and 24 in round 2, **33 crew and 17 impostor in round 3**. All are
+reported beside the readings and gate nothing; a wrong ejection on believable
+data is the game working (scorecard row 8).
+
+## 9. The decision menu
+
+The audit gives no verdict.
+
+- **The step the rule names: the era-keyed promotion of round 3 as the shown
+  set** (8.7). Under memo 8.8 the orchestrator takes or declines it on the
+  owner's criteria and leaning and writes the decision into this audit with
+  the readings it rests on; under memo 8.9 a promotion card's merge is the
+  orchestrator's once its reviews pass.
+- **`route_lines_version = 1`**, the round's one added field: **adopt** it by
+  the era-keyed promotion, **iterate** under a new value, or **keep round 2
+  shown**. Its Conf. cells read 0 and its presence is 117 of 119 meetings
+  (8.3).
+- **The other nine fields**: Conf. cells only, and every one reads 0 (8.2,
+  8.4).
+- **With the promotion, its card's follow-ups**: a public-results label for
+  the route field, which `frontend/src/components/PublicResults.tsx` cannot
+  name today; the era registry entry; the pin sweep; round 2's bytes kept as
+  `replays/candidates/stage-b-r2` (memo 8.9); the tour's re-curation in the
+  same card (memo 8.7 item 3); and the scorecard's frozen before column in the
+  grow form the promotion card contracts (the orchestrator's default of
+  2026-10-09, memo section 8.9's addendum on `main`).
+- **Before this record merges**: the stop of 7.5, the route-lines card's
+  committed-payload case that reads the round's own declared config. Its
+  edit is outside this card's scope and is the orchestrator's to assign.
+
+## 10. Limitations
+
+- Hosted generation is not byte-reproducible, so a seed is re-recorded only by
+  the failed-seed rule, never to change its bytes (none was). Rounds 2 and 3
+  differ in one key, but each is one hosted recording of 50 games: the win
+  shares' intervals (0.35-0.61 and 0.22-0.48) overlap, and every difference
+  between the rounds is the field's only within that noise.
+- M counts ejections charged on a pair the map or the regroup reconciles; it
+  does not say whether a served line changed any vote. The served reach (26 of
+  29) says the line was shown, not read.
+- The arms land together; only the Conf. cells and the scripted, fake and lab
+  rows attribute a mechanism, and fake and lab rows establish mechanics, not
+  reasoning quality.
+- 50 games: the one-reply reading rests on 20 evaluable opener rebuttals of 90;
+  the kill row served 22 rows; the witness counts rest on 13 witness-meeting
+  ejections.
+- The tally counts `llm_calls` rows only, as for rounds 1 and 2; this round has
+  no husk and no `failed_call` row. Recording wall comes from the recorder's
+  logs, kept outside the repository with the operator log; every other count
+  reproduces from the committed bytes with the commands above.
