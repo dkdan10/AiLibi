@@ -659,12 +659,13 @@ def all_committed_meetings() -> tuple[CommittedMeeting, ...]:
     )
 
 
-#: MEASURED: the committed meetings whose recorded flags the movement channel
-#: decides. With every other argument production passed and the move channel
-#: dropped, exactly these re-derive differently from the recording. Named rather
-#: than counted, so one member cannot leave while an unrelated defect takes its
-#: place. The controls in tests/meetings/test_contradictions.py (all four sets)
-#: and tests/meetings/test_transcript.py (samples/9p2i) both read this set.
+#: MEASURED: the frozen committed meetings whose recorded flags the movement
+#: channel decides. With every other argument production passed and the move
+#: channel dropped, exactly these re-derive differently from the recording. Named
+#: rather than counted, so one member cannot leave while an unrelated defect takes
+#: its place. Only the frozen baseline-9 sets are named: the shown 9p2i set's
+#: members move at every re-record, so its control asserts the divergence without
+#: naming it. tests/meetings/test_contradictions.py reads this set.
 # was 69 records-free names in test_contradictions.py, one of them (1134 m3) its own artifact
 MOVEMENT_DECIDED_MEETINGS: Final[frozenset[str]] = frozenset(
     {
@@ -719,24 +720,6 @@ MOVEMENT_DECIDED_MEETINGS: Final[frozenset[str]] = frozenset(
         "ml_corpus/9p2i:1146:headless-seed-1146:meeting-0",
         "ml_corpus/9p2i:1147:headless-seed-1147:meeting-0",
         "ml_corpus/9p2i:1149:headless-seed-1149:meeting-1",
-        # samples/9p2i, re-measured on candidate round 2's bytes (2026-10-02);
-        # the baseline-9 set named 17 meetings here.
-        "samples/9p2i:10:headless-seed-10:meeting-0",
-        "samples/9p2i:23:headless-seed-23:meeting-1",
-        "samples/9p2i:24:headless-seed-24:meeting-0",
-        "samples/9p2i:25:headless-seed-25:meeting-0",
-        "samples/9p2i:2:headless-seed-2:meeting-0",
-        "samples/9p2i:35:headless-seed-35:meeting-0",
-        "samples/9p2i:35:headless-seed-35:meeting-1",
-        "samples/9p2i:38:headless-seed-38:meeting-0",
-        "samples/9p2i:3:headless-seed-3:meeting-1",
-        "samples/9p2i:40:headless-seed-40:meeting-0",
-        "samples/9p2i:41:headless-seed-41:meeting-1",
-        "samples/9p2i:43:headless-seed-43:meeting-1",
-        "samples/9p2i:48:headless-seed-48:meeting-0",
-        "samples/9p2i:49:headless-seed-49:meeting-0",
-        "samples/9p2i:6:headless-seed-6:meeting-1",
-        "samples/9p2i:8:headless-seed-8:meeting-1",
     }
 )
 

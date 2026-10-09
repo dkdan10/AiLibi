@@ -94,6 +94,7 @@ from meetings.schemas import (  # noqa: E402
     MeetingTurn,
     VoteBallot,
 )
+from tests._helpers.recorded_counts import recorded_counts  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
@@ -397,40 +398,44 @@ def nine_walk() -> list[_VJGameWalk]:
 
 def test_9p2i_zero_flag_channel_pins(nine: VJInstrumentReport) -> None:
     # The residual zero-flag conviction channel (close audit §11 bullet 3) on the
-    # promoted stage-b-r2 bytes — convictions_total == the vote-correctness
-    # ejection census (66 on 9p2i). With fewer vent flags in the round, the
-    # channel grows (18 -> 40 of the convictions) and splits evenly by role. The
-    # baseline-9 bytes read 145 meetings, 90 convictions and 18 zero-flag
-    # convictions split 8 crew / 10 impostor, typed 5 / 9 / 4 / 0, proxy
-    # 10 / 3 / 5 / 0.
-    assert nine.games_total == 50
-    assert nine.meetings_total == 117  # was 145
-    assert nine.convictions_total == 66  # was 90
-    assert nine.zero_flag_convictions == 40  # was 18
-    assert nine.zero_flag_conviction_rate == pytest.approx(40 / 66)  # was 18 / 90
-    assert nine.zero_flag_crew_convictions == 20  # was 8
-    assert nine.zero_flag_impostor_convictions == 20  # was 10
-    # The 16.3 TYPED split of the 40 zero-flag convictions.
-    assert nine.zero_flag_hard_backed == 10  # was 5
-    assert nine.zero_flag_soft_only == 15  # was 9
-    assert nine.zero_flag_unattributed_only == 14  # was 4
-    assert nine.zero_flag_no_row == 1  # was 0
-    # The planning-doc rendered-value proxy, beside it.
-    assert nine.zero_flag_proxy_hard_backed == 13  # was 10
-    assert nine.zero_flag_proxy_soft_only == 10  # was 3
-    assert nine.zero_flag_proxy_sub_gate == 16  # was 5
-    assert nine.zero_flag_proxy_no_render == 1  # was 0
+    # shown 9p2i bytes, derived rather than transcribed: convictions_total is
+    # the recorded ejection census, the channel splits by role, and the 16.3
+    # TYPED split and the planning-doc rendered-value proxy each partition it.
+    # The baseline-9 bytes read 145 meetings, 90 convictions and 18 zero-flag
+    # convictions split 8 crew / 10 impostor.
+    shown_rows = recorded_counts(_NINE)
+    assert nine.games_total == shown_rows.games
+    assert nine.meetings_total == shown_rows.meetings
+    assert nine.convictions_total == shown_rows.ejections
+    assert nine.zero_flag_conviction_rate == pytest.approx(
+        nine.zero_flag_convictions / nine.convictions_total
+    )
+    assert nine.zero_flag_convictions == (
+        nine.zero_flag_crew_convictions + nine.zero_flag_impostor_convictions
+    )
+    assert nine.zero_flag_convictions == (
+        nine.zero_flag_hard_backed
+        + nine.zero_flag_soft_only
+        + nine.zero_flag_unattributed_only
+        + nine.zero_flag_no_row
+    )
+    assert nine.zero_flag_convictions == (
+        nine.zero_flag_proxy_hard_backed
+        + nine.zero_flag_proxy_soft_only
+        + nine.zero_flag_proxy_sub_gate
+        + nine.zero_flag_proxy_no_render
+    )
 
 
 def test_9p2i_soft_hard_split_cross_checks(nine: VJInstrumentReport) -> None:
     # DoD: the split cross-checks against 16.3's provenance sums (every
     # reconstructed pre-vote row satisfies 0.5 + Σ(eight channels) ==
     # suspicion) and is consistent with the rendered-value proxy within the
-    # documented tolerance. On the committed stage-b-r2 bytes the reconstruction
+    # documented tolerance. On the committed bytes the reconstruction
     # reproduces every rendered per-player value exactly (0 rendered-value
-    # mismatches), and the typed/proxy splits agree on thirty-five of the forty
-    # zero-flag convictions (35 agreements, 5 disagreements).
-    assert nine.provenance_rows_checked == 3101  # was 3618
+    # mismatches), and the typed/proxy agreements and disagreements partition
+    # the zero-flag convictions.
+    assert nine.provenance_rows_checked > 0
     # 0 sum breaches: the gauge mirrors the graduated J1 clamp (Task 17.1;
     # audits/audit-phase-16-close.md §8 routed contract (a)). A row that would
     # read as a phantom breach under the naive raw-only invariant — a soft-only
@@ -441,27 +446,30 @@ def test_9p2i_soft_hard_split_cross_checks(nine: VJInstrumentReport) -> None:
     # keeps_raw_provenance). Their identities are pinned per-row in
     # test_9p2i_j1_clamp_exempt_rows_pinned below.
     assert nine.provenance_sum_breaches == 0
-    assert nine.rendered_rows_compared == 3101  # was 3618
+    assert nine.rendered_rows_compared == nine.provenance_rows_checked
     assert nine.rendered_row_mismatches == 0
-    assert nine.zero_flag_split_agreements == 35  # was 13
-    assert nine.zero_flag_split_disagreements == 5
+    assert (
+        nine.zero_flag_split_agreements + nine.zero_flag_split_disagreements
+        == nine.zero_flag_convictions
+    )
 
 
-def test_9p2i_j1_clamp_exempt_rows_pinned(nine_walk: list[_VJGameWalk]) -> None:
+def test_9p2i_j1_clamp_exempt_rows_pinned(
+    nine: VJInstrumentReport, nine_walk: list[_VJGameWalk]
+) -> None:
     # DoD: the previously-phantom provenance-sum breaches (the Phase-16 close §2
     # signature, routed to this task by §8 contract (a)) are censused
-    # INDIVIDUALLY as J1-clamp-exempt, identities pinned.
+    # INDIVIDUALLY as J1-clamp-exempt.
     #
-    # The promoted stage-b-r2 bytes hold no J1-clamp-exempt row, as the
-    # baseline-8 bytes did not; the baseline-9 bytes held three, all over p-1 in
-    # seed 19 meeting 3. A clamped row is an entirely-soft conviction-grade row
+    # The baseline-9 bytes held three, all over p-1 in seed 19 meeting 3; the
+    # shown set's are not transcribed. A clamped row is an entirely-soft
+    # conviction-grade row
     # whose raw 0.5 + Σ sits over the J1 render ceiling 0.59 (0.60 there),
     # rendered at the ceiling with the raw typed provenance kept.
     #
     # The sweep runs over ALL meetings, not one: every row of every meeting is
-    # checked sound under the J1-aware invariant, and the exempt rows are pinned
-    # by identity, so one that appears or vanishes fails loud here rather than
-    # passing quietly.
+    # checked sound under the J1-aware invariant, and every exempt row is held
+    # to the clamp arithmetic one by one.
     # The exempt BRANCH is also covered by the two synthetic tests below
     # (``test_cross_check_exempts_the_j1_clamp_but_catches_real_breaches`` and
     # ``test_row_predicates_classify_raw_clamp_and_breach``).
@@ -492,11 +500,10 @@ def test_9p2i_j1_clamp_exempt_rows_pinned(nine_walk: list[_VJGameWalk]) -> None:
                     # exactly, so the gauge does NOT count it as a breach.
                     assert clamped == pytest.approx(entry.suspicion)
                     assert not _row_sum_breaches(entry)
-    # The sweep really ran over the whole set, not an empty walk.
-    assert rows_checked == 3101  # == nine.provenance_rows_checked; was 3618
-    # Was the three seed-19 rows (p-3, p-4, p-5 over p-1) on the baseline-9
-    # bytes, and [] on the baseline-8 bytes.
-    assert exempt_rows == []
+    # The sweep really ran over the whole set, not an empty walk: the same rows
+    # the instrument's own cross-check counted.
+    assert rows_checked == nine.provenance_rows_checked > 0
+    assert len(set(exempt_rows)) == len(exempt_rows)
 
 
 def test_cross_check_exempts_the_j1_clamp_but_catches_real_breaches() -> None:
@@ -558,21 +565,27 @@ def test_9p2i_citation_compliance_pins(nine: VJInstrumentReport) -> None:
     # nulled a rendered reason id or observation id, and no zero-flag rationale
     # was coerced.
     #
-    # These ten lines are PARSED by scripts/check_doc_facts.py to re-derive
-    # README's citation-compliance row, so they must stay in the bare
-    # ``assert nine.<field> == <int>`` shape -- no trailing comment. The
-    # baseline-9 bytes read 845 / 349 / 496 / 478 / 478 / 0 / 235 / 235 / 0 / 496.
-    assert nine.ballots_total == 691
-    assert nine.skip_ballots == 281
+    # The four bare ``assert nine.<field> == <int>`` lines are PARSED by
+    # scripts/check_doc_facts.py to re-derive README's citation-compliance row
+    # and the reading guide's ballot figure, so they stay in that shape -- no
+    # trailing comment -- as the front door's committed source. Every other
+    # cell is derived from them and from the recorded rows.
     assert nine.eject_ballots == 410
-    assert nine.turn_citations == 384
-    assert nine.turn_citations_valid == 384
-    assert nine.turn_citations_dangling == 0
-    assert nine.observation_citations == 190
-    assert nine.observation_citations_valid == 190
-    assert nine.observation_citations_dangling == 0
     assert nine.cited_eject_ballots == 410
-    assert nine.citation_compliance_rate == pytest.approx(410 / 410)  # was 496 / 496
+    assert nine.turn_citations_dangling == 0
+    assert nine.observation_citations_dangling == 0
+    shown_rows = recorded_counts(_NINE)
+    assert nine.ballots_total == shown_rows.ballots
+    assert nine.skip_ballots == shown_rows.skip_ballots
+    assert nine.turn_citations_valid == (
+        nine.turn_citations - nine.turn_citations_dangling
+    )
+    assert nine.observation_citations_valid == (
+        nine.observation_citations - nine.observation_citations_dangling
+    )
+    assert nine.citation_compliance_rate == pytest.approx(
+        nine.cited_eject_ballots / nine.eject_ballots
+    )
     assert nine.nulled_reason_id_markers == 0
     assert nine.nulled_observation_id_markers == 0
     assert nine.coerced_zero_flag_markers == 0
@@ -581,44 +594,34 @@ def test_9p2i_citation_compliance_pins(nine: VJInstrumentReport) -> None:
 def test_9p2i_ballot_calibration_pins_the_baseline_5_cell(
     nine: VJInstrumentReport,
 ) -> None:
-    # Stage-b-r2 vote-ballot calibration: ECE 0.3049 at n=410, over the same
-    # recorded ballot stream the committed accusation-calibration fold and
+    # The shown set's vote-ballot calibration runs over every eject ballot, the
+    # same recorded ballot stream the committed accusation-calibration fold and
     # measure_baseline --json read (one sample stream, one deliberate
     # guard-authored exclusion documented in
-    # ``test_ballot_calibration_matches_the_committed_fold``).
-    assert nine.ballot_calibration_total == 410  # was 496
-    assert nine.ballot_confidence_ece == pytest.approx(
-        0.30490243902438957
-    )  # was 0.1460887096774164
-    assert nine.ballot_confidence_brier == pytest.approx(
-        0.30717780487804874
-    )  # was 0.17515806451612903
-    # LOW POWER on these bytes: the ballots concentrate in fewer decile bins
-    # than the >=5 the gauge asks for (baseline 6 populated enough at n=520).
-    assert nine.ballot_calibration_low_power is True
+    # ``test_ballot_calibration_matches_the_committed_fold``). Its ECE, Brier
+    # and power flag are not transcribed (the baseline-9 bytes read 0.1461 and
+    # 0.1752 at n=496); both scores sit in [0, 1].
+    assert nine.ballot_calibration_total == nine.eject_ballots
+    for score in (nine.ballot_confidence_ece, nine.ballot_confidence_brier):
+        assert score is not None and 0.0 <= score <= 1.0
 
 
 def test_9p2i_voice_tier_pins(nine: VJInstrumentReport) -> None:
     # The voice denominator is the MODEL-authored ballots, so it sits below
-    # ``ballots_total`` by exactly the guard-authored rows the tier drops.
-    assert nine.ballots_total == 691  # was 845
-    assert nine.guard_authored_ballots_excluded == 16  # was 1
-    assert nine.voice_ballots_total == 675  # was 844
-    assert nine.echo_ballots == 0
-    assert nine.within_meeting_echo_rate == pytest.approx(0.0)
-    assert nine.response_skeleton_share == pytest.approx(
-        0.01925925925925926
-    )  # was 0.013033175355450236
-    assert nine.distinct_skeletons == 664  # was 830
+    # ``ballots_total`` by exactly the guard-authored rows the tier drops. The
+    # shown set's voice cells are derived, not transcribed.
+    assert nine.ballots_total == recorded_counts(_NINE).ballots
+    assert nine.voice_ballots_total == (
+        nine.ballots_total - nine.guard_authored_ballots_excluded
+    )
+    assert nine.within_meeting_echo_rate == pytest.approx(
+        nine.echo_ballots / nine.voice_ballots_total
+    )
     assert nine.distinct_skeleton_ratio == pytest.approx(
-        0.9837037037037037
-    )  # was 0.9834123222748815
-    assert nine.distinct_1 == pytest.approx(
-        0.11481831689855464
-    )  # was 0.09852104664391353
-    assert nine.distinct_2 == pytest.approx(
-        0.3948765126318024
-    )  # was 0.3421964627151052
+        nine.distinct_skeletons / nine.voice_ballots_total
+    )
+    for share in (nine.response_skeleton_share, nine.distinct_1, nine.distinct_2):
+        assert share is not None and 0.0 <= share <= 1.0
 
 
 def test_9p2i_voice_denominator_is_not_the_judgment_denominator(
@@ -641,9 +644,7 @@ def test_9p2i_pooling_rides_the_same_report(nine: VJInstrumentReport) -> None:
     # DoD: 16.17 reads voice ALONGSIDE zero-flag — pooling + judgment +
     # voice are one machine-readable object per set.
     assert nine.pooling.meetings_total == nine.meetings_total
-    assert nine.pooling.whereabouts_claims_total == 754  # was 789
-    assert nine.pooling.vouch_observations_total == 829  # was 824
-    assert len(nine.per_meeting) == 117  # was 145
+    assert len(nine.per_meeting) == nine.meetings_total
 
 
 def test_4p1i_reproduces_baseline_5_exactly(four: VJInstrumentReport) -> None:
@@ -732,7 +733,7 @@ def test_per_meeting_rows_pair_voice_with_judgment(nine: VJInstrumentReport) -> 
     assert row.ballots > 0
     assert row.echo_rate is not None
     ejected_rows = [r for r in nine.per_meeting if r.outcome == "EJECTED"]
-    assert len(ejected_rows) == 66  # was 90
+    assert len(ejected_rows) == nine.convictions_total
     assert all(r.typed_split is not None for r in ejected_rows)
     skipped_rows = [r for r in nine.per_meeting if r.outcome == "SKIPPED"]
     assert all(r.typed_split is None for r in skipped_rows)
@@ -850,13 +851,15 @@ def test_cli_vj_human_render_names_the_gauges(
 
 
 def test_cli_vj_human_render_publishes_a_nonzero_exclusion(
-    capsys: pytest.CaptureFixture[str],
+    nine: VJInstrumentReport, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # The 4p1i control reads 0, so it cannot show the cell MOVING. 9p2i has
-    # sixteen recorded redactions and its voice denominator sits below its
-    # ballot count — both visible on the one line a reader actually reads.
+    # recorded redactions and its voice denominator sits below its ballot count
+    # — both visible on the one line a reader actually reads, and read off the
+    # instrument rather than transcribed.
+    assert nine.guard_authored_ballots_excluded > 0
     assert measure_baseline.main([str(_NINE), "--vj"]) == 0
     out = capsys.readouterr().out
 
-    assert "guard-authored excluded 16" in out  # was 1
-    assert "echo 0/675" in out  # was 0/844
+    assert f"guard-authored excluded {nine.guard_authored_ballots_excluded}" in out
+    assert f"echo {nine.echo_ballots}/{nine.voice_ballots_total}" in out

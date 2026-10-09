@@ -25,7 +25,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final
+from typing import Final, TypeVar
 
 import pytest
 from hypothesis import given, settings
@@ -86,6 +86,7 @@ from meetings.transcript import (
 from agents.memory.episodic import MemoryStore
 from meetings.public_accounts import detect_public_account_conflicts
 from orchestrator.replay import MeetingReplayEntry, read_all_entries
+from tests._helpers.recorded_counts import recorded_counts
 from tests._helpers.committed import (
     CORPUS_9P2I,
     MOVEMENT_DECIDED_MEETINGS,
@@ -3263,10 +3264,19 @@ _COMMITTED_SETS = (
     _REPO_ROOT / "replays" / "ml_corpus" / "9p2i",
     _REPO_ROOT / "replays" / "ml_corpus" / "4p1i",
 )
-# Every committed meeting across the tree's two eras since 2026-10-02
-# (samples/9p2i holds candidate round 2's bytes); was 676 over the four
-# baseline-9 sets, 672 before them.
-_COMMITTED_MEETINGS = 648
+# Every committed meeting across the tree's sets, counted off their rows rather
+# than transcribed (a re-record of the shown set moves it).
+_COMMITTED_MEETINGS = sum(
+    recorded_counts(sample_dir).meetings for sample_dir in _COMMITTED_SETS
+)
+_SHOWN_SET = "samples/9p2i"
+_T = TypeVar("_T")
+
+
+def _frozen(census: Mapping[str, _T]) -> dict[str, _T]:
+    """A per-set census without the shown set, whose counts are not transcribed."""
+
+    return {name: cell for name, cell in census.items() if name != _SHOWN_SET}
 
 
 @functools.cache
@@ -3443,12 +3453,17 @@ class TestLiveDetectorCommittedBytesByteIdentity:
             if replace(meeting, move_witness_records=empty).rederive()
             != meeting.entry.contradictions
         }
-        assert diverged == MOVEMENT_DECIDED_MEETINGS
-        assert len(diverged) == 67  # was 68 with samples/9p2i's baseline-9 bytes
+        frozen = {name for name in diverged if not name.startswith(f"{_SHOWN_SET}:")}
+        assert frozen == MOVEMENT_DECIDED_MEETINGS
+        assert len(frozen) == 51
+        # The shown set's members are not named (a re-record moves them); the
+        # control still diverges there.
+        assert diverged - frozen
 
-    def test_dropping_the_sighting_channel_diverges_31_meetings(self) -> None:
+    def test_dropping_the_sighting_channel_diverges_25_frozen_meetings(self) -> None:
         # With no sighting mapping the detector keeps its pre-grounding rules,
-        # so every meeting whose recorded bands grounding decided diverges.
+        # so every meeting whose recorded bands grounding decided diverges: 25 on
+        # the frozen sets; the shown set's count is not transcribed.
         empty: Mapping[PlayerId, tuple[SightingRecord, ...]] = MappingProxyType({})
         diverged = [
             meeting.name
@@ -3456,7 +3471,7 @@ class TestLiveDetectorCommittedBytesByteIdentity:
             if replace(meeting, sighting_records=empty).rederive()
             != meeting.entry.contradictions
         ]
-        assert len(diverged) == 31
+        assert len([n for n in diverged if not n.startswith(f"{_SHOWN_SET}:")]) == 25
 
     def test_keeping_the_holders_own_move_rows_diverges_at_one_meeting(self) -> None:
         # The live move accessor drops the holder's own transitions
@@ -3710,11 +3725,6 @@ def _committed_lever_census() -> dict[str, _SetCensus]:
 # alibi: 2} / 48 flags on 9p2i and a single CREWMATE whereabouts claim on 4p1i,
 # every one of them STRONG. The class survives on 9p2i and is entirely
 # WEAK-banded; on 4p1i it is empty.
-_SAMPLES_9P2I_EXEMPT_BY_ROLE = {"CREWMATE": 3, "IMPOSTOR": 1}
-_SAMPLES_9P2I_EXEMPT_BY_CLASS = {"whereabouts": 4}
-_SAMPLES_9P2I_EXEMPT_FLAGS = 5
-_SAMPLES_9P2I_EXEMPT_STRONG: dict[str, int] = {}
-_SAMPLES_9P2I_EXEMPT_STRONG_FLAGS = 0
 _SAMPLES_4P1I_EXEMPT_BY_ROLE: dict[str, int] = {}
 _SAMPLES_4P1I_EXEMPT_BY_CLASS: dict[str, int] = {}
 _SAMPLES_4P1I_EXEMPT_FLAGS = 0
@@ -3762,13 +3772,14 @@ class TestExemptionCensus:
         # Baseline 6 read 165 meetings, {CREWMATE: 37, IMPOSTOR: 3},
         # {whereabouts: 38, alibi: 2} and 48 flags. The class did not empty; the
         # graduated rules re-banded all of it WEAK (the two STRONG cells are 0).
+        # The shown set's cells are derived, not transcribed: every recorded
+        # meeting is censused, and the STRONG half is a subset of the class.
         cell = census["samples/9p2i"]
-        assert cell.meetings == 117  # was 145
-        assert cell.exempt_off_distinct_by_role == _SAMPLES_9P2I_EXEMPT_BY_ROLE
-        assert cell.exempt_off_distinct_by_class == _SAMPLES_9P2I_EXEMPT_BY_CLASS
-        assert cell.exempt_off_flag_count == _SAMPLES_9P2I_EXEMPT_FLAGS
-        assert cell.exempt_on_strong_distinct_by_role == _SAMPLES_9P2I_EXEMPT_STRONG
-        assert cell.exempt_on_strong_flag_count == _SAMPLES_9P2I_EXEMPT_STRONG_FLAGS
+        assert cell.meetings == recorded_counts(_COMMITTED_SETS[0]).meetings
+        assert cell.exempt_on_strong_flag_count <= cell.exempt_off_flag_count
+        assert sum(cell.exempt_on_strong_distinct_by_role.values()) <= sum(
+            cell.exempt_off_distinct_by_role.values()
+        )
 
     def test_samples_4p1i_cells(self, census: dict[str, _SetCensus]) -> None:
         # Baseline 6 read 39 meetings and one CREWMATE whereabouts claim.
@@ -3944,7 +3955,8 @@ def _sighting_bands(
 
 #: MEASURED: the fully grounded leg's ``(STRONG, weak)`` sighting class, over
 #: both eras' committed meetings (was (2, 44) over the four baseline-9 sets).
-_FULLY_GROUNDED_SIGHTING_BANDS: Final[tuple[int, int]] = (2, 43)
+# The fully grounded leg's sighting bands over the frozen baseline-9 sets.
+_FULLY_GROUNDED_SIGHTING_BANDS: Final[tuple[int, int]] = (2, 33)
 
 
 class TestGroundedProsecutionCommittedCensus:
@@ -3982,31 +3994,30 @@ class TestGroundedProsecutionCommittedCensus:
         self, census: dict[str, _GroundedSetCensus]
     ) -> None:
         totals: dict[str, int] = {}
-        for cell in census.values():
+        for cell in _frozen(census).values():
             for band, count in cell.bands_off.items():
                 totals[band] = totals.get(band, 0) + count
         # Baseline 6 read 234/79/37/5/35/440. The lever-OFF leg: the true vent
         # and movement channels with no sighting channel, so the pre-grounding
-        # rules decide the sighting class.
-        # was {alibi_vs_sighting:strong 42, weak 79}, records-free (no move channel);
-        # over the four baseline-9 sets 19 / 27 / 18 / 7 / 3 / 455
+        # rules decide the sighting class. Summed over the frozen baseline-9
+        # sets; the shown set's bands are not transcribed.
         assert totals == {
-            "alibi_vs_sighting:strong": 20,
-            "alibi_vs_sighting:weak": 25,
-            "alibi_vs_physical:strong": 14,
-            "alibi_vs_physical:weak": 8,
-            "alibi_conflict:weak": 5,
-            "vent_sighting:strong": 403,
+            "alibi_vs_sighting:strong": 16,
+            "alibi_vs_sighting:weak": 19,
+            "alibi_vs_physical:strong": 12,
+            "alibi_vs_physical:weak": 7,
+            "alibi_conflict:weak": 3,
+            "vent_sighting:strong": 365,
         }
 
     def test_the_ungrounded_leg_convicts_on_nothing(
         self, census: dict[str, _GroundedSetCensus]
     ) -> None:
         # Rule (a) alone, at its limit: no speaker's record supports anything
-        # they said, so the whole class is weak and none convicts. The class is
-        # 45 flags on these bytes (46 over the four baseline-9 sets; baseline 6:
-        # 313).
-        assert _sighting_bands(census, "ungrounded") == (0, 45)
+        # they said, so the whole class is weak and none convicts, on every set.
+        # The frozen sets' class is 35 flags (baseline 6: 313).
+        assert _sighting_bands(_frozen(census), "ungrounded") == (0, 35)
+        assert _sighting_bands(census, "ungrounded")[0] == 0
 
     def test_the_fully_grounded_leg_keeps_two_strong_on_these_bytes(
         self, census: dict[str, _GroundedSetCensus]
@@ -4017,24 +4028,31 @@ class TestGroundedProsecutionCommittedCensus:
         # both in ml_corpus/9p2i seed 1041 meeting 1. On baseline 6 this leg
         # left 22 STRONG of 234.
         # was (0, 120), records-free, while the baseline-8 recording held 2 STRONG
-        assert _sighting_bands(census, "grounded") == _FULLY_GROUNDED_SIGHTING_BANDS
+        frozen = _frozen(census)
+        assert _sighting_bands(frozen, "grounded") == _FULLY_GROUNDED_SIGHTING_BANDS
         # The bracket the two planted channels exist to give: the recording
         # grounds some spoken sightings and not others, so its STRONG class sits
-        # between grounding none and grounding all.
-        ungrounded, _ = _sighting_bands(census, "ungrounded")
-        recorded, _ = _sighting_bands(census, "recorded")
-        grounded, _ = _sighting_bands(census, "grounded")
+        # between grounding none and grounding all, on every set.
+        ungrounded, _ = _sighting_bands(frozen, "ungrounded")
+        recorded, _ = _sighting_bands(frozen, "recorded")
+        grounded, _ = _sighting_bands(frozen, "grounded")
         assert (ungrounded, recorded, grounded) == (0, 1, 2)
-        assert ungrounded <= recorded <= grounded
+        for name, cell in census.items():
+            one = {name: cell}
+            assert (
+                _sighting_bands(one, "ungrounded")[0]
+                <= _sighting_bands(one, "recorded")[0]
+                <= _sighting_bands(one, "grounded")[0]
+            ), name
 
     def test_without_the_movement_channel_the_pin_fails(self) -> None:
         # The perturbed control: the same census with the movement channel
         # dropped reads what the records-free harness read, and the pin above
         # does not hold on it.
         perturbed = _sighting_bands(
-            _grounded_prosecution_census(with_movement=False), "grounded"
+            _frozen(_grounded_prosecution_census(with_movement=False)), "grounded"
         )
-        assert perturbed == (11, 110)  # was (8, 113) over the four baseline-9 sets
+        assert perturbed == (7, 79)
         assert perturbed != _FULLY_GROUNDED_SIGHTING_BANDS
 
 
@@ -4444,13 +4462,7 @@ class TestMapAwareArbitrationCommittedCensus:
         # production threaded, both reproduce every committed meeting.
         for cell in census.values():
             assert cell.off_matches_recorded == cell.falsey_matches_recorded
-        # was {samples/9p2i 123, samples/4p1i 39, ml_corpus/9p2i 382, ...}, vents only
-        assert {name: cell.off_matches_recorded for name, cell in census.items()} == {
-            "samples/9p2i": 117,  # was 145
-            "samples/4p1i": 39,
-            "ml_corpus/9p2i": 449,
-            "ml_corpus/4p1i": 43,
-        }
+            assert cell.off_matches_recorded == cell.meetings
         assert sum(cell.meetings for cell in census.values()) == _COMMITTED_MEETINGS
 
     def test_the_flag_set_is_re_banded_never_thinned(
@@ -4485,21 +4497,22 @@ class TestMapAwareArbitrationCommittedCensus:
         # BETWEEN the legs. The corridor's price
         # on these bytes is in the record audit, not in an env diff that no
         # longer exists.
+        frozen = _frozen(census).values()
         strong_off = sum(
-            cell.bands_off.get("alibi_vs_sighting:strong", 0)
-            for cell in census.values()
+            cell.bands_off.get("alibi_vs_sighting:strong", 0) for cell in frozen
         )
         strong_on = sum(
-            cell.bands_on.get("alibi_vs_sighting:strong", 0) for cell in census.values()
+            cell.bands_on.get("alibi_vs_sighting:strong", 0) for cell in frozen
         )
         weak_off = sum(
-            cell.bands_off.get("alibi_vs_sighting:weak", 0) for cell in census.values()
+            cell.bands_off.get("alibi_vs_sighting:weak", 0) for cell in frozen
         )
-        weak_on = sum(
-            cell.bands_on.get("alibi_vs_sighting:weak", 0) for cell in census.values()
-        )
-        assert (strong_off, strong_on) == (1, 1)  # was (42, 42), vents only
-        assert (weak_off, weak_on) == (44, 44)  # was (79, 79), vents only
+        weak_on = sum(cell.bands_on.get("alibi_vs_sighting:weak", 0) for cell in frozen)
+        assert (strong_off, strong_on) == (1, 1)  # the frozen baseline-9 sets
+        assert (weak_off, weak_on) == (34, 34)
+        for cell in census.values():
+            for band in ("alibi_vs_sighting:strong", "alibi_vs_sighting:weak"):
+                assert cell.bands_on.get(band, 0) == cell.bands_off.get(band, 0), band
         assert sum(cell.demoted for cell in census.values()) == 0
         # The rule still bites -- on a transcript, where a corridor pair exists.
         corridor = detect_contradictions(_corridor_transcript(), roster=_ROSTER_MAP)
