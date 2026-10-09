@@ -1122,36 +1122,38 @@ _BASELINE_SUPPLY_FLOORS: Final[Mapping[str, Mapping[str, SupplyFloors]]] = {
         ),
     },
     # A STAGE block, not a baseline: the shown 9-player set's era since the
-    # promotion of candidate round 2 (2026-10-02; eval/eras.py). The ladder tip
+    # promotion of candidate round 3 (2026-10-09; eval/eras.py). The ladder tip
     # stays at baseline 9, whose 9p2i entry above stays as history and as the ML
-    # selection floor (BAKEOFF_BASELINE_ID); the bytes it was measured on left
-    # replays/samples/9p2i at the promotion. Only a 9p2i entry: the other sets
-    # did not move. Measured on replays/samples/9p2i, the round-2 recording (the
-    # seven adopted gameplay arms, the kept vent exit, kill cooldown 6), through
-    # the referee's walk with the layers it declares (REFEREE_READS):
-    #   witnessed_event_rate        = 14/195 = 0.07179487179487179
-    #   flags_per_meeting           = 53/117 = 0.452991452991453 (38 recorded
+    # selection floor (BAKEOFF_BASELINE_ID). Only a 9p2i entry: the other sets
+    # did not move. Measured on replays/samples/9p2i, the round-3 recording (the
+    # seven adopted gameplay arms, the kept vent exit, kill cooldown 6 and the
+    # route lines), through the referee's walk with the layers it declares
+    # (REFEREE_READS):
+    #   witnessed_event_rate        = 14/192 = 0.07291666666666667
+    #   flags_per_meeting           = 54/119 = 0.453781512605042 (39 recorded
     #                                 vent flags + 15 recorded transcript flags)
-    #     transcript component      = 15/117 = 0.1282051282051282
-    #     persisted-vent component  = 38/117 = 0.3247863247863248
-    #   testimony_backed_conversion = 44/94 = 0.46808510638297873
+    #     transcript component      = 15/119 = 0.12605042016806722
+    #     persisted-vent component  = 39/119 = 0.3277310924369748
+    #   testimony_backed_conversion = 46/94 = 0.48936170212765956
     #                                 (OBSERVATION-BACKED, SUBJECT-AWARE)
     # TASK 16.11 derivation (population_relative_conversion=True): the set
-    # itself reads flags 53/117 -> ratio exactly 1.0 -> derived floor = pin;
-    # measured 44/94 -> PASS at exact equality (self-consistency).
-    "stage-b-r2": {
+    # itself reads flags 54/119 -> ratio exactly 1.0 -> derived floor = pin;
+    # measured 46/94 -> PASS at exact equality (self-consistency).
+    # History: the stage-b-r2 block (14/195, 53/117, 44/94), measured on round
+    # 2's bytes, left with them at round 3's promotion (2026-10-09).
+    "stage-b-r3": {
         "9p2i": SupplyFloors(
-            witnessed_event_rate=FloorPin(value=0.07179487179487179, numerator=14),
-            flags_per_meeting=FloorPin(value=0.452991452991453, numerator=53),
+            witnessed_event_rate=FloorPin(value=0.07291666666666667, numerator=14),
+            flags_per_meeting=FloorPin(value=0.453781512605042, numerator=54),
             testimony_backed_conversion=FloorPin(
-                value=0.46808510638297873, numerator=44
+                value=0.48936170212765956, numerator=46
             ),
             population_relative_conversion=True,
             transcript_flags_per_meeting=FloorPin(
-                value=0.1282051282051282, numerator=15
+                value=0.12605042016806722, numerator=15
             ),
             persisted_vent_flags_per_meeting=FloorPin(
-                value=0.3247863247863248, numerator=38
+                value=0.3277310924369748, numerator=39
             ),
         ),
     },
@@ -2479,7 +2481,7 @@ def default_baseline_id(
 
     A committed set reads its own era's block, as the era registry
     (:mod:`eval.eras`) names it: ``replays/samples/4p1i`` reads ``baseline-9``
-    and ``replays/samples/9p2i`` reads ``stage-b-r2``. A directory the registry
+    and ``replays/samples/9p2i`` reads ``stage-b-r3``. A directory the registry
     does not name (a candidate round, a scratch copy, a training evaluation)
     reads the ladder tip's block, ``baseline-9``; the training-side selection
     floors pass ``BAKEOFF_BASELINE_ID`` explicitly and never reach this default.

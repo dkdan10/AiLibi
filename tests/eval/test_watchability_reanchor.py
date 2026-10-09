@@ -260,12 +260,13 @@ def test_fsm_baseline_sets_pass_at_exact_equality_under_the_reanchor() -> None:
     (the derivation multiplies the pin by the ratio, in that order, so "the
     baseline passes at equality" survives the re-anchor bit-exact). Each set is
     scored against its own era's block by default (eval/eras.py): 9p2i against
-    the stage-b-r2 block at 44/94, 4p1i against baseline 9 at 20/37 (the
-    baseline-9 9p2i bytes read 79/112; baseline 8 read 81/128 and 20/33,
+    the stage-b-r3 block at 46/94, 4p1i against baseline 9 at 20/37 (the
+    stage-b-r2 9p2i bytes read 44/94; the baseline-9 9p2i bytes 79/112;
+    baseline 8 read 81/128 and 20/33,
     baseline 7 84/132 and 20/34, baseline 6 78/136 and 9/30).
     """
 
-    expected = {_NINE: 44 / 94, _FOUR: 20 / 37}  # was 79 / 112, 20 / 37
+    expected = {_NINE: 46 / 94, _FOUR: 20 / 37}  # was 44 / 94, 20 / 37
     for sample_dir, fraction in expected.items():
         report = compute_watchability(sample_dir)
         assert report.referee_passed is True, sample_dir.name
