@@ -1,6 +1,6 @@
 # Candidate round 3: the route lines on the shown set's rules
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
