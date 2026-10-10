@@ -197,8 +197,9 @@ together, so one run names every drifted fact rather than the first.
     is the one its voter wrote, with the teammate firewall's count beside it)
     are held, figure and before cell, in BOTH tables to the shown set's table
     on the generated ``docs/process-scorecard.md`` — never its JSON — whose
-    before column must name the era the shown set's recording replaced. Every
-    row but the two integrity rows sits below all four.
+    before column must name the era the shown set's recording replaced. The two
+    integrity rows open both tables, the four follow, and every other row sits
+    below all four.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -728,9 +729,9 @@ _PROCESS_ROWS: Final[tuple[tuple[str, str], ...]] = (
     (_UNEXPLAINED_CLAIM, "unexplained-decision rate"),
     (_AUTHORED_CLAIM, "agent-authored share"),
 )
-# The two rows allowed above the process rows: the replays reconstruct, and the
-# observation boundary holds. Every other row of either table, outcome and
-# role-correct rows among them, sits below all four.
+# The two rows that open both tables, above the process rows: the replays
+# reconstruct, and the observation boundary holds. Every other row of either
+# table, outcome and role-correct rows among them, sits below all four.
 _INTEGRITY_CLAIMS: Final[tuple[str, ...]] = (
     _REPLAY_COUNT_CLAIM,
     "Observation boundary checks",
@@ -3224,8 +3225,9 @@ def check_process_rows(repo_root: Path, readme: str, errors: list[str]) -> None:
     block of the era the shown set's recording replaced. The authored share
     carries the teammate firewall's count beside it, from the row-7 detail line.
 
-    Then the order: every row other than the two integrity rows sits below all
-    four, so no outcome or role-correct figure heads either table. A page that
+    Then the order: the two integrity rows open the table, the four follow, and
+    every other row sits below all four, so no outcome or role-correct figure
+    heads either table. A page that
     lacks the section, the table, a row, the before column or the detail line is
     refused by name rather than read around.
     """
@@ -3273,16 +3275,29 @@ def check_process_rows(repo_root: Path, readme: str, errors: list[str]) -> None:
 def check_process_order(
     document: str, claims: Sequence[str], errors: list[str]
 ) -> None:
-    """Every row but the two integrity rows sits below all four process rows.
+    """The two integrity rows open the table, the four process rows follow, and
+    every other row sits below all four.
 
-    Each row found above a process row is named with the first process row
-    beneath it, so a moved row reads as one error, not one per process row.
+    An integrity row found below a process row is named with the first process
+    row above it; any other row found above a process row is named with the
+    first process row beneath it, so a moved row reads as one error, not one per
+    process row.
     """
 
     process = [claim for claim, _ in _PROCESS_ROWS]
     positions = {claim: index for index, claim in enumerate(claims)}
     for index, claim in enumerate(claims):
-        if claim in _INTEGRITY_CLAIMS or claim in process:
+        if claim in process:
+            continue
+        if claim in _INTEGRITY_CLAIMS:
+            above = [row for row in process if -1 < positions.get(row, -1) < index]
+            if above:
+                errors.append(
+                    f"{document}: the integrity row {claim!r} sits below the "
+                    f"process row {min(above, key=positions.__getitem__)!r} — the "
+                    "two integrity rows open the table, above the four rows on how "
+                    "each vote was cast."
+                )
             continue
         below = [row for row in process if positions.get(row, -1) > index]
         if not below:

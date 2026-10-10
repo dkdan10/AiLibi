@@ -5937,3 +5937,30 @@ def test_a_linked_claim_is_still_read_as_its_row(doc_tree: Path) -> None:
         "does not state '15 of 15 innocent ejections sit in the no-proof cell'"
         in errors[0]
     )
+
+
+@pytest.mark.parametrize(
+    "integrity",
+    [
+        "Committed sample replays that reconstruct byte-identically",
+        "Observation boundary checks",
+    ],
+)
+def test_an_integrity_row_moved_below_the_process_rows_detected(
+    doc_tree: Path, integrity: str
+) -> None:
+    # Planted: one integrity row moved below the last process row in both
+    # tables, so agreement holds and only the order rule can refuse it.
+    for document in (_README, _READING_GUIDE):
+        text = _read(doc_tree, document)
+        row = _results_row_line(text, integrity)
+        authored = _results_row_line(text, _AUTHORED_CLAIM)
+        text = text.replace(row + "\n", "").replace(authored, f"{authored}\n{row}")
+        _write(doc_tree, document, text)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    for document, error in zip((_README, _READING_GUIDE), errors):
+        assert error.startswith(
+            f"{document}: the integrity row {integrity!r} sits below the process "
+            f"row {_GROUNDED_CLAIM!r}"
+        )
