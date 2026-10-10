@@ -26,6 +26,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DASHBOARD_COPY,
+  HEADER_COPY,
   MAP_COPY,
   PICKER_COPY,
   PROFILE_COPY,
@@ -515,6 +516,166 @@ describe("the public results tab's ejection heading", () => {
     expect(correctEjectionLeaves(sentence, "PUBLIC_RESULTS_COPY")).toEqual([
       "PUBLIC_RESULTS_COPY.ejectionsDescription",
     ]);
+  });
+});
+
+// ── the header's and the tour's source link ──────────────────────────────────
+//
+// The header reads the name, the tagline and one link to the repository, and
+// the guided tour's welcome step keeps the same link in plain words; the
+// attribution line both used to carry is gone. Their words live in
+// `HEADER_COPY`, so the attribution's words are refused anywhere in the copy
+// tree, and the two places that typed them inline carry no prose of their own.
+
+/** The removed attribution line's words, refused anywhere a viewer reads copy. */
+const ATTRIBUTION_WORDS = /directed by|Claude Code|Codex|AI-reviewed|ownership/i;
+
+/** The path of every string leaf in `tree` that carries an attribution word. */
+function attributionLeaves(tree: unknown, path: string): readonly string[] {
+  return stringLeaves(tree, path)
+    .filter((leaf) => ATTRIBUTION_WORDS.test(leaf.text))
+    .map((leaf) => leaf.path);
+}
+
+/** Class names are styling, not copy, so a span sets them aside first. */
+function bareSpan(span: string): string {
+  return span.replace(/className="[^"]*"/g, "");
+}
+
+/**
+ * The header's title block and the shell's `<header>` that mounts it (the
+ * workspace's mode banner is a `<header>` too, so the shell's is found inside
+ * `App`).
+ */
+function headerSpans(source: string): readonly [string, string] {
+  const titleStart = source.indexOf("export function ShellTitle(");
+  const titleEnd = source.indexOf("\n}\n", titleStart);
+  const app = source.indexOf("export default function App(");
+  const headerStart = source.indexOf("<header", app);
+  const headerEnd = source.indexOf("</header>", headerStart);
+  if (
+    titleStart < 0 ||
+    titleEnd <= titleStart ||
+    app < 0 ||
+    headerStart < 0 ||
+    headerEnd <= headerStart
+  ) {
+    throw new Error("the header moved");
+  }
+  return [
+    bareSpan(source.slice(titleStart, titleEnd)),
+    bareSpan(source.slice(headerStart, headerEnd)),
+  ];
+}
+
+/** The tour's welcome step, and the one link inside it. */
+function welcomeSpans(source: string): readonly [string, string] {
+  const stepStart = source.indexOf("export const STEPS");
+  const stepEnd = source.indexOf('title: "Perspective switcher', stepStart);
+  const step = source.slice(stepStart, stepEnd);
+  const linkStart = step.indexOf("<a ");
+  const linkEnd = step.indexOf("</a>", linkStart);
+  if (stepStart < 0 || stepEnd <= stepStart || linkStart < 0 || linkEnd <= linkStart) {
+    throw new Error("the welcome step moved");
+  }
+  return [bareSpan(step), bareSpan(step.slice(linkStart, linkEnd + "</a>".length))];
+}
+
+describe("the header's and the tour's source link", () => {
+  const app = stripComments(readFileSync(resolve(LIB_DIR, "../App.tsx"), "utf8"));
+  const tour = stripComments(
+    readFileSync(resolve(LIB_DIR, "../components/GuidedTour.tsx"), "utf8"),
+  );
+
+  it("holds the tagline, the two link texts and the repository", () => {
+    expect(HEADER_COPY).toEqual({
+      tagline: "Recorded AI social deduction",
+      sourceLinkText: "GitHub",
+      tourSourceLinkText: "Read the source on GitHub.",
+      sourceUrl: "https://github.com/dkdan10/AiLibi",
+    });
+  });
+
+  it("carries no attribution word anywhere in SPECTATOR_COPY", () => {
+    expect(stringLeaves(SPECTATOR_COPY, "SPECTATOR_COPY").length).toBeGreaterThan(20);
+    expect(attributionLeaves(SPECTATOR_COPY, "SPECTATOR_COPY")).toEqual([]);
+  });
+
+  it.each([
+    "directed by Daniel Keinan",
+    "code by Claude Code",
+    "and Codex",
+    "AI-reviewed",
+    "Source & ownership",
+  ])("catches %s restored as a copy value, naming the key (planted)", (words) => {
+    const planted = {
+      ...SPECTATOR_COPY,
+      header: { ...HEADER_COPY, tagline: `${HEADER_COPY.tagline} · ${words}` },
+    };
+    expect(attributionLeaves(planted, "SPECTATOR_COPY")).toEqual([
+      "SPECTATOR_COPY.header.tagline",
+    ]);
+  });
+
+  it("walks the whole tree, not only the header group (planted)", () => {
+    const planted = {
+      ...SPECTATOR_COPY,
+      dashboard: { ...DASHBOARD_COPY, intro: "Directed by Daniel Keinan." },
+    };
+    expect(attributionLeaves(planted, "SPECTATOR_COPY")).toEqual([
+      "SPECTATOR_COPY.dashboard.intro",
+    ]);
+  });
+
+  it("renders the header's words from the copy", () => {
+    const [title, header] = headerSpans(app);
+    expect(header).toContain("<ShellTitle />");
+    for (const key of ["tagline", "sourceLinkText", "sourceUrl"]) {
+      expect(title).toContain(`HEADER_COPY.${key}`);
+    }
+    expect(proseLiterals(title)).toEqual([]);
+    expect(proseLiterals(header)).toEqual([]);
+    expect(ATTRIBUTION_WORDS.test(title + header)).toBe(false);
+  });
+
+  it("catches the old strip typed back into the header (planted)", () => {
+    const [title] = headerSpans(app);
+    const literal = title.replace(
+      "{HEADER_COPY.tagline}",
+      "Recorded AI social deduction · directed by Daniel Keinan",
+    );
+    expect(literal).not.toBe(title);
+    expect(proseLiterals(literal)).toEqual([
+      "Recorded AI social deduction · directed by Daniel Keinan",
+    ]);
+    const link = title.replace("{HEADER_COPY.sourceLinkText}", "Source & ownership");
+    expect(link).not.toBe(title);
+    expect(ATTRIBUTION_WORDS.test(link)).toBe(true);
+  });
+
+  it("renders the welcome step's one link from the copy", () => {
+    const [step, link] = welcomeSpans(tour);
+    expect(step.split("<a ")).toHaveLength(2);
+    expect(link).toContain("HEADER_COPY.sourceUrl");
+    expect(link).toContain("HEADER_COPY.tourSourceLinkText");
+    expect(proseLiterals(link)).toEqual([]);
+    expect(ATTRIBUTION_WORDS.test(step)).toBe(false);
+  });
+
+  it("catches the old link text, or the old sentence, typed back into the step (planted)", () => {
+    const [step, link] = welcomeSpans(tour);
+    const literal = link.replace(
+      "{HEADER_COPY.tourSourceLinkText}",
+      "Read the source and ownership case study.",
+    );
+    expect(literal).not.toBe(link);
+    expect(proseLiterals(literal)).toEqual(["Read the source and ownership case study."]);
+    const sentence = step.replace(
+      "not making live model calls.",
+      "not making live model calls. Daniel Keinan directs the project; Claude Code and Codex agents write code and supporting material, with separate AI review.",
+    );
+    expect(sentence).not.toBe(step);
+    expect(ATTRIBUTION_WORDS.test(sentence)).toBe(true);
   });
 });
 

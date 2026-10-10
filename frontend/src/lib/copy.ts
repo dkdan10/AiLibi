@@ -159,6 +159,16 @@ export function showsBallotCorrectness(
  * time.
  */
 export const SPECTATOR_COPY = Object.freeze({
+  /**
+   * The shell header and its one link to the source; the guided tour's welcome
+   * step links to the same repository in a sentence of its own.
+   */
+  header: Object.freeze({
+    tagline: "Recorded AI social deduction",
+    sourceLinkText: "GitHub",
+    tourSourceLinkText: "Read the source on GitHub.",
+    sourceUrl: "https://github.com/dkdan10/AiLibi",
+  }),
   /** The Tournament tab. Every prose string on that surface is here. */
   dashboard: Object.freeze({
     ariaLabel: "Tournament dashboard",
@@ -697,6 +707,7 @@ export const SPECTATOR_COPY = Object.freeze({
 
 export const BALLOT_COPY = SPECTATOR_COPY.ballot;
 export const DASHBOARD_COPY = SPECTATOR_COPY.dashboard;
+export const HEADER_COPY = SPECTATOR_COPY.header;
 export const MAP_COPY = SPECTATOR_COPY.map;
 export const MEETING_COPY = SPECTATOR_COPY.meeting;
 export const PICKER_COPY = SPECTATOR_COPY.picker;
