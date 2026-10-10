@@ -119,7 +119,11 @@ Each item names its enforcing mechanism and the planted or perturbed case that t
 seen red before the code it guards exists. Every count is the set shown at dispatch, measured at the head that states
 it.
 
-- [ ] **The README leads with the four process rows, each held to the scorecard page.**
+- [x] Review correction: the order rule holds the two integrity rows above the four process rows, as its
+  docstring and message say (review round 1, the Codex review of `11eb133a`). Mechanism: `check_process_order`.
+  Planted: `test_an_integrity_row_moved_below_the_process_rows_detected`, either integrity row moved below the
+  last process row in both tables, red on the previous rule and green on the fix.
+- [x] **The README leads with the four process rows, each held to the scorecard page.**
   - The rows read the shown set's per-set table and row-7 detail line of `docs/process-scorecard.md`, value and before
     cell, in plain words: grounded EJECT (stated as a floor: every eject ballot must cite), deviating EJECT (against
     the voter's own top suspect), unexplained decisions, and agent-authored with the teammate-coerced count beside. At
@@ -135,19 +139,19 @@ it.
   - Planted (`tests/scripts/test_check_doc_facts.py`), each failing by row name: a README numerator edited; a before
     cell edited; a scorecard value edited with the README unchanged; a process row deleted; the proof row moved above a
     process row; the shown set's table removed; the teammate-coerced count edited.
-- [ ] **Both pages keep their ceilings, and every figure keeps its check.** The README stays at or under 1,600 words
+- [x] **Both pages keep their ceilings, and every figure keeps its check.** The README stays at or under 1,600 words
   and the reading guide at or under 1,350 (`check_front_door_budgets`), with `_FRONT_DOOR_BUDGETS` unchanged in the
   diff. The words come out of prose below the rows; the Phase-20 and Phase-21 bar paragraphs stay on the README,
   condensed if need be (moving them to `docs/history.md` is D8's open half, the owner's). `check_verdict_figures`,
   `check_finding_figures`, `check_injustice_cell` and `check_populated_report_example` stay green unweakened.
   Planted: the README padded one word over its ceiling fails; a condensed bar sentence whose `k of n = rate` no longer
   computes fails `check_verdict_figures`.
-- [ ] **No new term reaches the front door undefined.** Each term the rows introduce that is not plain English (at
+- [x] **No new term reaches the front door undefined.** Each term the rows introduce that is not plain English (at
   least "top suspect") gets a `docs/glossary.md` entry, and each the README uses gets a `_DIALECT_TERMS` row (`:392`),
   so its first use links the glossary; no README cell carries threshold arithmetic. Mechanism: `check_dialect_terms`
   (`:2624`). Planted: the new term's first README use outside a glossary link fails, and its glossary heading deleted
   fails.
-- [ ] **The public tab's heading describes its count.** "Correct ejections" (`PublicResults.tsx:93`) becomes a
+- [x] **The public tab's heading describes its count.** "Correct ejections" (`PublicResults.tsx:93`) becomes a
   `PUBLIC_RESULTS_COPY` key that says what the fraction counts without calling it correct (proposed: "Ejected players
   who were impostors"), and the tile's description moves into the copy with it. The memo's "Ejections, by what the
   table held" is not used: the tile's number is a role read, not a grounding read, and a heading describes its own
@@ -157,24 +161,24 @@ it.
   (`proseLiterals` over it is empty) and a walk of `PUBLIC_RESULTS_COPY`'s string leaves (`stringLeaves`,
   `copy.test.ts:129`) for "correct ejection". Planted: "Correct ejections" restored as a literal fails the span case;
   restored as the copy value fails the leaf walk, naming the key.
-- [ ] **No featured game ejects a crewmate.** A new test in `tests/api/test_sets.py` reads `FEATURED_GAMES` and every
+- [x] **No featured game ejects a crewmate.** A new test in `tests/api/test_sets.py` reads `FEATURED_GAMES` and every
   meeting of each served featured replay, and fails naming the set, seed and meeting index of any crewmate ejection:
   D7's default ("no wrong-but-believable ejection featured") at its conservative strength. The role read is curation
   and gates no record. Planted: a featured replay copied with one ejectee's role read as a crewmate fails. If the
   promotion's tour already pins the same at every meeting, Results cites that pin and this card adds none.
-- [ ] **The stills stay as captured.** No still shows a string this card changes (Evidence 4), so nothing is
+- [x] **The stills stay as captured.** No still shows a string this card changes (Evidence 4), so nothing is
   re-captured and `docs/media/` and `frontend/e2e/media.spec.ts` are untouched. Mechanism:
   `test_media_hashes_and_labels_are_current` and `test_the_captions_scene_is_the_recorded_one`
   (`tests/scripts/test_public_recording_provenance.py:138`, `:411`) pass unchanged at H, and `git diff --stat B H --
   docs/media frontend/e2e/media.spec.ts tests/scripts/test_public_recording_provenance.py` prints nothing. Perturbed:
   the README caption's tick edited by one in a scratch copy fails the caption test, so the unchanged pass is not
   vacuous.
-- [ ] **Live-tense sentences follow the change.** Every current-tense sentence about the README's old lead rows or the
+- [x] **Live-tense sentences follow the change.** Every current-tense sentence about the README's old lead rows or the
   tab's old heading is rewritten in this PR (the README, the reading guide, `docs/glossary.md`, and any comment in
   `PublicResults.tsx`). `git grep -n -i 'correct ejections'` outside `tasks/` and `audits/` leaves only the README's
   reported sentence (`:29`), tests, `DESIGN.md` and other history, each hit justified in Results. Mechanism: the
   leaf walk and the span case. Planted: an old sentence restored in a copy value fails the walk.
-- [ ] **One bounded mutation pass, and the gate record.** One pass over the listed classes (a dropped filter or
+- [x] **One bounded mutation pass, and the gate record.** One pass over the listed classes (a dropped filter or
   wrapper, a swapped collection, a comparison made a None test, a role, kind, room or tick read made a constant, a
   dropped tuple member, swapped branches, a loaded source read as its literal, message arguments) over the process-row
   rule and its order check, the public heading's copy read and the strip guard. Survivors are killed or reported in
@@ -300,4 +304,197 @@ the exact head, by run id, is the gate record.
 
 ## Results
 
-Not started.
+Built on `work/front-door-process-first` from `origin/main` at `76d1c826` (`B` below), on 2026-10-09, after the
+round-3 record (#505), the D14 retirement (#506) and the promotion (#507) merged and the step after round 3 was
+written (audit section 11); `main` did not move under the branch, so nothing was merged in. Pull request #508. Every
+count was re-measured on round 3's bytes (the shown set, era `stage-b-r3`) at the head that states it; the Evidence
+section's counts were measured on round 2 and are now the before cells. Every census is count-only, keyed by (set,
+meeting): no rendered prompt, transcript text or seed-band prefix was printed, band 2100-2999 stayed unseen, the
+held-out generator was not run, no provider was called and the untracked `.env` was not read. Scratch work stayed
+under the session scratchpad. The Status line is the orchestrator's (Constraints, "One writer per file"); this
+commit fills Results and the acceptance boxes only.
+
+**Commits.** `4bf37433` the four rows, check 22, the glossary entry and the trims; `a729d545` the public tab's
+heading; `d980fd9e` the strip guard; `11eb133a` the condensed bar paragraph keeps its verdict word; `71abf7be` the
+review-round fix (the integrity rows held above the process rows); then this Results commit.
+
+**Sections relied on.** This card; `docs/architecture.md` ("Packages": the `frontend/` paragraph, copy over typed
+DTOs, and the `eval/` paragraph; "Enforced boundaries", untouched); `docs/workflow.md`; decision memo sections 8.1
+(ruling 4), 8.2 item 5, 8.7 (items 1, 2 and 4) and 8.9 with its amendment and its two defaults; the baselines memo
+(advisory, outside the tree) Part 4 D7 and D8, Part 3.1 (G18 DEMOTE, W42 KEEP, S1 and S9) and Part 3.3; the direction
+`tasks/direction-2026-09-19-process-over-outcome.md` sections 7 and 8; the scorecard page's own row definitions
+(`eval/process_scorecard.py` `ROW_DEFINITIONS`).
+
+### Decisions
+
+Orchestrator rulings at dispatch, as applied:
+1. D8 default (b): the four process rows lead, read from the markdown page, never the JSON; the two role-correct rows
+   stay below under the existing "not demonstrated" sentence; the public tab's heading changes in the same merge
+   through `PUBLIC_RESULTS_COPY`, to the proposed "Ejected players who were impostors".
+2. D7 at its conservative strength: the strip guard fails naming set, seed and meeting index of any crewmate
+   ejection. All five featured games are clean, so nothing stopped and the featured list is unchanged.
+3. The grown before column: each process before cell reads round 2's block, the era the shown set replaced, through
+   `compare_before_figure`; the rule refuses a before column whose header names another era. Both pages now say each
+   before cell is what the set's "previously shown recording" read (was "replaced recording").
+4. Both ceilings hold without dropping a checked figure. The Phase-20 and Phase-21 bar paragraphs stay on the README;
+   the Phase-20 one is condensed, its verdict word and every figure kept.
+5. Nothing in `docs/media` or `frontend/e2e` moves.
+6. The live-tense sweep is item 7 below.
+7. The three halves held for the owner are untouched and no line of theirs is written: D8-L (the dashboard's "gate"
+   vocabulary and order, the "vote gate" badge), D8.1 (the belief panel's Error layer and the ballot badge) and D9-L
+   (skips by the line or by the label). No diff under `TournamentDashboard.tsx`, `MeetingView.tsx`,
+   `BeliefPanel.tsx`, `BeliefCell.tsx`, `BallotCard.tsx`, `GuidedTour.tsx` or `api/`.
+8. Publication: the PR body lists every string that goes live, old against new, and the bundle diff file by file;
+   the merge is the orchestrator's under memo 8.9.
+
+Decisions of this build:
+- **The rows' order** is the card's own: grounded EJECT first, labelled a floor; then deviating; unexplained;
+  authored. The baselines memo's "lead with those that moved" was measured on round 2 against baseline 9; against
+  round 2, all four of round 3's rows moved little, and the first row states the goal itself under its floor label.
+- **Figures quote the page verbatim** (`394/397 = 0.9924`), with no reformatting step; the authored row carries the
+  teammate count in words (`coerced_clause`). The page's row-1 SKIP half stays off the front door while D9 is open.
+- **The order rule is stronger than the card's wording:** the two integrity rows open the table (each present one
+  above every process row, since review round 1), and every other row must sit below all four process rows, so the
+  citation row is held too and no new row slips above them unannounced. A row out of place is named with the
+  nearest process row it crosses.
+- **Link-insensitive claim keys.** To link "top suspect" at its first README use (inside the deviating row's claim)
+  within the word budget, `results_rows`, `results_before_column` and `results_row` key a claim with its links
+  reduced to text; each table links the term from its own directory and still states one claim. A planted case holds
+  that a linked claim keeps its whole-row checks (the injustice clause).
+- **Existing tests followed the new text with their assertions kept** (Constraints): the round-2 rebuild hunks were
+  regenerated and still rebuild `2eed2e92`'s README byte for byte (16 hunks, checked in scratch);
+  `test_stubbed_results_table_detected` also guts the four new rows; `test_results_row_absent_from_the_guide_detected`
+  now also asserts the order error its renamed row earns, a second error rather than a looser count.
+- **Directly necessary follow-through, inside Expected scope:** `compare_result_figure` and `compare_before_figure`
+  gained a `document` keyword (defaulting to the README) so the guide's cells are compared too; the module docstring
+  gained check 22 and its summary line names the process rows.
+- **The card's Status line stays `ready`.** The house rule and the card's Constraints make it the orchestrator's on
+  `main`.
+
+### Acceptance evidence
+
+1. **The rows, held to the page.** Shown set (`docs/process-scorecard.md`, `### samples/9p2i`, rows 1, 2, 4, 7 and the
+   row-7 detail line, before column `before: stage-b-r2, as published at 2eed2e92`): grounded EJECT 394/397 = 0.9924
+   against 407/410 = 0.9927; deviating 56/291 = 19.2% against 65/292 = 22.3%; unexplained 6/702 = 0.0085 against
+   11/691 = 0.0159; authored 692/702 = 0.9858 against 674/691 = 0.9754, with `teammate_coerced 10` stated as "10
+   impostor votes against a partner turned into skips". Order in both tables: replays, boundary, the four rows,
+   citation, win rate, proof, vent, then (guide) partner ballots and emergence rulings, then learned policies. The
+   proof and vent rows keep `_PROOF_CLAIM`, `_VENT_CLAIM` and their checks; the not-demonstrated sentence
+   (`README.md:33` at the head) follows the table and reads them. Mechanism: check 22 in `check_facts`. Red first:
+   the 17 new doc-facts tests ran before the rule existed, `17 failed, 2 passed` (the two passes are existing tests
+   the `-k` filter matched); the rule then ran on the unchanged README and named all four missing rows in both
+   tables. Planted, each red by row name: `test_a_process_numerator_edited_in_both_tables_detected`,
+   `test_a_process_before_cell_edited_in_both_tables_detected`,
+   `test_a_scorecard_value_moved_under_an_unchanged_front_door_detected`, `test_a_deleted_process_row_detected`,
+   `test_the_proof_row_moved_above_a_process_row_detected` (README and guide),
+   `test_a_process_row_moved_below_the_win_rate_detected`, `test_the_shown_sets_table_removed_detected` (heading,
+   then table), `test_a_scorecard_row_missing_from_the_page_detected`, `test_a_truncated_scorecard_row_is_refused`,
+   `test_a_before_column_of_another_era_detected`, `test_the_teammate_count_edited_in_both_tables_detected`,
+   `test_the_page_teammate_count_moved_detected`, `test_a_page_with_no_typed_rewrites_reads_a_zero_count`,
+   `test_the_row_7_detail_line_missing_detected`, `test_an_unreadable_row_7_detail_detected`,
+   `test_a_shown_set_with_no_replaced_era_is_named`,
+   `test_a_row_above_reordered_process_rows_names_the_first_beneath_it`, `test_a_linked_claim_is_still_read_as_its_row`,
+   and, from review round 1, `test_an_integrity_row_moved_below_the_process_rows_detected` (both integrity rows).
+2. **Ceilings.** `wc -w README.md docs/reading-guide.md`: 1,585 and 1,339 against 1,600 and 1,350;
+   `_FRONT_DOOR_BUDGETS` is unchanged in the diff. Cut from prose below the rows: a duplicated sentence each in the
+   not-demonstrated, ML, firewall, install, scopes, running-locally, real-report and samples paragraphs, and the
+   condensed Phase-20 paragraph; in the guide, the Phase-20 sentence, §2's run and click paragraphs and the flag
+   qualification, §3's guard and alibi-flag sentences, and the ML pointer. `check_verdict_figures`,
+   `check_finding_figures`, `check_injustice_cell` and `check_populated_report_example` are unchanged and green.
+   Planted: `test_front_door_page_over_its_ceiling_detected` (one word over) and
+   `test_verdict_rate_that_contradicts_its_own_fraction_detected` (the condensed sentence's `61 of 103 = 0.5922`
+   moved to `61 of 104`, failing `check_verdict_figures`) pass against the new text.
+3. **The new term.** `### top suspect (the player a voter's own suspicion rates highest)` in `docs/glossary.md`; a
+   `_DIALECT_TERMS` row; first README use inside the deviating row's link. No README cell carries threshold
+   arithmetic. Planted: `test_top_suspect_unlinked_at_its_first_use_detected`,
+   `test_top_suspect_glossary_heading_deleted_detected`.
+4. **The public tab's heading.** `PUBLIC_RESULTS_COPY.ejectionsHeading` = "Ejected players who were impostors",
+   `ejectionsDescription` = the old description's words as a template. Mechanism: `PublicResults.test.tsx` "heads the
+   ejection tile with what its fraction counts, in the copy's words"; `copy.test.ts` "renders the ejection tile's
+   heading and description from the copy" (span case) and "says what the fraction counts, and calls no ejection
+   correct" (leaf walk). Red first: `4 failed | 387 passed` before the copy keys existed. Planted: "catches the old
+   heading typed back into the tile" (span case) and "catches the old heading, or an old sentence, restored as a copy
+   value" (the walk names `PUBLIC_RESULTS_COPY.ejectionsHeading`, then `.ejectionsDescription`).
+5. **The strip guard.** No earlier pin read every meeting (the promotion's verifier found only first meetings
+   pinned), so `test_no_featured_game_ejects_a_crewmate_at_any_meeting` is added. Count-only on the served bytes: 9p2i
+   seed 19 meetings (impostor, skip, impostor), seed 14 (impostor); 4p1i seeds 2 (impostor), 11 (impostor), 29
+   (skip): 5 impostor ejections, 2 skips, 0 crewmate ejections. Planted inside the test: seed 19's meeting-0 and then
+   meeting-2 ejectee, and 4p1i seed 2's, read as a crewmate, each named by set, seed and meeting index. Perturbed
+   strip probe (scratch): the list plus 9p2i seed 1, one of 14 shown-set games that eject a crewmate at some meeting,
+   reads `9p2i seed 1 meeting 0`.
+6. **The stills.** `git diff --stat B H -- docs/media frontend/e2e/media.spec.ts
+   tests/scripts/test_public_recording_provenance.py` prints nothing; both provenance tests pass unchanged. Perturbed
+   (scratch copy through `_scratch_front_door`): the caption's tick edited by one reads `names tick 10, the picture
+   shows tick 9` plus two scene problems; unchanged, it reads none.
+7. **Live tense.** `git grep -n -i 'correct ejections' -- . ':!tasks' ':!audits'` lists 23 hits: `README.md:33`, the
+   reported not-demonstrated sentence (kept); `DESIGN.md:982`, historical rationale; `docs/ownership-case-study.md:109`,
+   a published account of a past decision on an older recording; `experiments/fresh_deduction_instrument.py:5764` and
+   `experiments/lab/report-rubric-design.md:39`, lab history; and 18 in tests (the new planted cases in
+   `copy.test.ts` and `PublicResults.test.tsx`, the round-2 rebuild hunks and comments in
+   `tests/scripts/test_check_doc_facts.py`, and comments in five eval, experiment and training tests). None is in
+   `PublicResults.tsx` or the copy. No sentence in the README, the reading guide or the glossary describes the old
+   lead rows or the old heading; the guide's "zero-betrayal-votes row above" now reads "the partner row above".
+8. **Mutation pass and gate record.** One pass, 36 mutants, all killed, none surviving, and 3 more on review round
+   1's new branch (P29 to P31 below), all killed: 39 in all (scratch `mutate.py`, each an
+   exact-text edit restored byte for byte; guarding command: the doc-facts file for the rule, the strip-guard case for
+   the guard, the two frontend files for the heading). By class: drop a filter or wrapper 11 (P3, P13, P15, P17, P18,
+   P20, P23, P25, P26, P27, F2); comparison to a None test or its inverse 6 (P8, P9, P12, P16, P21, S2); swap a
+   related collection 4 (P5, P14, S3, F3); drop a tuple member 4 (P4, P6, P7, P28); a role, kind, room or tick read
+   made a constant 3 (P11, P19, S1); swap adjacent branches 2 (P10, P22); a loaded source read as its literal 3 (P1,
+   F1, F4); message arguments 3 (P2, P24, S4). While the pass was designed, four tests were added for mutants the
+   earlier cases did not reach (P13, P18, P23, P27); the pass then ran once over all 36. The mutant list is in the
+   pull request body. The gate record is CI's run at the exact head of the pull request, cited there by run id (memo
+   8.7 item 1 bars a further card-only commit to record it); run 38016862362 is CI at `11eb133a`, the head the
+   review read.
+
+### Validation
+
+Run from the branch's worktree with `.venv/bin/python` (the card's `uv run`), count-only; no local `check.sh` at the
+final head (memo 8.7 item 1).
+
+- `check_doc_facts.py`: exit 0. `validate_task_docs.py`: exit 0, "390 historical phase tasks and 390 prompts; 106 work
+  cards".
+- `wc -w README.md docs/reading-guide.md`: 1585, 1339.
+- `pytest tests/scripts/test_check_doc_facts.py tests/scripts/test_public_recording_provenance.py
+  tests/api/test_sets.py tests/api/test_public_results.py -q`: 527 passed at `71abf7be`.
+- `publish_process_scorecard.py --check`, `publish_gameplay_census.py --check`, `publish_game_profile.py --check`:
+  exit 0 each; `build_sample_report.py --check` for `samples/4p1i`, `samples/9p2i`, `ml_corpus/4p1i`,
+  `ml_corpus/9p2i`: exit 0 each.
+- `verify_ml_evidence.py` (offline, never `--complete`): exit 0, every check passed, 7 EVIDENCE-BRANCH-ABSENT (the
+  expected fresh-clone state). `UV_OFFLINE=1 bash scripts/verify_samples.sh`: exit 0, 4 sets of 50 verified clean.
+- `git diff --exit-code 76d1c826 -- replays/ training/ api/ docs/media/ frontend/e2e/ docs/process-scorecard.md
+  docs/gameplay-census.md`: exit 0.
+- `cd frontend`: `npm test` 821 passed (27 files); `npm run tsc:check` exit 0; `npm run lint` exit 0; `npm run e2e`
+  15 passed, 3 skipped (the media-capture specs, which run only under their capture switch).
+- Ruff, ruff format and strict mypy on the three changed Python files: clean.
+- Bundle: `build_demo_bundle.py --out` at `76d1c826` and at `11eb133a` in this one checkout, compared file by file
+  (`diff -rq`, then each differing file with hashed chunk names masked): 110 files, no `data/` file and not the
+  bundle's `README.md` note differs; eight compiled files differ: `index.html` and the `CanvasRenderer`, `MapView`,
+  `ReplayPicker`, `WebGLRenderer` and `WebGPURenderer` chunks in hashed import names only, and the `index` chunk (the
+  copy's two new keys) and the `TournamentDashboard` chunk (the tile reads the copy) in content. The later commits
+  change no file under `frontend/`, so the bundle built at `11eb133a` is the head's.
+- The campaign tier does not trigger: no file under `tests/training/` changed.
+
+### Review round 1 (2026-10-10 UTC)
+
+The Codex review of `11eb133a` (one P2 finding, `scripts/check_doc_facts.py`, the order check): the rule exempted the
+two integrity rows, so moving either below the four process rows in both pages passed while the docstring and the
+error message said the integrity rows open the table. Fixed in `71abf7be`: each integrity row present must sit above
+every process row and is named with the first process row above it when it is not; the docstrings say so. Planted:
+`test_an_integrity_row_moved_below_the_process_rows_detected`, parametrized over both integrity rows, two errors
+each (README and guide); run against the previous rule it failed (`2 failed`), against the fix it passes. Mutants
+of the new branch, each killed by the doc-facts file: P29 its missing-row filter (`-1 <`) dropped, P30 its comparison
+inverted, P31 its report dropped. The doc-facts file then reads 358 passed, and `check_doc_facts.py` exits 0.
+
+### Limitations
+
+- The process rows report one set, the shown 9-player set; the 4-player set's rows stay on the scorecard page only,
+  and no figure pools eras. They gate nothing and re-score nothing.
+- Row 1 is a floor, not a quality reading: the ballot asks every eject to cite, so it sits near its ceiling by
+  construction; row 2 reads deviation from the arithmetic, not whether the deviation was right.
+- The public tab gains no process rows: that needs a payload change (D8-L option (c), riding D9) and stays out of
+  scope; the tab's numbers and its proof split are unchanged.
+- The strip guard holds today's featured list; whether a wrong-but-believable ejection is ever featured stays the
+  owner's (D7's residue). The guard reads the role, for curation only.
+- Moving the Phase-20 and Phase-21 bar paragraphs off the README (D8's open half) and the three held viewer halves
+  (D8-L, D8.1, D9-L) remain the owner's.
