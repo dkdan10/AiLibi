@@ -1,6 +1,6 @@
 # Promote candidate round 3 as the shown set, with the tour re-curated
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
