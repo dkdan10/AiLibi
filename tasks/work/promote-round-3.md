@@ -146,14 +146,23 @@ is weakened, and a retired check is deleted with its mechanism and one history l
 goes through `SPECTATOR_COPY` or the picker data, with no task or audit ID, no unexplained jargon and no threshold
 arithmetic.
 
+- [x] Review correction (round 4): the round-3 sweep count reproduces. The sweep command quoted in the round-3
+  Review correction item below, in "Review corrections, round 3" and in the PR body's round-3 item now ends with the
+  pathspec `':!tasks/work/promote-round-3.md'`, which leaves out this card, whose own lines quote the figures and the
+  command. With it the command lists 16 at `9de107b9`, at `a2ba69a9` and at this round's head; without it, 16, 26 and
+  30, the difference being this card's own 0, 10 and 14 lines. Mechanism:
+  `git grep -n -E '32,?952,?472|2,?790,?383|33 ?MB|33MB|33 megabytes' <head> -- . ':!tasks/work/promote-round-3.md' | wc -l`
+  at each head, the same without the pathspec, and with `-- tasks/work/promote-round-3.md` alone for the card's own lines
+  (table in "Review corrections, round 4"). Perturbed: the bare command at `a2ba69a9` lists 26, not the 16 stated.
 - [x] Review correction (round 3): no comment or docstring still gives round 2's report as the shown 9p2i report's
   size. The module docstring of `scripts/build_demo_bundle.py` reads 34,579,235 bytes uncompressed, about 35 MB, and
   3,057,359 gzipped (was 32,952,472, about 33 MB, and 2,790,383), and the comments of `frontend/src/api/client.ts`
   (`getTournamentReport`) and `frontend/e2e/bundle.spec.ts` (the compact-results case) read 35 MB (was 33 MB).
   Mechanism: `gzip -dc replays/samples/9p2i/tournament-eval-report.json.gz | wc -c` and `stat -f %z` on the same gz;
-  the sweep `git grep -n -E '32,?952,?472|2,?790,?383|33 ?MB|33MB|33 megabytes' -- .`, re-run at the fix head (16
-  hits: the three inline old values and 13 lines of history in round 2's two cards). Perturbed: the present-tense
-  scan `git grep -n -E '(is|one is) (33 MB|32,952,472)' -- .` lists 3 at `9de107b9` and 0 at the fix head.
+  the sweep `git grep -n -E '32,?952,?472|2,?790,?383|33 ?MB|33MB|33 megabytes' -- . ':!tasks/work/promote-round-3.md'`,
+  re-run at the fix head (16 hits: the three inline old values and 13 lines of history in round 2's two cards).
+  Perturbed: the present-tense scan `git grep -n -E '(is|one is) (33 MB|32,952,472)' -- .` lists 3 at `9de107b9` and
+  0 at the fix head.
 - [x] Review correction (round 3): orchestrator ruling 5 (Decisions) replaces the text of the route-field box below.
   The route field is a recorded setting, named in plain words beside the kill cooldown through
   `SPECTATOR_COPY.routeLines`; `ADOPTED_RULES` and the "Adopted arms" paragraph stay at seven pairs, and that
@@ -1023,7 +1032,8 @@ Read by `gzip -dc replays/samples/9p2i/tournament-eval-report.json.gz | wc -c` (
 replays/samples/9p2i/tournament-eval-report.json.gz` (3057359; `stat -c %s` on Linux). The same two commands on
 `replays/candidates/stage-b-r2/9p2i/tournament-eval-report.json.gz` read 32952472 and 2790383, round 2's figures.
 `gzip -dc replays/ml_corpus/9p2i/tournament-eval-report.json.gz | wc -c` reads 107690098, the docstring's corpus
-figure, unchanged. The sweep `git grep -n -E '32,?952,?472|2,?790,?383|33 ?MB|33MB|33 megabytes' -- .` lists 16
+figure, unchanged. The sweep
+`git grep -n -E '32,?952,?472|2,?790,?383|33 ?MB|33MB|33 megabytes' -- . ':!tasks/work/promote-round-3.md'` lists 16
 hits at `9de107b9` and at the fix head. At the fix head they are the three inline old values and 13 lines of history
 in `tasks/work/post-promotion-follow-through.md` (11) and `tasks/work/promote-round-2.md` (2), round 2's cards
 measuring round 2's bytes at their own heads. The present-tense scan `git grep -n -E '(is|one is) (33
@@ -1076,3 +1086,47 @@ and `ruff format --check` are clean on `scripts/build_demo_bundle.py`, `eslint` 
 TypeScript files, `scripts/validate_task_docs.py` and `scripts/check_doc_facts.py` exit 0. `tests/docs/` does not
 exist. No local `bash scripts/check.sh` runs at this head (memo 8.7 item 1): CI's green run at the pushed head, cited
 by run id in the PR body, is the gate record, and no commit records it.
+
+### Review corrections, round 4 (2026-10-09)
+
+Built on `work/promote-round-3` at `a2ba69a9`, the head the documentation lens read (CI run 38008844971 and the
+campaign-tier run 38008844981 green there). One blocking finding, from the documentation lens. The round is
+documentation only (memo 8.7 item 4): this card and the PR body. No recorded byte, replay, comment, docstring,
+assertion or production line moves, and no test is weakened. No census ran, no provider was called and the untracked
+`.env` was not read. No new Codex comment: the two on the PR (at `c9e1a601`) are answered under round 1.
+
+**The sweep count (the finding).** Round 3 stated that its sweep lists 16 hits at `9de107b9` and at the fix head. At
+`a2ba69a9` the quoted command lists 26: the 16 classified there plus 10 lines of this card that quote the round-2
+figures or the command itself, whose text matches through its `33MB` alternative. That exclusion was unstated. The
+command now ends with the pathspec `':!tasks/work/promote-round-3.md'` in all three places it is quoted: the round-3
+Review correction item, "Review corrections, round 3" and the PR body's round-3 item. Nothing else in those
+sentences moves.
+
+| head | with the pathspec | without it | this card's own lines |
+|---|---|---|---|
+| `9de107b9` | 16 | 16 | 0 |
+| `a2ba69a9` | 16 | 26 | 10 |
+| this round's head | 16 | 30 | 14 |
+
+Read by
+`git grep -n -E '32,?952,?472|2,?790,?383|33 ?MB|33MB|33 megabytes' <head> -- . ':!tasks/work/promote-round-3.md' | wc -l`,
+the same without the pathspec, and with `-- tasks/work/promote-round-3.md`
+alone for the card's own lines. At each head the 16 are one line each in `scripts/build_demo_bundle.py`,
+`frontend/src/api/client.ts` and `frontend/e2e/bundle.spec.ts` (at `9de107b9` the three present-tense sentences
+round 3 re-derived, since then their inline old values) and 13 lines of history in
+`tasks/work/post-promotion-follow-through.md` (11) and `tasks/work/promote-round-2.md` (2). The present-tense scan
+`git grep -n -E '(is|one is) (33 MB|32,952,472)' -- .` needs no pathspec: it lists 0 at `a2ba69a9` and at this
+round's head, this card included.
+
+**Mutation (bounded).** One perturbation on the stated count: the command without the pathspec, run at `a2ba69a9`,
+lists 26, so the 16 stated there did not reproduce from the command as quoted. No other mutant: the changes are
+prose in this card and the PR body, and no listed operator class applies to them.
+
+**The trailer.** This round's commit, written by an Opus 5.5 worker, ends with the card's line verbatim,
+`Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`, directly after the `Card:` trailer, checked with `git log
+-1 --format=%B` before the push. The thirteen earlier lines stay recorded as the deviation under round 3.
+
+**Verification at the fix head.** `scripts/validate_task_docs.py` and `scripts/check_doc_facts.py` exit 0, and
+`pytest tests/scripts/test_check_doc_facts.py` passes (333 passed). `tests/docs/` does not exist, and no
+frontend file moves, so no vitest file is in reach. No local `bash scripts/check.sh` runs at this head (memo 8.7 item
+1): CI's green run at the pushed head, cited by run id in the PR body, is the gate record, and no commit records it.
