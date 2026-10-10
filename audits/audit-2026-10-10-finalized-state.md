@@ -651,7 +651,8 @@ nothing here edits the file a finding names.
 | 11 | The promotion card's Results says its wider scan "finds no other report size" and names two hits; the command as quoted lists nine lines at H (`wide-scan hits 9`). | `tasks/work/promote-round-3.md:1040` | `wide-scan` |
 | 12 | The promotion card's build-decisions bullet says the commits from `d9c3ada3` on carry the Opus line; the two commits after `9de107b9` carry the Fable line (`fable after 9de107b9 2`), so the bullet is stale at the card's head. | `tasks/work/promote-round-3.md:696` | `fable-after` |
 | 13 | The fold-reading Hypothesis case of the profile tests was seen to fail once under xdist with "DID NOT RAISE", as the orchestrator's dispatch reports it from a finish-wave review (no record of it is in the tree); at H it passes alone (`1 passed`). | `tests/eval/test_game_profile.py:1022` | `flaky-alone` |
-| 14 | This card's Validation expects `git grep -n _cross_era_trajectory` to exit 1 once the retirement merged; at H the function is gone from the code (`code hits exit 1`) but the bare grep exits 0 on task cards that name it (`card hits exit 0`). | `tasks/work/close-audit-finalized-state.md:395` | `cross-era` |
+| 14 | This card's Validation expects `git grep -n _cross_era_trajectory` to exit 1 once the retirement merged; at H the function is gone from every Python file (`code hits exit 1`), but the bare grep exits 0 on the documents that name it, task cards and this audit among them (`card hits exit 0`). | `tasks/work/close-audit-finalized-state.md:395` | `cross-era` |
+| 15 | The ladder-tip check reads the phrase with a literal space, so a "ladder tip" wrapped across a line is never scanned: the index holds one such sentence, round 3's row (`wrapped ladder-tip phrases 1`), and with its baseline 9 made baseline 10 the checker exits 0 (`wrapped tip exit 0`). This audit's own row keeps the phrase on one line, where the same edit exits 1. | `scripts/check_doc_facts.py:356` | `wrapped-tips`, `slow-wrapped-tip` |
 
 ## 8. Reproduction
 
@@ -705,7 +706,9 @@ trailers: for p in 507:54dff069 495:0e67f42a 484:8df69e15 477:acf6c604 483:bdfa5
 wide-scan: echo "wide-scan hits $(git grep -n -E '32\.9|2\.79 ?MB|about 33|33 ?MiB|2\.[78] ?MB' -- . ':!tasks' ':!audits' | wc -l | tr -d ' ')"
 fable-after: echo "fable after 9de107b9 $(git log --format='%(trailers:key=Co-Authored-By,valueonly)' 9de107b9..54dff069^2 | grep -c 'Claude Fable 5.1')"
 flaky-alone: uv run pytest -q -p no:cacheprovider tests/eval/test_game_profile.py::test_a_fold_reading_the_carrier_fails_both_properties
-cross-era: git grep -c _cross_era_trajectory -- ':!tasks' >/dev/null; echo "code hits exit $?"; git grep -c _cross_era_trajectory >/dev/null; echo "card hits exit $?"
+cross-era: git grep -c _cross_era_trajectory -- '*.py' >/dev/null; echo "code hits exit $?"; git grep -c _cross_era_trajectory >/dev/null; echo "card hits exit $?"
+wrapped-tips: echo "wrapped ladder-tip phrases $(perl -0777 -ne 'my $n = () = /ladder[ \t]*\n[ \t>]*tip/gi; print $n' audits/README.md)"
+slow-wrapped-tip: d=$(mktemp -d) && git archive HEAD | tar -x -C "$d" && perl -0777 -pi -e 's/and the ladder\n  tip stays at baseline 9\./and the ladder\n  tip stays at baseline 10./ or die' "$d/audits/README.md" && uv run python scripts/check_doc_facts.py --repo-root "$d" >/dev/null 2>&1; echo "wrapped tip exit $?"; rm -rf "$d"
 ```
 
 ### 8.2 Claims
@@ -854,6 +857,8 @@ command in section 8.1. A cited generated page also passes its own `--check`.
 | 119 | `1 passed` | 7.4 | `cmd:flaky-alone` |
 | 120 | `code hits exit 1` | 7.4 | `cmd:cross-era` |
 | 121 | `card hits exit 0` | 7.4 | `cmd:cross-era` |
+| 122 | `wrapped ladder-tip phrases 1` | 7.4 | `cmd:wrapped-tips` |
+| 123 | `wrapped tip exit 0` | 7.4 | `cmd:slow-wrapped-tip` |
 
 ## 9. Limitations of this audit
 

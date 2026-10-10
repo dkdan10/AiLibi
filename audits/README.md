@@ -434,8 +434,9 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   behind each figure and what they do not, the doctrine with its dated rulings,
   one row per pull request merged since the process direction, the open items
   and the points the owner still confirms, and the defects found on the way,
-  each filed and not fixed. It decides nothing and adopts nothing, the ladder
-  tip stays at baseline 9, and no check holds its figures once it merges.
+  each filed and not fixed. It decides nothing and adopts nothing,
+  the ladder tip stays at baseline 9, and no check holds its figures once it
+  merges.
 
 ## Cleanup measurements
 
