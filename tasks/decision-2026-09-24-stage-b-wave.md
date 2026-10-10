@@ -1633,6 +1633,11 @@ case, and each shown set reads the block of the era it replaced; nothing is re-s
 This is the orchestrator's default under memo 8.8 and 8.9, recorded here so `promote-round-3` may dispatch; the
 owner may replace it with a ruling at any time before that card merges.
 
+**Closure (2026-10-10).** The owner ruled under D15, verbatim: "close it". So `retire-temporal-evidence-v1` closes
+unexecuted: round 3 took the route field (8.2 item 2), leaving no source for the evidence-v2 adopting record it waited
+on, and its Results give the basis. The word answers the close audit's question on that card alone (its section 7.3);
+D15's other parts, the Phase-21 routed decision, the three Wave-2 toggles and D15-R1 and D15-R2, stay undecided.
+
 ## Appendix: reproduction
 
 The scratch scripts named here are session aids and are not committed; the load-bearing counts are

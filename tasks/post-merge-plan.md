@@ -49,7 +49,8 @@ original severity labels and refuter votes stay intact.
    public-results cache. [Card](work/nonblocking-followup-improvements.md).
 7. **Retire temporal v1 and evidence v1.** Four defects and one switch go with
    them. [Card](work/retire-temporal-evidence-v1.md). Blocked until an adopting
-   record for evidence v2 exists.
+   record for evidence v2 existed; closed unexecuted on 2026-10-10 (the card's
+   Results).
 
 **Delivery (2026-09-10).** Outcomes 1 to 6 are implemented, verified and open as
 stacked pull requests #439, #440, #441, #442, #443 and #444, in that merge order,
@@ -109,8 +110,9 @@ recomputed, and no prefix is printed or opened; if any prefix digest or skip
 moves, the worker stops and reports, the set is marked development, and a new
 band is frozen under a new card. Outcome 6 fills
 the gaps around the others and takes its `meetings/`, `api/` items after 4 and 3
-release those files. Outcome 7 does not start before an adopting record for
-evidence v2 exists; that record is not part of this plan.
+release those files. Outcome 7 was not to start before an adopting record for
+evidence v2 existed; that record is not part of this plan, and the outcome
+closed unexecuted on 2026-10-10 without it (the card's Results).
 
 ## Ownership
 
@@ -137,7 +139,7 @@ that total against disk.
 | Decision | State |
 | --- | --- |
 | **Spending authorization for outcome 5** — provider, exact model, per-call token cap, total token budget (about 2.5 M projected), wall-clock deadline, dollar limit, and a cost statement even on flat-rate service | **Authorized by the owner's merge of #437 on 2026-09-07 (limits only)** — `featherless` / `Qwen/Qwen3.6-27B`, 2,048 output per turn and 1,024 per vote, 2,400,000 input / 200,000 output tokens hard stop, 4 h of model work within a 6 h elapsed deadline, $0.00 marginal against the flat-rate subscription with its fee stated, 4p1i with 3 living voters, sequential. [The authorization card](work/fresh-deduction-authorization.md) carries the values and the conditions; the manifest copies these values verbatim when the instrument card creates it, and no live call, pilot or retry is authorized until that manifest, the preconditions and the frozen held-out set exist. The held-out preparer and runner roles were ruled on 2026-09-07 (memo B.13): a preparer session on [the freeze card](work/held-out-prefix-freeze.md), a separate runner session on the instrument card, and the owner's merge of the freeze pull request as the freeze. **Frozen 2026-09-08:** #438 merged as `23a23c2d`. |
-| Adopting record for evidence reasoning v2 | Outstanding. Outcome 7 is blocked on it and does not create it. |
+| Adopting record for evidence reasoning v2 | Outstanding. Outcome 7 waited on it and closed unexecuted on 2026-10-10 without it (the card's Results); this plan does not create it. |
 | Adoption of public accounts or attributed testimony, weighing the deliberate loss of the shared vent certificate | Outstanding. Outcome 4 hardens the channel; hardening is not evidence of better play. |
 | The death-tick body handle on the default path — leave as-is and state it, or mask it equally in both arms | **Ruled with the authorization card (#437, 2026-09-07):** left as temporal v2 renders it in both arms, stated in the manifest, and asserted by a regex over the rendered prompts and the frozen prefixes (`body-p-\d+-\d+` absent); the prefix generator is bound to the same temporal version. Outcome 5's manifest records the outcome either way. |
 | The probe-descriptor lifetime in `orchestrator/recording.py` — hold for the recording's lifetime, or keep the module's disclaimer | Outstanding, and framed as an explicit item in outcome 6 rather than left implied. |

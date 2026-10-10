@@ -40,7 +40,7 @@ findings and current repairs remain distinct.
 
 ## Card inventory
 
-As of 2026-10-10, `tasks/work/` holds 106 cards: 1 ready, 105 done. That
+As of 2026-10-10, `tasks/work/` holds 106 cards: 106 done. That
 sentence is derived, not typed: `scripts/validate_task_docs.py` recomputes the
 total and the per-status breakdown from the cards themselves and fails when
 either drifts, so flipping one card's Status is enough to make this paragraph
@@ -112,8 +112,9 @@ experimental adoption, and every candidate stays default-OFF. The instrument's p
 wall-clock and cost limits were authorized by the owner's merge of #437 on
 2026-09-07 through [the authorization card](work/fresh-deduction-authorization.md);
 no run is authorized until the renderer and provenance cards, the execution
-manifest and the held-out freeze land. The retirement card is blocked until an
-adopting record for evidence v2 exists.
+manifest and the held-out freeze land. The retirement card closed unexecuted on
+2026-10-10, on the owner's word: the adopting record for evidence v2 it waited on
+has no source once round 3 took the route field instead (its Results).
 
 Historical `phase-*.md` contracts and their generated `agent_prompts/` exports
 remain unchanged and validated. Use them when resuming that historical work;
