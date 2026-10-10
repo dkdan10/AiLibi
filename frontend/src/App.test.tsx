@@ -14,7 +14,7 @@ import { STEPS } from "./components/GuidedTour";
 import { HEADER_COPY } from "./lib/copy";
 
 /** The removed attribution line's words, the same five `lib/copy.test.ts` refuses. */
-const ATTRIBUTION_WORDS = /directed by|Claude Code|Codex|AI-reviewed|ownership/i;
+const ATTRIBUTION_WORDS = /\bdirected by|Claude Code|Codex|AI-reviewed|ownership/i;
 
 /** Markup reduced to the text a reader sees. */
 function textOf(html: string): string {

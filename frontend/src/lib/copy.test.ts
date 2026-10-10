@@ -527,8 +527,12 @@ describe("the public results tab's ejection heading", () => {
 // `HEADER_COPY`, so the attribution's words are refused anywhere in the copy
 // tree, and the two places that typed them inline carry no prose of their own.
 
-/** The removed attribution line's words, refused anywhere a viewer reads copy. */
-const ATTRIBUTION_WORDS = /directed by|Claude Code|Codex|AI-reviewed|ownership/i;
+/**
+ * The removed attribution line's words, refused anywhere a viewer reads copy.
+ * "directed by" is bounded so the ballot label "Vote redirected by the meeting
+ * rule" is not mistaken for it.
+ */
+const ATTRIBUTION_WORDS = /\bdirected by|Claude Code|Codex|AI-reviewed|ownership/i;
 
 /** The path of every string leaf in `tree` that carries an attribution word. */
 function attributionLeaves(tree: unknown, path: string): readonly string[] {
@@ -629,6 +633,12 @@ describe("the header's and the tour's source link", () => {
     expect(attributionLeaves({ lines: ["GitHub", "AI-reviewed"] }, "TREE")).toEqual([
       "TREE.lines[1]",
     ]);
+  });
+
+  it("lets a ballot that was redirected by the meeting rule through", () => {
+    expect(attributionLeaves({ ballot: "Vote redirected by the meeting rule" }, "TREE")).toEqual(
+      [],
+    );
   });
 
   it("renders the header's words from the copy", () => {
