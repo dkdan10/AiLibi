@@ -895,8 +895,9 @@ class TestHardEvidenceGateOnCommittedBytes:
     ) -> None:
         # Every EJECTED report meeting of the shown 9p2i set is walked: the
         # census is the funnel's own, not a transcription, because every
-        # recording cascades the trajectories and moves the ejection count (80
-        # on the baseline-9 bytes, 85 on baseline 8, 91 on baseline 7, 87 on
+        # recording cascades the trajectories and moves the ejection count (57
+        # on round 3's bytes, 63 on round 2's, 80 on the baseline-9 bytes, 85 on
+        # baseline 8, 91 on baseline 7, 87 on
         # baseline 6 after the Task-18.12 vent-widening re-record, 79 on
         # baseline 4).
         assert counterfactual.total_ejections == funnel.report_ejections > 0
@@ -904,7 +905,8 @@ class TestHardEvidenceGateOnCommittedBytes:
     # -- (i) the soft-only split, by ejectee role ----------------------------
 
     def test_soft_only_split_by_role(self, counterfactual: _GateCounterfactual) -> None:
-        # Over the 30 soft-only (non-hard-backed) ejections the clamp would:
+        # Over the soft-only (non-hard-backed) ejections (28 on round 3's bytes, 30
+        # on round 2's) the clamp would:
         #   kept        = off >= 0.60 AND on < 0.60 (the deciding soft lift damped);
         #   already     = off < 0.60 at graph level (render-side / LLM-read eject);
         #   still_over  = off >= 0.60 AND on >= 0.60 (fresh same-meeting lift holds).
@@ -918,8 +920,8 @@ class TestHardEvidenceGateOnCommittedBytes:
         # so is the shown set: the clamp neutralises ZERO crew mis-ejects (one on
         # baseline 8) and risks ZERO impostor catches. That polarity is the
         # finding pinned; the sub-gate and still-over sizes follow the recording
-        # and are held to their partition instead (round 2 read 16 crew + 1
-        # impostor sub-gate, 2 + 11 over the gate).
+        # and are held to their partition instead (round 3 reads 11 crew + 4
+        # impostor sub-gate, 2 + 11 over the gate; round 2 read 16 + 1 and 2 + 11).
         # (The baseline-4 split was 1-crew kept / 14 still-over; the
         # baseline-2-era 24/31-vs-6/16 hypothesis is long superseded -- exactly why
         # the DoD re-measures rather than carrying a prior figure.)
@@ -942,8 +944,9 @@ class TestHardEvidenceGateOnCommittedBytes:
     ) -> None:
         # There ARE hard-flag-backed convictions to guard: some ejections carry
         # a grounded (hard_total > atol) post-fold row for the ejectee. The
-        # floor is the non-vacuity statement (67 of 80 on the baseline-9 bytes,
-        # 33 of 63 on round 2's), and the hard-backed and soft-only ejections
+        # floor is the non-vacuity statement (29 of 57 on round 3's bytes, 33 of
+        # 63 on round 2's, 67 of 80 on the baseline-9 bytes), and the hard-backed
+        # and soft-only ejections
         # partition the census.
         assert counterfactual.hard_backed > 0
         assert (
@@ -965,7 +968,8 @@ class TestHardEvidenceGateOnCommittedBytes:
         self, counterfactual: _GateCounterfactual
     ) -> None:
         # The broader sweep: NO hard-backed subject row (ejectee or not, any voter)
-        # flips across the 0.60 verdict under the clamp, anywhere in the 117 meetings.
+        # flips across the 0.60 verdict under the clamp, anywhere in the set's
+        # meetings (119 on round 3's bytes, 117 on round 2's).
         assert counterfactual.subject_level_flips == ()
 
     def test_the_clamp_never_raises_an_ejectee_row(

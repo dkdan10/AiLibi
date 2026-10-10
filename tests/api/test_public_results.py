@@ -43,33 +43,35 @@ def test_current_summary_is_bounded_and_source_checked(
     canonical_summary: PublicResultsView,
 ) -> None:
     r = canonical_summary
-    # The promoted set (candidate round 2, since 2026-10-02). Was (50, 50, 39, 11,
-    # 1) / (145, 90, 81, 9) / (70, 70, 20, 11) on the baseline-9 bytes, and
+    # The promoted set (candidate round 3, since 2026-10-09). Was (50, 50, 26, 24,
+    # 13) / (117, 66, 44, 22) / (24, 24, 42, 20) on round 2's bytes, (50, 50, 39,
+    # 11, 1) / (145, 90, 81, 9) / (70, 70, 20, 11) on the baseline-9 bytes, and
     # (50, 50, 35, 15, 0) / (151, 95, 82, 13) / (68, 68, 27, 14) on baseline 8.
     assert (r.games, r.completed, r.crew_wins, r.impostor_wins, r.task_wins) == (
         50,
         50,
-        26,
-        24,
-        13,
+        33,
+        17,
+        19,
     )
     assert (r.meetings, r.ejections, r.impostor_ejections, r.innocent_ejections) == (
-        117,
-        66,
-        44,
-        22,
+        119,
+        61,
+        46,
+        15,
     )
     assert (
         r.proof_backed_ejections,
         r.proof_backed_correct,
         r.proof_free_ejections,
         r.proof_free_correct,
-    ) == (24, 24, 42, 20)
+    ) == (24, 24, 37, 22)
     # The two kept cases sit on the featured head, seed 19, and the set links the
     # commit that landed its bytes. (The holding edit published no case and no
     # link; the baseline-9 bytes carried three cases on seeds 23, 29 and 0.)
     assert [case.case_id for case in r.cases] == ["witnessed-vent", "weak-evidence"]
-    assert (r.recorded_from, r.recorded_until) == ("2026-10-01", "2026-10-01")
+    # was ("2026-10-01", "2026-10-01"), round 2's recording dates
+    assert (r.recorded_from, r.recorded_until) == ("2026-10-09", "2026-10-09")
     assert r.source_url == _ROOT_9P2I
     assert len(r.model_dump_json().encode()) < public.MAX_PUBLIC_RESULTS_BYTES
     assert r.reported_cost_usd == 0 and r.input_tokens > 0
@@ -160,7 +162,8 @@ def test_partial_recording_retains_reported_spend_without_a_win(
 
 def test_the_kept_cases_sit_on_the_featured_head_and_pin_its_bytes() -> None:
     # Two cases are kept, both re-written on the featured 9-player head (seed 19,
-    # the promoted set since 2026-10-02): its first meeting is the supported
+    # re-read on round 3's bytes, the promoted set since 2026-10-09, as on round
+    # 2's from 2026-10-02): its first meeting is the supported
     # case, its second the unresolved one. The disputed-route case is withdrawn:
     # its game (seed 29 meeting 1 on the baseline-9 bytes) has no promoted
     # counterpart on the strip, and no featured meeting ejects an innocent
@@ -221,11 +224,12 @@ def test_each_case_names_the_facts_its_check_holds() -> None:
 
 
 # The two roots, typed here rather than imported, so a moved constant cannot
-# move its own check. The 9-player set's bytes landed in 148fa211 (the
-# promotion); the 4-player replays are unchanged since 9bae2b03.
+# move its own check. The 9-player set's bytes landed in 5095a1c2 (round 3's
+# promotion; was 148fa211, round 2's); the 4-player replays are unchanged since
+# 9bae2b03.
 _ROOT_9P2I = (
     "https://github.com/dkdan10/AiLibi/blob/"
-    "148fa211a5851c288eeaf1a9591197f8ba13bdcc/replays/samples/9p2i/"
+    "5095a1c210d890d289405564d2af2607d2fbd4e9/replays/samples/9p2i/"
 )
 _ROOT_4P1I = (
     "https://github.com/dkdan10/AiLibi/blob/"
@@ -350,16 +354,16 @@ def _role_proof_recategorised(replay: ReplayView) -> ReplayView:
 
 
 def _an_accusation_withdrawn(replay: ReplayView) -> ReplayView:
-    # p-7's opt-in turn keeps every other claim and loses its accusation.
+    # p-4's opt-in turn keeps every other claim and loses its accusation.
     turn_id = "headless-seed-19:meeting-1:turn-3"
     turn = next(t for t in _meeting(replay, _WEAK).turns if t.turn_id == turn_id)
-    assert turn.speaker == "p-7"
+    assert turn.speaker == "p-4"  # was p-7 on round 2's bytes
     claims = tuple(c for c in turn.claims if c.type != "accusation")
     return _edit_turn(replay, _WEAK, turn_id, claims=claims)
 
 
 def _an_accusation_turned(replay: ReplayView) -> ReplayView:
-    # p-7 still accuses, but names p-9 instead of the reporter.
+    # p-4 still accuses, but names p-9 instead of the reporter.
     turn_id = "headless-seed-19:meeting-1:turn-3"
     turn = next(t for t in _meeting(replay, _WEAK).turns if t.turn_id == turn_id)
     claims = tuple(

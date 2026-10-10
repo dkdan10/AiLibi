@@ -3265,12 +3265,14 @@ class TestCommittedBytes106Pins:
         # The Task 18.12 baseline-6 re-record (the CREW-ONLY graduation slate, with
         # the whereabouts-interior and vent-placement levers now UNCONDITIONAL)
         # lit a RICHER R7 detector surface. On the promoted set (candidate round
-        # 2) it is 40 strong flags across the committed meetings, all legitimate
-        # detector kinds (vent_sighting 38, alibi_vs_physical 2) — no forbidden
+        # 3) it is 39 strong flags across the committed meetings, all legitimate
+        # detector kinds (vent_sighting 39; round 2's bytes read 40, vent_sighting
+        # 38 and alibi_vs_physical 2) — no forbidden
         # leak shape, and NO strong alibi_conflict (the lone-STRONG cross-speaker
         # conflict of baseline 1 stays gone with the railroad elimination). Both
         # bands are ALIVE (gated, not killed); their sizes are not transcribed
-        # (the baseline-9 bytes read 96 strong and 11 weak).
+        # (round 3's bytes read 39 strong and 15 weak, round 2's 40 and 13, the
+        # baseline-9 bytes 96 and 11).
         weak = strong = 0
         for seed in range(50):
             for entry in _committed_meetings(seed):
@@ -3288,8 +3290,9 @@ class TestCommittedBytes106Pins:
         # gated to ZERO corroborations. Re-pointed to the Task 16.14 baseline-4
         # re-record (Qwen/Qwen3.6-27B, qwen3_6_27b.v1 prompts, all six substrate
         # levers ON): seed 2 m0 is a meeting whose corroborations DO survive the
-        # gate (9 pairs on the promoted bytes, candidate round 2; 5 on the
-        # baseline-9 bytes). Assert every one is backed by an interior-tick sighting,
+        # gate (12 pairs on the promoted bytes, candidate round 3; 9 on round 2's
+        # bytes, 5 on the baseline-9 bytes). Assert every one is backed by an
+        # interior-tick sighting,
         # so no kill-scene / spawn-window evidence-free pair leaks through (the same
         # property the set-wide pin below enforces across all 50 seeds).
         entry = _committed_meetings(2)[0]

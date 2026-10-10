@@ -56,6 +56,19 @@ describe("the adopted rules", () => {
     expect(SHOWN_CONFIG.vent_exit_policy).toBe("look_and_wait");
     expect(ADOPTED_RULES.map((rule) => rule.field)).not.toContain("vent_exit_policy");
     expect(ADOPTED_RULES.map((rule) => rule.field)).not.toContain("kill_cooldown_ticks");
+    // The route lines too: the shown set records them, and they are not adopted.
+    expect(SHOWN_CONFIG.route_lines_version).toBe(1);
+    expect(ADOPTED_RULES.map((rule) => rule.field)).not.toContain("route_lines_version");
+  });
+
+  it("fail the pin when the route lines are listed as adopted (planted)", () => {
+    // The paragraph names the field after its adoption sentence, as a setting
+    // the shown recordings carry, so a list naming it adopted disagrees.
+    expect(ARMS_DOC).toContain("`route_lines_version = 1`");
+    expect(adoptedPairs(ARMS_DOC)).not.toContain("route_lines_version = 1");
+    const widened = [...ADOPTED_RULES, { field: "route_lines_version", value: 1 }];
+    const listed = widened.map((rule) => `${rule.field} = ${String(rule.value)}`);
+    expect(listed.join(", ")).not.toBe(adoptedPairs(ARMS_DOC).join(", "));
   });
 
   it("fail the pin when the paragraph's value for one pair is edited (planted)", () => {

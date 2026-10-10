@@ -5404,6 +5404,1729 @@
    "seeds": "0-49",
    "sha": "5877adb48e046042a1e2927675451f896168673a",
    "tree": "8197dc791afbe432186a5bd8c16e3e16f7dd8477"
+  },
+  {
+   "all": {
+    "b_kept": {
+     "cannot_reconcile": 3,
+     "crosses_regroup": 3,
+     "fits": 314,
+     "insufficient_timing": 1842,
+     "unverifiable": 0
+    },
+    "b_offered": {
+     "cannot_reconcile": 3,
+     "crosses_regroup": 4717,
+     "fits": 11714,
+     "insufficient_timing": 13613,
+     "unverifiable": 0
+    },
+    "b_snapshot_kept": {
+     "cannot_reconcile": 3,
+     "crosses_regroup": 2,
+     "fits": 1429,
+     "insufficient_timing": 705,
+     "unverifiable": 0
+    },
+    "b_snapshot_offered": {
+     "cannot_reconcile": 3,
+     "crosses_regroup": 4717,
+     "fits": 17565,
+     "insufficient_timing": 7762,
+     "unverifiable": 0
+    },
+    "charges": 376,
+    "charges_on_reconcilable_pair": 226,
+    "ejected_witnesses": 6,
+    "ejections": 61,
+    "ejections_with_a_charge": 59,
+    "ejections_with_reconcilable_pair": 29,
+    "insufficient_lines_misjudged": {
+     "a": 0,
+     "a_transcript_only": 0,
+     "b": 92,
+     "b_snapshot": 40,
+     "c": 0
+    },
+    "lines": {
+     "a": 594,
+     "a_transcript_only": 447,
+     "b": 2162,
+     "b_snapshot": 2139,
+     "c": 2322
+    },
+    "meetings": 119,
+    "misjudged": 29,
+    "misjudged_at_witness_meetings": 7,
+    "pit_net": 10,
+    "pit_net_misjudged": 6,
+    "reaches": {
+     "a": 8,
+     "a_transcript_only": 7,
+     "b": 22,
+     "b_snapshot": 28,
+     "c": 25
+    },
+    "reaches_charge_misjudged": {
+     "a": 6,
+     "a_transcript_only": 6,
+     "b": 13,
+     "b_snapshot": 15,
+     "c": 23
+    },
+    "reaches_misjudged": {
+     "a": 8,
+     "a_transcript_only": 7,
+     "b": 15,
+     "b_snapshot": 18,
+     "c": 25
+    },
+    "reaches_misjudged_at_witness": {
+     "a": 2,
+     "a_transcript_only": 2,
+     "b": 2,
+     "b_snapshot": 3,
+     "c": 7
+    },
+    "reporter_ejections": 10,
+    "unreached_pair_reasons": {
+     "a": {
+      "cap": 0,
+      "claim_not_held": 0,
+      "hop_bound": 18,
+      "kind": 509,
+      "phase_rule": 0,
+      "relevance_gate": 104,
+      "residual": 0,
+      "tick_bound": 2
+     },
+     "a_transcript_only": {
+      "cap": 0,
+      "claim_not_held": 0,
+      "hop_bound": 10,
+      "kind": 407,
+      "phase_rule": 0,
+      "relevance_gate": 115,
+      "residual": 0,
+      "tick_bound": 6
+     },
+     "b": {
+      "cap": 146,
+      "claim_not_held": 90,
+      "hop_bound": 0,
+      "kind": 1,
+      "phase_rule": 4,
+      "relevance_gate": 0,
+      "residual": 407,
+      "tick_bound": 0
+     },
+     "b_snapshot": {
+      "cap": 127,
+      "claim_not_held": 90,
+      "hop_bound": 0,
+      "kind": 1,
+      "phase_rule": 0,
+      "relevance_gate": 0,
+      "residual": 385,
+      "tick_bound": 0
+     },
+     "c": {
+      "cap": 0,
+      "claim_not_held": 0,
+      "hop_bound": 0,
+      "kind": 10,
+      "phase_rule": 0,
+      "relevance_gate": 1,
+      "residual": 0,
+      "tick_bound": 0
+     }
+    },
+    "unreached_reasons": {
+     "a": {
+      "cap": 0,
+      "claim_not_held": 0,
+      "hop_bound": 0,
+      "kind": 14,
+      "phase_rule": 0,
+      "relevance_gate": 7,
+      "residual": 0,
+      "tick_bound": 0
+     },
+     "a_transcript_only": {
+      "cap": 0,
+      "claim_not_held": 0,
+      "hop_bound": 1,
+      "kind": 15,
+      "phase_rule": 0,
+      "relevance_gate": 6,
+      "residual": 0,
+      "tick_bound": 0
+     },
+     "b": {
+      "cap": 8,
+      "claim_not_held": 2,
+      "hop_bound": 0,
+      "kind": 1,
+      "phase_rule": 1,
+      "relevance_gate": 0,
+      "residual": 2,
+      "tick_bound": 0
+     },
+     "b_snapshot": {
+      "cap": 6,
+      "claim_not_held": 2,
+      "hop_bound": 0,
+      "kind": 1,
+      "phase_rule": 0,
+      "relevance_gate": 0,
+      "residual": 2,
+      "tick_bound": 0
+     },
+     "c": {
+      "cap": 0,
+      "claim_not_held": 0,
+      "hop_bound": 0,
+      "kind": 3,
+      "phase_rule": 0,
+      "relevance_gate": 1,
+      "residual": 0,
+      "tick_bound": 0
+     }
+    },
+    "walkable_pair": {
+     "a": 8,
+     "a_no_movement": 5,
+     "a_no_regroup": 10,
+     "a_transcript_only": 7,
+     "a_with_movement_origins": 15
+    },
+    "witness_meetings": 14
+   },
+   "by_kind": {
+    "button": {
+     "b_kept": {
+      "cannot_reconcile": 0,
+      "crosses_regroup": 0,
+      "fits": 0,
+      "insufficient_timing": 0,
+      "unverifiable": 0
+     },
+     "b_offered": {
+      "cannot_reconcile": 0,
+      "crosses_regroup": 287,
+      "fits": 656,
+      "insufficient_timing": 622,
+      "unverifiable": 0
+     },
+     "b_snapshot_kept": {
+      "cannot_reconcile": 0,
+      "crosses_regroup": 0,
+      "fits": 0,
+      "insufficient_timing": 0,
+      "unverifiable": 0
+     },
+     "b_snapshot_offered": {
+      "cannot_reconcile": 0,
+      "crosses_regroup": 287,
+      "fits": 885,
+      "insufficient_timing": 393,
+      "unverifiable": 0
+     },
+     "charges": 24,
+     "charges_on_reconcilable_pair": 13,
+     "ejected_witnesses": 0,
+     "ejections": 4,
+     "ejections_with_a_charge": 4,
+     "ejections_with_reconcilable_pair": 2,
+     "insufficient_lines_misjudged": {
+      "a": 0,
+      "a_transcript_only": 0,
+      "b": 0,
+      "b_snapshot": 0,
+      "c": 0
+     },
+     "lines": {
+      "a": 0,
+      "a_transcript_only": 0,
+      "b": 0,
+      "b_snapshot": 0,
+      "c": 39
+     },
+     "meetings": 4,
+     "misjudged": 2,
+     "misjudged_at_witness_meetings": 0,
+     "pit_net": 0,
+     "pit_net_misjudged": 0,
+     "reaches": {
+      "a": 0,
+      "a_transcript_only": 0,
+      "b": 0,
+      "b_snapshot": 0,
+      "c": 1
+     },
+     "reaches_charge_misjudged": {
+      "a": 0,
+      "a_transcript_only": 0,
+      "b": 0,
+      "b_snapshot": 0,
+      "c": 1
+     },
+     "reaches_misjudged": {
+      "a": 0,
+      "a_transcript_only": 0,
+      "b": 0,
+      "b_snapshot": 0,
+      "c": 1
+     },
+     "reaches_misjudged_at_witness": {
+      "a": 0,
+      "a_transcript_only": 0,
+      "b": 0,
+      "b_snapshot": 0,
+      "c": 0
+     },
+     "reporter_ejections": 0,
+     "unreached_pair_reasons": {
+      "a": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 1,
+       "kind": 4,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "a_transcript_only": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 1,
+       "kind": 4,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "b": {
+       "cap": 0,
+       "claim_not_held": 2,
+       "hop_bound": 0,
+       "kind": 0,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 3,
+       "tick_bound": 0
+      },
+      "b_snapshot": {
+       "cap": 0,
+       "claim_not_held": 2,
+       "hop_bound": 0,
+       "kind": 0,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 3,
+       "tick_bound": 0
+      },
+      "c": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 2,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      }
+     },
+     "unreached_reasons": {
+      "a": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 2,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "a_transcript_only": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 2,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "b": {
+       "cap": 0,
+       "claim_not_held": 1,
+       "hop_bound": 0,
+       "kind": 0,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 1,
+       "tick_bound": 0
+      },
+      "b_snapshot": {
+       "cap": 0,
+       "claim_not_held": 1,
+       "hop_bound": 0,
+       "kind": 0,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 1,
+       "tick_bound": 0
+      },
+      "c": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 1,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      }
+     },
+     "walkable_pair": {
+      "a": 0,
+      "a_no_movement": 0,
+      "a_no_regroup": 0,
+      "a_transcript_only": 0,
+      "a_with_movement_origins": 0
+     },
+     "witness_meetings": 0
+    },
+    "report_no_vent_proof": {
+     "b_kept": {
+      "cannot_reconcile": 3,
+      "crosses_regroup": 2,
+      "fits": 229,
+      "insufficient_timing": 1456,
+      "unverifiable": 0
+     },
+     "b_offered": {
+      "cannot_reconcile": 3,
+      "crosses_regroup": 3775,
+      "fits": 9313,
+      "insufficient_timing": 10783,
+      "unverifiable": 0
+     },
+     "b_snapshot_kept": {
+      "cannot_reconcile": 3,
+      "crosses_regroup": 2,
+      "fits": 1117,
+      "insufficient_timing": 551,
+      "unverifiable": 0
+     },
+     "b_snapshot_offered": {
+      "cannot_reconcile": 3,
+      "crosses_regroup": 3775,
+      "fits": 13929,
+      "insufficient_timing": 6167,
+      "unverifiable": 0
+     },
+     "charges": 220,
+     "charges_on_reconcilable_pair": 175,
+     "ejected_witnesses": 6,
+     "ejections": 37,
+     "ejections_with_a_charge": 35,
+     "ejections_with_reconcilable_pair": 23,
+     "insufficient_lines_misjudged": {
+      "a": 0,
+      "a_transcript_only": 0,
+      "b": 79,
+      "b_snapshot": 35,
+      "c": 0
+     },
+     "lines": {
+      "a": 545,
+      "a_transcript_only": 416,
+      "b": 1690,
+      "b_snapshot": 1673,
+      "c": 1958
+     },
+     "meetings": 95,
+     "misjudged": 23,
+     "misjudged_at_witness_meetings": 7,
+     "pit_net": 5,
+     "pit_net_misjudged": 5,
+     "reaches": {
+      "a": 7,
+      "a_transcript_only": 7,
+      "b": 15,
+      "b_snapshot": 19,
+      "c": 22
+     },
+     "reaches_charge_misjudged": {
+      "a": 6,
+      "a_transcript_only": 6,
+      "b": 10,
+      "b_snapshot": 12,
+      "c": 20
+     },
+     "reaches_misjudged": {
+      "a": 7,
+      "a_transcript_only": 7,
+      "b": 12,
+      "b_snapshot": 15,
+      "c": 22
+     },
+     "reaches_misjudged_at_witness": {
+      "a": 2,
+      "a_transcript_only": 2,
+      "b": 2,
+      "b_snapshot": 3,
+      "c": 7
+     },
+     "reporter_ejections": 10,
+     "unreached_pair_reasons": {
+      "a": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 17,
+       "kind": 493,
+       "phase_rule": 0,
+       "relevance_gate": 102,
+       "residual": 0,
+       "tick_bound": 2
+      },
+      "a_transcript_only": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 9,
+       "kind": 390,
+       "phase_rule": 0,
+       "relevance_gate": 112,
+       "residual": 0,
+       "tick_bound": 6
+      },
+      "b": {
+       "cap": 146,
+       "claim_not_held": 85,
+       "hop_bound": 0,
+       "kind": 1,
+       "phase_rule": 4,
+       "relevance_gate": 0,
+       "residual": 401,
+       "tick_bound": 0
+      },
+      "b_snapshot": {
+       "cap": 127,
+       "claim_not_held": 85,
+       "hop_bound": 0,
+       "kind": 1,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 379,
+       "tick_bound": 0
+      },
+      "c": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 0,
+       "phase_rule": 0,
+       "relevance_gate": 1,
+       "residual": 0,
+       "tick_bound": 0
+      }
+     },
+     "unreached_reasons": {
+      "a": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 9,
+       "phase_rule": 0,
+       "relevance_gate": 7,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "a_transcript_only": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 1,
+       "kind": 9,
+       "phase_rule": 0,
+       "relevance_gate": 6,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "b": {
+       "cap": 8,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 1,
+       "phase_rule": 1,
+       "relevance_gate": 0,
+       "residual": 1,
+       "tick_bound": 0
+      },
+      "b_snapshot": {
+       "cap": 6,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 1,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 1,
+       "tick_bound": 0
+      },
+      "c": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 0,
+       "phase_rule": 0,
+       "relevance_gate": 1,
+       "residual": 0,
+       "tick_bound": 0
+      }
+     },
+     "walkable_pair": {
+      "a": 7,
+      "a_no_movement": 5,
+      "a_no_regroup": 9,
+      "a_transcript_only": 7,
+      "a_with_movement_origins": 13
+     },
+     "witness_meetings": 14
+    },
+    "report_vent_proof": {
+     "b_kept": {
+      "cannot_reconcile": 0,
+      "crosses_regroup": 1,
+      "fits": 85,
+      "insufficient_timing": 386,
+      "unverifiable": 0
+     },
+     "b_offered": {
+      "cannot_reconcile": 0,
+      "crosses_regroup": 655,
+      "fits": 1745,
+      "insufficient_timing": 2208,
+      "unverifiable": 0
+     },
+     "b_snapshot_kept": {
+      "cannot_reconcile": 0,
+      "crosses_regroup": 0,
+      "fits": 312,
+      "insufficient_timing": 154,
+      "unverifiable": 0
+     },
+     "b_snapshot_offered": {
+      "cannot_reconcile": 0,
+      "crosses_regroup": 655,
+      "fits": 2751,
+      "insufficient_timing": 1202,
+      "unverifiable": 0
+     },
+     "charges": 132,
+     "charges_on_reconcilable_pair": 38,
+     "ejected_witnesses": 0,
+     "ejections": 20,
+     "ejections_with_a_charge": 20,
+     "ejections_with_reconcilable_pair": 4,
+     "insufficient_lines_misjudged": {
+      "a": 0,
+      "a_transcript_only": 0,
+      "b": 13,
+      "b_snapshot": 5,
+      "c": 0
+     },
+     "lines": {
+      "a": 49,
+      "a_transcript_only": 31,
+      "b": 472,
+      "b_snapshot": 466,
+      "c": 325
+     },
+     "meetings": 20,
+     "misjudged": 4,
+     "misjudged_at_witness_meetings": 0,
+     "pit_net": 5,
+     "pit_net_misjudged": 1,
+     "reaches": {
+      "a": 1,
+      "a_transcript_only": 0,
+      "b": 7,
+      "b_snapshot": 9,
+      "c": 2
+     },
+     "reaches_charge_misjudged": {
+      "a": 0,
+      "a_transcript_only": 0,
+      "b": 3,
+      "b_snapshot": 3,
+      "c": 2
+     },
+     "reaches_misjudged": {
+      "a": 1,
+      "a_transcript_only": 0,
+      "b": 3,
+      "b_snapshot": 3,
+      "c": 2
+     },
+     "reaches_misjudged_at_witness": {
+      "a": 0,
+      "a_transcript_only": 0,
+      "b": 0,
+      "b_snapshot": 0,
+      "c": 0
+     },
+     "reporter_ejections": 0,
+     "unreached_pair_reasons": {
+      "a": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 12,
+       "phase_rule": 0,
+       "relevance_gate": 2,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "a_transcript_only": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 13,
+       "phase_rule": 0,
+       "relevance_gate": 3,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "b": {
+       "cap": 0,
+       "claim_not_held": 3,
+       "hop_bound": 0,
+       "kind": 0,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 3,
+       "tick_bound": 0
+      },
+      "b_snapshot": {
+       "cap": 0,
+       "claim_not_held": 3,
+       "hop_bound": 0,
+       "kind": 0,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 3,
+       "tick_bound": 0
+      },
+      "c": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 8,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      }
+     },
+     "unreached_reasons": {
+      "a": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 3,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "a_transcript_only": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 4,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "b": {
+       "cap": 0,
+       "claim_not_held": 1,
+       "hop_bound": 0,
+       "kind": 0,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "b_snapshot": {
+       "cap": 0,
+       "claim_not_held": 1,
+       "hop_bound": 0,
+       "kind": 0,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      },
+      "c": {
+       "cap": 0,
+       "claim_not_held": 0,
+       "hop_bound": 0,
+       "kind": 2,
+       "phase_rule": 0,
+       "relevance_gate": 0,
+       "residual": 0,
+       "tick_bound": 0
+      }
+     },
+     "walkable_pair": {
+      "a": 1,
+      "a_no_movement": 0,
+      "a_no_regroup": 1,
+      "a_transcript_only": 0,
+      "a_with_movement_origins": 2
+     },
+     "witness_meetings": 0
+    }
+   },
+   "classes": {
+    "cases": [
+     {
+      "classes": [
+       "innocent"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 1,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": false,
+       "a_transcript_only": false,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "impostor"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 7,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": false,
+       "a_transcript_only": false,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": "movement records",
+      "seed": 12,
+      "walkable_pair": {
+       "a": true,
+       "a_no_movement": false,
+       "a_no_regroup": true,
+       "a_transcript_only": false,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent"
+      ],
+      "meeting": 1,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 13,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": false,
+       "a_transcript_only": false,
+       "a_with_movement_origins": false
+      }
+     },
+     {
+      "classes": [
+       "impostor"
+      ],
+      "meeting": 1,
+      "misjudged": false,
+      "moved_by": null,
+      "seed": 16,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": false,
+       "a_transcript_only": false,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent"
+      ],
+      "meeting": 1,
+      "misjudged": true,
+      "moved_by": "regroup ticks",
+      "seed": 17,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": true,
+       "a_transcript_only": true,
+       "a_with_movement_origins": false
+      }
+     },
+     {
+      "classes": [
+       "impostor"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": "movement records",
+      "seed": 19,
+      "walkable_pair": {
+       "a": true,
+       "a_no_movement": false,
+       "a_no_regroup": true,
+       "a_transcript_only": false,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 22,
+      "walkable_pair": {
+       "a": true,
+       "a_no_movement": true,
+       "a_no_regroup": true,
+       "a_transcript_only": true,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 23,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": false,
+       "a_transcript_only": false,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent",
+       "ejected_witness"
+      ],
+      "meeting": 1,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 23,
+      "walkable_pair": {
+       "a": true,
+       "a_no_movement": true,
+       "a_no_regroup": true,
+       "a_transcript_only": true,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent"
+      ],
+      "meeting": 1,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 24,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": false,
+       "a_transcript_only": false,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 25,
+      "walkable_pair": {
+       "a": true,
+       "a_no_movement": true,
+       "a_no_regroup": true,
+       "a_transcript_only": true,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent",
+       "ejected_witness"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 29,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": false,
+       "a_transcript_only": false,
+       "a_with_movement_origins": false
+      }
+     },
+     {
+      "classes": [
+       "innocent",
+       "ejected_witness"
+      ],
+      "meeting": 1,
+      "misjudged": true,
+      "moved_by": "regroup ticks",
+      "seed": 30,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": true,
+       "a_transcript_only": true,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 33,
+      "walkable_pair": {
+       "a": true,
+       "a_no_movement": true,
+       "a_no_regroup": true,
+       "a_transcript_only": true,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent",
+       "ejected_witness"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 35,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": false,
+       "a_transcript_only": false,
+       "a_with_movement_origins": false
+      }
+     },
+     {
+      "classes": [
+       "innocent",
+       "ejected_witness"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": null,
+      "seed": 38,
+      "walkable_pair": {
+       "a": false,
+       "a_no_movement": false,
+       "a_no_regroup": false,
+       "a_transcript_only": false,
+       "a_with_movement_origins": true
+      }
+     },
+     {
+      "classes": [
+       "innocent",
+       "ejected_witness"
+      ],
+      "meeting": 0,
+      "misjudged": true,
+      "moved_by": "movement records",
+      "seed": 43,
+      "walkable_pair": {
+       "a": true,
+       "a_no_movement": false,
+       "a_no_regroup": true,
+       "a_transcript_only": false,
+       "a_with_movement_origins": true
+      }
+     }
+    ],
+    "counts": {
+     "ejected_witness": {
+      "ejected_witnesses": 6,
+      "ejections": 6,
+      "ejections_with_a_charge": 6,
+      "ejections_with_reconcilable_pair": 6,
+      "insufficient_lines_misjudged": {
+       "a": 0,
+       "a_transcript_only": 0,
+       "b": 16,
+       "b_snapshot": 9,
+       "c": 0
+      },
+      "misjudged": 6,
+      "misjudged_at_witness_meetings": 6,
+      "pit_net": 5,
+      "pit_net_misjudged": 5,
+      "reaches": {
+       "a": 2,
+       "a_transcript_only": 2,
+       "b": 2,
+       "b_snapshot": 3,
+       "c": 6
+      },
+      "reaches_charge_misjudged": {
+       "a": 2,
+       "a_transcript_only": 1,
+       "b": 2,
+       "b_snapshot": 2,
+       "c": 6
+      },
+      "reaches_misjudged": {
+       "a": 2,
+       "a_transcript_only": 2,
+       "b": 2,
+       "b_snapshot": 3,
+       "c": 6
+      },
+      "reaches_misjudged_at_witness": {
+       "a": 2,
+       "a_transcript_only": 2,
+       "b": 2,
+       "b_snapshot": 3,
+       "c": 6
+      },
+      "reporter_ejections": 6,
+      "unreached_pair_reasons": {
+       "a": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 6,
+        "kind": 202,
+        "phase_rule": 0,
+        "relevance_gate": 17,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "a_transcript_only": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 4,
+        "kind": 167,
+        "phase_rule": 0,
+        "relevance_gate": 20,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "b": {
+        "cap": 81,
+        "claim_not_held": 54,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 208,
+        "tick_bound": 0
+       },
+       "b_snapshot": {
+        "cap": 79,
+        "claim_not_held": 54,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 202,
+        "tick_bound": 0
+       },
+       "c": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 0,
+        "tick_bound": 0
+       }
+      },
+      "unreached_reasons": {
+       "a": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 4,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "a_transcript_only": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 4,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "b": {
+        "cap": 4,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "b_snapshot": {
+        "cap": 3,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "c": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 0,
+        "tick_bound": 0
+       }
+      },
+      "walkable_pair": {
+       "a": 2,
+       "a_no_movement": 1,
+       "a_no_regroup": 3,
+       "a_transcript_only": 2,
+       "a_with_movement_origins": 4
+      }
+     },
+     "impostor": {
+      "ejected_witnesses": 0,
+      "ejections": 46,
+      "ejections_with_a_charge": 44,
+      "ejections_with_reconcilable_pair": 14,
+      "insufficient_lines_misjudged": {
+       "a": 0,
+       "a_transcript_only": 0,
+       "b": 52,
+       "b_snapshot": 21,
+       "c": 0
+      },
+      "misjudged": 14,
+      "misjudged_at_witness_meetings": 1,
+      "pit_net": 5,
+      "pit_net_misjudged": 1,
+      "reaches": {
+       "a": 2,
+       "a_transcript_only": 1,
+       "b": 15,
+       "b_snapshot": 19,
+       "c": 10
+      },
+      "reaches_charge_misjudged": {
+       "a": 1,
+       "a_transcript_only": 1,
+       "b": 6,
+       "b_snapshot": 7,
+       "c": 8
+      },
+      "reaches_misjudged": {
+       "a": 2,
+       "a_transcript_only": 1,
+       "b": 8,
+       "b_snapshot": 9,
+       "c": 10
+      },
+      "reaches_misjudged_at_witness": {
+       "a": 0,
+       "a_transcript_only": 0,
+       "b": 0,
+       "b_snapshot": 0,
+       "c": 1
+      },
+      "reporter_ejections": 0,
+      "unreached_pair_reasons": {
+       "a": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 5,
+        "kind": 17,
+        "phase_rule": 0,
+        "relevance_gate": 39,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "a_transcript_only": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 1,
+        "kind": 18,
+        "phase_rule": 0,
+        "relevance_gate": 44,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "b": {
+        "cap": 1,
+        "claim_not_held": 10,
+        "hop_bound": 0,
+        "kind": 1,
+        "phase_rule": 4,
+        "relevance_gate": 0,
+        "residual": 6,
+        "tick_bound": 0
+       },
+       "b_snapshot": {
+        "cap": 1,
+        "claim_not_held": 10,
+        "hop_bound": 0,
+        "kind": 1,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 6,
+        "tick_bound": 0
+       },
+       "c": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 10,
+        "phase_rule": 0,
+        "relevance_gate": 1,
+        "residual": 0,
+        "tick_bound": 0
+       }
+      },
+      "unreached_reasons": {
+       "a": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 6,
+        "phase_rule": 0,
+        "relevance_gate": 6,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "a_transcript_only": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 7,
+        "phase_rule": 0,
+        "relevance_gate": 6,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "b": {
+        "cap": 1,
+        "claim_not_held": 2,
+        "hop_bound": 0,
+        "kind": 1,
+        "phase_rule": 1,
+        "relevance_gate": 0,
+        "residual": 1,
+        "tick_bound": 0
+       },
+       "b_snapshot": {
+        "cap": 1,
+        "claim_not_held": 2,
+        "hop_bound": 0,
+        "kind": 1,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 1,
+        "tick_bound": 0
+       },
+       "c": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 3,
+        "phase_rule": 0,
+        "relevance_gate": 1,
+        "residual": 0,
+        "tick_bound": 0
+       }
+      },
+      "walkable_pair": {
+       "a": 2,
+       "a_no_movement": 1,
+       "a_no_regroup": 2,
+       "a_transcript_only": 1,
+       "a_with_movement_origins": 4
+      }
+     },
+     "innocent": {
+      "ejected_witnesses": 6,
+      "ejections": 15,
+      "ejections_with_a_charge": 15,
+      "ejections_with_reconcilable_pair": 15,
+      "insufficient_lines_misjudged": {
+       "a": 0,
+       "a_transcript_only": 0,
+       "b": 40,
+       "b_snapshot": 19,
+       "c": 0
+      },
+      "misjudged": 15,
+      "misjudged_at_witness_meetings": 6,
+      "pit_net": 5,
+      "pit_net_misjudged": 5,
+      "reaches": {
+       "a": 6,
+       "a_transcript_only": 6,
+       "b": 7,
+       "b_snapshot": 9,
+       "c": 15
+      },
+      "reaches_charge_misjudged": {
+       "a": 5,
+       "a_transcript_only": 5,
+       "b": 7,
+       "b_snapshot": 8,
+       "c": 15
+      },
+      "reaches_misjudged": {
+       "a": 6,
+       "a_transcript_only": 6,
+       "b": 7,
+       "b_snapshot": 9,
+       "c": 15
+      },
+      "reaches_misjudged_at_witness": {
+       "a": 2,
+       "a_transcript_only": 2,
+       "b": 2,
+       "b_snapshot": 3,
+       "c": 6
+      },
+      "reporter_ejections": 10,
+      "unreached_pair_reasons": {
+       "a": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 13,
+        "kind": 492,
+        "phase_rule": 0,
+        "relevance_gate": 65,
+        "residual": 0,
+        "tick_bound": 2
+       },
+       "a_transcript_only": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 9,
+        "kind": 389,
+        "phase_rule": 0,
+        "relevance_gate": 71,
+        "residual": 0,
+        "tick_bound": 6
+       },
+       "b": {
+        "cap": 145,
+        "claim_not_held": 80,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 401,
+        "tick_bound": 0
+       },
+       "b_snapshot": {
+        "cap": 126,
+        "claim_not_held": 80,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 379,
+        "tick_bound": 0
+       },
+       "c": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 0,
+        "tick_bound": 0
+       }
+      },
+      "unreached_reasons": {
+       "a": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 8,
+        "phase_rule": 0,
+        "relevance_gate": 1,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "a_transcript_only": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 1,
+        "kind": 8,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 0,
+        "tick_bound": 0
+       },
+       "b": {
+        "cap": 7,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 1,
+        "tick_bound": 0
+       },
+       "b_snapshot": {
+        "cap": 5,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 1,
+        "tick_bound": 0
+       },
+       "c": {
+        "cap": 0,
+        "claim_not_held": 0,
+        "hop_bound": 0,
+        "kind": 0,
+        "phase_rule": 0,
+        "relevance_gate": 0,
+        "residual": 0,
+        "tick_bound": 0
+       }
+      },
+      "walkable_pair": {
+       "a": 6,
+       "a_no_movement": 4,
+       "a_no_regroup": 8,
+       "a_transcript_only": 6,
+       "a_with_movement_origins": 11
+      }
+     }
+    }
+   },
+   "commit": "60059688",
+   "declared_config": "replays/samples/9p2i/experiment-config.json",
+   "games": 50,
+   "label": "r3",
+   "meetings": [
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":12,"insufficient_timing":36,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":33,"insufficient_timing":13,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":2,"kind":"report_no_vent_proof","lines":{"a":14,"a_transcript_only":7,"b":48,"b_snapshot":46,"c":42},"meeting":0,"opener":"p-1","seed":0,"tick":17,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":5,"a_transcript_only":5,"b":0,"b_snapshot":0,"c":15},"meeting":1,"opener":"p-3","seed":0,"tick":30,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":3,"charges":5,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":3,"ejected":"p-6","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":true,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":0,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":12},"meeting":2,"opener":"p-4","seed":0,"tick":42,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":1,"charges":1,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":2,"ejected":"p-8","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":3,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":1,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":2},"meeting":3,"opener":"p-5","seed":0,"tick":52,"voters":3,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":5,"insufficient_timing":46,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":35,"insufficient_timing":15,"unverifiable":0},"case":{"ballot_charges":4,"charges":4,"charges_on_reconcilable_pair":4,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"kind":4},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":4},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":4,"ejected":"p-4","flag_charges":0,"misjudged":true,"misjudging_pairs":4,"pit_net":false,"placements":9,"reconcilable_pairs":24,"reporter":true,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":true}},"charges":6,"charges_on_reconcilable_pair":4,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":51,"b_snapshot":50,"c":24},"meeting":0,"opener":"p-4","seed":1,"tick":10,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":1,"insufficient_timing":40,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":29,"insufficient_timing":12,"unverifiable":0},"charges":3,"charges_on_reconcilable_pair":3,"kind":"report_no_vent_proof","lines":{"a":24,"a_transcript_only":18,"b":41,"b_snapshot":41,"c":42},"meeting":0,"opener":"p-1","seed":2,"tick":9,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":6,"insufficient_timing":31,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":21,"insufficient_timing":16,"unverifiable":0},"case":{"ballot_charges":5,"charges":7,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":5,"ejected":"p-6","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":8,"charges_on_reconcilable_pair":1,"kind":"report_vent_proof","lines":{"a":12,"a_transcript_only":0,"b":37,"b_snapshot":37,"c":18},"meeting":0,"opener":"p-1","seed":3,"tick":12,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":16},"meeting":1,"opener":"p-7","seed":3,"tick":22,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":3,"a_transcript_only":3,"b":0,"b_snapshot":0,"c":6},"meeting":2,"opener":"p-7","seed":3,"tick":33,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":2,"a_transcript_only":2,"b":0,"b_snapshot":0,"c":4},"meeting":3,"opener":"p-8","seed":3,"tick":49,"voters":3,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":2,"insufficient_timing":40,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":32,"insufficient_timing":8,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":12,"a_transcript_only":0,"b":42,"b_snapshot":40,"c":36},"meeting":0,"opener":"p-1","seed":4,"tick":8,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":12},"meeting":1,"opener":"p-1","seed":4,"tick":18,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":14,"insufficient_timing":28,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":27,"insufficient_timing":13,"unverifiable":0},"case":{"ballot_charges":5,"charges":7,"charges_on_reconcilable_pair":7,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"kind":4},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":4},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":1,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":1,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{"kind":4},"reaches":false,"reaches_charge":false,"reason":"kind"}},"eject_voters":5,"ejected":"p-4","flag_charges":2,"misjudged":true,"misjudging_pairs":4,"pit_net":false,"placements":4,"reconcilable_pairs":4,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":8,"charges_on_reconcilable_pair":8,"kind":"report_vent_proof","lines":{"a":6,"a_transcript_only":6,"b":42,"b_snapshot":40,"c":24},"meeting":0,"opener":"p-1","seed":5,"tick":15,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":4,"charges":6,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-3","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":9,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":7,"charges_on_reconcilable_pair":1,"kind":"button","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":16},"meeting":1,"opener":"p-2","seed":5,"tick":41,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":8,"insufficient_timing":25,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":19,"insufficient_timing":10,"unverifiable":0},"case":{"ballot_charges":5,"charges":7,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":2,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":5,"ejected":"p-6","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":8,"charges_on_reconcilable_pair":1,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":33,"b_snapshot":29,"c":30},"meeting":0,"opener":"p-1","seed":6,"tick":20,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":4},"meeting":1,"opener":"p-2","seed":6,"tick":39,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":6,"insufficient_timing":45,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":36,"insufficient_timing":15,"unverifiable":0},"case":{"ballot_charges":5,"charges":6,"charges_on_reconcilable_pair":6,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"kind":4},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":4},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":6,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":2,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{"kind":4},"reaches":false,"reaches_charge":false,"reason":"kind"}},"eject_voters":6,"ejected":"p-2","flag_charges":1,"misjudged":true,"misjudging_pairs":4,"pit_net":true,"placements":5,"reconcilable_pairs":4,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":true}},"charges":8,"charges_on_reconcilable_pair":8,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":51,"b_snapshot":51,"c":14},"meeting":0,"opener":"p-1","seed":7,"tick":10,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":2,"charges":2,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-7","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":9,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":2,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":4},"meeting":1,"opener":"p-1","seed":7,"tick":28,"voters":5,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":9,"insufficient_timing":40,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":32,"insufficient_timing":16,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":6},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":6},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"b":{"insufficient_lines":3,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":3,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":5,"ejected":"p-5","flag_charges":0,"misjudged":true,"misjudging_pairs":6,"pit_net":false,"placements":7,"reconcilable_pairs":12,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":7,"charges_on_reconcilable_pair":7,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":49,"b_snapshot":48,"c":30},"meeting":0,"opener":"p-1","seed":8,"tick":11,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":12},"meeting":1,"opener":"p-9","seed":8,"tick":26,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":2,"kind":"report_no_vent_proof","lines":{"a":6,"a_transcript_only":6,"b":0,"b_snapshot":0,"c":9},"meeting":2,"opener":"p-2","seed":8,"tick":53,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":3,"insufficient_timing":58,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":32,"insufficient_timing":29,"unverifiable":0},"case":{"ballot_charges":4,"charges":4,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":2,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":2,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":5,"ejected":"p-4","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":1,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":6,"charges_on_reconcilable_pair":2,"kind":"report_no_vent_proof","lines":{"a":14,"a_transcript_only":0,"b":61,"b_snapshot":61,"c":49},"meeting":0,"opener":"p-6","seed":9,"tick":7,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":10,"a_transcript_only":15,"b":0,"b_snapshot":0,"c":15},"meeting":1,"opener":"p-1","seed":9,"tick":18,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":4,"charges":6,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-7","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":6,"charges_on_reconcilable_pair":0,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":4},"meeting":2,"opener":"p-2","seed":9,"tick":34,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":6,"insufficient_timing":37,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":30,"insufficient_timing":12,"unverifiable":0},"case":{"ballot_charges":4,"charges":5,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":7,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":3,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":5,"ejected":"p-3","flag_charges":1,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":0,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":43,"b_snapshot":42,"c":12},"meeting":0,"opener":"p-1","seed":10,"tick":10,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":4,"charges":6,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-6","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":6,"charges_on_reconcilable_pair":0,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":4},"meeting":1,"opener":"p-4","seed":10,"tick":29,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":4,"insufficient_timing":40,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":30,"insufficient_timing":14,"unverifiable":0},"case":{"ballot_charges":5,"charges":6,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":5,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":1,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":6,"ejected":"p-3","flag_charges":1,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":6,"charges_on_reconcilable_pair":0,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":44,"b_snapshot":44,"c":28},"meeting":0,"opener":"p-1","seed":11,"tick":10,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":1,"fits":2,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":2,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":5,"charges":7,"charges_on_reconcilable_pair":7,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"kind":4,"relevance_gate":2},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":4,"relevance_gate":2},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":0,"pair_reasons":{"claim_not_held":3,"residual":3},"reaches":false,"reaches_charge":false,"reason":"claim_not_held"},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{"claim_not_held":3,"residual":3},"reaches":false,"reaches_charge":false,"reason":"claim_not_held"},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":5,"ejected":"p-7","flag_charges":2,"misjudged":true,"misjudging_pairs":6,"pit_net":false,"placements":6,"reconcilable_pairs":8,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":8,"charges_on_reconcilable_pair":8,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":3,"b_snapshot":2,"c":15},"meeting":1,"opener":"p-1","seed":11,"tick":20,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":9,"insufficient_timing":35,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":29,"insufficient_timing":15,"unverifiable":0},"case":{"ballot_charges":6,"charges":7,"charges_on_reconcilable_pair":7,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"hop_bound":2,"kind":119,"relevance_gate":51},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":4,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":2,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":6,"ejected":"p-2","flag_charges":1,"misjudged":true,"misjudging_pairs":172,"pit_net":false,"placements":23,"reconcilable_pairs":181,"reporter":false,"walkable_pair":{"a":true,"a_no_movement":false,"a_no_regroup":true,"a_transcript_only":false,"a_with_movement_origins":true}},"charges":7,"charges_on_reconcilable_pair":7,"kind":"report_no_vent_proof","lines":{"a":6,"a_transcript_only":0,"b":44,"b_snapshot":44,"c":18},"meeting":0,"opener":"p-3","seed":12,"tick":12,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":10,"insufficient_timing":53,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":43,"insufficient_timing":21,"unverifiable":0},"case":{"ballot_charges":4,"charges":4,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":5,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":3,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":5,"ejected":"p-1","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":14,"a_transcript_only":14,"b":63,"b_snapshot":64,"c":42},"meeting":0,"opener":"p-3","seed":13,"tick":11,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"hop_bound":3,"relevance_gate":4,"tick_bound":2},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"hop_bound":3,"tick_bound":6},"reaches":false,"reaches_charge":false,"reason":"hop_bound"},"b":{"insufficient_lines":0,"pair_reasons":{"residual":9},"reaches":false,"reaches_charge":false,"reason":"residual"},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{"residual":9},"reaches":false,"reaches_charge":false,"reason":"residual"},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":5,"ejected":"p-3","flag_charges":0,"misjudged":true,"misjudging_pairs":9,"pit_net":false,"placements":7,"reconcilable_pairs":15,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_no_vent_proof","lines":{"a":10,"a_transcript_only":10,"b":0,"b_snapshot":0,"c":25},"meeting":1,"opener":"p-2","seed":13,"tick":21,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":6,"a_transcript_only":6,"b":0,"b_snapshot":0,"c":6},"meeting":2,"opener":"p-6","seed":13,"tick":38,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":7,"insufficient_timing":28,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":17,"insufficient_timing":18,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":13},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":13},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"b":{"insufficient_lines":6,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":3,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":5,"ejected":"p-1","flag_charges":0,"misjudged":true,"misjudging_pairs":13,"pit_net":false,"placements":8,"reconcilable_pairs":19,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":35,"b_snapshot":35,"c":30},"meeting":0,"opener":"p-3","seed":14,"tick":11,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":2,"insufficient_timing":26,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":19,"insufficient_timing":8,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":28,"b_snapshot":27,"c":36},"meeting":0,"opener":"p-1","seed":15,"tick":9,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":10,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":25},"meeting":1,"opener":"p-2","seed":15,"tick":22,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":8,"a_transcript_only":8,"b":0,"b_snapshot":0,"c":16},"meeting":2,"opener":"p-5","seed":15,"tick":40,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":2,"insufficient_timing":42,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":40,"insufficient_timing":4,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"hop_bound":4,"relevance_gate":10},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":14},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"b":{"insufficient_lines":9,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":1,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":5,"ejected":"p-1","flag_charges":0,"misjudged":true,"misjudging_pairs":14,"pit_net":false,"placements":7,"reconcilable_pairs":16,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":44,"b_snapshot":44,"c":42},"meeting":0,"opener":"p-4","seed":16,"tick":11,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":4,"charges":4,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-9","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":6,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":true}},"charges":4,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":8},"meeting":1,"opener":"p-4","seed":16,"tick":43,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":3,"insufficient_timing":45,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":21,"insufficient_timing":27,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":1},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":1},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"b":{"insufficient_lines":3,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":3,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":1},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"}},"eject_voters":6,"ejected":"p-2","flag_charges":0,"misjudged":true,"misjudging_pairs":1,"pit_net":false,"placements":3,"reconcilable_pairs":2,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_no_vent_proof","lines":{"a":7,"a_transcript_only":7,"b":48,"b_snapshot":48,"c":35},"meeting":0,"opener":"p-7","seed":17,"tick":7,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":4,"charges":4,"charges_on_reconcilable_pair":4,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"hop_bound":4,"kind":187,"relevance_gate":44},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{"cap":46,"claim_not_held":26,"residual":163},"reaches":false,"reaches_charge":false,"reason":"cap"},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{"cap":46,"claim_not_held":26,"residual":163},"reaches":false,"reaches_charge":false,"reason":"cap"},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":4,"ejected":"p-5","flag_charges":0,"misjudged":true,"misjudging_pairs":235,"pit_net":false,"placements":26,"reconcilable_pairs":249,"reporter":true,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":true,"a_transcript_only":true,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_no_vent_proof","lines":{"a":5,"a_transcript_only":10,"b":0,"b_snapshot":0,"c":15},"meeting":1,"opener":"p-5","seed":17,"tick":17,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":3,"a_transcript_only":3,"b":0,"b_snapshot":0,"c":3},"meeting":2,"opener":"p-7","seed":17,"tick":31,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":2,"a_transcript_only":2,"b":0,"b_snapshot":0,"c":2},"meeting":3,"opener":"p-8","seed":17,"tick":52,"voters":3,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":35,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":23,"insufficient_timing":12,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":2,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":35,"b_snapshot":35,"c":42},"meeting":0,"opener":"p-8","seed":18,"tick":12,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":4,"charges":6,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-5","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":true,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":7,"charges_on_reconcilable_pair":1,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":10},"meeting":1,"opener":"p-1","seed":18,"tick":21,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":6},"meeting":2,"opener":"p-4","seed":18,"tick":42,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":8,"insufficient_timing":36,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":28,"insufficient_timing":16,"unverifiable":0},"case":{"ballot_charges":4,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":1,"relevance_gate":1},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":6,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":2,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":5,"ejected":"p-6","flag_charges":1,"misjudged":true,"misjudging_pairs":2,"pit_net":false,"placements":8,"reconcilable_pairs":7,"reporter":false,"walkable_pair":{"a":true,"a_no_movement":false,"a_no_regroup":true,"a_transcript_only":false,"a_with_movement_origins":true}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_vent_proof","lines":{"a":18,"a_transcript_only":12,"b":44,"b_snapshot":44,"c":36},"meeting":0,"opener":"p-4","seed":19,"tick":12,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":4,"a_transcript_only":4,"b":0,"b_snapshot":0,"c":16},"meeting":1,"opener":"p-1","seed":19,"tick":31,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":0,"charges":0,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":3,"ejected":"p-9","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":4,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":1,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":3},"meeting":2,"opener":"p-3","seed":19,"tick":44,"voters":4,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":8,"insufficient_timing":30,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":23,"insufficient_timing":15,"unverifiable":0},"case":{"ballot_charges":4,"charges":6,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":5,"ejected":"p-8","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":7,"charges_on_reconcilable_pair":1,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":38,"b_snapshot":38,"c":24},"meeting":0,"opener":"p-3","seed":20,"tick":12,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":1,"fits":3,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":1,"fits":2,"insufficient_timing":0,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":4,"b_snapshot":3,"c":8},"meeting":1,"opener":"p-3","seed":20,"tick":26,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":3,"a_transcript_only":3,"b":0,"b_snapshot":0,"c":3},"meeting":2,"opener":"p-5","seed":20,"tick":43,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":2,"a_transcript_only":2,"b":0,"b_snapshot":0,"c":2},"meeting":3,"opener":"p-6","seed":20,"tick":54,"voters":3,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":1,"insufficient_timing":31,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":17,"insufficient_timing":14,"unverifiable":0},"case":{"ballot_charges":3,"charges":3,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":3,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":1,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":3,"ejected":"p-2","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":3,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":6,"charges_on_reconcilable_pair":2,"kind":"report_no_vent_proof","lines":{"a":12,"a_transcript_only":6,"b":32,"b_snapshot":31,"c":30},"meeting":0,"opener":"p-1","seed":21,"tick":11,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":8,"b":0,"b_snapshot":0,"c":8},"meeting":1,"opener":"p-1","seed":21,"tick":27,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":3,"charges":5,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":3,"ejected":"p-5","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":6,"charges_on_reconcilable_pair":1,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":3},"meeting":2,"opener":"p-4","seed":21,"tick":40,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":2,"insufficient_timing":45,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":37,"insufficient_timing":9,"unverifiable":0},"case":{"ballot_charges":3,"charges":3,"charges_on_reconcilable_pair":3,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b":{"insufficient_lines":4,"pair_reasons":{"cap":17,"residual":16},"reaches":false,"reaches_charge":false,"reason":"cap"},"b_snapshot":{"insufficient_lines":1,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":3,"ejected":"p-5","flag_charges":0,"misjudged":true,"misjudging_pairs":33,"pit_net":false,"placements":14,"reconcilable_pairs":68,"reporter":false,"walkable_pair":{"a":true,"a_no_movement":true,"a_no_regroup":true,"a_transcript_only":true,"a_with_movement_origins":true}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_no_vent_proof","lines":{"a":18,"a_transcript_only":18,"b":47,"b_snapshot":46,"c":30},"meeting":0,"opener":"p-4","seed":22,"tick":12,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":3,"charges":4,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":3,"ejected":"p-6","flag_charges":1,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":1,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":1,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":8},"meeting":1,"opener":"p-4","seed":22,"tick":36,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":4},"meeting":2,"opener":"p-8","seed":22,"tick":55,"voters":3,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":9,"insufficient_timing":39,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":30,"insufficient_timing":18,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"kind":93},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":93},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":8,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":5,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":5,"ejected":"p-1","flag_charges":0,"misjudged":true,"misjudging_pairs":93,"pit_net":false,"placements":17,"reconcilable_pairs":94,"reporter":true,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":true}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":48,"b_snapshot":48,"c":36},"meeting":0,"opener":"p-1","seed":23,"tick":13,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":3,"charges":3,"charges_on_reconcilable_pair":3,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{"cap":41,"claim_not_held":34,"residual":116},"reaches":false,"reaches_charge":false,"reason":"cap"},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{"cap":41,"claim_not_held":34,"residual":116},"reaches":false,"reaches_charge":false,"reason":"cap"},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":3,"ejected":"p-3","flag_charges":0,"misjudged":true,"misjudging_pairs":191,"pit_net":true,"placements":22,"reconcilable_pairs":196,"reporter":true,"walkable_pair":{"a":true,"a_no_movement":true,"a_no_regroup":true,"a_transcript_only":true,"a_with_movement_origins":true}},"charges":3,"charges_on_reconcilable_pair":3,"kind":"report_no_vent_proof","lines":{"a":4,"a_transcript_only":4,"b":0,"b_snapshot":0,"c":8},"meeting":1,"opener":"p-3","seed":23,"tick":22,"voters":5,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":5,"insufficient_timing":41,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":25,"insufficient_timing":21,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":12,"a_transcript_only":0,"b":46,"b_snapshot":46,"c":24},"meeting":0,"opener":"p-7","seed":24,"tick":9,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":1,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":1,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":1,"charges":1,"charges_on_reconcilable_pair":1,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"kind":6},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":6},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":0,"pair_reasons":{"cap":1,"residual":5},"reaches":false,"reaches_charge":false,"reason":"cap"},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{"cap":1,"residual":5},"reaches":false,"reaches_charge":false,"reason":"cap"},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":3,"ejected":"p-3","flag_charges":0,"misjudged":true,"misjudging_pairs":6,"pit_net":false,"placements":13,"reconcilable_pairs":54,"reporter":true,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":true}},"charges":2,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":1,"b_snapshot":1,"c":25},"meeting":1,"opener":"p-3","seed":24,"tick":18,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":10,"insufficient_timing":40,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":39,"insufficient_timing":10,"unverifiable":0},"case":{"ballot_charges":4,"charges":4,"charges_on_reconcilable_pair":4,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b":{"insufficient_lines":7,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":2,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":4,"ejected":"p-4","flag_charges":0,"misjudged":true,"misjudging_pairs":53,"pit_net":false,"placements":21,"reconcilable_pairs":165,"reporter":false,"walkable_pair":{"a":true,"a_no_movement":true,"a_no_regroup":true,"a_transcript_only":true,"a_with_movement_origins":true}},"charges":4,"charges_on_reconcilable_pair":4,"kind":"report_no_vent_proof","lines":{"a":18,"a_transcript_only":18,"b":50,"b_snapshot":49,"c":42},"meeting":0,"opener":"p-1","seed":25,"tick":14,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":20},"meeting":1,"opener":"p-8","seed":25,"tick":23,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":5,"insufficient_timing":25,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":17,"insufficient_timing":13,"unverifiable":0},"charges":3,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":30,"b_snapshot":30,"c":35},"meeting":0,"opener":"p-8","seed":26,"tick":13,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":1,"fits":1,"insufficient_timing":1,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":1,"fits":1,"insufficient_timing":1,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":5,"a_transcript_only":5,"b":3,"b_snapshot":3,"c":20},"meeting":1,"opener":"p-1","seed":26,"tick":22,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":8,"a_transcript_only":8,"b":0,"b_snapshot":0,"c":12},"meeting":2,"opener":"p-1","seed":26,"tick":33,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":12,"insufficient_timing":35,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":35,"insufficient_timing":12,"unverifiable":0},"case":{"ballot_charges":5,"charges":7,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":5,"ejected":"p-7","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":9,"charges_on_reconcilable_pair":2,"kind":"report_vent_proof","lines":{"a":6,"a_transcript_only":6,"b":47,"b_snapshot":47,"c":30},"meeting":0,"opener":"p-1","seed":27,"tick":15,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":3,"charges":4,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-4","flag_charges":1,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":1,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":0,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":0},"meeting":1,"opener":"p-3","seed":27,"tick":36,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":2,"insufficient_timing":31,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":28,"insufficient_timing":5,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":2,"kind":"report_no_vent_proof","lines":{"a":6,"a_transcript_only":0,"b":33,"b_snapshot":33,"c":36},"meeting":0,"opener":"p-1","seed":28,"tick":9,"voters":7,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":2,"kind":"report_no_vent_proof","lines":{"a":5,"a_transcript_only":5,"b":0,"b_snapshot":0,"c":25},"meeting":1,"opener":"p-3","seed":28,"tick":20,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":0,"charges":0,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":3,"ejected":"p-8","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":1,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":1,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":0},"meeting":2,"opener":"p-6","seed":28,"tick":28,"voters":5,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":2,"a_transcript_only":2,"b":0,"b_snapshot":0,"c":2},"meeting":3,"opener":"p-6","seed":28,"tick":54,"voters":3,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":3,"insufficient_timing":34,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":24,"insufficient_timing":13,"unverifiable":0},"case":{"ballot_charges":3,"charges":3,"charges_on_reconcilable_pair":3,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"kind":20},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":20},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":1,"pair_reasons":{"cap":6,"residual":14},"reaches":false,"reaches_charge":false,"reason":"cap"},"b_snapshot":{"insufficient_lines":1,"pair_reasons":{"cap":6,"residual":14},"reaches":false,"reaches_charge":false,"reason":"cap"},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":6,"ejected":"p-5","flag_charges":0,"misjudged":true,"misjudging_pairs":20,"pit_net":true,"placements":8,"reconcilable_pairs":20,"reporter":true,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":3,"charges_on_reconcilable_pair":3,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":37,"b_snapshot":37,"c":30},"meeting":0,"opener":"p-5","seed":29,"tick":13,"voters":7,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":9,"insufficient_timing":51,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":42,"insufficient_timing":18,"unverifiable":0},"charges":4,"charges_on_reconcilable_pair":4,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":60,"b_snapshot":60,"c":49},"meeting":0,"opener":"p-7","seed":30,"tick":11,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"hop_bound":3,"kind":111,"relevance_gate":10},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{"cap":32,"claim_not_held":20,"residual":72},"reaches":false,"reaches_charge":false,"reason":"cap"},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{"cap":32,"claim_not_held":20,"residual":72},"reaches":false,"reaches_charge":false,"reason":"cap"},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":5,"ejected":"p-1","flag_charges":0,"misjudged":true,"misjudging_pairs":124,"pit_net":true,"placements":19,"reconcilable_pairs":132,"reporter":true,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":true,"a_transcript_only":true,"a_with_movement_origins":true}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":12,"b":0,"b_snapshot":0,"c":6},"meeting":1,"opener":"p-1","seed":30,"tick":19,"voters":7,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":3,"insufficient_timing":27,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":18,"insufficient_timing":11,"unverifiable":0},"charges":3,"charges_on_reconcilable_pair":3,"kind":"report_no_vent_proof","lines":{"a":12,"a_transcript_only":6,"b":30,"b_snapshot":29,"c":42},"meeting":0,"opener":"p-1","seed":31,"tick":12,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":6,"insufficient_timing":48,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":38,"insufficient_timing":15,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":6,"a_transcript_only":0,"b":54,"b_snapshot":53,"c":36},"meeting":0,"opener":"p-4","seed":32,"tick":14,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":2,"charges":2,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-5","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":7,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":3,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":5},"meeting":1,"opener":"p-3","seed":32,"tick":26,"voters":6,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":6},"meeting":2,"opener":"p-4","seed":32,"tick":52,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":10,"insufficient_timing":23,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":27,"insufficient_timing":5,"unverifiable":0},"case":{"ballot_charges":6,"charges":6,"charges_on_reconcilable_pair":6,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b":{"insufficient_lines":1,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":6,"ejected":"p-9","flag_charges":0,"misjudged":true,"misjudging_pairs":36,"pit_net":false,"placements":18,"reconcilable_pairs":101,"reporter":false,"walkable_pair":{"a":true,"a_no_movement":true,"a_no_regroup":true,"a_transcript_only":true,"a_with_movement_origins":true}},"charges":7,"charges_on_reconcilable_pair":7,"kind":"report_no_vent_proof","lines":{"a":24,"a_transcript_only":24,"b":33,"b_snapshot":32,"c":18},"meeting":0,"opener":"p-2","seed":33,"tick":12,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":3,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":3,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":3,"charges":3,"charges_on_reconcilable_pair":3,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{"cap":1,"claim_not_held":5},"reaches":false,"reaches_charge":false,"reason":"cap"},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{"cap":1,"claim_not_held":5},"reaches":false,"reaches_charge":false,"reason":"cap"},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":3,"ejected":"p-5","flag_charges":0,"misjudged":true,"misjudging_pairs":6,"pit_net":false,"placements":6,"reconcilable_pairs":6,"reporter":false,"walkable_pair":{"a":true,"a_no_movement":true,"a_no_regroup":true,"a_transcript_only":true,"a_with_movement_origins":true}},"charges":3,"charges_on_reconcilable_pair":3,"kind":"report_no_vent_proof","lines":{"a":4,"a_transcript_only":8,"b":3,"b_snapshot":3,"c":8},"meeting":1,"opener":"p-3","seed":33,"tick":24,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":6,"insufficient_timing":27,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":19,"insufficient_timing":14,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":2,"kind":"report_no_vent_proof","lines":{"a":7,"a_transcript_only":7,"b":33,"b_snapshot":33,"c":56},"meeting":0,"opener":"p-7","seed":34,"tick":11,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":18,"a_transcript_only":18,"b":0,"b_snapshot":0,"c":24},"meeting":1,"opener":"p-1","seed":34,"tick":24,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":6,"insufficient_timing":40,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":30,"insufficient_timing":16,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"kind":8},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":8},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":6,"pair_reasons":{"cap":2,"residual":6},"reaches":false,"reaches_charge":false,"reason":"cap"},"b_snapshot":{"insufficient_lines":3,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":5,"ejected":"p-2","flag_charges":0,"misjudged":true,"misjudging_pairs":8,"pit_net":false,"placements":10,"reconcilable_pairs":29,"reporter":true,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":46,"b_snapshot":46,"c":36},"meeting":0,"opener":"p-2","seed":35,"tick":12,"voters":7,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":2,"kind":"report_no_vent_proof","lines":{"a":4,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":12},"meeting":1,"opener":"p-4","seed":35,"tick":26,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":8,"insufficient_timing":28,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":26,"insufficient_timing":10,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":30,"a_transcript_only":30,"b":36,"b_snapshot":36,"c":36},"meeting":0,"opener":"p-1","seed":36,"tick":12,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":12,"a_transcript_only":12,"b":0,"b_snapshot":0,"c":12},"meeting":1,"opener":"p-6","seed":36,"tick":27,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":3,"insufficient_timing":33,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":17,"insufficient_timing":19,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":12,"a_transcript_only":0,"b":36,"b_snapshot":36,"c":42},"meeting":0,"opener":"p-1","seed":37,"tick":10,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":3,"charges":4,"charges_on_reconcilable_pair":4,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"hop_bound":1,"kind":2},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"hop_bound":1,"kind":2},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":0,"pair_reasons":{"residual":3},"reaches":false,"reaches_charge":false,"reason":"residual"},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{"residual":3},"reaches":false,"reaches_charge":false,"reason":"residual"},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":3,"ejected":"p-9","flag_charges":1,"misjudged":true,"misjudging_pairs":3,"pit_net":false,"placements":4,"reconcilable_pairs":4,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":4,"charges_on_reconcilable_pair":4,"kind":"button","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":4},"meeting":1,"opener":"p-2","seed":37,"tick":28,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":2,"charges":2,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":2,"ejected":"p-5","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":3,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":2,"a_transcript_only":2,"b":0,"b_snapshot":0,"c":2},"meeting":2,"opener":"p-6","seed":37,"tick":40,"voters":3,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":7,"insufficient_timing":24,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":15,"insufficient_timing":16,"unverifiable":0},"case":{"ballot_charges":6,"charges":6,"charges_on_reconcilable_pair":6,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"hop_bound":3,"kind":63,"relevance_gate":7},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":63,"relevance_gate":10},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":5,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":3,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":6,"ejected":"p-1","flag_charges":0,"misjudged":true,"misjudging_pairs":73,"pit_net":true,"placements":14,"reconcilable_pairs":74,"reporter":true,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":true}},"charges":6,"charges_on_reconcilable_pair":6,"kind":"report_no_vent_proof","lines":{"a":6,"a_transcript_only":0,"b":31,"b_snapshot":31,"c":30},"meeting":0,"opener":"p-1","seed":38,"tick":11,"voters":7,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":2,"insufficient_timing":38,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":33,"insufficient_timing":7,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":12,"a_transcript_only":0,"b":40,"b_snapshot":40,"c":36},"meeting":0,"opener":"p-1","seed":39,"tick":10,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":4,"charges":6,"charges_on_reconcilable_pair":6,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"kind":2},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":2},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":0,"pair_reasons":{"claim_not_held":2},"reaches":false,"reaches_charge":false,"reason":"claim_not_held"},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{"claim_not_held":2},"reaches":false,"reaches_charge":false,"reason":"claim_not_held"},"c":{"insufficient_lines":0,"pair_reasons":{"kind":2},"reaches":false,"reaches_charge":false,"reason":"kind"}},"eject_voters":4,"ejected":"p-6","flag_charges":2,"misjudged":true,"misjudging_pairs":2,"pit_net":false,"placements":4,"reconcilable_pairs":2,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":6,"charges_on_reconcilable_pair":6,"kind":"button","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":15},"meeting":1,"opener":"p-4","seed":39,"tick":22,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":6},"meeting":2,"opener":"p-5","seed":39,"tick":50,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":6,"insufficient_timing":46,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":34,"insufficient_timing":19,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":2,"kind":"report_no_vent_proof","lines":{"a":7,"a_transcript_only":7,"b":52,"b_snapshot":53,"c":35},"meeting":0,"opener":"p-1","seed":40,"tick":12,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":5,"ejected":"p-6","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":7,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":12},"meeting":1,"opener":"p-1","seed":40,"tick":28,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":1,"insufficient_timing":37,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":30,"insufficient_timing":6,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":4},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":4},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"b":{"insufficient_lines":10,"pair_reasons":{"phase_rule":4},"reaches":false,"reaches_charge":false,"reason":"phase_rule"},"b_snapshot":{"insufficient_lines":2,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":5,"ejected":"p-1","flag_charges":0,"misjudged":true,"misjudging_pairs":4,"pit_net":false,"placements":5,"reconcilable_pairs":6,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":6,"charges_on_reconcilable_pair":6,"kind":"report_no_vent_proof","lines":{"a":6,"a_transcript_only":6,"b":38,"b_snapshot":36,"c":30},"meeting":0,"opener":"p-2","seed":41,"tick":11,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":6,"a_transcript_only":6,"b":0,"b_snapshot":0,"c":9},"meeting":1,"opener":"p-6","seed":41,"tick":42,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":2,"a_transcript_only":2,"b":0,"b_snapshot":0,"c":2},"meeting":2,"opener":"p-7","seed":41,"tick":56,"voters":3,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":3,"insufficient_timing":42,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":37,"insufficient_timing":8,"unverifiable":0},"case":{"ballot_charges":5,"charges":6,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":8,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":6,"ejected":"p-4","flag_charges":1,"misjudged":false,"misjudging_pairs":0,"pit_net":true,"placements":4,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":7,"charges_on_reconcilable_pair":0,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":45,"b_snapshot":45,"c":14},"meeting":0,"opener":"p-1","seed":42,"tick":12,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":6,"insufficient_timing":36,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":32,"insufficient_timing":9,"unverifiable":0},"case":{"ballot_charges":6,"charges":6,"charges_on_reconcilable_pair":6,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"hop_bound":4,"kind":76,"relevance_gate":10},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":4,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":2,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null}},"eject_voters":6,"ejected":"p-5","flag_charges":0,"misjudged":true,"misjudging_pairs":90,"pit_net":true,"placements":16,"reconcilable_pairs":98,"reporter":true,"walkable_pair":{"a":true,"a_no_movement":false,"a_no_regroup":true,"a_transcript_only":false,"a_with_movement_origins":true}},"charges":6,"charges_on_reconcilable_pair":6,"kind":"report_no_vent_proof","lines":{"a":12,"a_transcript_only":0,"b":42,"b_snapshot":41,"c":30},"meeting":0,"opener":"p-5","seed":43,"tick":10,"voters":7,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":2,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":4,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":12},"meeting":1,"opener":"p-3","seed":43,"tick":22,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":9,"insufficient_timing":35,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":29,"insufficient_timing":15,"unverifiable":0},"case":{"ballot_charges":1,"charges":1,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":4,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"b_snapshot":{"insufficient_lines":2,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":5,"ejected":"p-5","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":7,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":2,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":44,"b_snapshot":44,"c":42},"meeting":0,"opener":"p-8","seed":44,"tick":10,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":13,"insufficient_timing":28,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":20,"insufficient_timing":21,"unverifiable":0},"charges":4,"charges_on_reconcilable_pair":4,"kind":"report_no_vent_proof","lines":{"a":18,"a_transcript_only":18,"b":41,"b_snapshot":41,"c":24},"meeting":0,"opener":"p-1","seed":45,"tick":16,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":15},"meeting":1,"opener":"p-3","seed":45,"tick":30,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":3,"charges":5,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":3,"ejected":"p-8","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":3,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":7,"charges_on_reconcilable_pair":2,"kind":"button","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":4},"meeting":2,"opener":"p-5","seed":45,"tick":46,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":1,"charges":1,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":2,"ejected":"p-9","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":3,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":1,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":2,"a_transcript_only":2,"b":0,"b_snapshot":0,"c":2},"meeting":3,"opener":"p-6","seed":45,"tick":59,"voters":3,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":6,"insufficient_timing":51,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":44,"insufficient_timing":12,"unverifiable":0},"charges":4,"charges_on_reconcilable_pair":4,"kind":"report_no_vent_proof","lines":{"a":18,"a_transcript_only":18,"b":57,"b_snapshot":56,"c":36},"meeting":0,"opener":"p-1","seed":46,"tick":12,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":3,"charges":3,"charges_on_reconcilable_pair":3,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"kind":1},"reaches":false,"reaches_charge":false,"reason":"kind"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"kind":1},"reaches":false,"reaches_charge":false,"reason":"kind"},"b":{"insufficient_lines":0,"pair_reasons":{"kind":1},"reaches":false,"reaches_charge":false,"reason":"kind"},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{"kind":1},"reaches":false,"reaches_charge":false,"reason":"kind"},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-4","flag_charges":0,"misjudged":true,"misjudging_pairs":1,"pit_net":false,"placements":3,"reconcilable_pairs":2,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":3,"charges_on_reconcilable_pair":3,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":10},"meeting":1,"opener":"p-3","seed":46,"tick":23,"voters":6,"witness_meeting":true},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":1,"charges_on_reconcilable_pair":1,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":3},"meeting":2,"opener":"p-6","seed":46,"tick":48,"voters":4,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":9,"insufficient_timing":35,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":25,"insufficient_timing":19,"unverifiable":0},"case":{"ballot_charges":5,"charges":5,"charges_on_reconcilable_pair":5,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":3},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{"relevance_gate":3},"reaches":false,"reaches_charge":false,"reason":"relevance_gate"},"b":{"insufficient_lines":8,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":4,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":true,"reaches_charge":false,"reason":null}},"eject_voters":5,"ejected":"p-1","flag_charges":0,"misjudged":true,"misjudging_pairs":3,"pit_net":false,"placements":6,"reconcilable_pairs":9,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":5,"charges_on_reconcilable_pair":5,"kind":"report_no_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":44,"b_snapshot":44,"c":42},"meeting":0,"opener":"p-6","seed":47,"tick":9,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":4,"charges":4,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-9","flag_charges":0,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":4,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":5,"a_transcript_only":5,"b":0,"b_snapshot":0,"c":10},"meeting":1,"opener":"p-2","seed":47,"tick":24,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":11,"insufficient_timing":37,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":31,"insufficient_timing":17,"unverifiable":0},"charges":3,"charges_on_reconcilable_pair":3,"kind":"report_no_vent_proof","lines":{"a":24,"a_transcript_only":12,"b":48,"b_snapshot":48,"c":42},"meeting":0,"opener":"p-2","seed":48,"tick":13,"voters":7,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":5,"a_transcript_only":5,"b":0,"b_snapshot":0,"c":20},"meeting":1,"opener":"p-2","seed":48,"tick":22,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"charges":0,"charges_on_reconcilable_pair":0,"kind":"report_no_vent_proof","lines":{"a":12,"a_transcript_only":12,"b":0,"b_snapshot":0,"c":8},"meeting":2,"opener":"p-3","seed":48,"tick":39,"voters":5,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":8,"insufficient_timing":37,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":24,"insufficient_timing":23,"unverifiable":0},"case":{"ballot_charges":5,"charges":6,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":2,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":2,"pair_reasons":{},"reaches":true,"reaches_charge":true,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":6,"ejected":"p-7","flag_charges":1,"misjudged":false,"misjudging_pairs":0,"pit_net":true,"placements":4,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":7,"charges_on_reconcilable_pair":1,"kind":"report_vent_proof","lines":{"a":7,"a_transcript_only":7,"b":45,"b_snapshot":47,"c":35},"meeting":0,"opener":"p-1","seed":49,"tick":9,"voters":8,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":1,"insufficient_timing":1,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":1,"insufficient_timing":0,"unverifiable":0},"charges":3,"charges_on_reconcilable_pair":3,"kind":"report_no_vent_proof","lines":{"a":15,"a_transcript_only":5,"b":2,"b_snapshot":1,"c":20},"meeting":1,"opener":"p-6","seed":49,"tick":20,"voters":6,"witness_meeting":false},
+    {"b_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"b_snapshot_kept":{"cannot_reconcile":0,"crosses_regroup":0,"fits":0,"insufficient_timing":0,"unverifiable":0},"case":{"ballot_charges":4,"charges":6,"charges_on_reconcilable_pair":0,"checks":{"a":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"a_transcript_only":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"b_snapshot":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null},"c":{"insufficient_lines":0,"pair_reasons":{},"reaches":false,"reaches_charge":false,"reason":null}},"eject_voters":4,"ejected":"p-9","flag_charges":2,"misjudged":false,"misjudging_pairs":0,"pit_net":false,"placements":2,"reconcilable_pairs":0,"reporter":false,"walkable_pair":{"a":false,"a_no_movement":false,"a_no_regroup":false,"a_transcript_only":false,"a_with_movement_origins":false}},"charges":6,"charges_on_reconcilable_pair":0,"kind":"report_vent_proof","lines":{"a":0,"a_transcript_only":0,"b":0,"b_snapshot":0,"c":4},"meeting":2,"opener":"p-4","seed":49,"tick":34,"voters":5,"witness_meeting":false}
+   ],
+   "path": "replays/samples/9p2i",
+   "recorded_experiment_config": {
+    "ballot_kill_row_version": 1,
+    "bounded_rebuttal_version": 1,
+    "format_version": 1,
+    "impostor_ballot_version": 1,
+    "kill_cooldown_ticks": 6,
+    "meeting_reset": "hub_with_grace",
+    "report_body_handle_version": 1,
+    "route_lines_version": 1,
+    "vent_entry_policy": "own_fresh_kill",
+    "vent_exit_policy": "look_and_wait",
+    "vent_witness_rule": "physical"
+   },
+   "roster": {
+    "impostors": 2,
+    "players": 9
+   },
+   "rule_inputs": {
+    "M": 29,
+    "R": {
+     "a": 8,
+     "a_transcript_only": 7,
+     "b": 15,
+     "b_snapshot": 18,
+     "c": 25
+    },
+    "R_W": {
+     "a": 2,
+     "a_transcript_only": 2,
+     "b": 2,
+     "b_snapshot": 3,
+     "c": 7
+    },
+    "W": 7
+   },
+   "seeds": "0-49",
+   "sha": "600596883a4522e621e990a2aa33144d2e22031a",
+   "tree": "ba728841c9431eaa6391d4846891080820dcef68"
   }
  ],
  "instrument": "experiments/lab/route_check_replay.py",
@@ -5413,6 +7136,9 @@
     "branch": 2
    },
    "r2": {
+    "branch": 3
+   },
+   "r3": {
     "branch": 3
    },
    "s9": {

@@ -188,7 +188,8 @@ def test_every_mechanism_records_its_verdict() -> None:
     Not every status is FLIPPED any more. On baselines 8 and 9 the
     content-vs-own-memory exhibit is PARTLY FLIPPED: its evidence half held (the
     fatal STRONG flag is still gone) while its outcome half regressed (the
-    meeting ejects a crewmate again). The allowed set is enumerated so a status
+    meeting ejects a crewmate again); on round 3's bytes the provenance-impossible
+    sighting exhibit reads the same way. The allowed set is enumerated so a status
     nobody defined fails here, rather than widened to "any string".
     """
 
@@ -204,29 +205,34 @@ def test_every_mechanism_records_its_verdict() -> None:
 
 
 def test_provenance_impossible_sighting_no_longer_mints_its_flag() -> None:
-    """Seed 23 M1: the impostor-authored sighting flag is gone, and so is the ejection.
+    """Seed 23 M1: the impostor-authored sighting flag is gone; a crewmate goes anyway.
 
     The mechanism was a flag whose sighting side nobody could have made. On the
-    recorded bytes the meeting carries no contradiction at all and the table
-    skips, so there is no unchecked sighting left to convict on.
+    recorded bytes the meeting carries no contradiction at all, so there is no
+    unchecked sighting left to convict on; the table still ejects the crewmate
+    p-3 on nothing flagged (on round 2's bytes it skipped).
     """
 
     (anchor,) = PROVENANCE_IMPOSSIBLE_SIGHTING.anchors
-    meeting = _meeting(_load(anchor), anchor)
+    replay = _load(anchor)
+    meeting = _meeting(replay, anchor)
+    roles = {player.agent_id: player.role for player in replay.players}
 
     # ABSENT, not demoted: no flag at all, so none can be weak or strong. Was two
     # weak_signal flags on baseline 8.
     assert meeting.contradictions == ()
-    assert meeting.outcome == "SKIPPED"
-    assert meeting.ejected_player_id is None
+    assert meeting.outcome == "EJECTED"  # was SKIPPED on round 2's bytes
+    assert meeting.ejected_player_id == "p-3"  # was None
+    assert roles["p-3"] == "CREWMATE"
 
 
 def test_content_vs_own_memory_miss_defangs_the_flag_but_still_ejects() -> None:
     """Seed 12 M0: the evidence half held, the outcome half did NOT.
 
-    The fatal STRONG flag built from two innocents' statements is still gone —
-    on baseline 9 and on the promoted set the meeting carries no flag at all, so
-    nothing here can convict. But this meeting EJECTS the crewmate p-2, where the
+    The fatal STRONG flag built from two innocents' statements is still gone — on
+    round 3's bytes the meeting carries one WEAK flag, from p-2's alibi and
+    crewmate p-5's sighting, and no strong one (on baseline 9 and round 2's bytes
+    no flag at all). But this meeting EJECTS the crewmate p-2, where the
     baseline-7 recording skipped. The exhibit's original claim ("no longer ejects an
     innocent") is therefore false on these bytes, and this test pins the
     regression rather than the claim: same family as the sole-flag class
@@ -238,11 +244,17 @@ def test_content_vs_own_memory_miss_defangs_the_flag_but_still_ejects() -> None:
     meeting = _meeting(replay, anchor)
     roles = {player.agent_id: player.role for player in replay.players}
 
-    # The evidence half: still defanged — no flag at all. Was two weak_signal
-    # flags naming p-5 on baseline 8.
-    assert meeting.contradictions == ()
+    # The evidence half: still defanged — no STRONG flag, one weak one naming the
+    # ejected crewmate from two crewmates' statements. Was no flag at all on round
+    # 2's bytes, and two weak_signal flags naming p-5 on baseline 8.
+    assert [flag.weak for flag in meeting.contradictions] == [True]
+    (flag,) = meeting.contradictions
+    assert flag.subjects == ("p-2",)
+    speakers = {_speaker(meeting, flag.event_a_id), _speaker(meeting, flag.event_b_id)}
+    assert speakers == {"p-2", "p-5"}
+    assert {roles[speaker] for speaker in speakers} == {"CREWMATE"}
 
-    # The outcome half: a crewmate is ejected with no flag against anyone.
+    # The outcome half: a crewmate is ejected on no strong flag.
     assert meeting.outcome == "EJECTED"
     assert meeting.ejected_player_id == "p-2"  # was "p-5" on baseline 8
     assert roles["p-2"] == "CREWMATE"
@@ -297,8 +309,8 @@ def test_equal_weight_conflict_has_nothing_left_to_weigh() -> None:
 #:
 #: This class held at ZERO on baseline 7, RE-OPENED at one meeting carrying two
 #: such flags on baseline 8 (seed 41 meeting 2, convicting the CREWMATE p-9), and
-#: is CLOSED again on baseline 9 and on the promoted set (candidate round 2,
-#: since 2026-10-02): the walk finds no meeting. Empty is the
+#: is CLOSED again on baseline 9 and on the promoted sets (candidate round 2,
+#: then round 3 since 2026-10-09): the walk finds no meeting. Empty is the
 #: strictest form of the growth tripwire, since any meeting convicting this way
 #: now fails it; the baseline-8 loss is still stated below, on that meeting's
 #: frozen line. Same family as the sole-flag wrongful-conviction class
@@ -307,12 +319,12 @@ def test_equal_weight_conflict_has_nothing_left_to_weigh() -> None:
 _STATEMENT_PAIR_CONVICTIONS: Final[frozenset[str]] = frozenset()
 
 #: The recorded flag the planted case promotes, as (seed, meeting index, flag
-#: index) on samples/9p2i: seed 38 M0's only flag, a weak-banded
-#: ``alibi_vs_sighting`` naming the crewmate p-1 on a meeting that skipped.
-#: Chosen by measurement, because the exhibits' own anchors carry no
-#: statement-pair flag left to plant. Was seed 9 M0's on the baseline-9 bytes,
-#: and seed 12 M0's second flag before them.
-_PLANTED_SOURCE: Final[tuple[int, int, int]] = (38, 0, 0)
+#: index) on samples/9p2i: seed 1 M0's first flag, a weak-banded
+#: ``alibi_vs_sighting`` naming p-1 on a meeting that ejected another player.
+#: Chosen by measurement, because no meeting convicts on such a flag. Was seed
+#: 38 M0's only flag on round 2's bytes (none there on round 3's), seed 9 M0's on
+#: the baseline-9 bytes, and seed 12 M0's second flag before them.
+_PLANTED_SOURCE: Final[tuple[int, int, int]] = (1, 0, 0)
 
 
 def test_the_flip_search_finds_exactly_the_named_meetings() -> None:

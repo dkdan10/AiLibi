@@ -29,9 +29,10 @@ from orchestrator.replay import LLMCallRecord
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"
-#: The promoted 9p2i set's era config (candidate round 2, 2026-10-02): every gate
-#: run over its bytes, or over a mini-set copied from them, declares it, as the
-#: recorder declared it. A run that does not is refused on provenance
+#: The promoted 9p2i set's era config (candidate round 3 since 2026-10-09, after
+#: round 2's from 2026-10-02): every gate run over its bytes, or over a mini-set
+#: copied from them, declares it, as the recorder declared it. A run that does
+#: not is refused on provenance
 #: (``test_the_promoted_set_requires_its_declared_config``).
 _ERA_CONFIG = ("--expected-experiment-config", str(_NINE / "experiment-config.json"))
 
@@ -571,11 +572,12 @@ def _locked_pin() -> str:
     open, which is where the corpus's own versions live during a bump-in-flight
     window, and otherwise from the live registry under the set's declared
     config. The baseline-9 re-record closed the last window and the archive is
-    empty. The promoted set (candidate round 2, 2026-10-02) stamps the live
+    empty. The promoted set (candidate round 3, 2026-10-09) stamps the live
     registry's versions with its era's ballot arms folded in: three templates at
-    ``.qwen3_6_27b.v6`` and the ballot at its two ``.v8`` arm stamps, joined by
-    ``+``. This helper follows whichever holds the recorded stamps rather than
-    being re-pointed by hand each time.
+    ``.qwen3_6_27b.v6`` and the ballot at its three ``.v8`` arm stamps, joined by
+    ``+`` (round 2's set, shown from 2026-10-02, carried two). This helper
+    follows whichever holds the recorded stamps rather than being re-pointed
+    by hand each time.
     """
 
     from orchestrator.experiment_config import RecordedExperimentConfig

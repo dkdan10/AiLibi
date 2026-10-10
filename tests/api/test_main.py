@@ -114,7 +114,8 @@ def test_substrate_mismatch_serves_a_500_naming_the_game_and_the_divergence(
         # A scripted-factory recording stamps no policy and reads as the FSM
         # default, so the claim diverges on its id alone.
         ("4p1i", ["policy_id"]),
-        # The promoted 9p2i recording (candidate round 2) was made by the
+        # The promoted 9p2i recording (candidate round 3, as round 2's before it)
+        # was made by the
         # experimental factory, which stamps no policy the loader can read as
         # the FSM default, so the divergence is the missing stamp itself. Its
         # baseline-9 bytes, scripted, read ["policy_id"].

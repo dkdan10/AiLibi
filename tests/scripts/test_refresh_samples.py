@@ -1924,6 +1924,11 @@ _ERA_CONFIG = _REPO_ROOT / "replays" / "samples" / "9p2i" / "experiment-config.j
 _ROUND_1_CONFIG = (
     _REPO_ROOT / "replays" / "candidates" / "stage-b-r1" / "experiment-config.json"
 )
+#: Candidate round 2's config: the shown set's era config until round 3's
+#: promotion, kept at round 2's candidate copy.
+_ROUND_2_CONFIG = (
+    _REPO_ROOT / "replays" / "candidates" / "stage-b-r2" / "experiment-config.json"
+)
 #: The era rule's refusal, as it names the promoted set.
 _ERA_REFUSAL = "inside the committed set replays/samples/9p2i, whose recordings"
 #: The era registry with no declared config anywhere: the planted repositories
@@ -1967,15 +1972,16 @@ def test_a_committed_set_records_only_its_eras_declared_config(
 ) -> None:
     """Planted: every config but the era's own is refused at the promoted set.
 
-    The era's declared file passes there and nowhere else committed; a bare run,
-    round 1's config and the era config with one byte changed are refused by
-    the era rule, and the era config aimed at the 4p1i sample or the corpus is
+    The era's declared file (round 3's) passes there and nowhere else committed;
+    a bare run, round 1's config, round 2's config (the era config before round
+    3's promotion) and the era config with one byte changed are refused by the
+    era rule, and the era config aimed at the 4p1i sample or the corpus is
     refused by the canonical-tree rule.
     """
 
     samples_9 = _REPO_ROOT / "replays" / "samples" / "9p2i"
     assert _era_outcome(_ERA_CONFIG, samples_9) is None
-    for refused in (None, _ROUND_1_CONFIG):
+    for refused in (None, _ROUND_1_CONFIG, _ROUND_2_CONFIG):
         outcome = _era_outcome(refused, samples_9) or ""
         assert _ERA_REFUSAL in outcome, refused
         assert outcome.endswith(_NOTHING_STAGED)
@@ -2032,7 +2038,7 @@ def test_the_era_verdict_follows_the_declared_file_on_disk(tmp_path: Path) -> No
     """Planted: a checkout whose promoted set declares different valid bytes.
 
     The rule reads the declared file's sha256 from disk, never a remembered
-    value: with the scratch file's own sha256 the run passes, and with round 2's
+    value: with the scratch file's own sha256 the run passes, and with round 3's
     sha256 (the committed file's) the same run is refused.
     """
 
@@ -2061,9 +2067,10 @@ def test_the_era_verdict_follows_the_declared_file_on_disk(tmp_path: Path) -> No
         return None
 
     assert verdict(hashlib.sha256(moved).hexdigest()) is None
-    round_2 = hashlib.sha256(era_bytes).hexdigest()
-    assert round_2 == "0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b"
-    assert _ERA_REFUSAL in (verdict(round_2) or "")
+    shown = hashlib.sha256(era_bytes).hexdigest()
+    # was 0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b (round 2)
+    assert shown == "a788b9eba5e8f2f5d29033fece2d0dc0dbac7d3528ea93c7c7a93327dbc6d57d"
+    assert _ERA_REFUSAL in (verdict(shown) or "")
 
 
 #: A second set whose era declares a config, for the planted registry below: an
@@ -2329,9 +2336,19 @@ def test_any_other_target_prints_no_profile_line(tmp_path: Path) -> None:
         assert profile_lines(proc.stdout.splitlines()) == [], env_update
 
 
-def test_a_bare_dry_run_into_the_promoted_set_is_refused() -> None:
+@pytest.mark.parametrize(
+    "extra",
+    ((), ("--experiment-config", str(_ROUND_2_CONFIG))),
+    ids=("bare", "round 2's config"),
+)
+def test_a_bare_dry_run_into_the_promoted_set_is_refused(
+    extra: tuple[str, ...],
+) -> None:
+    """A bare run, and one carrying round 2's config (the era config the set
+    declared before round 3's promotion), are refused before anything stages."""
+
     before = _git_status()
-    proc = _era_dry_run()
+    proc = _era_dry_run(*extra)
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert _ERA_REFUSAL in proc.stderr
     assert _NOTHING_STAGED in proc.stderr

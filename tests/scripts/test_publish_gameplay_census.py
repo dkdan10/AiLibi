@@ -497,7 +497,7 @@ def test_main_publishes_and_checks_the_tree_it_is_given(
         ]
     )
     promoted, baseline_9 = planted.eras
-    assert (promoted.era_id, promoted.pooled) == ("stage-b-r2", None)
+    assert (promoted.era_id, promoted.pooled) == ("stage-b-r3", None)  # was stage-b-r2
     assert baseline_9.era_id == "baseline-9"
     assert baseline_9.pooled is not None
     assert (baseline_9.pooled.games, baseline_9.pooled.meetings) == (2, 3)
@@ -515,7 +515,8 @@ def test_main_publishes_and_checks_the_tree_it_is_given(
     printed = capsys.readouterr().out
     assert printed == (
         f"Wrote {command.MARKDOWN_PATH} and {command.JSON_PATH}: 3 games, "
-        "3 meetings, eras stage-b-r2, baseline-9; role-correctness is reported "
+        # was "eras stage-b-r2, baseline-9", before round 3's promotion
+        "3 meetings, eras stage-b-r3, baseline-9; role-correctness is reported "
         "and gates nothing.\n"
     )
     assert (root / command.JSON_PATH).read_text(
@@ -1079,7 +1080,8 @@ def test_a_row_only_one_set_holds_is_published_for_every_group() -> None:
     thrown = census.TABLES["actions_thrown_away_on_trigger_ticks"].title
     lines = page.splitlines()
     assert lines[lines.index(f"**{thrown}.**") + 2] == (
-        "| row | samples/9p2i (stage-b-r2) | baseline-9, pooled | "
+        # was "samples/9p2i (stage-b-r2)", before round 3's promotion
+        "| row | samples/9p2i (stage-b-r3) | baseline-9, pooled | "
         "ml_corpus/4p1i (baseline-9) | samples/4p1i (baseline-9) |"
     )
     assert _table_block(page, thrown) == [
@@ -1095,7 +1097,8 @@ def test_an_era_naming_a_set_the_census_does_not_hold_is_refused() -> None:
     planted = _planted()
     (era,) = planted.eras
     widened = era.model_copy(update={"sets": (*era.sets, "samples/4p1i")})
-    with pytest.raises(ValueError, match="the stage-b-r2 era names sets"):
+    # was "the stage-b-r2 era", before round 3's promotion
+    with pytest.raises(ValueError, match="the stage-b-r3 era names sets"):
         command.render_markdown(planted.model_copy(update={"eras": (widened,)}))
 
 

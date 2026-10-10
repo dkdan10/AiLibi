@@ -32,8 +32,8 @@ function member(seed: number) {
 const VIEW: GameProfileView = {
   viewModelVersion: "6",
   rubric_version: 2,
-  era: "stage-b-r2",
-  manifest_key: "43b5ee45",
+  era: "stage-b-r3", // was stage-b-r2
+  manifest_key: "641b4254", // was 43b5ee45
   source_fingerprint: "sha256:0",
   seedset: "9p2i",
   stale: false,

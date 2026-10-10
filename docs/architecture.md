@@ -120,7 +120,7 @@ Baselines are adopting records. Baseline 9, the current one, is the process
 re-record adopting the substrate wave
 (`audits/audit-2026-09-22-process-rerecord.md`) and holds three sets;
 `replays/samples/9p2i` is a later era (`eval/eras.py`), promoted candidate round
-2 (`audits/audit-2026-10-01-stage-b-r2.md` §9), and instruments never pool eras.
+3 (`audits/audit-2026-10-09-stage-b-r3.md` §12), and instruments never pool eras.
 Baseline 8 is the maintenance re-record (`audits/audit-phase-21-rerecord.md`).
 Baseline 7 followed an explicit FINDING override
 (`audits/audit-phase-20-baseline-7.md` §6.1); its missed bars did not pass.

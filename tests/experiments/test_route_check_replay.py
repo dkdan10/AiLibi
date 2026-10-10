@@ -10,7 +10,11 @@ process count reads no role, and the outputs carry counts and the instrument's
 own wording, never a recorded text, whether written as is or as the JSON escapes it.
 
 Columns are read from temporary repositories built here, or from the checkout's
-own ``HEAD`` resolved to its sha, so a shallow clone runs every case.
+own ``HEAD`` resolved to its sha, so a shallow clone runs every case. The r2 games
+are round 2's bytes, read where they now live (the candidate copy
+``replays/candidates/stage-b-r2``, moved there without a byte changed when round 3
+was promoted) and placed at the path the r2 column was recorded at; the r3 games
+are the shown set's.
 """
 
 from __future__ import annotations
@@ -52,7 +56,7 @@ from agents.memory.store import (
 from agents.perception import ingest_packet
 from engine.world import load_canonical_map
 from engine.entities import Role
-from eval.eras import STAGE_B_R2
+from eval.eras import STAGE_B_R2, STAGE_B_R3
 from eval.gameplay_census import GameFacts, fold_set
 from meetings.manager import derive_reported_testimony
 from meetings.schemas import (
@@ -80,7 +84,12 @@ from orchestrator.replay import (
     read_all_entries,
     recorded_experiment_config,
 )
-from tests._helpers.committed import SAMPLES_9P2I, census_inputs, repo_root
+from tests._helpers.committed import (
+    CANDIDATE_R2_9P2I,
+    SAMPLES_9P2I,
+    census_inputs,
+    repo_root,
+)
 from tests.meetings.test_prompt_byte_golden import (
     _canonical_renderers,
     consumed_exactly_once,
@@ -90,6 +99,10 @@ from tests.meetings.test_prompt_byte_golden import (
 _PUBLIC_MAP: Final = public_map_from_engine_map(load_canonical_map())
 _R1_DIR: Final[Path] = repo_root / "replays" / "candidates" / "stage-b-r1" / "9p2i"
 _R1_CONFIG: Final[Path] = repo_root / "replays" / "candidates" / "stage-b-r1"
+#: Round 2's games and its declared config, at the candidate copy their bytes moved
+#: to (was ``replays/samples/9p2i`` and the config beside its games).
+_R2_DIR: Final[Path] = CANDIDATE_R2_9P2I
+_R2_CONFIG: Final[Path] = CANDIDATE_R2_9P2I.parent / "experiment-config.json"
 #: r2 games: seed 0 holds four meetings (regroups from the second on); seed 1
 #: holds three; seed 2 holds one, the cheapest whole-game run.
 _PARITY_SEED: Final[int] = 0
@@ -340,10 +353,11 @@ def _column_repo(
     repo = root / "repo"
     target = repo / "replays" / "samples" / "9p2i"
     target.mkdir(parents=True)
-    for name in ("MANIFEST.md", "roster.json", "experiment-config.json"):
-        shutil.copy(SAMPLES_9P2I / name, target / name)
+    for name in ("MANIFEST.md", "roster.json"):
+        shutil.copy(_R2_DIR / name, target / name)
+    shutil.copy(_R2_CONFIG, target / "experiment-config.json")
     for seed in seeds:
-        shutil.copy(SAMPLES_9P2I / f"replay-seed-{seed}.jsonl", target)
+        shutil.copy(_R2_DIR / f"replay-seed-{seed}.jsonl", target)
     if with_r1:
         r1 = repo / "replays" / "candidates" / "stage-b-r1" / "9p2i"
         r1.mkdir(parents=True)
@@ -432,9 +446,7 @@ def test_a_run_records_each_columns_sha_tree_and_config(
     (column,) = payload["columns"]
     assert column["sha"] == sha and column["commit"] == sha[:10]
     assert column["tree"] == _git(repo, "rev-parse", f"{sha}:replays/samples/9p2i")
-    assert column["recorded_experiment_config"] == json.loads(
-        (SAMPLES_9P2I / "experiment-config.json").read_text()
-    )
+    assert column["recorded_experiment_config"] == json.loads(_R2_CONFIG.read_text())
     assert column["declared_config"] == "replays/samples/9p2i/experiment-config.json"
 
 
@@ -478,17 +490,53 @@ def test_a_tree_named_as_the_commit_is_refused(
     assert f"commit '{tree}' does not resolve to a commit" in capsys.readouterr().err
 
 
-def test_the_r2_config_is_read_from_the_era_registry(
+def test_the_r3_config_is_read_from_the_era_registry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    # was the r2 config read from the registry, before round 3 became the shown era
+    assert rcr.declared_config_path("r3") == STAGE_B_R3.declared_config
     repo, sha = _column_repo(tmp_path)
-    moved = replace(STAGE_B_R2, declared_config="replays/samples/9p2i/moved.json")
-    monkeypatch.setattr(rcr, "STAGE_B_R2", moved)
-    assert rcr.declared_config_path("r2") == "replays/samples/9p2i/moved.json"
-    assert _run(repo, tmp_path, f"r2={sha}:replays/samples/9p2i") == 1
+    moved = replace(STAGE_B_R3, declared_config="replays/samples/9p2i/moved.json")
+    monkeypatch.setattr(rcr, "STAGE_B_R3", moved)
+    assert rcr.declared_config_path("r3") == "replays/samples/9p2i/moved.json"
+    assert _run(repo, tmp_path, f"r3={sha}:replays/samples/9p2i") == 1
     assert "moved.json" in capsys.readouterr().err
+
+
+def test_the_r2_config_is_the_path_its_column_was_recorded_at() -> None:
+    """r2's committed column names the shown set's path of its own commit; the era
+    registry now names round 2's candidate copy, which that commit never held."""
+
+    payload = json.loads(_COMMITTED_JSON.read_text())
+    (r2,) = [column for column in payload["columns"] if column["label"] == "r2"]
+    assert rcr.declared_config_path("r2") == rcr.R2_CONFIG_PATH
+    assert rcr.R2_CONFIG_PATH == r2["declared_config"]
+    assert rcr.R2_CONFIG_PATH == f"{r2['path']}/experiment-config.json"
+    assert rcr.R2_CONFIG_PATH != STAGE_B_R2.declared_config
+
+
+def test_r2_read_at_the_registrys_new_path_fails_at_its_own_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Planted: the r2 column pointed at the registry's path for round 2's config.
+
+    The column's commit holds round 2's games at the shown set's path with the
+    config beside them, so the registry's candidate-copy path does not exist
+    there, and the run stops naming it.
+    """
+
+    repo, sha = _column_repo(tmp_path)
+    kept = STAGE_B_R2.declared_config
+    assert kept is not None
+    monkeypatch.setattr(rcr, "R2_CONFIG_PATH", kept)
+    assert _run(repo, tmp_path, f"r2={sha}:replays/samples/9p2i") == 1
+    err = capsys.readouterr().err
+    assert f"git show {sha}:{kept}" in err
+    assert "does not exist" in err
 
 
 def test_a_path_that_does_not_resolve_is_refused(
@@ -635,7 +683,7 @@ def test_a_later_commit_that_rewrites_the_column_leaves_check_green(
     assert _run(repo, out, f"r2={sha}:replays/samples/9p2i") == 0
     column = repo / "replays" / "samples" / "9p2i"
     (column / f"replay-seed-{_RUN_SEED}.jsonl").unlink()
-    shutil.copy(SAMPLES_9P2I / f"replay-seed-{_WALK_SEED}.jsonl", column)
+    shutil.copy(_R2_DIR / f"replay-seed-{_WALK_SEED}.jsonl", column)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "a different game in the column")
     assert _check(repo, out) == 0
@@ -663,16 +711,16 @@ def test_a_file_committed_into_the_column_after_the_run_leaves_check_green(
 
 
 def _r2_game(seed: int) -> GameFacts:
-    (game,) = [g for g in census_inputs(SAMPLES_9P2I).games if g.seed == seed]
+    (game,) = [g for g in census_inputs(_R2_DIR).games if g.seed == seed]
     return game
 
 
 def _game_copy(directory: Path, seed: int) -> Path:
     """A scratch copy of one r2 game beside its roster, which the walk re-seeds from."""
 
-    shutil.copy(SAMPLES_9P2I / "roster.json", directory / "roster.json")
+    shutil.copy(_R2_DIR / "roster.json", directory / "roster.json")
     copy = directory / f"replay-seed-{seed}.jsonl"
-    shutil.copy(SAMPLES_9P2I / copy.name, copy)
+    shutil.copy(_R2_DIR / copy.name, copy)
     return copy
 
 
@@ -820,7 +868,7 @@ def test_a_census_with_one_meeting_removed_raises() -> None:
         rcr.RouteCheckReplayError, match=r"r2 seed 1 meeting 2: the census holds no"
     ):
         rcr.read_game(
-            SAMPLES_9P2I / f"replay-seed-{_WALK_SEED}.jsonl",
+            _R2_DIR / f"replay-seed-{_WALK_SEED}.jsonl",
             label="r2",
             game=short,
             renderers=_canonical_renderers(),
@@ -835,7 +883,7 @@ def test_a_census_with_one_meeting_more_raises() -> None:
         match=r"^r2 seed 2 meeting 1: the census holds 2 meetings and the walk read 1$",
     ):
         rcr.read_game(
-            SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl",
+            _R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl",
             label="r2",
             game=longer,
             renderers=_canonical_renderers(),
@@ -871,7 +919,7 @@ def _memories_survive(
 
     monkeypatch.setattr(rcr, "read_meeting", watched)
     rcr.read_game(
-        SAMPLES_9P2I / f"replay-seed-{_WALK_SEED}.jsonl",
+        _R2_DIR / f"replay-seed-{_WALK_SEED}.jsonl",
         label="r2",
         game=_r2_game(_WALK_SEED),
         renderers=_canonical_renderers(),
@@ -918,7 +966,7 @@ def test_the_rerender_check_pins_the_ballot_budget(
         rcr.RouteCheckReplayError, match="not the ballot's memory block"
     ):
         rcr.read_game(
-            SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl",
+            _R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl",
             label="r2",
             game=_r2_game(_RUN_SEED),
             renderers=_canonical_renderers(),
@@ -929,7 +977,7 @@ def _first_meeting(seed: int) -> Any:
     return next(
         iter(
             walk_replay_meetings(
-                SAMPLES_9P2I / f"replay-seed-{seed}.jsonl",
+                _R2_DIR / f"replay-seed-{seed}.jsonl",
                 game_map=load_canonical_map(),
                 renderers_for_set=_canonical_renderers(),
             )
@@ -994,7 +1042,7 @@ def test_a_ledger_bound_that_is_no_integer_raises(
 
 
 def test_meeting_kinds_agree_with_the_census_vent_proof_cells() -> None:
-    inputs = census_inputs(SAMPLES_9P2I)
+    inputs = census_inputs(_R2_DIR)
     kinds = [rcr.meeting_kind(m) for game in inputs.games for m in game.meetings]
     cells = fold_set(inputs).cells
     button = cells["button_meetings_with_vent_proof"]
@@ -1006,7 +1054,7 @@ def test_meeting_kinds_agree_with_the_census_vent_proof_cells() -> None:
 
 
 def test_witness_meetings_read_the_kill_facts_since_the_previous_meeting() -> None:
-    inputs = census_inputs(SAMPLES_9P2I)
+    inputs = census_inputs(_R2_DIR)
     found = []
     for game in inputs.games:
         for index, fact in enumerate(game.meetings):
@@ -1043,7 +1091,7 @@ def test_the_ledger_call_is_the_managers_own(monkeypatch: pytest.MonkeyPatch) ->
         manager_module, "corroboration_discipline_enabled", lambda env=None: True
     )
     monkeypatch.setattr(manager_module, "build_testimony_ledger", spy)
-    path = SAMPLES_9P2I / f"replay-seed-{_PARITY_SEED}.jsonl"
+    path = _R2_DIR / f"replay-seed-{_PARITY_SEED}.jsonl"
     recorded = recorded_experiment_config(read_all_entries(path))
     earlier: list[int] = []
     compared = 0
@@ -1746,7 +1794,7 @@ def _one_game_records(
 ) -> tuple[rcr.MeetingRecord, ...]:
     game = replace(_r2_game(_RUN_SEED), roles=roles)
     records, _ = rcr.read_game(
-        SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl",
+        _R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl",
         label="r2",
         game=game,
         renderers=_canonical_renderers(),
@@ -1829,7 +1877,7 @@ def _forbidden(repo: Path, sha: str) -> frozenset[str]:
     _, forbidden = rcr.run_columns(repo, [source])
     recorded = {
         text
-        for entry in read_all_entries(SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl")
+        for entry in read_all_entries(_R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl")
         for text in (
             *(
                 turn.free_text
@@ -1861,7 +1909,7 @@ def test_a_rationale_written_into_the_json_fails_the_scan(
     forbidden = _forbidden(repo, sha)
     rationale = next(
         ballot.rationale_text
-        for entry in read_all_entries(SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl")
+        for entry in read_all_entries(_R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl")
         for ballot in getattr(entry, "ballots", ())
         if len(ballot.rationale_text) >= 40
     )
@@ -1910,7 +1958,7 @@ _COMMITTED_JSON: Final[Path] = repo_root / rcr.DEFAULT_JSON
 def test_the_committed_reading_takes_the_branch_its_rule_inputs_give() -> None:
     payload = json.loads(_COMMITTED_JSON.read_text())
     labels = [column["label"] for column in payload["columns"]]
-    assert labels == ["s9", "r1", "r2"]
+    assert labels == ["s9", "r1", "r2", "r3"]  # was ["s9", "r1", "r2"]
     for column in payload["columns"]:
         branch = payload["reading"]["branches"][column["label"]]["branch"]
         assert rcr.reading_branch(column["rule_inputs"]) == branch
@@ -1934,21 +1982,29 @@ def test_the_committed_columns_name_full_shas_never_a_symbolic_ref() -> None:
         assert column["commit"] != "HEAD"
 
 
-def test_the_committed_r2_column_recomputes_from_the_checkouts_bytes() -> None:
-    """The committed r2 column is what the instrument reads from these replays today.
+@pytest.mark.parametrize(
+    ("label", "directory"),
+    (("r2", _R2_DIR), ("r3", SAMPLES_9P2I)),
+    ids=("r2", "r3"),
+)
+def test_the_committed_round_column_recomputes_from_the_checkouts_bytes(
+    label: str, directory: Path
+) -> None:
+    """Each committed round column is what the instrument reads from its replays today.
 
-    The checkout's ``replays/samples/9p2i`` replays are the bytes the column
-    records (nothing under ``replays/`` moved since), so every count of the
-    column, case by case and in aggregate, is recomputed here and compared. A
-    shallow clone runs it: it reads the working tree, never history.
+    r2's replays are the bytes its column records, moved without a byte changed to
+    round 2's candidate copy; r3's are the shown set's, at the path its column
+    records. Every count of each column, case by case and in aggregate, is
+    recomputed here and compared. A shallow clone runs it: it reads the working
+    tree, never history.
     """
 
     payload = json.loads(_COMMITTED_JSON.read_text())
-    (committed,) = [column for column in payload["columns"] if column["label"] == "r2"]
-    census = census_inputs(SAMPLES_9P2I)
-    records, _ = rcr.read_set(SAMPLES_9P2I, label="r2", census=census)
+    (committed,) = [column for column in payload["columns"] if column["label"] == label]
+    census = census_inputs(directory)
+    records, _ = rcr.read_set(directory, label=label, census=census)
     source = rcr.ColumnSource(
-        label="r2",
+        label=label,
         commit=committed["commit"],
         sha=committed["sha"],
         path=committed["path"],
@@ -2290,7 +2346,7 @@ def test_an_insufficient_line_counts_only_over_two_rooms() -> None:
 
 
 def test_vent_proof_names_a_living_player_and_a_witness_reports() -> None:
-    inputs = census_inputs(SAMPLES_9P2I)
+    inputs = census_inputs(_R2_DIR)
     game = next(g for g in inputs.games if g.seed == 28)
     fact = game.meetings[0]
     assert rcr.is_witness_meeting(fact, kills=game.kills, previous_tick=None)
@@ -2310,7 +2366,7 @@ def test_a_census_that_names_a_different_meeting_raises() -> None:
     )
     with pytest.raises(rcr.RouteCheckReplayError, match="read different meetings"):
         rcr.read_game(
-            SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl",
+            _R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl",
             label="r2",
             game=renamed,
             renderers=_canonical_renderers(),
@@ -2344,7 +2400,7 @@ def test_a_later_meeting_the_census_reads_differently_is_named(
         r"meetings$",
     ):
         rcr.read_game(
-            SAMPLES_9P2I / f"replay-seed-{_WALK_SEED}.jsonl",
+            _R2_DIR / f"replay-seed-{_WALK_SEED}.jsonl",
             label="r1",
             game=replace(game, meetings=(*game.meetings[:2], third)),
             renderers=_canonical_renderers(),
@@ -2354,12 +2410,12 @@ def test_a_later_meeting_the_census_reads_differently_is_named(
 def test_a_census_of_other_seeds_raises(tmp_path: Path) -> None:
     _game_copy(tmp_path, _RUN_SEED)
     with pytest.raises(rcr.RouteCheckReplayError, match="hold different seeds"):
-        rcr.read_set(tmp_path, label="r2", census=census_inputs(SAMPLES_9P2I))
+        rcr.read_set(tmp_path, label="r2", census=census_inputs(_R2_DIR))
     with pytest.raises(
         rcr.RouteCheckReplayError,
         match=r"^r1: the census and the set hold different seeds$",
     ):
-        rcr.read_set(tmp_path, label="r1", census=census_inputs(SAMPLES_9P2I))
+        rcr.read_set(tmp_path, label="r1", census=census_inputs(_R2_DIR))
 
 
 def test_a_turn_text_written_into_the_json_fails_the_scan(
@@ -2369,7 +2425,7 @@ def test_a_turn_text_written_into_the_json_fails_the_scan(
     forbidden = _forbidden(repo, sha)
     text = next(
         turn.free_text
-        for entry in read_all_entries(SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl")
+        for entry in read_all_entries(_R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl")
         if (transcript := getattr(entry, "transcript", None)) is not None
         for turn in transcript.turns
         if len(turn.free_text) >= 40
@@ -2430,7 +2486,7 @@ def test_a_census_with_no_meeting_for_a_games_first_raises() -> None:
         rcr.RouteCheckReplayError, match=r"r2 seed 2 meeting 0: the census holds no"
     ):
         rcr.read_game(
-            SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl",
+            _R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl",
             label="r2",
             game=replace(game, meetings=()),
             renderers=_canonical_renderers(),
@@ -2818,7 +2874,7 @@ def test_a_run_whose_json_would_carry_a_rationale_writes_nothing(
     repo, _, sha = one_game_run
     rationale = next(
         ballot.rationale_text
-        for entry in read_all_entries(SAMPLES_9P2I / f"replay-seed-{_RUN_SEED}.jsonl")
+        for entry in read_all_entries(_R2_DIR / f"replay-seed-{_RUN_SEED}.jsonl")
         for ballot in getattr(entry, "ballots", ())
         if len(ballot.rationale_text) >= 40
     )

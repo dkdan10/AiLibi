@@ -142,7 +142,7 @@ from eval.watchability import (  # noqa: E402
 )
 
 # The two committed sample sets measured when no dir is given. Each is measured
-# alone and no mode pools them: samples/9p2i is the stage-b-r2 era and
+# alone and no mode pools them: samples/9p2i is the stage-b-r3 era and
 # samples/4p1i the baseline-9 era (eval/eras.py).
 _CANONICAL_SETS: tuple[Path, ...] = (
     _REPO_ROOT / "replays" / "samples" / "9p2i",

@@ -265,10 +265,13 @@ def test_main_checks_and_publishes_the_scripts_own_checkout(
     assert command.main([]) == 0
     assert seen == [("check", command._REPO_ROOT), ("publish", command._REPO_ROOT)]
     printed = capsys.readouterr().out
+    # was "era stage-b-r2", before round 3's promotion
     assert (
         "Wrote replays/samples/9p2i/results-game-profile.json: 50 games, era "
-        "stage-b-r2; role-correctness is reported and gates nothing." in printed
+        f"{era_of('replays/samples/9p2i').id}; role-correctness is reported and "
+        "gates nothing." in printed
     )
+    assert era_of("replays/samples/9p2i").id == "stage-b-r3"
     assert "Wrote docs/game-profile.md." in printed
 
 
@@ -323,7 +326,7 @@ def test_the_stamp_reads_the_loaders_manifest_key_and_the_fingerprint() -> None:
 
     stamp = command.read_stamp(SAMPLES_9P2I, ROOT)
     assert stamp == gp.ProfileStamp(
-        era="stage-b-r2",
+        era="stage-b-r3",  # was stage-b-r2
         manifest_key=_manifest_git_sha(SAMPLES_9P2I),
         source_fingerprint=recording_fingerprint(SAMPLES_9P2I),
         seedset="9p2i",
@@ -423,10 +426,79 @@ def test_the_page_states_what_the_profile_is_not() -> None:
         "The rule can only hide more; it never selects or orders a game.",
         "carry some information about the ending",
         "so this tripwire is nearly blind",
-        "Row 3 can answer 1 of this set's 15 alibi-class flags",
         "A wrong call on lines the voters held and believed is part of the game",
     ):
         assert sentence in page, sentence
+    # Read off the served file (was the literal "1 of this set's 15", round 2's).
+    tripwires = _committed()["pre_reveal"]["tripwires"]
+    answered = (
+        f"Row 3 can answer {tripwires['alibi_flags_evaluable']} of this set's "
+        f"{tripwires['alibi_flags']} alibi-class flags"
+    )
+    assert answered in page
+
+
+def _seeds(members: list[dict[str, Any]]) -> str:
+    return ", ".join(str(member["seed"]) for member in members) or "none"
+
+
+def _served_lines(served: dict[str, Any]) -> list[str]:
+    """The page lines the served file's shelves, classes, tripwires and lean imply.
+
+    Each is built from the served file's own values and the page's words for
+    them, so the page is held to the file it ships beside; the values themselves
+    are held to the recordings by ``--check``. (On round 2's bytes these read the
+    reporter shelf at 14 games, the wrong shelf at 20 with 21 ejections, the
+    regroup-kills shelf before the reveal at 6 of 50, the governing reading
+    tripping (26, 2), and the task-win lean at 13 games, 1.46 shelves.)
+    """
+
+    pre, reveal = served["pre_reveal"], served["reveal"]
+    shelves = {shelf["name"]: shelf for shelf in pre["shelves"]}
+    reporter = shelves[gp.REPORTER_SAW_IT]
+    wrong = reveal["decided_without_proof"]["wrong"]
+    tables = {table["name"]: table for table in reveal["class_tables"]}
+    lines = [
+        f"| {command.NAMES[gp.REPORTER_SAW_IT]} | {len(reporter['members'])} | "
+        f"{_seeds(reporter['members'])} |",
+        f"| {command.NAMES[gp.WRONG_ON_WHAT_IT_HELD]} | {len(wrong['members'])} "
+        f"({sum(len(m['meetings']) for m in wrong['members'])} ejections) | "
+        f"{_seeds(wrong['members'])} |",
+    ]
+    for name, fact in (
+        (gp.TWO_KILLS_AFTER_ONE_REGROUP, gp.ANY_EJECTION),
+        (gp.CAUGHT_VENTING, "CREWMATE_EJECT"),
+        (gp.STRUCK_AFTER_THE_REGROUP, "IMPOSTOR_PARITY"),
+    ):
+        table = tables[name]
+        (row,) = [row for row in table["rows"] if row["fact"] == fact]
+        lines.append(
+            f"| {command.NAMES[name]} | {table['members']} of {table['games']} | "
+            f"{command.NAMES.get(fact, fact)} | {row['a']}, {row['b']}, {row['c']}, "
+            f"{row['d']} | {command._p_text(row['p'])} | "
+            f"{command.CLASS_WORDS[table['classification']]} |"
+        )
+    for reading in pre["tripwires"]["readings"]:
+        entries = ", ".join(
+            f"({e['seed']}, {e['meeting']})" for e in reading["entries"]
+        )
+        games = len({entry["seed"] for entry in reading["entries"]})
+        lines.append(
+            f"| {command.READING_WORDS[reading['name']]} | {len(reading['entries'])} "
+            f"| {games} | {entries or 'none'} |"
+        )
+    endings = {game["seed"]: game["ending"] for game in reveal["games"]}
+    tasks = [
+        sum(
+            1
+            for shelf in pre["shelves"]
+            if any(member["seed"] == game["seed"] for member in shelf["members"])
+        )
+        for game in pre["games"]
+        if not game["tripped"] and endings[game["seed"]] == "CREWMATE_TASKS"
+    ]
+    lines.append(f"| `CREWMATE_TASKS` | {len(tasks)} | {sum(tasks) / len(tasks):.2f} |")
+    return lines
 
 
 def test_the_page_states_the_stamps_the_shelves_and_the_classes() -> None:
@@ -437,17 +509,9 @@ def test_the_page_states_the_stamps_the_shelves_and_the_classes() -> None:
         f"* era: `{served['era']}`",
         f"* MANIFEST key: `{served['manifest_key']}`",
         f"* source fingerprint: `{served['source_fingerprint']}`",
-        "| The reporter saw it happen | 14 | 0, 1, 7, 9, 16, 19, 23, 28, 29, 30, 32, 35, 38, 43 |",
-        "| Decided without proof: wrong on what it held | 20 (21 ejections) |",
-        "| Two kills after one regroup | 6 of 50 | some meeting ejected someone | 4, 2, 42, 2 | 0.0655 | a shelf before the reveal |",
-        "| Caught venting | 19 of 50 | CREWMATE_EJECT | 12, 7, 1, 30 | under 0.0001 | behind the reveal, by the leak rule |",
-        "| Struck after the regroup | 40 of 50 | IMPOSTOR_PARITY | 22, 18, 2, 8 | 0.0766 | a facet, by the saturation rule |",
-        "| decisive, the governing reading: the ejecting ballots labelled off-target, uncited or invalid-citation removed | 1 | 1 | (26, 2) |",
-        "| any ejecting ballot so labelled | 2 | 2 | (26, 2), (41, 0) |",
-        "| every ejecting ballot so labelled | 0 | 0 | none |",
-        "| `CREWMATE_TASKS` | 13 | 1.46 |",
+        *_served_lines(served),
     ):
-        assert line in page, line
+        assert line in page.splitlines(), line
     assert f"at least {gp.SLOW_BURN_TICKS} ticks" in page
     assert f"Any p below {gp.profile_constants().leak_p_level}" in " ".join(
         page.split()

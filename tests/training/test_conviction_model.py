@@ -90,7 +90,8 @@ from training.surrogate.dataset import (
 from training.surrogate.runner import SurrogateFitCorpus, fit_corpus_fingerprint
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-#: samples/9p2i holds candidate round 2's bytes since 2026-10-02 (eval/eras.py);
+#: samples/9p2i holds candidate round 3's bytes since 2026-10-09 (round 2's from
+#: 2026-10-02; eval/eras.py);
 #: the conviction table, built on the frozen surrogate walk, refuses it by name.
 _PROMOTED_NINE = _REPO_ROOT / "replays" / "samples" / "9p2i"
 _FOUR = _REPO_ROOT / "replays" / "samples" / "4p1i"

@@ -85,7 +85,7 @@ from counterfactual_phase21 import (  # noqa: E402
 )
 from engine.entities import Role  # noqa: E402
 from engine.world import load_canonical_map  # noqa: E402
-from eval.eras import STAGE_B_R2  # noqa: E402
+from eval.eras import STAGE_B_R3  # noqa: E402
 from eval.gameplay_census import (  # noqa: E402
     CensusInputs,
     GameFacts,
@@ -269,31 +269,33 @@ class RouteCheckReplayError(RuntimeError):
 
 
 #: The four columns, in the order the report sets them out: s9 is baseline 9,
-#: the 9-player set shown before the promotion; r1 is candidate round 1, the
-#: eight Stage-B rules; r2 is candidate round 2, the same rules with a six-tick
-#: kill cooldown; r3 is candidate round 3, recorded by its own card under the
-#: config file it declares, which adds the route lines.
+#: the 9-player set shown before round 2's promotion; r1 is candidate round 1,
+#: the eight Stage-B rules; r2 is candidate round 2, the same rules with a
+#: six-tick kill cooldown, shown from 2026-10-02 to 2026-10-09; r3 is candidate
+#: round 3, the same rules with the route lines, the shown set since 2026-10-09.
 COLUMN_LABELS: Final[tuple[str, ...]] = ("s9", "r1", "r2", "r3")
 
 #: The config file candidate round 1 recorded under.
 R1_CONFIG_PATH: Final[str] = "replays/candidates/stage-b-r1/experiment-config.json"
 
-#: The config file candidate round 3 records under.
-R3_CONFIG_PATH: Final[str] = "replays/candidates/stage-b-r3/experiment-config.json"
+#: The config file candidate round 2's column was recorded at: the shown set's
+#: path while round 2 was shown. The era registry now reads round 2's config at
+#: its candidate copy, so the committed r2 column keeps the path its commit holds.
+R2_CONFIG_PATH: Final[str] = "replays/samples/9p2i/experiment-config.json"
 
 
 def declared_config_path(label: str) -> str | None:
     """The experiment config a column's rows must have recorded, or ``None``.
 
-    r2 declares its era's config, read from the era registry when asked; r1
-    and r3 declare their round's own file; s9 was recorded with every
-    experimental switch off. The path is read at the column's own commit.
+    r3 declares the shown era's config, read from the era registry when asked;
+    r1 and r2 declare the file each column's commit holds; s9 was recorded with
+    every experimental switch off. The path is read at the column's own commit.
     """
 
     if label == "r3":
-        return R3_CONFIG_PATH
+        return STAGE_B_R3.declared_config
     if label == "r2":
-        return STAGE_B_R2.declared_config
+        return R2_CONFIG_PATH
     if label == "r1":
         return R1_CONFIG_PATH
     if label == "s9":

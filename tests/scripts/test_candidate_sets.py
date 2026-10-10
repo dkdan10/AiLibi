@@ -20,6 +20,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -246,6 +247,101 @@ def test_every_committed_round_holds_its_declared_shape() -> None:
         round_dir.name: round_problems(round_dir) for round_dir in candidate_rounds()
     }
     assert all(not found for found in problems.values()), problems
+
+
+#: The rounds the tree holds since round 3's promotion: round 1, and round 2's
+#: bytes kept as its comparison record (round 3's directory left with its bytes).
+_COMMITTED_ROUNDS: Final[tuple[str, ...]] = ("stage-b-r1", "stage-b-r2")
+#: Round 2's declaration: the config its 50 games recorded, the shown set's
+#: declared config from 2026-10-02 until round 3's promotion.
+_ROUND_2_DECLARATION: Final[tuple[str, ...]] = (
+    "0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b"
+    "  experiment-config.json",
+    "9p2i seeds 0-49",
+)
+
+
+def test_the_committed_rounds_are_round_1_and_round_2() -> None:
+    """The enumeration the committed leg walks names both kept rounds, so it
+    cannot skip one silently; round 3's directory is gone with its bytes."""
+
+    assert tuple(path.name for path in candidate_rounds()) == _COMMITTED_ROUNDS
+    assert not (CANDIDATES_ROOT / "stage-b-r3").exists()
+    readme = (CANDIDATES_ROOT / "stage-b-r2" / "README.md").read_text(encoding="utf-8")
+    assert declaration_blocks(readme) == [list(_ROUND_2_DECLARATION)]
+
+
+def _linked_round(source: Path, target: Path) -> Path:
+    """A scratch copy of a committed round whose files are hard links, not copies."""
+
+    for path in sorted(source.rglob("*")):
+        destination = target / path.relative_to(source)
+        if path.is_dir():
+            destination.mkdir(parents=True, exist_ok=True)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            os.link(path, destination)
+    return target
+
+
+@pytest.mark.parametrize("where", ("", "9p2i"), ids=("round root", "set"))
+def test_a_stray_file_in_round_2s_directory_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, where: str
+) -> None:
+    """Planted: one stray file beside round 2's kept bytes, at its root or in its set.
+
+    The set's re-simulation and report rebuild are the committed leg's, so they
+    are stood in for here; the shape check names the stray file.
+    """
+
+    monkeypatch.setattr(_verify_samples, "verify_samples", lambda _set_dir: [])
+    round_dir = _linked_round(CANDIDATES_ROOT / "stage-b-r2", tmp_path / "stage-b-r2")
+    assert round_problems(round_dir, report_check=lambda _set_dir: 0) == []
+    (round_dir / where / "notes.txt").write_text("stray\n", encoding="utf-8")
+    expected = (
+        "undeclared 'notes.txt' in the round"
+        if not where
+        else "9p2i: unexpected 'notes.txt'"
+    )
+    assert round_problems(round_dir, report_check=lambda _set_dir: 0) == [expected]
+
+
+def _replaced(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` as a new file, never through a hard link."""
+
+    path.unlink()
+    path.write_text(text, encoding="utf-8")
+
+
+def test_round_2s_moved_config_and_its_seeds_are_held_to_the_declaration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted: one byte of the moved config, and a declaration naming seed 50.
+
+    The config's sha256 no longer matches the declaration's first line; a
+    declaration of seeds 0-50 names a replay the kept set does not hold.
+    """
+
+    monkeypatch.setattr(_verify_samples, "verify_samples", lambda _set_dir: [])
+    source = CANDIDATES_ROOT / "stage-b-r2"
+    moved = _linked_round(source, tmp_path / "moved" / "stage-b-r2")
+    original = (source / de.CONFIG_FILENAME).read_text(encoding="utf-8")
+    edited = original.replace('"format_version": 1', '"format_version":\t1')
+    assert len(edited) == len(original) and edited != original
+    _replaced(moved / de.CONFIG_FILENAME, edited)
+    _only(
+        round_problems(moved, report_check=lambda _set_dir: 0),
+        "the declaration's first line is",
+    )
+    seeds = _linked_round(source, tmp_path / "seeds" / "stage-b-r2")
+    readme = (source / "README.md").read_text(encoding="utf-8")
+    assert readme.count("9p2i seeds 0-49") == 1
+    _replaced(seeds / "README.md", readme.replace("9p2i seeds 0-49", "9p2i seeds 0-50"))
+    problems = round_problems(seeds, report_check=lambda _set_dir: 0)
+    _only(problems, "9p2i: missing 'replay-seed-50.jsonl'")
+    _only(problems, "the replay files do not hold exactly the declared seeds")
+    assert (source / de.CONFIG_FILENAME).read_text(encoding="utf-8") == original
+    assert (source / "README.md").read_text(encoding="utf-8") == readme
 
 
 def test_the_enumerator_lists_rounds_only_and_reads_an_absent_root(
@@ -568,6 +664,9 @@ def _new_copy(
         for index, template in enumerate(de.USER_FACING_TEMPLATES)
     }
     copy["family README"] = (CANDIDATES_ROOT / _FAMILY_README).read_text(
+        encoding="utf-8"
+    )
+    copy["round 2 README"] = (CANDIDATES_ROOT / "stage-b-r2" / "README.md").read_text(
         encoding="utf-8"
     )
     for name, parse in (

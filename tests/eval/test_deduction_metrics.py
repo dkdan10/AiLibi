@@ -154,18 +154,19 @@ def test_samples_9p2i_meeting_flag_partition(
 
     §8 row 3: "165 meetings, flagged 70 -> 68 imp/2 inn; unflagged 95 -> 10/21",
     unflagged-meeting accuracy 10/31 = 32.3%. The unit here is the MEETING. The
-    pins read the promoted stage-b-r2 bytes; the baseline-9 bytes read 145
+    pins read the promoted stage-b-r3 bytes; round 2's bytes read 117 meetings,
+    24 flagged (24 / 0) and 93 unflagged (20 / 22), and the baseline-9 bytes 145
     meetings, 70 flagged (70 / 0) and 75 unflagged (11 / 9).
     """
 
     cross_tab = samples_9p2i.deduction.meeting_flag_cross_tab
-    assert cross_tab.meetings_total == 117  # was 145
-    assert cross_tab.flagged_meetings == 24  # was 70
-    assert cross_tab.unflagged_meetings == 93  # was 75
-    assert cross_tab.flagged_ejections_impostor == 24  # was 70
+    assert cross_tab.meetings_total == 119  # was 117
+    assert cross_tab.flagged_meetings == 24  # was 24
+    assert cross_tab.unflagged_meetings == 95  # was 93
+    assert cross_tab.flagged_ejections_impostor == 24  # was 24
     assert cross_tab.flagged_ejections_innocent == 0
-    assert cross_tab.unflagged_ejections_impostor == 20  # was 11
-    assert cross_tab.unflagged_ejections_innocent == 22  # was 9
+    assert cross_tab.unflagged_ejections_impostor == 22  # was 20
+    assert cross_tab.unflagged_ejections_innocent == 15  # was 22
     # The lines above are the reading guide's committed source, parsed by
     # scripts/check_doc_facts.py, so they stay literal; the cell below is derived.
     accuracy = cross_tab.unflagged_meeting_accuracy
@@ -411,8 +412,8 @@ def test_accepts_a_bare_game_sequence(samples_4p1i: TournamentEvalReport) -> Non
 # cross-pin the contract asks for; a diff on either side is a loud failure in
 # both suites.
 # The weak-signal column is what the baseline-9 record moved: 50 -> 11 on the
-# samples set and 126 -> 44 on the corpus. The samples set now holds the
-# stage-b-r2 bytes, which carry far fewer vent flags.
+# samples set and 126 -> 44 on the corpus. The samples set now holds round 3's
+# bytes (stage-b-r3; round 2's before them), so its row is derived below.
 _EXPECTED_CATEGORY_COUNTS: Final[dict[str, tuple[int, int, int]]] = {
     # set -> (role_proof, cross_statement, weak_signal); the shown 9p2i set is
     # derived from its own flags instead (test_the_shown_sets_taxonomy_...).
@@ -540,10 +541,11 @@ def test_roll_call_coverage_split_under_both_estimators(
     """VERIFY-THEN-FIX for the §7 item-24 roll-call split (source-specific).
 
     The two estimators genuinely differ, so both ship as separately named cells:
-    on these bytes the pooled turn-level impostor share is 46.5% (samples) and
-    45.8% (corpus), while the unweighted per-meeting macro-average of the same
-    turns reads 45.4% and 41.6%. ``replays/ml_corpus/README.md`` item 8
-    publishes the pooled pair as its headline and names the macro-average
+    on these bytes the pooled turn-level impostor share is 47.5% (samples; 46.5%
+    on round 2's bytes) and 45.8% (corpus), while the unweighted per-meeting
+    macro-average of the same turns reads 46.5% (45.4% on round 2's) and
+    41.6%. ``replays/ml_corpus/README.md`` item 8 publishes the pooled pair as
+    its headline and names the macro-average
     beside it; ``check_doc_facts.check_corpus_disclosures`` re-derives the
     corpus cells from the same reports these asserts read. The shown set's
     cells are derived here rather than transcribed.
@@ -605,9 +607,9 @@ def test_thirteen_engine_redirected_ejects_reproduces(
     The triage listed it UNVERIFIED-CHEAPLY. The recount over the triage's bytes
     found exactly 13 redirect-marked ballots on ``replays/samples/9p2i``, all 13
     recorded as ejects, none coerced to SKIP, and the recount became the pin.
-    The class is EMPTY on the baseline-9 bytes and on the promoted stage-b-r2
-    bytes: not one ballot on the set carries the redirect marker (baseline 8
-    read 23, all ejects).
+    The class is EMPTY on the baseline-9 bytes, on round 2's and on the
+    promoted stage-b-r3 bytes: not one ballot on the set carries the redirect
+    marker (baseline 8 read 23, all ejects).
     """
 
     redirects = samples_9p2i.deduction.redirected_ballots
@@ -653,8 +655,8 @@ def test_weak_flag_only_conviction_lands_on_the_audit_exhibit(
     metric is ejectee-scoped, so it is not merely counting meetings that happen
     to be weak-flagged. Every weak-only conviction on the CORPUS set still
     ejected an innocent (2 of 2), and the sample set's one on the promoted
-    stage-b-r2 bytes did too (the baseline-9 bytes carried none; baseline 8
-    read six there, five of them innocent). The numerators are 1 and 2, so the
+    stage-b-r3 bytes did too, as round 2's one did (the baseline-9 bytes
+    carried none; baseline 8 read six there, five of them innocent). The numerators are 1 and 2, so the
     cells keep the rare-event advisory: the interval, not the rate, is the
     honest read.
     """
@@ -680,8 +682,9 @@ def test_seed_47_is_the_sample_weak_only_conviction(
 ) -> None:
     """Name the exhibits: every weak-only conviction, walked independently.
 
-    The class began as seed 47's innocent p-8. On the promoted stage-b-r2 bytes
-    the sample set carries one, seed 8's innocent p-9, beside the corpus set's
+    The class began as seed 47's innocent p-8. On the promoted stage-b-r3 bytes
+    the sample set carries one, the innocent ejected at seed 12's first meeting
+    (was seed 8's innocent p-9 on round 2's bytes), beside the corpus set's
     two, all three innocent.
     """
 
@@ -1088,18 +1091,20 @@ def test_scaffold_leakage_reproduces_the_19_8_disclosure(
 ) -> None:
     """The MODEL-originated nets behind ``replays/ml_corpus/README.md`` item 7.
 
-    10/200 and 124/651 impostor-voter ballots name a partner, with a crew
-    false-positive control of 0; 0, 36 and 3 ballots state the role outright;
+    10/198 and 124/651 impostor-voter ballots name a partner, with a crew
+    false-positive control of 0; 1, 36 and 3 ballots state the role outright (0
+    on round 2's samples bytes);
     player-visible ``free_text`` carries no leak on either 9p2i set. (The
     corpus README's item 7 still reads 41/210 for samples-9p2i: its S9 column is
     the baseline-9 bytes, kept as history.)
     """
 
     samples = samples_9p2i.deduction.scaffold_leakage
-    # was (41, 210). Kept on ONE line with no trailing comma: this is the pin
-    # scripts/check_doc_facts.py reads to hold the reading guide's partner-ballot
-    # row, and its pattern needs the tuple literal contiguous.
-    assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (10, 200)
+    # was (10, 200) on round 2's bytes, (41, 210) on the baseline-9 bytes. Kept on
+    # ONE line with no trailing comma: this is the pin scripts/check_doc_facts.py
+    # reads to hold the reading guide's partner-ballot row, and its pattern needs
+    # the tuple literal contiguous.
+    assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (10, 198)
     assert samples.crew_partner_naming_ballots == 0
     assert samples.player_visible_leak_turns == 0
 
@@ -1181,7 +1186,8 @@ def test_the_pre_guard_body_is_the_parsed_field_not_the_raw_envelope(
 
     The raw vote response carries ``"confidence": 0.NN``, which the
     quoted-decimal net would read as the model reproducing its own scoring grid.
-    Scanning the envelope would report 415 machinery quotations on this set
+    Scanning the envelope would report 389 machinery quotations on this set
+    (415 on round 2's bytes)
     against no real one — so the extraction is load-bearing, not cosmetic.
     """
 
@@ -1501,8 +1507,9 @@ def test_guard_originated_stale_rationales_are_rare_not_absent(
     preserve, and labels the path "dormant for committed bytes". Measured, that
     label was *rare*, not *absent*, on the earlier records (baseline 8 carried
     one instance on ``samples/9p2i``, baseline 6 one in the corpus). On the
-    current bytes it IS absent: zero on all four sets, over 17 target rewrites
-    on each 9p2i set (4 on the baseline-9 samples bytes). This test exists because the metric read 0
+    current bytes it IS absent: zero on all four sets, over 10 target rewrites
+    on the 9p2i sample set (17 on round 2's bytes, 4 on the baseline-9 samples
+    bytes) and 17 on the corpus. This test exists because the metric read 0
     everywhere until the self-kill net landed — a leakage predicate that saw
     only partner and role phrasing was blind to a voter narrating their own
     kill, which is the third shape 19.15's own contract names — so a zero here
@@ -1562,7 +1569,8 @@ def test_witnessed_supply_adopts_the_kill_craft_pins(
 ) -> None:
     """The committed supply cells ARE ``tests/eval/test_kill_craft.py:66-135``.
 
-    Corpus 550 kills / 16 crew-witnessed, samples-9p2i 195 / 14, samples-4p1i
+    Corpus 550 kills / 16 crew-witnessed, samples-9p2i 192 / 14 (195 / 14 on
+    round 2's bytes), samples-4p1i
     66 / 1, and ``co_present_histogram == {0: N}`` on every set — the
     "too-clean evidence economy" structural finding, which lands here as
     ``co_present_crew_kills == 0``.
@@ -1696,7 +1704,8 @@ def test_a_cross_tab_cell_cannot_carry_another_blocks_counts(
     """The no-mixing validator: one block's accuracy cell cannot ride another's.
 
     This is the C5 lesson enforced by the model rather than by prose. On the
-    current bytes both partitions happen to hold 42 non-direct / unflagged
+    current bytes both partitions happen to hold 37 (42 on round 2's) non-direct
+    / unflagged
     ejections, so swapping the cell across is no longer detectable by its
     counts alone -- the swap is perturbed by ONE ejection first, which is what
     the validator is for.

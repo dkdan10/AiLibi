@@ -726,8 +726,8 @@ def test_baseline_9_floor_pins_equal_the_measured_bytes() -> None:
     was pinned from. The 9p2i entry's bytes left ``replays/samples/9p2i`` at the
     promotion of candidate round 2 (2026-10-02), so it is HISTORY, and the ML
     selection floor (``BAKEOFF_BASELINE_ID``): it is held to its literal pins and
-    never re-derived, as the baseline-2 block was. The promoted set's own floors
-    are the ``stage-b-r2`` block, anchored below.
+    never re-derived, as the baseline-2 block was. The shown set's own floors
+    are the ``stage-b-r3`` block, anchored below.
     """
 
     historical = _BASELINE_SUPPLY_FLOORS["baseline-9"]["9p2i"]
@@ -765,30 +765,34 @@ def test_baseline_9_floor_pins_equal_the_measured_bytes() -> None:
         assert gauge.floor == fraction, f"4p1i {name} floor pin"
 
 
-#: The promoted set's measured supply: the stage-b-r2 block is pinned from it.
-_STAGE_B_R2_FRACTIONS: dict[str, float] = {
-    "witnessed_event_rate": 14 / 195,
-    "flags_per_meeting": 53 / 117,  # 38 vent + 15 transcript
-    "testimony_backed_conversion": 44 / 94,  # SUBJECT-AWARE
-    "transcript_flags_per_meeting": 15 / 117,
-    "persisted_vent_flags_per_meeting": 38 / 117,
+#: The shown set's measured supply: the stage-b-r3 block is pinned from it. The
+#: stage-b-r2 block (14/195, 53/117 with 38 vent and 15 transcript, 44/94) left
+#: with round 2's bytes at round 3's promotion, with its equality tests.
+_STAGE_B_R3_FRACTIONS: dict[str, float] = {
+    "witnessed_event_rate": 14 / 192,
+    "flags_per_meeting": 54 / 119,  # 39 vent + 15 transcript
+    "testimony_backed_conversion": 46 / 94,  # SUBJECT-AWARE
+    "transcript_flags_per_meeting": 15 / 119,
+    "persisted_vent_flags_per_meeting": 39 / 119,
 }
 
 
-def test_stage_b_r2_floor_pins_equal_the_measured_bytes() -> None:
+def test_stage_b_r3_floor_pins_equal_the_measured_bytes() -> None:
     """EXACT ANCHOR: the stage block's 9p2i floors equal the promoted bytes.
 
     The same both-sides discipline: on ``replays/samples/9p2i`` every gauge
     measures exactly its pinned floor, and the set's default block is its own
     era's (``eval/eras.py``), so a bare call scores it against these floors.
+    The block of the era its bytes replaced is gone.
     """
 
     report = compute_watchability(_NINE)
-    assert report.baseline_id == "stage-b-r2"
+    assert report.baseline_id == "stage-b-r3"
     assert report.referee_passed is True
+    assert "stage-b-r2" not in _BASELINE_SUPPLY_FLOORS
     by_name = {gauge.name: gauge for gauge in report.supply_gauges}
-    assert set(by_name) == set(_STAGE_B_R2_FRACTIONS)
-    for name, fraction in _STAGE_B_R2_FRACTIONS.items():
+    assert set(by_name) == set(_STAGE_B_R3_FRACTIONS)
+    for name, fraction in _STAGE_B_R3_FRACTIONS.items():
         assert by_name[name].measured == fraction, f"{name} measured"
         assert by_name[name].floor == fraction, f"{name} floor pin"
     # The other committed sample set reads its own era's block by default.
@@ -821,10 +825,10 @@ def _stage_pin_numerator_problems(
     return problems
 
 
-def test_stage_b_r2_floor_numerators_equal_the_measured_counts(
+def test_stage_b_r3_floor_numerators_equal_the_measured_counts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """EXACT ANCHOR: each stage-b-r2 pin's numerator is its measured event count.
+    """EXACT ANCHOR: each stage-b-r3 pin's numerator is its measured event count.
 
     The counts are the ones the referee's own walk measures on the promoted
     bytes, read off the call that gates them. Planted: one pin's numerator moved
@@ -841,11 +845,11 @@ def test_stage_b_r2_floor_numerators_equal_the_measured_counts(
         return gate(gauges, floors)
 
     monkeypatch.setattr(watchability_module, "evaluate_supply_floors", spy)
-    assert compute_watchability(_NINE).baseline_id == "stage-b-r2"
+    assert compute_watchability(_NINE).baseline_id == "stage-b-r3"
     assert len(measured) == 1
-    floors = _BASELINE_SUPPLY_FLOORS["stage-b-r2"]["9p2i"]
+    floors = _BASELINE_SUPPLY_FLOORS["stage-b-r3"]["9p2i"]
     assert _stage_pin_numerator_problems(floors, measured[0]) == []
-    for name in sorted(_STAGE_B_R2_FRACTIONS):
+    for name in sorted(_STAGE_B_R3_FRACTIONS):
         pin = getattr(floors, name)
         moved = replace(floors, **{name: replace(pin, numerator=pin.numerator + 1)})
         assert _stage_pin_numerator_problems(moved, measured[0]) == [
@@ -854,38 +858,38 @@ def test_stage_b_r2_floor_numerators_equal_the_measured_counts(
         ]
 
 
-@pytest.mark.parametrize("gauge", sorted(_STAGE_B_R2_FRACTIONS))
+@pytest.mark.parametrize("gauge", sorted(_STAGE_B_R3_FRACTIONS))
 def test_a_stage_pin_raised_by_one_numerator_fails_its_set(gauge: str) -> None:
-    """PLANTED: each stage-b-r2 pin, raised by one numerator, rejects the bytes.
+    """PLANTED: each stage-b-r3 pin, raised by one numerator, rejects the bytes.
 
     The measured supply is the promoted set's; only the one pin moves. The
     conversion pin is a population-relative anchor, so raising it raises the
     derived floor in proportion and still fails the set.
     """
 
-    floors = _BASELINE_SUPPLY_FLOORS["stage-b-r2"]["9p2i"]
+    floors = _BASELINE_SUPPLY_FLOORS["stage-b-r3"]["9p2i"]
     denominators = {
-        "witnessed_event_rate": 195,
-        "flags_per_meeting": 117,
+        "witnessed_event_rate": 192,  # was 195
+        "flags_per_meeting": 119,  # was 117
         "testimony_backed_conversion": 94,
-        "transcript_flags_per_meeting": 117,
-        "persisted_vent_flags_per_meeting": 117,
+        "transcript_flags_per_meeting": 119,  # was 117
+        "persisted_vent_flags_per_meeting": 119,  # was 117
     }
     pin = getattr(floors, gauge)
     raised = FloorPin(
         value=(pin.numerator + 1) / denominators[gauge], numerator=pin.numerator + 1
     )
     measured = SupplyGaugeValues(
-        witnessed_event_rate=14 / 195,
-        total_kills=195,
+        witnessed_event_rate=14 / 192,  # was 14 / 195
+        total_kills=192,  # was 195
         crew_witnessed_kills=14,
-        flags_per_meeting=53 / 117,
-        total_flags=53,
-        persisted_vent_flags=38,
-        meetings_total=117,
-        testimony_backed_conversion=44 / 94,
+        flags_per_meeting=54 / 119,  # was 53 / 117
+        total_flags=54,  # was 53
+        persisted_vent_flags=39,  # was 38
+        meetings_total=119,  # was 117
+        testimony_backed_conversion=46 / 94,  # was 44 / 94
         backed_conversion_attempted=94,
-        backed_conversion_converted=44,
+        backed_conversion_converted=46,  # was 44
     )
     assert evaluate_supply_floors(measured, floors)[0] is True
     changes: dict[str, Any] = {gauge: raised}
@@ -1065,15 +1069,15 @@ def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
     The historical parity pin guards only the FROZEN path, and the CLI aggregate
     is a single scalar — neither shows the patches acting on any real committed
     game. This pins the live-vs-historical per-game delta on the promoted
-    stage-b-r2 9p2i bytes: the subject-aware railroad floor (patch 2) adds no
-    floored game (the baseline-9 bytes added two, 5 and 19; baseline 8 added 19
-    alone; baseline 4 floored one, 29; baseline 3 four, 19/27/29/31 — the
-    mechanism stays covered by the synthetic
+    stage-b-r3 9p2i bytes: the subject-aware railroad floor (patch 2) adds no
+    floored game (the stage-b-r2 bytes added none either; the baseline-9 bytes
+    added two, 5 and 19; baseline 8 added 19 alone; baseline 4 floored one, 29;
+    baseline 3 four, 19/27/29/31 — the mechanism stays covered by the synthetic
     ``test_subject_aware_backing_gates_conversion_and_railroad``), and the
-    conversion-coupled D2 gate (patch 1) zeroes the separation term on thirteen
-    games, where the baseline-9 bytes read four, 4/10/39/46, and baselines 6 to 8
-    none (baseline 5 zeroed 2/4/10/12/37/47; the mechanism itself is pinned on
-    synthetic bytes elsewhere in this file).
+    conversion-coupled D2 gate (patch 1) zeroes the separation term on twelve
+    games, where the stage-b-r2 bytes read thirteen, the baseline-9 bytes four,
+    4/10/39/46, and baselines 6 to 8 none (baseline 5 zeroed 2/4/10/12/37/47;
+    the mechanism itself is pinned on synthetic bytes elsewhere in this file).
     """
 
     live = {s.seed: s for s in _score_committed_set(_NINE)}
@@ -1090,7 +1094,7 @@ def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
     # this file).
     assert live_floored - hist_floored == set()  # was {5, 19}
 
-    # Patch 1 (conversion-coupled D2): on the promoted bytes thirteen committed
+    # Patch 1 (conversion-coupled D2): on the promoted bytes twelve committed
     # games are suspicion theater — rendered-suspicion separation with no
     # converted backed accusation and no contradiction flag — so the gate zeroes
     # their live separation while the frozen spec keeps it positive (the
@@ -1101,8 +1105,8 @@ def test_hardened_patches_fire_on_the_committed_9p2i_bytes() -> None:
         for seed in live
         if live[seed].d2_separation_norm == 0.0 and hist[seed].d2_separation_norm > 0.0
     }
-    # was {4, 10, 39, 46}
-    assert patch1_zeroed == {4, 12, 15, 21, 23, 25, 28, 29, 31, 33, 43, 45, 48}
+    # was {4, 12, 15, 21, 23, 25, 28, 29, 31, 33, 43, 45, 48} on round 2's bytes
+    assert patch1_zeroed == {2, 4, 23, 24, 29, 30, 34, 35, 36, 38, 43, 48}
 
 
 def test_testimony_backed_conversion_requires_observation_backing() -> None:
@@ -1382,11 +1386,12 @@ def test_malformed_bytes_fail_closed_not_crash(tmp_path: Path) -> None:
 
 
 def test_witnessed_event_rate_is_the_measured_anchor() -> None:
-    """The 9p2i witnessed-event rate is the 14/195 = 7.18% crew-witnessed anchor.
+    """The 9p2i witnessed-event rate is the 14/192 = 7.29% crew-witnessed anchor.
 
     Computed from the committed bytes (not the pinned constant), so it tracks the
-    set's own era: the promoted stage-b-r2 bytes record 14 crew-witnessed of 195
-    kills in 9p2i (baseline 9 was 3/175 = 1.71%; baseline 8 was 3/182 = 1.65%;
+    set's own era: the promoted stage-b-r3 bytes record 14 crew-witnessed of 192
+    kills in 9p2i (stage-b-r2 was 14/195 = 7.18%; baseline 9 was 3/175 = 1.71%;
+    baseline 8 was 3/182 = 1.65%;
     baseline 7 was 3/177 = 1.69%; the vent-widening baseline 6 was 6/177 =
     3.39%; the pre-widening baseline 6 was 7/173 = 4.05%; baseline 5 was 7/203 =
     3.45%).
@@ -1396,7 +1401,7 @@ def test_witnessed_event_rate_is_the_measured_anchor() -> None:
     witnessed = next(
         g for g in report.supply_gauges if g.name == "witnessed_event_rate"
     )
-    assert witnessed.measured == pytest.approx(14 / 195)  # was 3 / 175
+    assert witnessed.measured == pytest.approx(14 / 192)  # was 14 / 195
 
 
 def test_evidence_starved_set_fails_the_referee() -> None:
@@ -1677,7 +1682,7 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     assert report["referee_passed"] is True
     assert report["roster_key"] == "9p2i"
     # The set's own era's block (eval/eras.py), no longer one global default.
-    assert report["baseline_id"] == "stage-b-r2"  # was baseline-9
+    assert report["baseline_id"] == "stage-b-r3"  # was stage-b-r2
     assert len(report["per_game"]) == 50
     # Three Layer-1 gauges plus the two flags-per-meeting components the stage
     # block pins; the components trail the merged row, in that order.
@@ -1697,8 +1702,9 @@ def test_cli_watchability_json_emits_per_game_and_aggregate() -> None:
     # the suspicion-theater games). Re-derived on the same bytes when the backing
     # vocabulary gained the spoken saw_move placement: more attempts enter D2 than
     # convert, so the mean eases. Re-derived on the baseline-9 bytes, and again on
-    # the promoted stage-b-r2 bytes, where the D2 gate sinks thirteen games.
-    assert report["mean_score"] == pytest.approx(24.73)  # was 47.85
+    # the promoted stage-b-r2 bytes, where the D2 gate sank thirteen games, and
+    # on the promoted stage-b-r3 bytes, where it sinks twelve.
+    assert report["mean_score"] == pytest.approx(28.73)  # was 24.73
 
 
 def test_cli_watchability_human_output() -> None:

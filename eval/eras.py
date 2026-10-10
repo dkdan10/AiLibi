@@ -1,11 +1,11 @@
 """The committed replay sets and the recorded era each one belongs to.
 
-Since the promotion of candidate round 2 (2026-10-02) the tree holds two eras.
-``replays/samples/9p2i`` holds the round-2 recording: the seven adopted Stage-B
-arms, the kept vent exit and a six-tick kill cooldown, recorded once under one
-declared experiment config. The other three committed sets keep the baseline-9
-process re-record. An era is the recorded identity a group of games shares: its
-settings, temporal delivery, substrate stamp and prompt stamps
+Since the promotion of candidate round 3 (2026-10-09) the tree holds two eras.
+``replays/samples/9p2i`` holds the round-3 recording: the seven adopted Stage-B
+arms, the kept vent exit, a six-tick kill cooldown and the route lines, recorded
+once under one declared experiment config. The other three committed sets keep
+the baseline-9 process re-record. An era is the recorded identity a group of
+games shares: its settings, temporal delivery, substrate stamp and prompt stamps
 (:class:`eval.gameplay_census.EraKey`). Two eras are never pooled.
 
 This module is the one place a committed set's era is named. Every instrument
@@ -76,18 +76,28 @@ BASELINE_9: Final[Era] = Era(
     declared_config=None,
 )
 
-#: Candidate round 2, promoted as the shown 9-player set on 2026-10-02 (the
-#: round's record, section 9).
+#: Candidate round 2, the shown 9-player set from 2026-10-02 to 2026-10-09. It
+#: owns no committed set: its bytes are the candidate copy
+#: ``replays/candidates/stage-b-r2``, read with this declared config there.
 STAGE_B_R2: Final[Era] = Era(
     id="stage-b-r2",
     record="audits/audit-2026-10-01-stage-b-r2.md",
     recorded_on="2026-10-01",
+    declared_config="replays/candidates/stage-b-r2/experiment-config.json",
+)
+
+#: Candidate round 3, promoted as the shown 9-player set on 2026-10-09 (the
+#: round's record, section 12).
+STAGE_B_R3: Final[Era] = Era(
+    id="stage-b-r3",
+    record="audits/audit-2026-10-09-stage-b-r3.md",
+    recorded_on="2026-10-09",
     declared_config="replays/samples/9p2i/experiment-config.json",
 )
 
 #: Every era a committed set belongs to, oldest first. ``tests/eval/test_eras.py``
 #: holds it equal to :func:`registered_eras` of the registry below.
-ERAS: Final[tuple[Era, ...]] = (BASELINE_9, STAGE_B_R2)
+ERAS: Final[tuple[Era, ...]] = (BASELINE_9, STAGE_B_R3)
 
 #: The era the substrate ladder tip stands at. A directory the registry does not
 #: name (a candidate round, a scratch copy, a training evaluation) is measured
@@ -97,7 +107,7 @@ LADDER_TIP_ERA: Final[Era] = BASELINE_9
 #: The four committed sets, in publication order.
 COMMITTED_SETS: Final[tuple[CommittedSet, ...]] = (
     CommittedSet("replays/ml_corpus/9p2i", BASELINE_9),
-    CommittedSet("replays/samples/9p2i", STAGE_B_R2),
+    CommittedSet("replays/samples/9p2i", STAGE_B_R3),
     CommittedSet("replays/ml_corpus/4p1i", BASELINE_9),
     CommittedSet("replays/samples/4p1i", BASELINE_9),
 )
@@ -171,6 +181,7 @@ __all__ = [
     "ERAS",
     "LADDER_TIP_ERA",
     "STAGE_B_R2",
+    "STAGE_B_R3",
     "CommittedSet",
     "Era",
     "committed_set",

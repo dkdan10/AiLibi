@@ -1873,6 +1873,15 @@ from tests._helpers.recorded_counts import recorded_counts  # noqa: E402
 _COMMITTED_9P2I_REPORT = report_path(
     Path(__file__).resolve().parents[2] / "replays" / "samples" / "9p2i"
 )
+#: Round 2's report, at its candidate copy since round 3's promotion: the bytes
+#: the classified finding below was recorded on (was the samples report).
+_ROUND_2_9P2I_REPORT = report_path(
+    Path(__file__).resolve().parents[2]
+    / "replays"
+    / "candidates"
+    / "stage-b-r2"
+    / "9p2i"
+)
 
 
 def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
@@ -1946,7 +1955,8 @@ def test_committed_9p2i_report_pins_the_audited_conversion_values() -> None:
 
 
 # ROUND 2's impostor ejections that fail ``_has_real_evidence``, the finding
-# test_committed_9p2i_unbacked_ejections_are_classified records: (seed,
+# test_committed_9p2i_unbacked_ejections_are_classified records on round 2's
+# bytes, read at their candidate copy since round 3's promotion: (seed,
 # meeting id, tick, ejected player).
 # Re-pinned at the promotion of candidate round 2 (2026-10-02): five rows became
 # nine. The baseline-9 identities were (6, meeting-3, 43, p-9), (27, meeting-1,
@@ -2170,12 +2180,13 @@ def test_committed_9p2i_unbacked_ejections_are_classified() -> None:
 
     This test records ROUND 2's finding on round 2's bytes -- the one place
     the split is written down -- so its inventory is named, not derived: it is
-    a finding about one recording, which the promotion re-points to that
-    round's candidate copy rather than re-pinning on the next set.
+    a finding about one recording, which round 3's promotion re-pointed to that
+    round's candidate copy rather than re-pinning on the next set (was the
+    samples report while round 2 was shown).
     """
 
     report = TournamentEvalReport.model_validate_json(
-        read_report_text(_COMMITTED_9P2I_REPORT)
+        read_report_text(_ROUND_2_9P2I_REPORT)
     )
     classified = {
         (seed, meeting.meeting_id): (

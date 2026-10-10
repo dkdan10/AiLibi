@@ -10,23 +10,23 @@ The interesting question is whether a plausible accusation follows from the evid
 
 [![One scene in the omniscient view and through a crewmate's fog, with the agent's accusation below](docs/media/spectator-two-truths.png)](https://dkdan10.github.io/AiLibi/)
 
-*9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-01 record (9p2i): at tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. [Media provenance](docs/media/README.md#provenance) records the source and asset identities; the [short clip](docs/media/spectator-journey.webm) walks the same game.*
+*9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-09 record (9p2i): at tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. [Media provenance](docs/media/README.md#provenance) records the source and asset identities; the [short clip](docs/media/spectator-journey.webm) walks the same game.*
 
 ## What the measurements said
 
-The shown 9-player set was recorded 2026-10-01 under the adopted gameplay changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity); the 4-player set and the ML corpus stay at [baseline 9](docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22. No figure pools the two. Each before cell is what that set's replaced recording read.
+The shown 9-player set was recorded 2026-10-09 under the adopted gameplay changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity); the 4-player set and the ML corpus stay at [baseline 9](docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22. No figure pools the two. Each before cell is what that set's replaced recording read.
 
 | What | Figure | Before | Recorded on, and where it lives |
 |---|---|---|---|
 | Committed sample replays that reconstruct byte-identically | 100 of 100 | 100 of 100 | every commit — `scripts/verify_samples.sh` |
 | Observation boundary checks | import rules and planted/recursive leak checks | import rules and planted/recursive leak checks | [contracts](.importlinter), [planted imports](tests/test_firewall.py), [packet scans](eval/leak_scan.py); bounded checks, not complete privacy assurance |
-| Impostor win rate, committed samples | 36% (4p1i), 48% (9p2i) | 36% (4p1i), 22% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-01 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
-| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 410 / 410, zero dangling | 496 / 496, zero dangling | the 2026-10-01 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
-| Ejection accuracy with engine-certified proof of the ejectee's role, against without (9p2i) | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | 70 / 70 = 1.0000 vs 11 / 20 = 0.5500 | the 2026-10-01 record (9p2i) — [the record](audits/audit-2026-10-01-stage-b-r2.md) §9.6, against [baseline 9's](audits/audit-2026-09-22-process-rerecord.md) §6.2; 22 of 22 innocent ejections sit in the no-proof cell |
-| Correct 9p ejections riding an ejectee-specific vent sighting | 24 / 44 = 55% | 70 / 81 = 86% | the 2026-10-01 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
+| Impostor win rate, committed samples | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
+| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 397 / 397, zero dangling | 410 / 410, zero dangling | the 2026-10-09 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
+| Ejection accuracy with engine-certified proof of the ejectee's role, against without (9p2i) | 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | the 2026-10-09 record (9p2i) — [the record](audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](audits/audit-2026-10-01-stage-b-r2.md) §9.6; 15 of 15 innocent ejections sit in the no-proof cell |
+| Correct 9p ejections riding an ejectee-specific vent sighting | 24 / 46 = 52% | 24 / 44 = 55% | the 2026-10-09 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
 | Learned tactical policies that became the default | none, ruled twice | none, ruled twice | 2026-07-18 and 2026-08-01 — [phase 17](audits/audit-phase-17-close.md), [phase 18](audits/audit-phase-18-close.md) |
 
-*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 44 correct ejections follow certified vent evidence; without it, 20 of 42 ejections target impostors and 22 convict crewmates. This demonstrates processing of certified facts and deception, **not general social deduction**. The [reading guide](docs/reading-guide.md) reads these 50 games alone.
+*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 46 correct ejections follow certified vent evidence; without it, 22 of 37 ejections target impostors and 15 convict crewmates. This demonstrates processing of certified facts and deception, **not general social deduction**. The [reading guide](docs/reading-guide.md) reads these 50 games alone.
 
 **Two bars were written down first, and both were missed.** Baseline 7 measured conviction accuracy without proof at 61 of 103 = 0.5922 against 0.60, and wrongful ejections at 42 against fewer than 35. Its rule returned **FINDING**, but Daniel adopted that recording by explicit owner override on 2026-08-26; the bars did not pass. Baseline 8 registered no bars and measured 50 of 96 = 0.5208 and 46 innocent ejections. Baseline 9 registered none either and measured 43 of 85 = 0.5059 and 42 innocent ejections over its four recorded sets, a movement too small for these samples to call real. [The decision and its limitations](docs/ownership-case-study.md) preserve both judgments.
 
@@ -44,7 +44,7 @@ Python 3.11 · FastAPI/Pydantic · React/Vite/PixiJS · strict mypy · Hypothesi
 
 **Known evidence leak:** in the baseline-9 recordings, default opening prompts
 reveal a hidden death tick through a body identifier. The shown 9-player set's
-report openings no longer carry it (0 of 114). The full temporal repair stays
+report openings no longer carry it (0 of 115). The full temporal repair stays
 default-off, not adopted. [Observation contract and limitations](docs/observation-contract.md).
 
 ## Who did what
@@ -105,8 +105,8 @@ Three distinct claims:
 
 The default fake provider tests mechanics offline. Real generation needs an explicitly selected provider and token, cost, and wall-time limits, even with flat-rate service. Follow [provider setup](llm/README.md), [.env.example](.env.example), and [bounded tournament/resume instructions](docs/deployment.md); keep new outputs in a separate directory. Fresh model dialogue is not reproduced by a seed alone.
 
-**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 66 ejections, vote correctness 0.795, and ejection accuracy 0.667. The demo publishes a smaller, strictly validated summary; reported usage is separate from verified outcomes and is not a billing guarantee.
+**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections, vote correctness 0.783, and ejection accuracy 0.754. The demo publishes a smaller, strictly validated summary; reported usage is separate from verified outcomes and is not a billing guarantee.
 
-**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts with a `v8` ballot, each in its own era. The 4-player set was regenerated 2026-09-22 (4p1i) at [baseline 9](audits/audit-2026-09-22-process-rerecord.md), every experimental switch off: impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-01 (9p2i) under the adopted gameplay changes ([its record](audits/audit-2026-10-01-stage-b-r2.md)), its ballot stamped `impostor_ballot_v1` and `ballot_kill_row_v1`: impostor win rate 48% (9p2i). Each manifest records per-game provenance. The picture above is from the 9-player game the guided tour opens on.
+**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts with a `v8` ballot, each in its own era. The 4-player set was regenerated 2026-09-22 (4p1i) at [baseline 9](audits/audit-2026-09-22-process-rerecord.md), every experimental switch off: impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the route lines, a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)), its ballot stamped `impostor_ballot_v1`, `ballot_kill_row_v1` and `route_lines_v1`: impostor win rate 34% (9p2i). Each manifest records per-game provenance. The picture above is from the 9-player game the guided tour opens on.
 
 [Reading guide](docs/reading-guide.md) · [Glossary](docs/glossary.md) · [Audits](audits/README.md) · [Artifact retention](docs/artifacts.md) · [Contributing](CONTRIBUTING.md)

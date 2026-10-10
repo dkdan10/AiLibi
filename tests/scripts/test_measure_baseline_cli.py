@@ -5,8 +5,10 @@ is a task failure, not a number to retrofit) and covers the CLI surface: default
 two-set run, explicit dir, ``--json``, and the usage-error path. The 4p1i pins
 read the baseline-9 process re-record (prompt set ``qwen3_6_27b`` at v6 for the
 accusation round and both reports, v8 for the vote ballot); the 9p2i pins read the
-promoted set, candidate round 2 (its own era since 2026-10-02, the same prompt set
-with the era's ballot arms), each ``was`` the baseline-9 reading.
+promoted set, candidate round 3 (its own era since 2026-10-09, after round 2's
+from 2026-10-02; the same prompt set with the era's ballot arms), held to the
+surfaces that record it rather than transcribed, the baseline-9 reading beside
+each.
 """
 
 from __future__ import annotations

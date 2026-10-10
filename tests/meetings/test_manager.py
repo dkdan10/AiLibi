@@ -5502,8 +5502,9 @@ class TestCommittedBytes107FoldPins:
         # the fold. The audited suspicion-math (a corroboration drops the defended
         # subject below the §4.6 gate) is covered by the synthetic corroboration-
         # delta tests; here we pin that the bytes route the defended subject to the
-        # corroboration channel, not the fold. Re-anchored on the promoted bytes
-        # (candidate round 2, 2026-10-02) to seed 3 m0: the corroborated crewmate
+        # corroboration channel, not the fold. Re-anchored on candidate round 2's
+        # bytes (2026-10-02) to seed 3 m0, and true again on round 3's promoted
+        # bytes (2026-10-09): the corroborated crewmate
         # p-1 (the seed-3 impostors are p-2/p-6) is never folded while the impostor
         # p-6 takes the fold.
         entry = _committed_meeting(3, 0)
@@ -6039,14 +6040,15 @@ class TestSingleWitnessInformYieldOnCommittedBytes:
     """The Task 10.15 inform-yield bloc, walked offline over the committed bytes.
 
     The deliverable number, re-anchored to the latest recording of the committed
-    9p2i set (Qwen/Qwen3.6-27B, candidate round 2, promoted 2026-10-02). The
+    9p2i set (Qwen/Qwen3.6-27B, candidate round 3, promoted 2026-10-09). The
     derivation first reproduces the §4(3) partition EXACTLY off the committed
-    bytes (66 accused living-impostor meeting-subjects the ballots did not eject;
-    17 of them rendered over the §4.6 gate yet lost plurality -- prior recordings
-    read 42 / 16 (baseline 9), 51 / 18, 52 / 18, 70 / 34, 60 / 29, 75 / 37,
-    46 / 19, 46 / 10, 72 / 38), which validates the offline oracle, then counts
-    how many the single-witness inform converts WITHOUT any tally change (this
-    recording: 0; prior: 0, 1, 0, 1, 4, 4, none, none).
+    bytes (65 accused living-impostor meeting-subjects the ballots did not eject;
+    20 of them rendered over the §4.6 gate yet lost plurality -- prior recordings
+    read 66 / 17 (round 2), 42 / 16 (baseline 9), 51 / 18, 52 / 18, 70 / 34,
+    60 / 29, 75 / 37, 46 / 19, 46 / 10, 72 / 38), which validates the offline
+    oracle, then counts how many the single-witness inform converts WITHOUT any
+    tally change (this recording: 0; prior: 0 (round 2), 0, 1, 0, 1, 4, 4, none,
+    none).
     """
 
     def test_methodology_reproduces_the_audit_partition(

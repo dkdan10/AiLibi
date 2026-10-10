@@ -2606,8 +2606,9 @@ class TestCommittedWalk:
 #: worked case, so the amendment is pinned to the recorded bytes it was measured
 #: on rather than to synthetic fixtures alone
 #: (audits/audit-phase-21-hardening.md §3.2). The samples/9p2i case was seed 48
-#: meeting 2 on the baseline-9 bytes; since 2026-10-02 the set holds candidate
-#: round 2's bytes and the same shape is re-read at seed 0 meeting 0.
+#: meeting 2 on the baseline-9 bytes; the set held candidate round 2's bytes
+#: from 2026-10-02 and holds round 3's since 2026-10-09, and on each the same
+#: shape is re-read at seed 0 meeting 0.
 _ANCHORS: Final[tuple[tuple[str, int, int], ...]] = (
     ("ml_corpus/9p2i", 1111, 0),
     ("samples/9p2i", 0, 0),

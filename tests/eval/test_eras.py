@@ -38,6 +38,10 @@ from _manifest_writer import parse_manifest  # noqa: E402
 _ROUND_2_CONFIG_SHA256 = (
     "0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b"
 )
+#: The sha256 of candidate round 3's declared config (its record, section 1.3).
+_ROUND_3_CONFIG_SHA256 = (
+    "a788b9eba5e8f2f5d29033fece2d0dc0dbac7d3528ea93c7c7a93327dbc6d57d"
+)
 
 
 def test_the_registry_names_each_committed_set_once_and_two_eras() -> None:
@@ -50,9 +54,9 @@ def test_the_registry_names_each_committed_set_once_and_two_eras() -> None:
     ]
     assert {entry.era.id for entry in eras.COMMITTED_SETS} == {
         "baseline-9",
-        "stage-b-r2",
+        "stage-b-r3",  # was stage-b-r2
     }
-    assert eras.era_of("replays/samples/9p2i") == eras.STAGE_B_R2
+    assert eras.era_of("replays/samples/9p2i") == eras.STAGE_B_R3  # was STAGE_B_R2
     assert eras.sets_in(eras.BASELINE_9) == (
         "replays/ml_corpus/9p2i",
         "replays/ml_corpus/4p1i",
@@ -70,15 +74,25 @@ def test_the_registry_holds_on_the_committed_bytes() -> None:
     assert len(baseline_9) == 1
     assert keys["replays/samples/9p2i"] not in baseline_9
     assert next(iter(baseline_9)).settings == ()
-    assert dict(keys["replays/samples/9p2i"].settings)["kill_cooldown_ticks"] == 6
+    shown = dict(keys["replays/samples/9p2i"].settings)
+    assert shown["kill_cooldown_ticks"] == 6
+    assert shown["route_lines_version"] == 1
 
 
-def test_the_declared_config_is_round_2s_bytes() -> None:
-    declared = eras.STAGE_B_R2.declared_config
+def test_the_declared_configs_are_round_3s_and_round_2s_bytes() -> None:
+    """The shown era reads round 3's file in the set; round 2's moved with its bytes."""
+
+    declared = eras.STAGE_B_R3.declared_config
     assert declared == "replays/samples/9p2i/experiment-config.json"
     data = (_REPO_ROOT / declared).read_bytes()
+    assert hashlib.sha256(data).hexdigest() == _ROUND_3_CONFIG_SHA256
+    kept = eras.STAGE_B_R2.declared_config
+    # was replays/samples/9p2i/experiment-config.json, before round 2's bytes moved
+    assert kept == "replays/candidates/stage-b-r2/experiment-config.json"
+    data = (_REPO_ROOT / kept).read_bytes()
     assert hashlib.sha256(data).hexdigest() == _ROUND_2_CONFIG_SHA256
     assert eras.BASELINE_9.declared_config is None
+    assert eras.STAGE_B_R2 not in eras.ERAS
 
 
 @pytest.mark.parametrize("entry", eras.COMMITTED_SETS, ids=lambda entry: entry.path)
@@ -106,25 +120,28 @@ def test_the_module_exports_every_public_name_it_defines() -> None:
 
 def test_eras_is_the_registrys_eras_oldest_first() -> None:
     assert eras.ERAS == eras.registered_eras()
-    assert eras.registered_eras() == (eras.BASELINE_9, eras.STAGE_B_R2)
+    # was (BASELINE_9, STAGE_B_R2), before round 3's promotion
+    assert eras.registered_eras() == (eras.BASELINE_9, eras.STAGE_B_R3)
 
 
 #: An era no committed set belongs to, recorded after both committed eras.
 _THIRD_ERA = eras.Era(
     id="planted-third",
     record="audits/planted.md",
-    recorded_on="2026-10-05",
+    recorded_on="2026-10-12",  # was 2026-10-05, before the shown era's 2026-10-09
     declared_config=None,
 )
 
 
 def test_eras_held_to_the_registry_turns_red_on_either_side() -> None:
-    """Planted: ERAS without the promoted era, and a registry naming a third.
+    """Planted: ERAS without the promoted era, ERAS still naming the era it
+    replaced, and a registry naming a third.
 
-    Either way the registry's eras and ERAS differ, so the pin above is red.
+    Each way the registry's eras and ERAS differ, so the pin above is red.
     """
 
     assert (eras.BASELINE_9,) != eras.registered_eras()
+    assert (eras.BASELINE_9, eras.STAGE_B_R2) != eras.registered_eras()
     widened = (*eras.COMMITTED_SETS, eras.CommittedSet("replays/x/9p2i", _THIRD_ERA))
     assert eras.ERAS != eras.registered_eras(widened)
     assert eras.registered_eras(widened) == (*eras.ERAS, _THIRD_ERA)
@@ -176,6 +193,28 @@ def test_a_registry_filing_samples_9p2i_under_baseline_9_is_refused() -> None:
         verify_era_registry(_REPO_ROOT, registry=misfiled)
 
 
+def test_a_registry_filing_samples_9p2i_under_stage_b_r2_is_refused() -> None:
+    """Planted: the promoted set left under the era its bytes replaced.
+
+    Round 2's declared config, read at its candidate copy, is not what round 3's
+    games recorded (it lacks the route lines), so the registry is refused naming
+    the set and the era.
+    """
+
+    stale = tuple(
+        eras.CommittedSet(entry.path, eras.STAGE_B_R2)
+        if entry.path == "replays/samples/9p2i"
+        else entry
+        for entry in eras.COMMITTED_SETS
+    )
+    message = (
+        "replays/samples/9p2i: seed 0 recorded settings that differ from the "
+        "stage-b-r2 era's declared config"
+    )
+    with pytest.raises(GameplayCensusEraError, match=re.escape(message)):
+        verify_era_registry(_REPO_ROOT, registry=stale)
+
+
 def _scratch_set(tmp_path: Path, seeds: tuple[int, ...]) -> Path:
     """A scratch root holding a few of the promoted set's games and its files."""
 
@@ -191,7 +230,7 @@ def _scratch_set(tmp_path: Path, seeds: tuple[int, ...]) -> Path:
     return target
 
 
-_SCRATCH_REGISTRY = (eras.CommittedSet("replays/samples/9p2i", eras.STAGE_B_R2),)
+_SCRATCH_REGISTRY = (eras.CommittedSet("replays/samples/9p2i", eras.STAGE_B_R3),)
 
 
 def test_a_scratch_copy_of_the_promoted_games_passes(tmp_path: Path) -> None:
@@ -338,21 +377,21 @@ def test_two_era_ids_folding_to_one_key_are_refused(
 def test_a_switch_off_set_filed_under_a_declared_config_is_refused(
     tmp_path: Path,
 ) -> None:
-    """Planted: two switch-off 4p1i games filed under the stage-b-r2 era."""
+    """Planted: two switch-off 4p1i games filed under the stage-b-r3 era."""
 
     _scratch_4p1i(tmp_path, "replays/scratch/first")
-    declared = eras.STAGE_B_R2.declared_config
+    declared = eras.STAGE_B_R3.declared_config  # was STAGE_B_R2's
     assert declared is not None
     (tmp_path / declared).parent.mkdir(parents=True)
     shutil.copy(_REPO_ROOT / declared, tmp_path / declared)
     message = (
         f"replays/scratch/first: seed {_MEETING_SEEDS_4P1I[0]} recorded settings "
-        "that differ from the stage-b-r2 era's declared config"
+        "that differ from the stage-b-r3 era's declared config"
     )
     with pytest.raises(GameplayCensusEraError, match=re.escape(message)):
         verify_era_registry(
             tmp_path,
-            registry=(eras.CommittedSet("replays/scratch/first", eras.STAGE_B_R2),),
+            registry=(eras.CommittedSet("replays/scratch/first", eras.STAGE_B_R3),),
         )
 
 

@@ -51,10 +51,11 @@ A group of committed recordings made under one identity: the same settings,
 prompts and temporal delivery. Instruments read an era's sets together and
 never pool two eras. [`eval/eras.py`](../eval/eras.py) names two: baseline 9's
 owns the 4-player set and the ML corpus, and a later one owns the shown
-9-player set, recorded 2026-10-01 with the adopted gameplay changes switched on
-by one declared config
-([`audits/audit-2026-10-01-stage-b-r2.md`](../audits/audit-2026-10-01-stage-b-r2.md)
-§9).
+9-player set, recorded 2026-10-09 with the adopted gameplay changes and the
+[route lines](#route-line-what-the-doors-say-about-a-players-stated-places)
+switched on by one declared config
+([`audits/audit-2026-10-09-stage-b-r3.md`](../audits/audit-2026-10-09-stage-b-r3.md)
+§12).
 
 ### adopting record (the recording that adopts a change)
 
@@ -70,9 +71,9 @@ Where the substrate currently stands. "The ladder tip stands at baseline 9"
 ([`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md)); the
 phrase is checked against that audit by
 [`scripts/check_doc_facts.py`](../scripts/check_doc_facts.py), so no document
-can quietly name a different one. The shown 9-player set moved to a later era
-on 2026-10-02 without moving the tip: no substrate setting changed, and
-baseline 10 is reserved for a full re-record.
+can quietly name a different one. The shown 9-player set moved to later eras
+on 2026-10-02 and 2026-10-09 without moving the tip: no substrate setting
+changed, and baseline 10 is reserved for a full re-record.
 
 ### graduated lever (a setting deleted into the default)
 

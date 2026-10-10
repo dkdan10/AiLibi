@@ -110,7 +110,8 @@ def test_samples_four_all_on_menu(samples_four: OffMenuActionReport) -> None:
 def test_samples_nine_is_refused_by_name() -> None:
     """samples/9p2i is outside the instrument's reading; it refuses the set by name.
 
-    The set holds candidate round 2's bytes since 2026-10-02, recorded with its
+    The set holds candidate round 3's bytes since 2026-10-09 (round 2's from
+    2026-10-02), recorded with its
     era's experiment config, and the historical feature reconstruction reads
     recordings made with every switch off. On its baseline-9 bytes the set read
     all-on-menu over 1754 impostor decisions.

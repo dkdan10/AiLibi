@@ -250,9 +250,9 @@ function VoteCorrectness({
   // rate tile carries the scope note that says what the rate is for.
   //
   // The rate is NOT structurally 1.0, whatever this file used to tell a reader:
-  // the committed 9p2i report records 35 evidence-backed of 44 impostor
-  // ejections (0.795). So the copy says what a value below 1 means and stops
-  // short of naming a cause.
+  // the committed 9p2i report records 36 evidence-backed of 46 impostor
+  // ejections (0.783; was 35 of 44, 0.795, on round 2's bytes). So the copy
+  // says what a value below 1 means and stops short of naming a cause.
   const smallN = report.vote_correctness_small_n ? (
     <MetricCaveat tone="warn" title={DASHBOARD_COPY.voteCorrectnessSmallNTitle}>
       {DASHBOARD_COPY.voteCorrectnessSmallN}

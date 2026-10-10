@@ -2132,3 +2132,261 @@ no criterion of this decision reads role-correctness. (2) "Every gate and count-
 passed" reads, under the amended discipline (1.7, 6.1): the full gate set passed after the probe and after every
 second batch, six of the eleven checkpoints, and the count-only key scan read 0 at all eleven. The readings the
 decision rests on are otherwise as sections 7 and 8 state them, and the step stands: round 3 is promoted.
+
+## 12. The promotion (2026-10-09)
+
+Card: [`tasks/work/promote-round-3.md`](../tasks/work/promote-round-3.md). A dated
+addendum: sections 1 to 11 above are unchanged, byte for byte, from `c71ea63e`,
+the merge of PR #505 that committed them.
+
+### 12.1 The step and the rulings
+
+Section 11 records the step the orchestrator took under the owner's delegation:
+candidate round 3 is promoted as the shown set by the era-keyed path, in one card
+with the tour's re-curation. The owner's words behind it, verbatim and dated (the
+decision memo, `tasks/decision-2026-09-24-stage-b-wave.md`, sections 8.8 and 8.9):
+
+- 2026-10-09, the step delegated: "I will let this session, as the orchestrator,
+  decide about promoting round 3. Keep what I want for the project in mind. I
+  lean towards wanting to promote round 3, but if there is an issue you find with
+  recording, or think it is really a step down in terms of gameplay, you can make
+  the decision to keep round 2."
+- 2026-10-09, the merges delegated: "Merge both when verified and retire the
+  memo's D14 list".
+- 2026-10-09, the amendment: "Keep the comparison records".
+
+The scorecard's frozen before column takes the grow form by the orchestrator's
+default of 2026-10-09 recorded in section 8.9 of the memo, which the owner may
+replace before this card merges (12.6). The route field, `route_lines_version =
+1`, is a setting the shown set's recordings carry; the public page names it in
+plain words beside the kill cooldown and does not call it adopted, and no switch
+is deleted.
+
+### 12.2 The bytes, both ways, file by file
+
+Round 2's 50 replays, `MANIFEST.md`, `roster.json` and report gz moved from
+`replays/samples/9p2i/` to `replays/candidates/stage-b-r2/9p2i/`, and its
+declared config to that round's root; a new `README.md` there carries the round's
+declaration (the config's sha256 line and `9p2i seeds 0-49`). Round 3's 50
+replays, `MANIFEST.md`, `roster.json` and report gz moved from
+`replays/candidates/stage-b-r3/9p2i/` into `replays/samples/9p2i/`, and its
+declared config beside them; round 3's `README.md` left with its emptied round
+directory. The set's `results-game-profile.json` stayed at
+`replays/samples/9p2i/` and was regenerated there for round 3. Each moved file's
+sha256 at the promoting head equals its sha256 at `2eed2e92`, this card's base
+(`shasum -a 256` over both, compared name by name: 108 files, 0 differing).
+Round 2's bytes were held at `replays/samples/9p2i/` from `148fa211` to
+`2eed2e92`; round 3's at `replays/candidates/stage-b-r3/` from `a09065cc` (its
+first checkpoint) and `f35ff99c` (its declared config) to `2eed2e92`, through the
+record's merge `c71ea63e`.
+
+#### round 2: 54 files, 0 differing
+
+| at `2eed2e92` | at the head | sha256 |
+|---|---|---|
+| `replays/samples/9p2i/MANIFEST.md` | `replays/candidates/stage-b-r2/9p2i/MANIFEST.md` | `78941baa36a6ac33e166e2cae979f1ff424c84dce6956e9e3bab11e0c510758d` |
+| `replays/samples/9p2i/roster.json` | `replays/candidates/stage-b-r2/9p2i/roster.json` | `01ba485b9aed3cc7517a813afe919581861ccc1439c7249db0cbb06a84644340` |
+| `replays/samples/9p2i/tournament-eval-report.json.gz` | `replays/candidates/stage-b-r2/9p2i/tournament-eval-report.json.gz` | `ce05afee46e85019e5ec98ccfd223705c11654152b711fab55515e0502fafd8c` |
+| `replays/samples/9p2i/replay-seed-0.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-0.jsonl` | `155126d2c1a8c8dfc0876f0347ed399570cc0d29c611e068c12be2720217bc62` |
+| `replays/samples/9p2i/replay-seed-1.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-1.jsonl` | `266fbac33f1971674e108ba8c4da3b8621edc8ead9d971eabc72fe633f494d3a` |
+| `replays/samples/9p2i/replay-seed-2.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-2.jsonl` | `d08bb5da0fc947ea96ea3d1e45aa5b046b0eda0ee2920cb0cfe27b747b64b22b` |
+| `replays/samples/9p2i/replay-seed-3.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-3.jsonl` | `cb6107b392b1ac6d5ad0e7ab6833e165a83e867dee6859eefd281145d79192f1` |
+| `replays/samples/9p2i/replay-seed-4.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-4.jsonl` | `562ca5846f8a29b2444b2c810b42300580f745823c6ab8646f84086be1fcf336` |
+| `replays/samples/9p2i/replay-seed-5.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-5.jsonl` | `01ef9eb75d30f331621fb892d2ccea3ef52b05343873cf3062907a7ff671655b` |
+| `replays/samples/9p2i/replay-seed-6.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-6.jsonl` | `254aa95e2dd6f7698515307d4090454a8e020faadbe8c92758c544c2f9d56de3` |
+| `replays/samples/9p2i/replay-seed-7.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-7.jsonl` | `08b911e579d7539c19850efcb34f075aa8d541f5215f73c9563165855101b01d` |
+| `replays/samples/9p2i/replay-seed-8.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-8.jsonl` | `0a8e56248b053ce44de880ae19111f965054228b18e1764b0e25212198b91e5c` |
+| `replays/samples/9p2i/replay-seed-9.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-9.jsonl` | `f0fdb66ed38945e23e2fe8bd03026e05cf1cf8993117816790ec059c1a2a39a0` |
+| `replays/samples/9p2i/replay-seed-10.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-10.jsonl` | `48cb758e4516ff90754ab4d4699a98e347e234e10f0c1352f1c8e3b79079a64e` |
+| `replays/samples/9p2i/replay-seed-11.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-11.jsonl` | `63792832f75fd2e5ed9beb8839b8c9d9350394ab0c2f11fc8fb82ead2e452657` |
+| `replays/samples/9p2i/replay-seed-12.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-12.jsonl` | `4dc586360f54f8c445de35ede4b4dba076906793621f4e2825a45a9a87f805da` |
+| `replays/samples/9p2i/replay-seed-13.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-13.jsonl` | `1063f3fa59473e3ea55cfb7fca7ac0fd4a0f4ae4af2c9e4268c030960bcae498` |
+| `replays/samples/9p2i/replay-seed-14.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-14.jsonl` | `0b02948a4e25de188a39872567ffa13580f68a6f60dde070c81c0e90f29b4392` |
+| `replays/samples/9p2i/replay-seed-15.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-15.jsonl` | `4374910278c49ea406326164ef0e3028d5c64b0b9712ebf77e72a41c1dd65a01` |
+| `replays/samples/9p2i/replay-seed-16.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-16.jsonl` | `a0c0151ebd58ab2016d82b7abee4fb6b387b40d8239d4831e5d2270e47eb6411` |
+| `replays/samples/9p2i/replay-seed-17.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-17.jsonl` | `239c6821fcdba105e59db0a7d28f2540a92d6dc56e1dd145be2fe14358bfce14` |
+| `replays/samples/9p2i/replay-seed-18.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-18.jsonl` | `b6de226b5dcf3a7b87c7a28041f9909100bc1e8cb61c78159e5e1b64d53aa5c6` |
+| `replays/samples/9p2i/replay-seed-19.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-19.jsonl` | `3c2f045f761eeb5bb5d02c8bfeeae9559cd7999b75937f25572e772949b31e64` |
+| `replays/samples/9p2i/replay-seed-20.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-20.jsonl` | `9eb758b49def9cbff03177242687d9154451a08fe9ae7edd4225b4d5144ec025` |
+| `replays/samples/9p2i/replay-seed-21.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-21.jsonl` | `73396964aee3adaef25dd0aa5b2660aa3a222fdf9d1354058bd04828a8c2beca` |
+| `replays/samples/9p2i/replay-seed-22.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-22.jsonl` | `1f6f7d96fa7ff933965611c43ba7036ab5414849f8b83ab7461a53456ef3108f` |
+| `replays/samples/9p2i/replay-seed-23.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-23.jsonl` | `d298f23ac0ff061ea77bbc44ac6828420a2c33dc156fc11ea56fab3be33b6c50` |
+| `replays/samples/9p2i/replay-seed-24.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-24.jsonl` | `bd7006e7098b61fca0d41f98ad3334d33b2c21337cd16026821736b6e1d1f771` |
+| `replays/samples/9p2i/replay-seed-25.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-25.jsonl` | `6a82683c71e77a8d6dfe7e344168fea18358752071defd5647fc12661c43c6a8` |
+| `replays/samples/9p2i/replay-seed-26.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-26.jsonl` | `442b6db851e87079ae1bdccfc68ebc9a52b6dfbefadcb58dd4d4e76dcf1c2a2a` |
+| `replays/samples/9p2i/replay-seed-27.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-27.jsonl` | `a6e0ca34c12a9091dca11795ee02c27b403af8effec547238cfba25b240b4aa1` |
+| `replays/samples/9p2i/replay-seed-28.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-28.jsonl` | `24523d6e57ff2c020a02f68de04a64b8d5f2b22ffe98248ad5b54d73c9b509a3` |
+| `replays/samples/9p2i/replay-seed-29.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-29.jsonl` | `6606b40aec5f10a6d47971d9d4ef642087e83bca6ba00df48a19728ddb3cbb28` |
+| `replays/samples/9p2i/replay-seed-30.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-30.jsonl` | `8c18a6dc325953ad0b92e2c842fd20bddf7e85350ece9b66a06c130643cd0f94` |
+| `replays/samples/9p2i/replay-seed-31.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-31.jsonl` | `e62391a8d9fd74b519c1aeca780cb7cbcd3ede22a18d563d1d0dc6950c37ec87` |
+| `replays/samples/9p2i/replay-seed-32.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-32.jsonl` | `d71297584feb57b328712982ec4dce8074bb4311e21bb49a65bcad13006000cb` |
+| `replays/samples/9p2i/replay-seed-33.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-33.jsonl` | `4063270a26974de1a0134a6ebd38491b8fceb3b0b6f40b19204da700dcce5f42` |
+| `replays/samples/9p2i/replay-seed-34.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-34.jsonl` | `1a130de676363be202ed2693b7899b20daab368ec46940f860ca9cb487dd020e` |
+| `replays/samples/9p2i/replay-seed-35.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-35.jsonl` | `6ee9459a4da0f0702082e2a66fcfdcf9c85e5f6635957858531497775696b009` |
+| `replays/samples/9p2i/replay-seed-36.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-36.jsonl` | `39123907fe06a01b97f6d1b4a82c29fd03df1113e9a47817f987f22b8e0b048f` |
+| `replays/samples/9p2i/replay-seed-37.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-37.jsonl` | `cf23571d8904a90e6cd1e24f199bf974e3c72cee313754b5d03064bd781fbe21` |
+| `replays/samples/9p2i/replay-seed-38.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-38.jsonl` | `ec88a94b38549d2856b32fd22c9222145c221128f31ffe76b2ffda61046ac54c` |
+| `replays/samples/9p2i/replay-seed-39.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-39.jsonl` | `7f3a88e6fa136ce0f3d365be15c1cfef989a542fbc48ee2bfc4251bfc959440b` |
+| `replays/samples/9p2i/replay-seed-40.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-40.jsonl` | `1530708b78f56d3af1599faf13307d727062423ecb3581e8fe7baee956bda983` |
+| `replays/samples/9p2i/replay-seed-41.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-41.jsonl` | `1b30086fe06f1798f3e8002d15ab88fa9fd4a012154a897779aff077be9633ad` |
+| `replays/samples/9p2i/replay-seed-42.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-42.jsonl` | `60d23f9f7c77158efe691fab69703fce714440d0a08ae1d8273a79b49393508a` |
+| `replays/samples/9p2i/replay-seed-43.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-43.jsonl` | `5c48bda2e0707cfc3430f5c678a154bdef812705940740b3f60a39a79122a983` |
+| `replays/samples/9p2i/replay-seed-44.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-44.jsonl` | `4cd837f4a10045ea46518a60a451bd9b3887e5527bb83583f0af33c27249519d` |
+| `replays/samples/9p2i/replay-seed-45.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-45.jsonl` | `19a01db30cf49770bf56855b233df57ad4112580b440cdf09e73c33cfc2110a4` |
+| `replays/samples/9p2i/replay-seed-46.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-46.jsonl` | `5dbdd08e9ab41267ccedc42632f15c2a41b4670932064330b751d8510ed25af5` |
+| `replays/samples/9p2i/replay-seed-47.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-47.jsonl` | `eaa1dcee4750a72dd20375aea4b918383eeebb04be0c5029fcde28d2e92b0fc8` |
+| `replays/samples/9p2i/replay-seed-48.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-48.jsonl` | `81fe976f0d33862c4a18cb2ee17a2f82d7759a09e3cd8dbf3ed1cd50e9ecc6d1` |
+| `replays/samples/9p2i/replay-seed-49.jsonl` | `replays/candidates/stage-b-r2/9p2i/replay-seed-49.jsonl` | `e121c74f6d0ad752c4b34e47b5759d188d0297589d2cc28bcf95a45604d5bb42` |
+| `replays/samples/9p2i/experiment-config.json` | `replays/candidates/stage-b-r2/experiment-config.json` | `0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b` |
+
+#### round 3: 54 files, 0 differing
+
+| at `2eed2e92` | at the head | sha256 |
+|---|---|---|
+| `replays/candidates/stage-b-r3/9p2i/MANIFEST.md` | `replays/samples/9p2i/MANIFEST.md` | `0a14e32fdbe23652f2d50e3bdadf4d6bde1a7e03b867d266436903f6274ab542` |
+| `replays/candidates/stage-b-r3/9p2i/roster.json` | `replays/samples/9p2i/roster.json` | `01ba485b9aed3cc7517a813afe919581861ccc1439c7249db0cbb06a84644340` |
+| `replays/candidates/stage-b-r3/9p2i/tournament-eval-report.json.gz` | `replays/samples/9p2i/tournament-eval-report.json.gz` | `2e2a8816bf82ccd1a81be095468d6fcb1e5b37fa1e746dd9664d2d0064ee4c02` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-0.jsonl` | `replays/samples/9p2i/replay-seed-0.jsonl` | `891f57450f5f9d903506dc9a7fed482eed3b8e10677b490ba5a86eaee03b5af2` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-1.jsonl` | `replays/samples/9p2i/replay-seed-1.jsonl` | `3370ea0c7ee0e002aad5737e096f267b62a5104c8b6db3548a805d46c20bc470` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-2.jsonl` | `replays/samples/9p2i/replay-seed-2.jsonl` | `d5390ded5b1764aa564666aff0c06a72674c4e9001c2ffc017be4152ab3fd086` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-3.jsonl` | `replays/samples/9p2i/replay-seed-3.jsonl` | `109034c3a93303ac960ceff423383b703b3d0dbade6cd5a075da1cc899c8d157` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-4.jsonl` | `replays/samples/9p2i/replay-seed-4.jsonl` | `41ca2679d5146a7ada54315048edc5637cd6d19ce3e74659df057e73c22517a3` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-5.jsonl` | `replays/samples/9p2i/replay-seed-5.jsonl` | `fd3302ce5d489d17bec599c054881631469b452a17f85b280a56eb05037d8eb8` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-6.jsonl` | `replays/samples/9p2i/replay-seed-6.jsonl` | `5991ed8b201e3d727947b55b22cdfac2967eab46d40c88523546f871087348cd` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-7.jsonl` | `replays/samples/9p2i/replay-seed-7.jsonl` | `dc1fecc92c49de6ce89148e1d72a9d62b40e9f29fab3d91a57cd8aa4cb266a75` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-8.jsonl` | `replays/samples/9p2i/replay-seed-8.jsonl` | `5983eda22e64ec619b2a7b87240b6041c1ae0c6051e2cf51af4329925817ca61` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-9.jsonl` | `replays/samples/9p2i/replay-seed-9.jsonl` | `ca82e916d86e554661dfd538ada29dc5b8d92e5c2d6d952fb8684c77ae304906` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-10.jsonl` | `replays/samples/9p2i/replay-seed-10.jsonl` | `f915426f2546c3279ac3554dea7b474be4e435aafe375650120b81e821e500cb` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-11.jsonl` | `replays/samples/9p2i/replay-seed-11.jsonl` | `ab4de5bcbc201222044afe679ac41d9eae43abaca3678983914e747023733818` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-12.jsonl` | `replays/samples/9p2i/replay-seed-12.jsonl` | `06e50e5ebea656538c17999a4f3d65c24135d6d65e103ecaaf0c6f39580e5a94` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-13.jsonl` | `replays/samples/9p2i/replay-seed-13.jsonl` | `63c3dd57f6b2da0123899cd4e988cf69e058ba4e87e0cf75c6f334a0a257c727` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-14.jsonl` | `replays/samples/9p2i/replay-seed-14.jsonl` | `c95511fc892272f0ae974ae9b1d4c6c68a45e0b9e25ed368be89e353d8b96112` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-15.jsonl` | `replays/samples/9p2i/replay-seed-15.jsonl` | `807f5f538489dbc5d72974cb2a2a2d454bdff947a99d1132c99ef7a3cb9ab1dd` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-16.jsonl` | `replays/samples/9p2i/replay-seed-16.jsonl` | `c20eda2bc3f7adc8637bf2f3fc77fe641e9a063a53e6045ce5ccc83cb6c94826` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-17.jsonl` | `replays/samples/9p2i/replay-seed-17.jsonl` | `63b356ca5eff4c663e08c1e13bef0ab43f53d2be491346ab1df83bb8c1fe0c85` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-18.jsonl` | `replays/samples/9p2i/replay-seed-18.jsonl` | `1dab4813efd138ce851f1b84dce0a59d9d9b36799753c5f0eb878ab3a8d3f67a` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-19.jsonl` | `replays/samples/9p2i/replay-seed-19.jsonl` | `01bbbd8b31c6aee0703bffc1fb8943682b825a181a2b8391bdbb71b89c11f31c` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-20.jsonl` | `replays/samples/9p2i/replay-seed-20.jsonl` | `b103e82851dc657b339d6236e552e5987ade7dfee8cdf0c5437a7cf4fc93e23a` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-21.jsonl` | `replays/samples/9p2i/replay-seed-21.jsonl` | `ced74fc7dc46657ffadd7453604bc2303dc5079d57dfc2ac3bb6994923913362` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-22.jsonl` | `replays/samples/9p2i/replay-seed-22.jsonl` | `74bf97639b778ec7791b122975d416a505fdef7fe2ff9486713c1baa5cf8598d` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-23.jsonl` | `replays/samples/9p2i/replay-seed-23.jsonl` | `356ac3ae392c593b91b3d1c167f0006e117a0e07ac51181696e0507a3bbea3fa` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-24.jsonl` | `replays/samples/9p2i/replay-seed-24.jsonl` | `d31d17144b763244e1f029cf98939589f2ec213a2fb309cabcffdba922a9fd41` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-25.jsonl` | `replays/samples/9p2i/replay-seed-25.jsonl` | `452af40d81d49b5b5180da2c3142bf7735033de8a9830e1598a73b04854d8cef` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-26.jsonl` | `replays/samples/9p2i/replay-seed-26.jsonl` | `86adeef0797ba98eeb7808b4ef7550c6a62c45c06dcbc92d4da204dce7e0b3e2` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-27.jsonl` | `replays/samples/9p2i/replay-seed-27.jsonl` | `697d6d939ff478b51038340d44b68181cf18a99ccc8fc798251a146d48628bde` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-28.jsonl` | `replays/samples/9p2i/replay-seed-28.jsonl` | `16b08a89dea9805901283bed55d16abd9b3528dcdc1101a1eb577a6ba487a542` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-29.jsonl` | `replays/samples/9p2i/replay-seed-29.jsonl` | `0eea49a95384431437ae8028b2e3595bf0ce9e41ee325a70fbccfae6aba722e4` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-30.jsonl` | `replays/samples/9p2i/replay-seed-30.jsonl` | `493b80a5808fe8aba7c66fc0ff6895d6d6ee77b6e53f68df05c525f90d89ad7b` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-31.jsonl` | `replays/samples/9p2i/replay-seed-31.jsonl` | `1229e5c426956e1d1e4dc213260e4d9e9b0a3007b089895fb0a5ced584fd79f0` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-32.jsonl` | `replays/samples/9p2i/replay-seed-32.jsonl` | `ea5a858201b2b062ea0df85ca496e4888f53d54d5e490b699355a300fc2118b6` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-33.jsonl` | `replays/samples/9p2i/replay-seed-33.jsonl` | `1df3d2a87d78865b628be184c9f67b7b2857b7826089ecf5d7810f1a5c866284` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-34.jsonl` | `replays/samples/9p2i/replay-seed-34.jsonl` | `916d2d28fbda30a5a9920dc3bc604029d9f1d462700819976aa81fda92695a01` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-35.jsonl` | `replays/samples/9p2i/replay-seed-35.jsonl` | `cc886899d41428803c6de47b068defb3d28ac7411eebd38f589ebe74addb144f` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-36.jsonl` | `replays/samples/9p2i/replay-seed-36.jsonl` | `d7a2b82b12dfd3e5de7e91132f72f678a19546d91b8200b308d6067dca9793ec` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-37.jsonl` | `replays/samples/9p2i/replay-seed-37.jsonl` | `fc3cdf83c56620b6d8557cbfe111594b46f1966256241a85c3ea761e28a8bb2e` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-38.jsonl` | `replays/samples/9p2i/replay-seed-38.jsonl` | `1e0b09209c374c2094a71379362d9c5a714f24a2597dae322f350ec893f67698` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-39.jsonl` | `replays/samples/9p2i/replay-seed-39.jsonl` | `51c3453f643f8c35a6ad9fa29f7d09c0af5aab596f5d4daf37b48d3465eb3554` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-40.jsonl` | `replays/samples/9p2i/replay-seed-40.jsonl` | `74974edeaacc514fc8a59c091f4c515bac3a1357da1e7f146de5dbd3ff7ed737` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-41.jsonl` | `replays/samples/9p2i/replay-seed-41.jsonl` | `2d22c55b00a3628bb6a411d4420515ad565a334b6dbbd4be836808a925baefdc` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-42.jsonl` | `replays/samples/9p2i/replay-seed-42.jsonl` | `af823aec129454ada8a7ab8382a71daf7013caa75b9a72460fa7cf4dcaf5ad84` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-43.jsonl` | `replays/samples/9p2i/replay-seed-43.jsonl` | `50ef3318a0f3de055a529d4e62c6a5275b861ad5235147ba3e4775d13ba36b7b` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-44.jsonl` | `replays/samples/9p2i/replay-seed-44.jsonl` | `503bb25b52988e2416e8b2afaae89ed5b885395dd7266fdf45859b58f59c4d7d` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-45.jsonl` | `replays/samples/9p2i/replay-seed-45.jsonl` | `e1971ffac9985ee0161045e6a0c20c19b53eb549891a9be88c1bd49a7ab69520` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-46.jsonl` | `replays/samples/9p2i/replay-seed-46.jsonl` | `33938445f0a6e7a10b21c08343e132110a0ef7a1c8b18d2236a00eb2d13fd638` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-47.jsonl` | `replays/samples/9p2i/replay-seed-47.jsonl` | `1991d507039b6f3d4958749da131d07d7edffce95560590a939c5dc44cb1216c` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-48.jsonl` | `replays/samples/9p2i/replay-seed-48.jsonl` | `99242f2e7b8643ea1b861c276d0687abfc73b82c810a9949cb65020f9fda37a7` |
+| `replays/candidates/stage-b-r3/9p2i/replay-seed-49.jsonl` | `replays/samples/9p2i/replay-seed-49.jsonl` | `e94472f09037b3bb779edd2dffdae569e564e0167e607fe50985ae0b0ad176ba` |
+| `replays/candidates/stage-b-r3/experiment-config.json` | `replays/samples/9p2i/experiment-config.json` | `a788b9eba5e8f2f5d29033fece2d0dc0dbac7d3528ea93c7c7a93327dbc6d57d` |
+
+### 12.3 The era, and what did not move
+
+`eval/eras.py` names two eras. **baseline-9** owns `replays/samples/4p1i`,
+`replays/ml_corpus/9p2i` and `replays/ml_corpus/4p1i`, unchanged. **stage-b-r3**
+owns `replays/samples/9p2i`: this record, recorded 2026-10-09 under the declared
+config `replays/samples/9p2i/experiment-config.json` (sha256
+`a788b9eba5e8f2f5d29033fece2d0dc0dbac7d3528ea93c7c7a93327dbc6d57d`, 1.3).
+`stage-b-r2` owns no committed set; its declared config is read at
+`replays/candidates/stage-b-r2/experiment-config.json` (sha256
+`0c02fa61069c37131e2369a2a408d1a2f555521d696bbc7823b918709ac5192b`). The
+substrate ladder tip stays at baseline 9, and baseline 10 stays reserved for the
+full re-record that re-freezes the corpus. No instrument pools across eras. The
+corpus, its FROZEN line and every ML artifact keep their bytes and keys; the
+champion-flip comparator stays held at 11 of 50; `replays/samples/4p1i`,
+`replays/ml_corpus/*` and `replays/candidates/stage-b-r1/` are byte-identical.
+The watchability referee scores the shown set against a new `stage-b-r3` stage
+block measured on these bytes at equality (14/192, 54/119, 46/94); its gauges,
+rules, scoring and the layers its walk reads did not change.
+
+### 12.4 The win split
+
+| set | round-2 impostor rate | promoted impostor rate |
+|---|---|---|
+| `samples/9p2i` | 48% (24/50) | **34% (17/50)** |
+
+Read from the set's `MANIFEST.md` `winner` column, at `2eed2e92` and at the
+promoting head. Win split is not a gate and is published only because the front
+door quotes it.
+
+### 12.5 The cells the front door quotes, for the promoted set
+
+Read off the promoted set's eval report, its `deduction.ejectee_proof_cross_tab`
+block: 61 ejections, 46 of an impostor and 15 of an innocent. The before column
+is round 2's record's own `samples/9p2i` rows
+([its §9.6](audit-2026-10-01-stage-b-r2.md)). Intervals are Wilson 95%.
+
+#### Published cell 1 — non-direct conviction accuracy
+
+| set | before | after |
+|---|---|---|
+| `samples/9p2i` | 20/42 = 0.4762 | **22/37 = 0.5946** [0.4349, 0.7365] |
+
+The direct-proof cell for `samples/9p2i` stays perfect: **24/24 = 1.0000**
+[0.8620, 1.0], against 24/24 = 1.0000 on round 2.
+
+#### Published cell 2 — innocent ejections
+
+| set | before | after |
+|---|---|---|
+| `samples/9p2i` | 22 | **15** |
+
+Every innocent ejection sits in the non-direct cell: the proof-present cell is
+innocent-free, 0 of 24, and 37 − 22 = 15.
+
+### 12.6 The before column, grown
+
+The process scorecard's frozen before column (`docs/process-scorecard-before.json`)
+grew by the recording this promotion replaced, in the grow form the orchestrator's
+default names: the baseline-9 block (`samples/9p2i` as published at `d41c9006`)
+stays byte for byte as the file's first block, and round 2's `samples/9p2i`
+entry of `docs/process-scorecard.json` at `2eed2e92` is appended as a second
+block, `era_id` `stage-b-r2`, carried as frozen bytes the publisher never
+recomputes. The pin `BEFORE_COLUMNS_SHA256` moved from
+`b6b8ecaa5ecdde48630a1cb5eec9628d799553fdd6911ab38efdb654e95e38a7` to
+`df88d369d8c320c8b4180309cac4266a90308033231cc55bea1794340fec363b`. Each set
+shows the block of the era its bytes replaced, so `samples/9p2i`, now
+`stage-b-r3`, shows round 2's rows. Nothing is re-scored. The choice is
+reversible: removing the appended block restores the old file's bytes, whose
+sha256 is the old pin.
+
+### 12.7 The candidate-round rule
+
+As the owner's amendment rules it: a promotion deletes the promoted round's
+candidate copy, whose bytes become the committed set, and keeps the bytes it
+replaces as that round's candidate copy, the comparison record that isolates one
+change; every other round stays. Here round 3's directory is deleted, its bytes
+held at `2eed2e92`; round 2's bytes are `replays/candidates/stage-b-r2/`, the
+comparison record for the route lines; round 1 (`replays/candidates/stage-b-r1/`)
+stays as before. The decision memo's proposal that the card landing round r+1
+deletes round r is declined.
+
+### 12.8 The tour on the promoted bytes
+
+The featured strip was re-picked by its measured criterion on these bytes and
+keeps its games: 9p2i seed 19, whose first meeting ejects on a role-proof flag
+and which shows both vent behaviours the map draws before that meeting with the
+sighting from a player other than the body's reporter, and 9p2i seed 14, the one
+opener that ejects an impostor with no flag and no vent event anywhere; the
+4p1i cards are unchanged. No featured game ejects a crewmate, and none is on the
+served profile's reveal-only shelf of games decided wrongly without proof. Both
+curated cases hold sentence by sentence on round 3's seed 19 and stay; their
+source links point at `5095a1c2`, the commit that landed the promoted bytes.

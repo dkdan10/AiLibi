@@ -147,9 +147,9 @@ _SAMPLES_4P1I = _REPO_ROOT / "replays" / "samples" / "4p1i"
 _CORPUS_9P2I = _REPO_ROOT / "replays" / "ml_corpus" / "9p2i"
 _CORPUS_4P1I = _REPO_ROOT / "replays" / "ml_corpus" / "4p1i"
 # The committed sets by recorded era (eval/eras.py). The three baseline-9 sets
-# pool together; samples/9p2i has been its own era (stage-b-r2) since the
-# promotion of 2026-10-02, so a pooled pin sums the three and reads samples/9p2i
-# beside it, never with it.
+# pool together; samples/9p2i has been its own era since the promotion of
+# 2026-10-02 (stage-b-r2, then stage-b-r3 since 2026-10-09), so a pooled pin
+# sums the three and reads samples/9p2i beside it, never with it.
 _BASELINE_9_SETS: Final[tuple[Path, ...]] = tuple(
     _REPO_ROOT / path for path in sets_in(BASELINE_9)
 )
@@ -1731,7 +1731,7 @@ def test_i2_false_crew_self_placement_pins(
         assert crew_cell.denominator == crew_claims
         assert 0 <= crew_cell.numerator <= crew_claims
     assert 0 <= shown.impostor_false.numerator <= shown.impostor_false.denominator
-    assert _counts(shown.crew_false) == (4, 632)
+    assert _counts(shown.crew_false) == (1, 665)  # was (4, 632) on round 2's bytes
     assert _counts(reports[_CORPUS_9P2I].false_whereabouts.crew_false) == (
         17,
         2003,
@@ -1745,15 +1745,21 @@ def test_i2_false_crew_self_placement_pins(
         87,
     )  # was (1, 89)
     # The strict agent-frame reading of the same rule (engine ticks N-1 and N-2).
-    assert _counts(shown.crew_false_agent_frame) == (3, 632)
-    # On the shown bytes none of the 122 impostor self-placements is false,
-    # against 4 of 632 crew claims (the baseline-9 bytes read 1 of 110, baseline
-    # 8 0 of 106). Both arms are under one percent, so neither reads as a measure
-    # of deception.
-    assert _counts(shown.impostor_false) == (0, 122)
+    assert _counts(shown.crew_false_agent_frame) == (
+        1,
+        665,
+    )  # was (3, 632) on round 2's bytes
+    # On the shown bytes one of the 118 impostor self-placements is false,
+    # against 1 of 665 crew claims (round 2's bytes read 0 of 122 and 4 of 632,
+    # the baseline-9 bytes 1 of 110, baseline 8 0 of 106). Both arms are under one
+    # percent, so neither reads as a measure of deception.
+    assert _counts(shown.impostor_false) == (1, 118)  # was (0, 122) on round 2's bytes
     # Self-placement coverage: how often a rendered self-location row carried the
     # exact (tick, room) pair the claim used.
-    assert _counts(shown.copyable_self_location) == (34, 632)
+    assert _counts(shown.copyable_self_location) == (
+        31,
+        665,
+    )  # was (34, 632) on round 2's bytes
 
 
 @pytest.mark.slow
@@ -1770,7 +1776,7 @@ def test_i3_sole_flag_precision_pins(
     ]
     assert per_victim == [(0, 0), (1, 1), (0, 0), (0, 0)]
     # Pooled within an era only: the three baseline-9 sets (samples/9p2i, the
-    # stage-b-r2 era, is the first entry above and is never pooled with them).
+    # stage-b-r3 era, is the first entry above and is never pooled with them).
     assert (sum(n for n, _ in per_victim[1:]), sum(d for _, d in per_victim[1:])) == (
         1,
         1,
@@ -1906,8 +1912,8 @@ def test_i5_fabricated_completion_pins(
     # fabricated row no prompt carried poisoned nobody.
     assert _counts(reports[_SAMPLES_9P2I].fabricated_completions.fabricated) == (
         0,
-        307,
-    )
+        318,
+    )  # was (0, 307) on round 2's bytes
     assert _counts(reports[_CORPUS_9P2I].fabricated_completions.fabricated) == (
         0,
         854,
@@ -2006,8 +2012,10 @@ def test_i7_movement_origin_flag_pins(
     for sample_dir in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I):
         cells = reports[sample_dir].movement_origin_flags
         assert cells.memory_truthful_spoken_false <= cells.spoke_origin.numerator
-    assert reports[_SAMPLES_9P2I].movement_origin_flags.backed_by_move_line == 1
-    assert reports[_SAMPLES_9P2I].movement_origin_flags.spoke_destination == 1
+    assert (
+        reports[_SAMPLES_9P2I].movement_origin_flags.backed_by_move_line == 2
+    )  # was 1
+    assert reports[_SAMPLES_9P2I].movement_origin_flags.spoke_destination == 2  # was 1
 
 
 @pytest.mark.slow
@@ -2084,7 +2092,7 @@ def test_i10_meeting_physicality_pins(
         _counts(reports[d].meeting_physicality.venting_participants)
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert venting == [(66, 117), (63, 449), (5, 39), (4, 43)]
+    assert venting == [(67, 119), (63, 449), (5, 39), (4, 43)]  # was (66, 117) first
     # The shown set's denominator is every meeting it records.
     shown_meetings = recorded_counts(_SAMPLES_9P2I).meetings
     assert venting[0][1] == shown_meetings
@@ -2098,13 +2106,14 @@ def test_i10_meeting_physicality_pins(
         _counts(reports[d].meeting_physicality.reporter_killed_within_three)
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert killed == [(0, 117), (63, 449), (1, 39), (2, 43)]
+    assert killed == [(0, 119), (63, 449), (1, 39), (2, 43)]  # was (0, 117) first
     assert killed[0][1] == shown_meetings
     assert (sum(n for n, _ in killed[1:]), sum(d for _, d in killed[1:])) == (
         66,
         531,
     )  # was (84, 676) over all four sets
-    assert reports[_SAMPLES_9P2I].meeting_physicality.body_triggered_meetings == 114
+    # was 114 on round 2's bytes
+    assert reports[_SAMPLES_9P2I].meeting_physicality.body_triggered_meetings == 115
 
     # The coherent reporter rate beside it: only a body-triggered meeting HAS a
     # reporter to kill, so the numerator is identical and only the denominator
@@ -2114,7 +2123,7 @@ def test_i10_meeting_physicality_pins(
         _counts(reports[d].meeting_physicality.reporter_killed_body_triggered)
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert body_killed == [(0, 114), (63, 416), (1, 36), (2, 36)]
+    assert body_killed == [(0, 115), (63, 416), (1, 36), (2, 36)]  # was (0, 114) first
     assert [n for n, _ in body_killed] == [n for n, _ in killed]
     assert reports[
         _CORPUS_9P2I
@@ -2147,7 +2156,7 @@ def test_the_agent_clock_is_proved_on_every_committed_set(
         reports[d].clock_alignment_checked
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert checked == [7789, 9725, 382, 417]
+    assert checked == [8204, 9725, 382, 417]  # was 7789 first, on round 2's bytes
     # A count of what the tree holds, per era: the three baseline-9 sets, then
     # the shown set on its own above.
     assert sum(checked[1:]) == 10524
@@ -2157,7 +2166,7 @@ def test_the_agent_clock_is_proved_on_every_committed_set(
         reports[d].clock_alignment_action_stamped
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     ]
-    assert stamped == [8, 301, 18, 27]
+    assert stamped == [10, 301, 18, 27]  # was 8 first, on round 2's bytes
     assert all(count > 0 for count in stamped)
 
 
@@ -2170,20 +2179,21 @@ def test_render_budget_pins(reports: Mapping[Path, EvidenceHonestyReport]) -> No
     # partition the testimony rows.
     budget = reports[_SAMPLES_9P2I].render_budget
     assert budget.snapshots == recorded_counts(_SAMPLES_9P2I).prompts
-    assert budget.rendered_lines_total == 57_330
+    assert budget.rendered_lines_total == 58_280  # was 57_330 on round 2's bytes
     assert budget.rendered_lines_mean == pytest.approx(
         budget.rendered_lines_total / budget.snapshots
     )
-    assert budget.rendered_lines_mean == pytest.approx(38.169107856191744, abs=1e-4)
+    # was 38.169107856191744 on round 2's bytes
+    assert budget.rendered_lines_mean == pytest.approx(38.26657912015759, abs=1e-4)
     assert budget.testimony_rows_total <= budget.rendered_lines_total
     assert (
         sum(budget.testimony_rows_by_living_bucket.values())
         == budget.testimony_rows_total
     )
     assert dict(budget.testimony_rows_by_living_bucket) == {
-        "5-6": 19991,
-        "<=4": 6237,
-        ">=7": 1977,
+        "5-6": 19819,  # was 19991 on round 2's bytes
+        "<=4": 7236,  # was 6237
+        ">=7": 1959,  # was 1977
     }
     # Measured, not assumed: no recorded 4p1i prompt carries a reported-testimony
     # row at all, which is why the census is reported per candidate-count bucket
@@ -2499,7 +2509,7 @@ def test_self_placement_coverage_pins(
         census = placement[sample_dir]
         assert census.crew_claims > 0
         assert census.in_record == census.crew_claims
-    assert placement[_SAMPLES_9P2I].crew_claims == 632
+    assert placement[_SAMPLES_9P2I].crew_claims == 665  # was 632 on round 2's bytes
     assert placement[_CORPUS_9P2I].crew_claims == 2003  # was 1920
     assert placement[_SAMPLES_4P1I].crew_claims == 79
     assert placement[_CORPUS_4P1I].crew_claims == 87  # was 89
@@ -2515,14 +2525,14 @@ def test_self_placement_coverage_pins(
             census.crew_claims,
         )
     # On the shown set a claim older than the twelve most recent spans the trail
-    # renders can fall outside the cap: in seed 47's fourth meeting a crewmate
-    # places itself at tick 2, older than the twelve most recent spans (and one
-    # public-regroup step) the trail renders, so 631 of the 632 claim ticks reach
-    # the prompt (the record holds all 632). Both legs render the same, since the
-    # trail is unconditional.
+    # renders can fall outside the cap, so 664 of the 665 claim ticks reach the
+    # prompt (the record holds all 665). On round 2's bytes 631 of 632 did: in
+    # seed 47's fourth meeting a crewmate placed itself at tick 2, older than the
+    # twelve most recent spans (and one public-regroup step) the trail renders.
+    # Both legs render the same, since the trail is unconditional.
     samples = placement[_SAMPLES_9P2I]
     assert samples.rendered_off == samples.rendered_on <= samples.crew_claims
-    assert (samples.rendered_off, samples.rendered_on) == (631, 631)
+    assert (samples.rendered_off, samples.rendered_on) == (664, 664)  # was (631, 631)
     assert samples.in_record == samples.crew_claims
 
 
@@ -2549,8 +2559,8 @@ def test_the_trail_s_budget_cost_is_measured_not_assumed(
     assert samples.renders == recorded_counts(_SAMPLES_9P2I).ballots
     assert samples.added_tokens == 0
     assert (samples.renders, samples.trail_steps, samples.added_tokens) == (
-        691,
-        5686,
+        702,  # was 691 on round 2's bytes
+        5844,  # was 5686
         0,
     )
     assert (
@@ -2587,7 +2597,7 @@ def test_the_completed_task_row_names_the_engine_truth_room(
     # RETAINED composite the speaker held, whose non-elastic belief block leaves
     # less room than a fresh one (the per-span route this one replaced renders 817
     # here and 2394 on the corpus). The residual is carried, not smoothed.
-    assert placement[_SAMPLES_9P2I].completion_rows == 336
+    assert placement[_SAMPLES_9P2I].completion_rows == 357  # was 336 on round 2's bytes
     assert placement[_CORPUS_9P2I].completion_rows == 1331  # was 1731
     assert placement[_SAMPLES_4P1I].completion_rows == 37
     assert placement[_CORPUS_4P1I].completion_rows == 39
@@ -3060,7 +3070,9 @@ def test_the_movement_census_covers_every_committed_meeting(
     # three baseline-9 sets, then samples/9p2i), so the movement channel has a
     # real population to read.
     assert sum(movement[d].spoken_transitions for d in _BASELINE_9_SETS) == 1_108
-    assert movement[_SAMPLES_9P2I].spoken_transitions == 389
+    assert (
+        movement[_SAMPLES_9P2I].spoken_transitions == 390
+    )  # was 389 on round 2's bytes
 
 
 @pytest.mark.slow
@@ -3076,7 +3088,7 @@ def test_the_origin_spoken_flags_stop_minting(
     # The same class the review's I-7 counted (7/76, 30/233, 0/3, 1/1), counted
     # here off a live re-derivation of the OFF leg rather than off the recorded
     # flags, so it is not the report cell's reading.
-    assert per_set == [(27, 35), (60, 86), (0, 0), (0, 0)]
+    assert per_set == [(24, 32), (60, 86), (0, 0), (0, 0)]  # was (27, 35) first
     origin = sum(n for n, _ in per_set)
     # Pooled within an era only: the three baseline-9 sets.
     baseline_9 = [
@@ -3090,7 +3102,7 @@ def test_the_origin_spoken_flags_stop_minting(
     assert [
         movement[d].origin_strong
         for d in (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
-    ] == [5, 19, 0, 0]
+    ] == [7, 19, 0, 0]  # was 5 first, on round 2's bytes
     # ON: on these bytes every one of the origin flags stops minting outright;
     # none keeps its event pair by quoting the room the witness actually saw the
     # subject enter (baseline 8: 59 dissolved, 1 survived naming the destination).
@@ -3138,7 +3150,7 @@ def test_the_price_of_the_lever_in_the_other_direction(
     # live accessor drops them
     assert per_set == [2, 9, 0, 0]
     # Counted within an era only: the three baseline-9 sets, then samples/9p2i
-    # (stage-b-r2) alone.
+    # (stage-b-r3) alone.
     era = _BASELINE_9_SETS
     assert sum(movement[d].new_flags for d in era) == 9
     assert sum(movement[d].new_flags_strong for d in sets) == 0
@@ -3154,7 +3166,8 @@ def test_the_price_of_the_lever_in_the_other_direction(
     assert sum(movement[d].strong_alibi_vs_sighting_on for d in era) == 16
     # The shown set: its new flags split by subject, and the engine can back at
     # most every one of them. Here both name impostors on a placement the engine
-    # does not agree with, and a STRONG band of 9 reads 4 with the lever.
+    # does not agree with, and a STRONG band of 11 reads 4 with the lever (9
+    # read 4 on round 2's bytes).
     samples = movement[_SAMPLES_9P2I]
     assert samples.new_subject_crewmate + samples.new_subject_impostor == (
         samples.new_flags
@@ -3166,7 +3179,7 @@ def test_the_price_of_the_lever_in_the_other_direction(
         samples.new_destination_engine_true,
         samples.strong_alibi_vs_sighting_off,
         samples.strong_alibi_vs_sighting_on,
-    ) == (0, 2, 0, 9, 4)
+    ) == (0, 2, 0, 11, 4)  # was (0, 2, 0, 9, 4) on round 2's bytes
     # "No new flag class in their place": the ON kinds are a subset of the OFF
     # kinds on every set — the lever re-reads placements, it invents no rule.
     for sample_dir in sets:
@@ -3511,7 +3524,7 @@ def test_the_grounded_census_covers_every_committed_meeting(
     # The shown set's two readings, the movement lever never the wider one.
     samples = grounded[_SAMPLES_9P2I]
     assert samples.strong_move <= samples.strong_off
-    assert (samples.strong_off, samples.strong_move) == (9, 4)
+    assert (samples.strong_off, samples.strong_move) == (10, 3)  # was (9, 4)
 
 
 @pytest.mark.slow
@@ -3523,9 +3536,9 @@ def test_the_grounded_lever_prices_the_prosecution_class(
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     # Direction 1 — what stops being minted, per set.
     per_set = [grounded[d].strong_grounded for d in sets]
-    assert per_set == [3, 5, 0, 0]
+    assert per_set == [0, 5, 0, 0]  # was 3 first, on round 2's bytes
     # Everything below is counted within an era only: the three baseline-9 sets,
-    # then samples/9p2i (stage-b-r2) alone.
+    # then samples/9p2i (stage-b-r3) alone.
     era = _BASELINE_9_SETS
     samples = grounded[_SAMPLES_9P2I]
     # Direction 2 — what the class looks like after: every surviving sighting
@@ -3536,24 +3549,32 @@ def test_the_grounded_lever_prices_the_prosecution_class(
         5,
     )
     assert samples.surviving_sides_grounded == samples.surviving_sides
-    assert (samples.surviving_sides, samples.surviving_sides_grounded) == (3, 3)
+    assert (samples.surviving_sides, samples.surviving_sides_grounded) == (
+        0,
+        0,
+    )  # was (3, 3)
     # The pre-record proxy for precision, QUOTED not gated: OFF, the baseline-9
     # sets' class names 9 impostors among 34 distinct subjects, and the 5 it still
     # names under the grounded lever are all impostors; on samples/9p2i it names
-    # 1 impostor among 7, and the 2 it still names are crewmates. Both are far
+    # no impostor among 10 and nobody under the grounded lever (round 2's bytes
+    # named 1 impostor among 7, and 2 crewmates under the lever). Both are far
     # too small to read as precision — a record is what measures that.
     assert (
         sum(grounded[d].off_subjects for d in era),
         sum(grounded[d].off_subject_impostors for d in era),
     ) == (34, 9)
     assert samples.off_subject_impostors <= samples.off_subjects
-    assert (samples.off_subjects, samples.off_subject_impostors) == (7, 1)
+    assert (samples.off_subjects, samples.off_subject_impostors) == (
+        10,
+        0,
+    )  # was (7, 1)
     assert (
         sum(grounded[d].grounded_subjects for d in era),
         sum(grounded[d].grounded_subject_impostors for d in era),
     ) == (5, 5)
     assert samples.grounded_subject_impostors <= samples.grounded_subjects
-    assert (samples.grounded_subjects, samples.grounded_subject_impostors) == (2, 0)
+    # was (2, 0) on round 2's bytes
+    assert (samples.grounded_subjects, samples.grounded_subject_impostors) == (0, 0)
     # The scope firewall: only alibi_vs_sighting moves.
     for sample_dir in sets:
         cell = grounded[sample_dir]
@@ -3563,7 +3584,7 @@ def test_the_grounded_lever_prices_the_prosecution_class(
         assert (cell.new_flags, cell.structural_drift, cell.count_drift) == (0, 0, 0)
     # A count per set, so no count crosses an era.
     assert [grounded[d].bands_off.get("vent_sighting:strong", 0) for d in sets] == [
-        38,
+        39,  # was 38 on round 2's bytes
         317,
         20,
         28,
@@ -3582,7 +3603,7 @@ def test_the_grounded_lever_composed_with_the_movement_lever(
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     # Per set, the STRONG flags left with both levers and with the grounded one.
     assert [grounded[d].strong_both for d in sets] == [0, 1, 0, 0]
-    assert [grounded[d].strong_grounded for d in sets] == [3, 5, 0, 0]
+    assert [grounded[d].strong_grounded for d in sets] == [0, 5, 0, 0]  # was 3 first
     for sample_dir in sets:
         assert grounded[sample_dir].strong_both <= grounded[sample_dir].strong_grounded
     # Within an era only: the three baseline-9 sets, then samples/9p2i alone.
@@ -3625,12 +3646,13 @@ def test_the_sole_flag_wrongful_ejections_lose_their_strong_flag(
     # crewmates. The baseline-9 sets hold 1, and it is an IMPOSTOR: no crewmate
     # is convicted on this class alone, so there is no wrongful ejection for the
     # lever to strip (baseline 8 held 4 crewmates, one of which kept its flag
-    # under the slate). The shown samples/9p2i bytes hold none.
+    # under the slate). The shown samples/9p2i bytes hold one, a crewmate, whose
+    # STRONG flag the slate strips (round 2's bytes held none).
     assert (victims, impostors) == (1, 1)
     assert victims - impostors == 0
     samples = grounded[_SAMPLES_9P2I]
     assert samples.sole_victim_impostors <= samples.sole_victims
-    assert (samples.sole_victims, samples.sole_victim_impostors) == (0, 0)
+    assert (samples.sole_victims, samples.sole_victim_impostors) == (1, 0)  # was (0, 0)
     assert sum(grounded[d].sole_crewmate_still_strong_grounded for d in sets) == 0
     assert sum(grounded[d].sole_crewmate_still_strong_both for d in sets) == 0  # was 1
 
@@ -3952,7 +3974,7 @@ def test_the_corridor_census_covers_every_committed_meeting(
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     assert sum(corridors[d].meetings for d in sets) == _committed_meeting_total()
     # Per set (baseline 6: 234).
-    assert [corridors[d].strong_off for d in sets] == [9, 35, 0, 0]
+    assert [corridors[d].strong_off for d in sets] == [11, 35, 0, 0]  # was 9 first
 
 
 @pytest.mark.slow
@@ -3965,10 +3987,10 @@ def test_i6_adjacent_room_strong_share_on_the_records_free_leg(
     off = [(corridors[d].adjacent_off, corridors[d].strong_off) for d in sets]
     # The review's pooled 148/234 = 63.2%, re-derived here rather than restated.
     # On these bytes the baseline-9 sets' re-derived class is 35 STRONG flags, 24
-    # of them one doorway apart, and samples/9p2i (stage-b-r2) is read beside
+    # of them one doorway apart, and samples/9p2i (stage-b-r3) is read beside
     # them, never pooled (the report cell reads the recorded flags instead).
     # was also an ON half, the same call as the OFF one since the lever graduated
-    assert off == [(6, 9), (24, 35), (0, 0), (0, 0)]
+    assert off == [(8, 11), (24, 35), (0, 0), (0, 0)]  # was (6, 9) first
     assert off[0][0] <= off[0][1]
     baseline_9 = [
         (corridors[d].adjacent_off, corridors[d].strong_off) for d in _BASELINE_9_SETS
@@ -4004,7 +4026,12 @@ def test_the_instrument_and_the_detector_read_one_adjacency_rule(
     # was also direction 1 (nothing demoted off-adjacent), 0 by construction
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     kept = sum(corridors[d].adjacent_kept_strong for d in sets)
-    assert [corridors[d].adjacent_kept_strong for d in sets] == [6, 24, 0, 0]
+    assert [corridors[d].adjacent_kept_strong for d in sets] == [
+        8,
+        24,
+        0,
+        0,
+    ]  # was 6 first
     assert sum(corridors[d].adjacent_off for d in sets) == kept
     gaps = [
         gap
@@ -4021,7 +4048,12 @@ def test_the_instrument_and_the_detector_read_one_adjacency_rule(
         )
         for d in sets
     ]
-    assert recorded == [(0, 1, 5), (1, 4, 19), (0, 0, 0), (0, 0, 0)]
+    assert recorded == [
+        (0, 0, 8),
+        (1, 4, 19),
+        (0, 0, 0),
+        (0, 0, 0),
+    ]  # was (0, 1, 5) first
     for sample_dir, split in zip(sets, recorded, strict=True):
         assert sum(split) == corridors[sample_dir].adjacent_kept_strong
 
@@ -4045,7 +4077,7 @@ def test_the_guard_reports_the_interior_boundary_class(
 
     sets = (_SAMPLES_9P2I, _CORPUS_9P2I, _SAMPLES_4P1I, _CORPUS_4P1I)
     near = [corridors[d].adjacent_kept_near_interior_boundary for d in sets]
-    assert near == [6, 21, 0, 0]
+    assert near == [8, 21, 0, 0]  # was 6 first, on round 2's bytes
     for d in sets:
         assert (
             corridors[d].adjacent_kept_near_interior_boundary
@@ -4099,9 +4131,10 @@ def _sighting_ticks_covered(view: str) -> int:
 # 9p2i at audits/audit-phase-20-preregistration.md:351-356). The re-render
 # recounts it from the memories rather than from the recorded prompts, so the two
 # agree only if the reconstruction is faithful. The census reads the baseline-9
-# era's nine-player set, ml_corpus/9p2i, since samples/9p2i moved to the
-# stage-b-r2 era (2026-10-02): there the recorded cell counts the one-reply calls
-# a snapshot per living player does not, and the two means sit 0.23 rows apart.
+# era's nine-player set, ml_corpus/9p2i, since samples/9p2i left that era on
+# 2026-10-02 (stage-b-r2, then stage-b-r3 since 2026-10-09): on round 2's bytes
+# the recorded cell counted the one-reply calls a snapshot per living player
+# does not, and the two means sat 0.23 rows apart.
 _COMMITTED_OFF_MEAN: Final[float] = 39.0830  # was 37.8943 on samples/9p2i
 # The ON-path row count the review PROJECTED (53.2 x 0.68), falsified by the
 # measurement below, and the cell that replaces it as the ratified pin.

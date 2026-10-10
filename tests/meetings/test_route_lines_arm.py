@@ -92,6 +92,8 @@ from orchestrator.replay import (
     read_all_entries,
     recorded_experiment_config,
 )
+from eval.eras import COMMITTED_SETS as REGISTERED_SETS
+from eval.eras import STAGE_B_R2, CommittedSet
 from tests._helpers.committed import candidate_rounds
 from tests._helpers.scripted_meeting import record_game
 from tests._helpers.scripted_routes import record_routes_game, round_two_config
@@ -160,9 +162,12 @@ def test_the_field_is_declared_last_in_the_meeting_layer_and_omitted_at_default(
 
 
 def _round_two_file() -> str:
-    return (
-        _REPO / "replays" / "samples" / "9p2i" / "experiment-config.json"
-    ).read_text(encoding="utf-8")
+    """Round 2's declared file, at its candidate copy since round 3's promotion
+    (was ``replays/samples/9p2i/experiment-config.json``)."""
+
+    kept = STAGE_B_R2.declared_config
+    assert kept is not None
+    return (_REPO / kept).read_text(encoding="utf-8")
 
 
 def test_round_twos_file_plus_the_field_validates_at_format_one() -> None:
@@ -213,13 +218,15 @@ def test_every_committed_experiment_config_file_reserializes_unchanged() -> None
     assert _config_file_problems() == []
 
 
-#: Every committed replay set, read through its first replay's recorded settings.
+#: Every committed replay set, read through its first replay's recorded settings
+#: (round 2's candidate copy added at round 3's promotion).
 _COMMITTED_SETS: Final[tuple[str, ...]] = (
     "samples/9p2i",
     "samples/4p1i",
     "ml_corpus/9p2i",
     "ml_corpus/4p1i",
     "candidates/stage-b-r1/9p2i",
+    "candidates/stage-b-r2/9p2i",
 )
 
 
@@ -277,15 +284,45 @@ def _declared_configs_recording_the_field_on(candidates: Path) -> frozenset[Path
     return frozenset(declared)
 
 
+def _era_configs_recording_the_field_on(
+    replays: Path, registry: Sequence[CommittedSet] = REGISTERED_SETS
+) -> Mapping[str, Path]:
+    """Each committed set whose era's declared config reads the field ON, and that file.
+
+    The sets come from the era registry, never from a path named here: an era
+    that declares a config names its file, and a set filed under it counts when
+    that file reads the field ON and every replay of the set recorded it at the
+    file's value. Since round 3's promotion the shown 9-player set is the one.
+    ``replays`` may be a scratch tree; the registry's paths are read beside it.
+    """
+
+    root = replays.parent
+    found: dict[str, Path] = {}
+    for entry in registry:
+        declared = entry.era.declared_config
+        if declared is None or not (root / declared).is_file():
+            continue
+        data = (root / declared).read_bytes()
+        value = RecordedExperimentConfig.model_validate_json(data).route_lines_version
+        recorded = sorted((root / entry.path).glob("replay-seed-*.jsonl"))
+        if value is not None and recorded:
+            if all(_recorded_route_lines(path) == value for path in recorded):
+                found[entry.label] = root / declared
+    return found
+
+
 def _config_files_reading_the_field_on(replays: Path) -> list[str]:
     """Each ``experiment-config.json`` under ``replays`` that reads the field ON.
 
-    The one exception is a candidate round's declared config whose round
-    recorded the field ON; any other file reading it ON is listed, under
-    ``samples/`` or ``ml_corpus/`` always.
+    The exceptions are a candidate round's declared config whose round recorded
+    the field ON, and a committed set's era config whose set recorded it ON
+    (:func:`_era_configs_recording_the_field_on`); any other file reading it ON
+    is listed, under ``ml_corpus/`` always.
     """
 
-    declared = _declared_configs_recording_the_field_on(replays / "candidates")
+    declared = _declared_configs_recording_the_field_on(
+        replays / "candidates"
+    ) | frozenset(_era_configs_recording_the_field_on(replays).values())
     return [
         path.relative_to(replays.parent).as_posix()
         for path in sorted(replays.rglob("experiment-config.json"))
@@ -302,8 +339,9 @@ def _committed_payloads_reading_the_field_on(
 ) -> list[str]:
     """Each committed payload, config file under ``replays`` or set in ``sets`` reading it ON.
 
-    A candidate round's declared config whose round recorded the field ON is the
-    one file left out (:func:`_config_files_reading_the_field_on`).
+    A candidate round's declared config whose round recorded the field ON, and a
+    committed set's era config whose set recorded it ON, are the files left out
+    (:func:`_config_files_reading_the_field_on`); that set is the one set left out.
     """
 
     if not sets:
@@ -324,7 +362,10 @@ def _committed_payloads_reading_the_field_on(
                     ).route_lines_version:
                         found.append(path.relative_to(_REPO).as_posix())
     found += _config_files_reading_the_field_on(replays)
+    adopted = _era_configs_recording_the_field_on(replays)
     for name in sets:
+        if name in adopted:
+            continue
         first = min((replays / name).glob("replay-seed-*.jsonl"))
         recorded = recorded_experiment_config(read_all_entries(first))
         if (recorded or RecordedExperimentConfig()).route_lines_version is not None:
@@ -333,16 +374,23 @@ def _committed_payloads_reading_the_field_on(
 
 
 def test_every_committed_payload_reads_the_field_off() -> None:
-    """A missing key means OFF: no committed payload, file or set reads the field ON.
+    """A missing key means OFF: no committed payload, file or set reads the field ON
+    but the shown era's.
 
     The byte test above cannot see a flipped default, since the omission keys on
-    the default and the bytes would still round-trip; this one can. The one file
-    that may read it ON is a candidate round's declared config whose round
-    recorded it ON, enumerated from the candidate declarations.
+    the default and the bytes would still round-trip; this one can. The files
+    that may read it ON are a candidate round's declared config whose round
+    recorded it ON, enumerated from the candidate declarations, and an era's
+    declared config whose committed set recorded it ON, enumerated from the era
+    registry: since round 3's promotion (2026-10-09) that is the shown 9-player
+    set's, and no other set.
     """
 
     found = _committed_payloads_reading_the_field_on(_REPO / "replays", _COMMITTED_SETS)
     assert found == []
+    assert set(_era_configs_recording_the_field_on(_REPO / "replays")) == {
+        "samples/9p2i"
+    }
 
 
 #: The planted round's directory name in a scratch ``replays/`` tree.
@@ -351,6 +399,7 @@ _PLANTED_ROUND: Final[str] = "planted"
 _PLANTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
     {
         "as declared": (),
+        "the shown set as its era declares": (),
         "samples on": ("replays/samples/9p2i/experiment-config.json",),
         "corpus on": ("replays/ml_corpus/9p2i/experiment-config.json",),
         "a set recorded on": ("samples/9p2i",),
@@ -386,7 +435,7 @@ def _plant_replays(root: Path, games: _Games, plant: str) -> Path:
     """A scratch ``replays/``: round 2's declared set, and a round declaring the field ON.
 
     ``samples/9p2i`` holds round 2's declared file and the fake rehearsal's OFF
-    game. The round's config is round 2's file with the field added (round 3's
+    game, or, as the shown era declares it, the ON file and the ON game. The round's config is round 2's file with the field added (round 3's
     declared bytes), declared by its sha256 for two seeds of set ``9p2i`` whose
     replays are the fake rehearsal's ON game; ``plant`` perturbs one part. Two
     plants hold other ON bytes (the field's key first), so the sha256 compared is
@@ -400,10 +449,13 @@ def _plant_replays(root: Path, games: _Games, plant: str) -> Path:
     replays = root / "replays"
     samples = replays / "samples" / "9p2i"
     samples.mkdir(parents=True)
+    shown_on = plant == "the shown set as its era declares"
     (samples / "experiment-config.json").write_text(
-        on if plant == "samples on" else off, encoding="utf-8"
+        on if plant == "samples on" or shown_on else off, encoding="utf-8"
     )
-    shown = games.fake_on if plant == "a set recorded on" else games.fake_off
+    shown = (
+        games.fake_on if plant == "a set recorded on" or shown_on else games.fake_off
+    )
     shutil.copyfile(shown, samples / "replay-seed-0.jsonl")
     if plant == "corpus on":
         corpus = replays / "ml_corpus" / "9p2i"
@@ -451,8 +503,9 @@ def test_only_a_declared_round_recording_the_field_on_may_read_it_on(
 ) -> None:
     """Planted: the case's walk over a scratch ``replays/``, one part perturbed.
 
-    An ON file under ``samples/`` or ``ml_corpus/`` is listed, and so is a listed
-    set that recorded the field ON, and a round's ON file when its declaration
+    An ON file under ``ml_corpus/`` is listed, and so is an ON file under
+    ``samples/`` whose set recorded the field OFF and a listed set that recorded
+    it ON under an OFF era file (the shown set ON as its era declares is not), and a round's ON file when its declaration
     names other bytes than the file holds, names no set or appears twice, or a
     declared seed (of any declared set) is missing or recorded the field OFF; the
     round as declared is not, on round 3's bytes or on other ON bytes it declares,
@@ -484,9 +537,11 @@ def test_without_its_omission_the_committed_payloads_and_files_fail(
     first_file = min(arms_tests._ARCHIVE.glob("*.jsonl"))
     assert mismatch == f"{first_file.relative_to(_REPO)}:1"
     assert rows == 1
+    # Round 2's file moved to its candidate copy (was the samples path); the
+    # shown set's file holds the field's key, so it re-serializes either way.
     assert _config_file_problems() == [
         "replays/candidates/stage-b-r1/experiment-config.json",
-        "replays/samples/9p2i/experiment-config.json",
+        "replays/candidates/stage-b-r2/experiment-config.json",
     ]
 
 

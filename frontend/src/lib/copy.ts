@@ -411,7 +411,7 @@ export const SPECTATOR_COPY = Object.freeze({
     // The recorded weighing artefact: who this voter wrote down while choosing.
     // The heading deliberately claims NOTHING about who those are — an earlier
     // "Also weighed" said the OTHER players, and the bytes falsify that. Over
-    // `replays/samples/9p2i`, 28 of 691 ballots list the voter ITSELF (measured
+    // `replays/samples/9p2i`, 27 of 702 ballots list the voter ITSELF (measured
     // by `scripts/measure_featured_criterion.py --alternatives`); none lists the
     // target the vote applied to, which the ballot schema still admits, and the
     // recordings also admit an id no longer in the game and the literal `SKIP`.
@@ -515,6 +515,9 @@ export const SPECTATOR_COPY = Object.freeze({
       "impostors in a vent wait briefly for the rooms they can see to clear before coming out, set for these recordings",
     killCooldownOne: "a kill cooldown of {ticks} tick set for these recordings",
     killCooldownMany: "a kill cooldown of {ticks} ticks set for these recordings",
+    // The route lines: kept in the shown recordings since 2026-10-09, not adopted.
+    routeLines:
+      "each ballot lists which changes of room stated at the meeting the doors, or the restart after a meeting, allow, set for these recordings",
     // The settings that stay experiments.
     evidenceReasoning: "observation timing and travel checks v{version}",
     investigation: "bounded missing-player searches",

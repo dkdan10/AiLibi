@@ -50,9 +50,9 @@ Every one of them is a candidate. The publisher classes each per era:
 ## `replays/samples/9p2i`
 
 * rubric version: 2
-* era: `stage-b-r2`
-* MANIFEST key: `43b5ee45`
-* source fingerprint: `sha256:ebb629f67c36607e39733660db7e069729fff198adcf34c091a4d6252d796ae2`
+* era: `stage-b-r3`
+* MANIFEST key: `641b4254`
+* source fingerprint: `sha256:ea53a00f4c59aa23dd6c014c92443b36049ee192ec8a33e07d3ca69301f55329`
 * seedset: `9p2i`
 * games: 50
 
@@ -60,44 +60,44 @@ Every one of them is a candidate. The publisher classes each per era:
 
 | reading | ejections | games | entries (seed, meeting index) |
 | --- | --- | --- | --- |
-| decisive, the governing reading: the ejecting ballots labelled off-target, uncited or invalid-citation removed | 1 | 1 | (26, 2) |
-| decisive, those ballots read as SKIP instead | 1 | 1 | (26, 2) |
-| decisive, every ballot so labelled removed, whatever its target | 1 | 1 | (26, 2) |
+| decisive, the governing reading: the ejecting ballots labelled off-target, uncited or invalid-citation removed | 0 | 0 | none |
+| decisive, those ballots read as SKIP instead | 0 | 0 | none |
+| decisive, every ballot so labelled removed, whatever its target | 0 | 0 | none |
 | every ejecting ballot so labelled | 0 | 0 | none |
-| any ejecting ballot so labelled | 2 | 2 | (26, 2), (41, 0) |
+| any ejecting ballot so labelled | 1 | 1 | (44, 0) |
 | the ejected player named by an alibi-class flag row 3 classes as manufactured | 0 | 0 | none |
 
-The governing readings trip seed 26. Row 3 can answer 1 of this set's 15 alibi-class flags, so the manufactured-contradiction tripwire is nearly blind here.
+The governing readings trip no game. Row 3 can answer 0 of this set's 15 alibi-class flags, so the manufactured-contradiction tripwire is nearly blind here.
 
 ### Shelves before the reveal
 
 | shelf | games | seeds |
 | --- | --- | --- |
-| The reporter saw it happen | 14 | 0, 1, 7, 9, 16, 19, 23, 28, 29, 30, 32, 35, 38, 43 |
+| The reporter saw it happen | 13 | 0, 7, 19, 23, 28, 29, 30, 32, 35, 38, 43, 45, 46 |
 | Double kill | 7 | 1, 3, 4, 8, 21, 24, 32 |
-| Slow burn | 11 | 1, 5, 6, 8, 18, 19, 22, 25, 32, 39, 47 |
-| Two kills after one regroup | 6 | 0, 4, 12, 13, 16, 36 |
-| A close call | 16 | 0, 1, 9, 16, 21, 22, 23, 24, 25, 31, 36, 37, 38, 41, 43, 47 |
-| Suspicion moved | 16 | 0, 1, 7, 8, 9, 13, 18, 21, 25, 30, 34, 35, 38, 39, 40, 47 |
-| A third round | 19 | 0, 1, 3, 8, 9, 15, 16, 17, 18, 19, 22, 24, 32, 37, 38, 39, 41, 47, 49 |
+| Slow burn | 15 | 5, 6, 8, 16, 17, 18, 19, 20, 22, 28, 32, 34, 39, 45, 46 |
+| Suspicion moved | 16 | 0, 8, 13, 17, 21, 24, 26, 28, 30, 32, 34, 35, 36, 39, 40, 49 |
+| A third round | 22 | 0, 3, 8, 9, 13, 15, 17, 18, 19, 20, 21, 22, 26, 28, 32, 37, 39, 41, 45, 46, 48, 49 |
 
-*An eyewitness voted on it* marks 15 meetings in 14 games: 0, 1, 7, 9, 16, 19, 23, 28, 29, 30, 32, 35, 38, 43.
+*An eyewitness voted on it* marks 14 meetings in 13 games: 0, 7, 19, 23, 28, 29, 30, 32, 35, 38, 43, 45, 46.
 
-Games on no tripwire, by how many shelves before the reveal they sit on: 12 on 0, 11 on 1, 11 on 2, 7 on 3, 6 on 4, 1 on 5, 1 on 6.
+Games on no tripwire, by how many shelves before the reveal they sit on: 12 on 0, 17 on 1, 11 on 2, 7 on 3, 2 on 4, 1 on 5.
 
 ### Shelves behind the reveal
 
 | shelf | games | seeds |
 | --- | --- | --- |
-| Caught venting | 19 | 0, 3, 5, 6, 7, 9, 10, 11, 13, 18, 19, 20, 22, 27, 34, 37, 39, 42, 49 |
-| One line, two readings | 20 | 2, 3, 5, 9, 11, 13, 18, 19, 20, 21, 22, 24, 32, 34, 36, 37, 38, 39, 43, 49 |
-| One-vote ejection | 10 | 0, 1, 9, 16, 22, 23, 24, 37, 43, 47 |
-| Nobody voted out | 4 | 4, 15, 31, 36 |
-| Down to the wire | 12 | 0, 3, 8, 9, 13, 15, 16, 18, 29, 37, 38, 41 |
-| Runaway | 14 | 5, 6, 7, 10, 11, 14, 17, 20, 27, 34, 40, 42, 44, 49 |
-| Decided at a meeting | 14 | 0, 1, 5, 7, 9, 10, 11, 19, 20, 27, 34, 37, 48, 49 |
-| Decided without proof: the table was right | 18 (19 ejections) | 0, 1, 7, 8, 9, 14, 16, 17, 19, 20, 24, 32, 34, 37, 38, 40, 44, 47 |
-| Decided without proof: wrong on what it held | 20 (21 ejections) | 2, 8, 9, 12, 13, 21, 22, 23, 24, 25, 28, 29, 30, 33, 35, 39, 43, 45, 46, 48 |
+| Two kills after one regroup | 8 | 0, 1, 2, 4, 12, 26, 36, 38 |
+| A close call | 16 | 0, 1, 2, 8, 21, 22, 24, 25, 30, 33, 35, 37, 43, 45, 46, 49 |
+| Caught venting | 19 | 0, 3, 5, 6, 7, 9, 10, 11, 18, 19, 20, 21, 22, 27, 37, 39, 42, 45, 49 |
+| One line, two readings | 24 | 0, 2, 3, 5, 6, 9, 10, 11, 13, 17, 18, 19, 20, 21, 22, 23, 27, 28, 32, 34, 37, 42, 45, 49 |
+| One-vote ejection | 9 | 0, 1, 21, 22, 24, 25, 33, 37, 45 |
+| Nobody voted out | 8 | 2, 4, 15, 26, 31, 34, 36, 48 |
+| Down to the wire | 12 | 0, 3, 15, 17, 18, 20, 26, 28, 29, 37, 41, 45 |
+| Runaway | 14 | 5, 6, 7, 9, 10, 11, 14, 16, 27, 40, 42, 44, 47, 49 |
+| Decided at a meeting | 15 | 0, 5, 7, 9, 10, 11, 16, 19, 21, 23, 27, 37, 45, 47, 49 |
+| Decided without proof: the table was right | 19 (21 ejections) | 0, 7, 8, 9, 13, 14, 16, 17, 19, 21, 28, 32, 33, 37, 40, 41, 45, 46, 47 |
+| Decided without proof: wrong on what it held | 14 (15 ejections) | 1, 12, 13, 17, 22, 23, 24, 25, 29, 30, 33, 35, 38, 43 |
 
 ### Classes this era
 
@@ -105,56 +105,56 @@ Each row is one 2x2 table over every game of the era: members holding the fact, 
 
 | candidate | games on it | fact | table | p | class |
 | --- | --- | --- | --- | --- | --- |
-| The reporter saw it happen | 14 of 50 | CREWMATE_TASKS | 2, 12, 11, 25 | 0.3030 | a shelf before the reveal |
-| The reporter saw it happen | 14 of 50 | CREWMATE_EJECT | 5, 9, 8, 28 | 0.4737 | a shelf before the reveal |
-| The reporter saw it happen | 14 of 50 | IMPOSTOR_PARITY | 7, 7, 17, 19 | 1.0000 | a shelf before the reveal |
-| The reporter saw it happen | 14 of 50 | some meeting ejected someone | 14, 0, 32, 4 | 0.5660 | a shelf before the reveal |
-| The reporter saw it happen | 14 of 50 | a crewmate was ejected | 7, 7, 14, 22 | 0.5344 | a shelf before the reveal |
-| Double kill | 7 of 50 | CREWMATE_TASKS | 1, 6, 12, 31 | 0.6596 | a shelf before the reveal |
-| Double kill | 7 of 50 | CREWMATE_EJECT | 1, 6, 12, 31 | 0.6596 | a shelf before the reveal |
-| Double kill | 7 of 50 | IMPOSTOR_PARITY | 5, 2, 19, 24 | 0.2387 | a shelf before the reveal |
-| Double kill | 7 of 50 | some meeting ejected someone | 6, 1, 40, 3 | 0.4641 | a shelf before the reveal |
-| Double kill | 7 of 50 | a crewmate was ejected | 3, 4, 18, 25 | 1.0000 | a shelf before the reveal |
-| Slow burn | 11 of 50 | CREWMATE_TASKS | 4, 7, 9, 30 | 0.4446 | a shelf before the reveal |
-| Slow burn | 11 of 50 | CREWMATE_EJECT | 3, 8, 10, 29 | 1.0000 | a shelf before the reveal |
-| Slow burn | 11 of 50 | IMPOSTOR_PARITY | 4, 7, 20, 19 | 0.5010 | a shelf before the reveal |
-| Slow burn | 11 of 50 | some meeting ejected someone | 11, 0, 35, 4 | 0.5635 | a shelf before the reveal |
-| Slow burn | 11 of 50 | a crewmate was ejected | 4, 7, 17, 22 | 0.7412 | a shelf before the reveal |
-| Two kills after one regroup | 6 of 50 | CREWMATE_TASKS | 0, 6, 13, 31 | 0.3192 | a shelf before the reveal |
-| Two kills after one regroup | 6 of 50 | CREWMATE_EJECT | 1, 5, 12, 32 | 1.0000 | a shelf before the reveal |
-| Two kills after one regroup | 6 of 50 | IMPOSTOR_PARITY | 5, 1, 19, 25 | 0.0925 | a shelf before the reveal |
-| Two kills after one regroup | 6 of 50 | some meeting ejected someone | 4, 2, 42, 2 | 0.0655 | a shelf before the reveal |
-| Two kills after one regroup | 6 of 50 | a crewmate was ejected | 2, 4, 19, 25 | 1.0000 | a shelf before the reveal |
-| A close call | 16 of 50 | CREWMATE_TASKS | 3, 13, 10, 24 | 0.5075 | a shelf before the reveal |
-| A close call | 16 of 50 | CREWMATE_EJECT | 4, 12, 9, 25 | 1.0000 | a shelf before the reveal |
-| A close call | 16 of 50 | IMPOSTOR_PARITY | 9, 7, 15, 19 | 0.5470 | a shelf before the reveal |
-| A close call | 16 of 50 | some meeting ejected someone | 14, 2, 32, 2 | 0.5843 | a shelf before the reveal |
-| A close call | 16 of 50 | a crewmate was ejected | 7, 9, 14, 20 | 1.0000 | a shelf before the reveal |
-| Suspicion moved | 16 of 50 | CREWMATE_TASKS | 3, 13, 10, 24 | 0.5075 | a shelf before the reveal |
-| Suspicion moved | 16 of 50 | CREWMATE_EJECT | 5, 11, 8, 26 | 0.7310 | a shelf before the reveal |
-| Suspicion moved | 16 of 50 | IMPOSTOR_PARITY | 8, 8, 16, 18 | 1.0000 | a shelf before the reveal |
-| Suspicion moved | 16 of 50 | some meeting ejected someone | 16, 0, 30, 4 | 0.2919 | a shelf before the reveal |
-| Suspicion moved | 16 of 50 | a crewmate was ejected | 8, 8, 13, 21 | 0.5427 | a shelf before the reveal |
-| A third round | 19 of 50 | CREWMATE_TASKS | 6, 13, 7, 24 | 0.5213 | a shelf before the reveal |
-| A third round | 19 of 50 | CREWMATE_EJECT | 6, 13, 7, 24 | 0.5213 | a shelf before the reveal |
-| A third round | 19 of 50 | IMPOSTOR_PARITY | 7, 12, 17, 14 | 0.2549 | a shelf before the reveal |
-| A third round | 19 of 50 | some meeting ejected someone | 18, 1, 28, 3 | 1.0000 | a shelf before the reveal |
-| A third round | 19 of 50 | a crewmate was ejected | 5, 14, 16, 15 | 0.1391 | a shelf before the reveal |
-| Caught venting | 19 of 50 | CREWMATE_TASKS | 3, 16, 10, 21 | 0.3203 | behind the reveal, by the leak rule |
-| Caught venting | 19 of 50 | CREWMATE_EJECT | 12, 7, 1, 30 | under 0.0001 | behind the reveal, by the leak rule |
-| Caught venting | 19 of 50 | IMPOSTOR_PARITY | 4, 15, 20, 11 | 0.0038 | behind the reveal, by the leak rule |
-| Caught venting | 19 of 50 | some meeting ejected someone | 19, 0, 27, 4 | 0.2839 | behind the reveal, by the leak rule |
-| Caught venting | 19 of 50 | a crewmate was ejected | 4, 15, 17, 14 | 0.0374 | behind the reveal, by the leak rule |
-| One line, two readings | 20 of 50 | CREWMATE_TASKS | 2, 18, 11, 19 | 0.0498 | behind the reveal, by the leak rule |
-| One line, two readings | 20 of 50 | CREWMATE_EJECT | 8, 12, 5, 25 | 0.1004 | behind the reveal, by the leak rule |
-| One line, two readings | 20 of 50 | IMPOSTOR_PARITY | 10, 10, 14, 16 | 1.0000 | behind the reveal, by the leak rule |
-| One line, two readings | 20 of 50 | some meeting ejected someone | 19, 1, 27, 3 | 0.6411 | behind the reveal, by the leak rule |
-| One line, two readings | 20 of 50 | a crewmate was ejected | 8, 12, 13, 17 | 1.0000 | behind the reveal, by the leak rule |
-| Struck after the regroup | 40 of 50 | CREWMATE_TASKS | 8, 32, 5, 5 | 0.1009 | a facet, by the saturation rule |
-| Struck after the regroup | 40 of 50 | CREWMATE_EJECT | 10, 30, 3, 7 | 0.7068 | a facet, by the saturation rule |
-| Struck after the regroup | 40 of 50 | IMPOSTOR_PARITY | 22, 18, 2, 8 | 0.0766 | a facet, by the saturation rule |
-| Struck after the regroup | 40 of 50 | some meeting ejected someone | 36, 4, 10, 0 | 0.5710 | a facet, by the saturation rule |
-| Struck after the regroup | 40 of 50 | a crewmate was ejected | 18, 22, 3, 7 | 0.4880 | a facet, by the saturation rule |
+| The reporter saw it happen | 13 of 50 | CREWMATE_TASKS | 4, 9, 15, 22 | 0.7415 | a shelf before the reveal |
+| The reporter saw it happen | 13 of 50 | CREWMATE_EJECT | 4, 9, 10, 27 | 1.0000 | a shelf before the reveal |
+| The reporter saw it happen | 13 of 50 | IMPOSTOR_PARITY | 5, 8, 12, 25 | 0.7413 | a shelf before the reveal |
+| The reporter saw it happen | 13 of 50 | some meeting ejected someone | 13, 0, 29, 8 | 0.0928 | a shelf before the reveal |
+| The reporter saw it happen | 13 of 50 | a crewmate was ejected | 6, 7, 8, 29 | 0.1489 | a shelf before the reveal |
+| Double kill | 7 of 50 | CREWMATE_TASKS | 2, 5, 17, 26 | 0.6948 | a shelf before the reveal |
+| Double kill | 7 of 50 | CREWMATE_EJECT | 1, 6, 13, 30 | 0.6565 | a shelf before the reveal |
+| Double kill | 7 of 50 | IMPOSTOR_PARITY | 4, 3, 13, 30 | 0.2098 | a shelf before the reveal |
+| Double kill | 7 of 50 | some meeting ejected someone | 6, 1, 36, 7 | 1.0000 | a shelf before the reveal |
+| Double kill | 7 of 50 | a crewmate was ejected | 2, 5, 12, 31 | 1.0000 | a shelf before the reveal |
+| Slow burn | 15 of 50 | CREWMATE_TASKS | 9, 6, 10, 25 | 0.0564 | a shelf before the reveal |
+| Slow burn | 15 of 50 | CREWMATE_EJECT | 4, 11, 10, 25 | 1.0000 | a shelf before the reveal |
+| Slow burn | 15 of 50 | IMPOSTOR_PARITY | 2, 13, 15, 20 | 0.0555 | a shelf before the reveal |
+| Slow burn | 15 of 50 | some meeting ejected someone | 14, 1, 28, 7 | 0.4074 | a shelf before the reveal |
+| Slow burn | 15 of 50 | a crewmate was ejected | 2, 13, 12, 23 | 0.1787 | a shelf before the reveal |
+| Two kills after one regroup | 8 of 50 | CREWMATE_TASKS | 1, 7, 18, 24 | 0.1343 | behind the reveal, by the leak rule |
+| Two kills after one regroup | 8 of 50 | CREWMATE_EJECT | 1, 7, 13, 29 | 0.4143 | behind the reveal, by the leak rule |
+| Two kills after one regroup | 8 of 50 | IMPOSTOR_PARITY | 6, 2, 11, 31 | 0.0134 | behind the reveal, by the leak rule |
+| Two kills after one regroup | 8 of 50 | some meeting ejected someone | 4, 4, 38, 4 | 0.0158 | behind the reveal, by the leak rule |
+| Two kills after one regroup | 8 of 50 | a crewmate was ejected | 3, 5, 11, 31 | 0.6699 | behind the reveal, by the leak rule |
+| A close call | 16 of 50 | CREWMATE_TASKS | 2, 14, 17, 17 | 0.0134 | behind the reveal, by the leak rule |
+| A close call | 16 of 50 | CREWMATE_EJECT | 5, 11, 9, 25 | 0.7455 | behind the reveal, by the leak rule |
+| A close call | 16 of 50 | IMPOSTOR_PARITY | 9, 7, 8, 26 | 0.0299 | behind the reveal, by the leak rule |
+| A close call | 16 of 50 | some meeting ejected someone | 15, 1, 27, 7 | 0.4092 | behind the reveal, by the leak rule |
+| A close call | 16 of 50 | a crewmate was ejected | 8, 8, 6, 28 | 0.0396 | behind the reveal, by the leak rule |
+| Suspicion moved | 16 of 50 | CREWMATE_TASKS | 9, 7, 10, 24 | 0.1171 | a shelf before the reveal |
+| Suspicion moved | 16 of 50 | CREWMATE_EJECT | 3, 13, 11, 23 | 0.5012 | a shelf before the reveal |
+| Suspicion moved | 16 of 50 | IMPOSTOR_PARITY | 4, 12, 13, 21 | 0.5241 | a shelf before the reveal |
+| Suspicion moved | 16 of 50 | some meeting ejected someone | 13, 3, 29, 5 | 0.6994 | a shelf before the reveal |
+| Suspicion moved | 16 of 50 | a crewmate was ejected | 5, 11, 9, 25 | 0.7455 | a shelf before the reveal |
+| A third round | 22 of 50 | CREWMATE_TASKS | 11, 11, 8, 20 | 0.1501 | a shelf before the reveal |
+| A third round | 22 of 50 | CREWMATE_EJECT | 7, 15, 7, 21 | 0.7527 | a shelf before the reveal |
+| A third round | 22 of 50 | IMPOSTOR_PARITY | 4, 18, 13, 15 | 0.0696 | a shelf before the reveal |
+| A third round | 22 of 50 | some meeting ejected someone | 19, 3, 23, 5 | 1.0000 | a shelf before the reveal |
+| A third round | 22 of 50 | a crewmate was ejected | 3, 19, 11, 17 | 0.0605 | a shelf before the reveal |
+| Caught venting | 19 of 50 | CREWMATE_TASKS | 4, 15, 15, 16 | 0.0742 | behind the reveal, by the leak rule |
+| Caught venting | 19 of 50 | CREWMATE_EJECT | 12, 7, 2, 29 | under 0.0001 | behind the reveal, by the leak rule |
+| Caught venting | 19 of 50 | IMPOSTOR_PARITY | 3, 16, 14, 17 | 0.0632 | behind the reveal, by the leak rule |
+| Caught venting | 19 of 50 | some meeting ejected someone | 19, 0, 23, 8 | 0.0177 | behind the reveal, by the leak rule |
+| Caught venting | 19 of 50 | a crewmate was ejected | 1, 18, 13, 18 | 0.0079 | behind the reveal, by the leak rule |
+| One line, two readings | 24 of 50 | CREWMATE_TASKS | 8, 16, 11, 15 | 0.5700 | behind the reveal, by the leak rule |
+| One line, two readings | 24 of 50 | CREWMATE_EJECT | 11, 13, 3, 23 | 0.0110 | behind the reveal, by the leak rule |
+| One line, two readings | 24 of 50 | IMPOSTOR_PARITY | 5, 19, 12, 14 | 0.0775 | behind the reveal, by the leak rule |
+| One line, two readings | 24 of 50 | some meeting ejected someone | 22, 2, 20, 6 | 0.2503 | behind the reveal, by the leak rule |
+| One line, two readings | 24 of 50 | a crewmate was ejected | 4, 20, 10, 16 | 0.1192 | behind the reveal, by the leak rule |
+| Struck after the regroup | 41 of 50 | CREWMATE_TASKS | 14, 27, 5, 4 | 0.2729 | a facet, by the saturation rule |
+| Struck after the regroup | 41 of 50 | CREWMATE_EJECT | 10, 31, 4, 5 | 0.2447 | a facet, by the saturation rule |
+| Struck after the regroup | 41 of 50 | IMPOSTOR_PARITY | 17, 24, 0, 9 | 0.0198 | a facet, by the saturation rule |
+| Struck after the regroup | 41 of 50 | some meeting ejected someone | 33, 8, 9, 0 | 0.3216 | a facet, by the saturation rule |
+| Struck after the regroup | 41 of 50 | a crewmate was ejected | 13, 28, 1, 8 | 0.4138 | a facet, by the saturation rule |
 
 ### The lean of the shelf count
 
@@ -162,9 +162,9 @@ Never served and never used to order a game: the mean number of shelves before t
 
 | ending | games | mean shelves |
 | --- | --- | --- |
-| `CREWMATE_EJECT` | 13 | 1.92 |
-| `CREWMATE_TASKS` | 13 | 1.46 |
-| `IMPOSTOR_PARITY` | 23 | 1.96 |
+| `CREWMATE_EJECT` | 14 | 1.36 |
+| `CREWMATE_TASKS` | 19 | 1.84 |
+| `IMPOSTOR_PARITY` | 17 | 1.12 |
 
 ## Limitations
 
