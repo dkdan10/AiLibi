@@ -5854,6 +5854,36 @@ def test_a_shown_set_with_no_replaced_era_is_named(
     )
 
 
+def test_the_before_column_follows_the_registrys_replaced_era(
+    doc_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The before column is picked by the era the registry says the shown set's
+    # recording replaced, never by a fixed id. Planted: the registry filing
+    # samples/9p2i under round 2, whose recording replaced baseline 9's. The
+    # committed page's before column names round 2, so it is refused, naming
+    # baseline 9...
+    from eval.eras import STAGE_B_R2
+
+    monkeypatch.setattr(check_doc_facts, "era_of", lambda path: STAGE_B_R2)
+    errors: list[str] = []
+    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _README), errors)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{_SCORECARD_PAGE}: the '### samples/9p2i' table has no before column "
+        "naming the baseline-9 era"
+    )
+    # ...and a page whose before column names baseline 9 is read from it.
+    _substitute(
+        doc_tree,
+        _SCORECARD_PAGE,
+        "| # | row | before: stage-b-r2, as published",
+        "| # | row | before: baseline-9, as published",
+    )
+    errors = []
+    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _README), errors)
+    assert errors == []
+
+
 def test_a_page_with_no_typed_rewrites_reads_a_zero_count(doc_tree: Path) -> None:
     # Planted: the page's row-7 detail reads "none", the way a set with no
     # guard rewrite prints it; the count beside the authored share is then 0.
