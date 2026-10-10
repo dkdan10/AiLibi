@@ -5,7 +5,10 @@ records are never rewritten — a correction is an additive, dated erratum insid
 the record it corrects — so an old audit is a snapshot of what was known then,
 not a claim about today. The current state is on the
 [README](../README.md) and in [docs/history.md](../docs/history.md); the
-vocabulary is in [docs/glossary.md](../docs/glossary.md).
+vocabulary is in [docs/glossary.md](../docs/glossary.md). A reader new to the
+project can start with the close of 2026-10-10, under its own heading after the
+Stage-B gameplay wave below, whose first section is written for someone who did
+not watch the work.
 
 Two audits with the same date and different suffixes (`-claude`, `-codex`,
 `-reconciled`) are one review: two AI auditors run independently, then a third
@@ -421,6 +424,19 @@ directory's `README.md`, which carries the tallies and the proposed routing.
   bytes are now `replays/samples/9p2i`, the shown 9-player set, in its own era,
   round 2's bytes are kept as `replays/candidates/stage-b-r2`, and the ladder
   tip stays at baseline 9.
+
+## The finalized state
+
+- [audit-2026-10-10-finalized-state.md](audit-2026-10-10-finalized-state.md) —
+  the close of the current arc, in one place. It opens with a page for a reader
+  who did not watch the work, then states what the system is, the eras and the
+  committed and candidate sets, what the recordings demonstrate with the command
+  behind each figure and what they do not, the doctrine with its dated rulings,
+  one row per pull request merged since the process direction, the open items
+  and the points the owner still confirms, and the defects found on the way,
+  each filed and not fixed. It decides nothing and adopts nothing,
+  the ladder tip stays at baseline 9, and no check holds its figures once it
+  merges.
 
 ## Cleanup measurements
 
