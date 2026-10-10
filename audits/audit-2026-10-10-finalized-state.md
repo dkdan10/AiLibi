@@ -3,8 +3,9 @@
 Card: [`tasks/work/close-audit-finalized-state.md`](../tasks/work/close-audit-finalized-state.md).
 Base B: `main` at `a3b42fd4`, after the finish wave merged in its card's order
 (round 3's record, the retirement of the era-locked pins, round 3's promotion
-and the process-first front door) and the orchestrator's `docs:` commits flipped
-those cards and stamped the task inventory. Branch
+and the process-first front door), the orchestrator's four `card:` commits
+flipped those cards and its `docs:` commit stamped the task inventory (section
+6 names all five). Branch
 `work/close-audit-finalized-state`, one pull request into `main`; its head H and
 CI's green run at H are cited in the card's Results and the pull request.
 
@@ -289,7 +290,7 @@ falls between.
 
 | cell | baseline-9, pooled | stage-b-r2 | stage-b-r3 |
 | --- | --- | --- | --- |
-| skips labelled as holding nothing | 764/1183 (64.6%) | n/a | 235/305 (77.0%) |
+| skips labelled as holding nothing | 764/1183 (64.6%) | 214/281 | 235/305 (77.0%) |
 | holds-nothing skips whose own inputs name no living candidate | 0/764 (0.0%) | 0/214 | 0/235 (0.0%) |
 | supported ejects whose cited line the route makes true | 818/842 (97.1%) | 278/281 | 245/248 (98.8%) |
 | supported ejects whose cited line the route makes false | 24/842 (2.9%) | 3/281 | 3/248 (1.2%) |
@@ -297,19 +298,29 @@ falls between.
 | the same, at meetings a kill witness opened | 8/13 (61.5%) | 7/12 | 7/13 (53.8%) |
 
 The stage-b-r2 column is round 3's record's round-2 column, read from its own
-tables (`audits/audit-2026-10-09-stage-b-r3.md`, section 8.8).
+tables (`audits/audit-2026-10-09-stage-b-r3.md`, sections 8.2 and 8.8), as
+fractions, the form in which that record prints them.
 
 ### 3.3 The census: the genre
 
-| cell | baseline-9, pooled | stage-b-r3 |
-| --- | --- | --- |
-| vent exits a crewmate saw | 251/427 (58.8%) | 7/70 (10.0%) |
-| vent trips ended by a regroup | n/a | 47/140 (33.6%) |
-| kills soon after a meeting | 107/302 (35.4%) | 0/106 (0.0%) |
-| the opener speaks a second time | 0/531 (0.0%) | 90/119 (75.6%) |
-| meetings opened by an impostor | 0/531 by construction | 0/119 by construction |
-| task wins in games with a sabotage in play | 2/23 (8.7%) | 17/19 (89.5%) |
-| games the impostors won, reported beside | 77/250 (30.8%) | 17/50 (34.0%) |
+| cell | baseline-9, pooled | stage-b-r2 | stage-b-r3 |
+| --- | --- | --- | --- |
+| vent exits a crewmate saw | 251/427 (58.8%) | n/a | 7/70 (10.0%) |
+| vent trips ended by a regroup | n/a | 47/140 | 47/140 (33.6%) |
+| kills soon after a meeting | 107/302 (35.4%) | 0/109 | 0/106 (0.0%) |
+| the opener speaks a second time | 0/531 (0.0%) | n/a | 90/119 (75.6%) |
+| meetings opened by an impostor | 0/531 by construction | 0/117 by construction | 0/119 by construction |
+| task wins in games with a sabotage in play | 2/23 (8.7%) | n/a | 17/19 (89.5%) |
+| games the impostors won, reported beside | 77/250 (30.8%) | 24/50 | 17/50 (34.0%) |
+
+The stage-b-r2 column is round 3's record's round-2 column
+(`audits/audit-2026-10-09-stage-b-r3.md`, sections 8.2, 8.5 and 8.8), as
+fractions, the form in which that record prints them. Three of its cells read
+n/a because that record prints no round-2 value for them: it states
+`vent_exits_seen_from_exit_room` rather than `vent_exits_seen_by_crew`,
+`accused_opener_answers` rather than `opener_speaks_again`, and nothing for
+`task_wins_with_sabotage_in_play`; this audit types no number its sources do
+not print.
 
 Each stage-b-r3 cell follows a recorded setting the census names on its page:
 the impostor looks before leaving a vent and a vent exit is seen only from the
@@ -454,10 +465,11 @@ so whether a served line changes a vote is read once and not established.
 
 **The reporter trap's standing.** The census reports, per era, reporter seats
 ejected without vent proof against other crewmate seats ejected without it:
-baseline-9 29/271 (10.7%) against 2/703 (0.3%), stage-b-r3 10/95 (10.5%) against
-5/302 (1.7%). The re-keyed flag's bar, flagged above twice round 2's relative
-rate (21.28, decision memo section 8.7), gates nothing and the step rule never
-read it; round 3 read it at 6.4, not flagged. While impostor self-report stays
+baseline-9 29/271 (10.7%) against 2/703 (0.3%), stage-b-r2 17/93 against 5/291
+(round 3's record, section 8.8), stage-b-r3 10/95 (10.5%) against 5/302
+(1.7%). The re-keyed flag's bar, flagged above twice round 2's relative rate
+(21.28, decision memo section 8.7), gates nothing and the step rule never read
+it; round 3 read it at 6.4, not flagged. While impostor self-report stays
 off, every reporter is a crewmate: no meeting was opened by an impostor
 (0/119 by construction), so any reporter line reads a role.
 
@@ -534,10 +546,17 @@ read-only
 `gh pr list --repo dkdan10/AiLibi --base main --state merged --search 'merged:>=2026-09-19'`
 at dispatch names the same 37 pull requests, each with a merge commit, so no
 row is a fast-forward. The date is the merge commit's author date. Between merges, contract documents
-landed on `main` as `docs:` commits without a pull request, as AGENTS.md
-allows; the two this audit cites are the extractor card's closure (`a331ab90`,
-then `97549508`) and the finish wave's card flips with the inventory stamp
-(`76d1c826`, `49498b0b`, `a3b42fd4`).
+landed on `main` as `card:` and `docs:` commits without a pull request, as
+AGENTS.md allows. This audit cites two groups of them: the extractor card's
+closure, two `docs:` commits (`a331ab90`, then `97549508`); and the
+orchestrator's five commits of the finish wave, one after each of its four
+merges and the inventory stamp after the last, each printed with its subject
+by command `finish-commits`:
+`3d32d31e card: flip stage-b-record-r3 to done after its merge`,
+`2eed2e92 card: flip retire-era-locked-pins to done after its merge`,
+`76d1c826 card: flip promote-round-3 to done after its merge`,
+`49498b0b card: flip front-door-process-first to done after its merge` and
+`a3b42fd4 docs: stamp the task inventory with the day of its last flip`.
 
 | pull request | card | merge commit | date | how |
 | --- | --- | --- | --- | --- |
@@ -599,7 +618,7 @@ not a row.
 | `baseline 10` | Reserved for the full re-record that re-freezes the corpus; not run. | the owner (D12, and the ML hold) | `eval/eras.py:24` | `baseline 10 is reserved for the full re-record that re-freezes the corpus` |
 | `retire-temporal-evidence-v1` | Status `ready` at B and at H, blocked on an adopting record for evidence reasoning version 2 that no round took; an owner confirmation point under D15, "wait" or "lift the exclusion". | the owner (D15) | `tasks/decision-2026-09-24-stage-b-wave.md:1626` | `and blocked: whether` |
 | `D9` | Whether row 1's skip cell credits an explicit "none held": undecided. | the owner | `tasks/decision-2026-09-24-stage-b-wave.md:1498` | `D9, D12, D13 and D15 to D18` |
-| `D12` | The before column's form: taken in the grow form by the orchestrator's default of 2026-10-09 when round 3 was promoted, confirmable; baseline 10 and the ladder's frame stay undecided. | the owner | `tasks/decision-2026-09-24-stage-b-wave.md:1629` | `Orchestrator default of 2026-10-09 for the frozen before column (baselines memo D12)` |
+| `D12` | The before column's form: taken in the grow form by the orchestrator's default of 2026-10-09 when round 3 was promoted. The memo gave the owner a window, "the owner may replace it with a ruling at any time before that card merges" (`tasks/decision-2026-09-24-stage-b-wave.md:1633-1634`), which closed when the promotion merged as `54dff069`; as the orchestrator reads it, a later owner ruling could still replace the form, by a new card. An owner confirmation point; baseline 10 and the ladder's frame stay undecided. | the owner | `tasks/decision-2026-09-24-stage-b-wave.md:1629` | `Orchestrator default of 2026-10-09 for the frozen before column (baselines memo D12)` |
 | `D13` | The watchability floors and the stage block: undecided; the retirement kept them as the frozen referee's. | the owner | `tasks/decision-2026-09-24-stage-b-wave.md:1498` | `D9, D12, D13 and D15 to D18` |
 | `D15` | The routed decision of the phase-21 close, the three Wave-2 toggles and the held temporal card: undecided. | the owner | `tasks/decision-2026-09-24-stage-b-wave.md:1627` | `it waits or closes is the owner's D15 word` |
 | `D16` | The status of the balance pair (the kept vent exit and the six-tick cooldown): undecided; round 3 declared it as round 2 did. | the owner | `tasks/decision-2026-09-24-stage-b-wave.md:1499` | `its status (D16) does not change here` |
@@ -635,8 +654,14 @@ not a row.
   the front-door card held without writing a line of them.
 - **D7's default** (no wrong-but-believable ejection featured) and **D12's grow
   form** for the before column, both taken as the orchestrator's defaults under
-  the owner's delegation of 2026-10-09 (decision memo section 8.9), both
-  confirmable or replaceable by an owner ruling.
+  the owner's delegation of 2026-10-09 (decision memo section 8.9), both owner
+  confirmation points. D7's default holds "unless the owner says otherwise"
+  (`tasks/decision-2026-09-24-stage-b-wave.md:1619-1620`). For D12 the memo
+  stated a window, "the owner may replace it with a ruling at any time before
+  that card merges" (`tasks/decision-2026-09-24-stage-b-wave.md:1633-1634`);
+  that window closed when the promotion merged as `54dff069`, and, as the
+  orchestrator reads it, a later owner ruling could still replace the form by
+  a new card.
 - **D9, D13, D16, D17 and D18**, which decision memo section 8.5 leaves
   undecided; and D12's remainder, baseline 10 and the ladder's frame.
 - **A full re-record for baseline 10**, which would re-freeze the corpus and
@@ -664,7 +689,7 @@ nothing here edits the file a finding names.
 | 13 | The fold-reading Hypothesis case of the profile tests was seen to fail once under xdist with "DID NOT RAISE", as the orchestrator's dispatch reports it from a finish-wave review (no record of it is in the tree). Its planted proof expects a random search to find a counterexample, so a search that finds none passes the property and the case fails. At H it passes alone under Hypothesis seed 0 (`1 passed`) and fails under seed 58 with "DID NOT RAISE" on every run (`seed 58 DID NOT RAISE lines 1`), so the case is seed-dependent wherever it runs, and one unseeded run inside this audit's own check printed no pass; the card's Results give the local seed counts. | `tests/eval/test_game_profile.py:1022` | `flaky-alone`, `flaky-seed` |
 | 14 | This card's Validation expects `git grep -n _cross_era_trajectory` to exit 1 once the retirement merged; at H the function is gone from every Python file (`code hits exit 1`), but the bare grep exits 0 on the documents that name it, task cards and this audit among them (`card hits exit 0`). | `tasks/work/close-audit-finalized-state.md:395` | `cross-era` |
 | 15 | The ladder-tip check reads the phrase with a literal space, so a "ladder tip" wrapped across a line is never scanned: the index holds one such sentence, round 3's row (`wrapped ladder-tip phrases 1`), and with its baseline 9 made baseline 10 the checker exits 0 (`wrapped tip exit 0`). This audit's own row keeps the phrase on one line, where the same edit exits 1. | `scripts/check_doc_facts.py:356` | `wrapped-tips`, `slow-wrapped-tip` |
-| 16 | The offline reasoning-evidence scorecard builds one fixed inventory of all four committed sets, the shown set's era and baseline 9's together, and folds them into one block of historical diagnostics without reading the era registry (`era registry reads 0`, `inventory sets 4`). So the registry's docstring, "Every instrument that walks more than one committed set ... read it" (`eval/eras.py:11-15`), and round 3's record, "No instrument pools across eras." (`audits/audit-2026-10-09-stage-b-r3.md:2312`), claim more than the tree holds; neither is edited here. Found by the pull request's automated review. | `eval/reasoning_evidence.py:342` | `reasoning-pool` |
+| 16 | The offline reasoning-evidence scorecard builds one fixed inventory of all four committed sets, the shown set's era and baseline 9's together, and folds them into one block of historical diagnostics without reading the era registry (`era registry reads 0`, `inventory sets 4`). So the registry's docstring, "Every instrument that walks more than one committed set ... read it" (`eval/eras.py:11-15`), and round 3's record, "No instrument pools across eras." (`audits/audit-2026-10-09-stage-b-r3.md:2312`), claim more than the tree holds; neither is edited here. Found by the pull request's automated review. | `eval/reasoning_evidence.py:344` | `reasoning-pool` |
 
 ## 8. Reproduction
 
@@ -701,6 +726,7 @@ era-ladder: uv run python -c "from eval import eras; print('tip', eras.LADDER_TI
 candidates: git ls-files replays/candidates | cut -d/ -f1-3 | sort -u
 ledger-count: echo "first-parent merges $(git log --first-parent --merges --oneline 0755c25d..a3b42fd4 | wc -l | tr -d ' ')"
 featured: uv run python -c "import json, re; j = json.load(open('replays/samples/9p2i/results-game-profile.json')); w = {m['seed'] for m in j['reveal']['decided_without_proof']['wrong']['members']}; f = {int(s) for s in re.findall(r'set: .9p2i.,\s*seed: (\d+)', open('frontend/src/components/ReplayPicker.tsx').read())}; print(f'featured 9p2i {len(f)}; wrong on what it held {len(w)}; both {len(f & w)}')"
+finish-commits: git log --no-walk=unsorted --format='%h %s' 3d32d31e 2eed2e92 76d1c826 49498b0b a3b42fd4
 closure: git log -1 --format='%h %s' a3b42fd4 -- tasks/work/rubric-extractor-era.md; git merge-base --is-ancestor 97549508 84a4509c; echo "ancestor exit $?"
 erv-configs: git grep -c evidence_reasoning_version -- 'replays/**/experiment-config.json'; echo "configs exit $?"
 arch-four: echo "four-contracts lines $(grep -c 'Four import-linter contracts' docs/architecture.md)"
@@ -722,7 +748,7 @@ flaky-seed: echo "seed 58 DID NOT RAISE lines $(uv run pytest -q -p no:cacheprov
 cross-era: git grep -c _cross_era_trajectory -- '*.py' >/dev/null; echo "code hits exit $?"; git grep -c _cross_era_trajectory >/dev/null; echo "card hits exit $?"
 wrapped-tips: echo "wrapped ladder-tip phrases $(perl -0777 -ne 'my $n = () = /ladder[ \t]*\n[ \t>]*tip/gi; print $n' audits/README.md)"
 shelves: uv run python -c "import json; d = json.load(open('replays/samples/9p2i/results-game-profile.json')); print('; '.join(s['name'] + ' ' + str(len(s['members'])) for s in d['pre_reveal']['shelves']))"
-reasoning-pool: echo "era registry reads $(grep -c -E 'eval\.eras|from eval import eras|era_of|era_groups' eval/reasoning_evidence.py)"; echo "inventory sets $(sed -n 342,352p eval/reasoning_evidence.py | grep -c -E '\("(samples|ml_corpus)", "(4p1i|9p2i)"')"
+reasoning-pool: echo "era registry reads $(grep -c -E 'eval\.eras|from eval import eras|era_of|era_groups' eval/reasoning_evidence.py)"; echo "inventory sets $(sed -n 344,352p eval/reasoning_evidence.py | grep -c -E '\("(samples|ml_corpus)", "(4p1i|9p2i)"')"
 slow-wrapped-tip: d=$(mktemp -d) && git archive HEAD | tar -x -C "$d" && perl -0777 -pi -e 's/and the ladder\n  tip stays at baseline 9\./and the ladder\n  tip stays at baseline 10./ or die' "$d/audits/README.md" && uv run python scripts/check_doc_facts.py --repo-root "$d" >/dev/null 2>&1; echo "wrapped tip exit $?"; rm -rf "$d"
 ```
 
@@ -880,6 +906,18 @@ command in section 8.1. A cited generated page also passes its own `--check`.
 | 127 | `inventory sets 4` | 7.4 | `cmd:reasoning-pool` |
 | 128 | `No instrument pools across eras.` | 7.4 | `audits/audit-2026-10-09-stage-b-r3.md:2312` |
 | 129 | `seed 58 DID NOT RAISE lines 1` | 7.4 | `cmd:flaky-seed` |
+| 130 | `3d32d31e card: flip stage-b-record-r3 to done after its merge` | 6 | `cmd:finish-commits` |
+| 131 | `2eed2e92 card: flip retire-era-locked-pins to done after its merge` | 6 | `cmd:finish-commits` |
+| 132 | `76d1c826 card: flip promote-round-3 to done after its merge` | 6 | `cmd:finish-commits` |
+| 133 | `49498b0b card: flip front-door-process-first to done after its merge` | 6 | `cmd:finish-commits` |
+| 134 | `a3b42fd4 docs: stamp the task inventory with the day of its last flip` | 6 | `cmd:finish-commits` |
+| 135 | `214/281` | 3.2 | `audits/audit-2026-10-09-stage-b-r3.md:1916` |
+| 136 | `47/140` | 3.3 | `audits/audit-2026-10-09-stage-b-r3.md:2009` |
+| 137 | `0/109` | 3.3 | `audits/audit-2026-10-09-stage-b-r3.md:2012` |
+| 138 | `0/117` | 3.3 | `audits/audit-2026-10-09-stage-b-r3.md:1883` |
+| 139 | `24/50` | 3.3 | `audits/audit-2026-10-09-stage-b-r3.md:1950` |
+| 140 | `17/93` | 4 | `audits/audit-2026-10-09-stage-b-r3.md:2020` |
+| 141 | `5/291` | 4 | `audits/audit-2026-10-09-stage-b-r3.md:2020` |
 
 ## 9. Limitations of this audit
 
