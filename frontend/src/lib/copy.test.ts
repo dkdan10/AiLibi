@@ -625,6 +625,10 @@ describe("the header's and the tour's source link", () => {
     expect(attributionLeaves(planted, "SPECTATOR_COPY")).toEqual([
       "SPECTATOR_COPY.dashboard.intro",
     ]);
+    // A list leaf is named by its index, so a word inside one points at its slot.
+    expect(attributionLeaves({ lines: ["GitHub", "AI-reviewed"] }, "TREE")).toEqual([
+      "TREE.lines[1]",
+    ]);
   });
 
   it("renders the header's words from the copy", () => {

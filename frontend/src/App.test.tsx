@@ -128,6 +128,18 @@ describe("the guided tour's welcome step", () => {
     );
   });
 
+  it.each(["directed by", "Claude Code", "Codex", "AI-reviewed", "ownership"])(
+    "names %s wherever it returns in the step (planted)",
+    (word) => {
+      const planted = html.replace(
+        "not making live model calls.",
+        `not making live model calls. ${word}`,
+      );
+      expect(planted).not.toBe(html);
+      expect(welcomeProblems(planted)).toEqual([`the step says ${word}`]);
+    },
+  );
+
   it("names the old sentence or the old link when either returns (planted)", () => {
     const sentence = html.replace(
       "not making live model calls.",
