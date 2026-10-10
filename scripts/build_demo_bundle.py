@@ -26,9 +26,10 @@ not a cut-down copy of it.
 read straight out of ``frontend/src/components/ReplayPicker.tsx`` so the demo can
 never drift from the editorial list — plus the picker metadata and the game-shape
 profile entries of those games. Deliberately absent: ``tournament-eval-report.json.gz`` (the
-9p2i one is 32,952,472 bytes uncompressed, about 33 MB, and 2,790,383 bytes
-gzipped; the ML corpus one is 107,690,098 bytes uncompressed — that is the
-corpus, not a demo), the per-tick endpoint
+9p2i one is 34,579,235 bytes uncompressed, about 35 MB, and 3,057,359 bytes
+gzipped (was 32,952,472, about 33 MB, and 2,790,383 on round 2's bytes); the ML
+corpus one is 107,690,098 bytes uncompressed — that is the corpus, not a demo),
+the per-tick endpoint
 and the cost
 summary (no caller), and every set the featured list does not name. The dashboard
 tab in a bundle therefore renders a "No tournament report" card written for this

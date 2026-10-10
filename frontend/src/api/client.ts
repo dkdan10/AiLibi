@@ -359,8 +359,9 @@ export function getEvalCostSummary(): Promise<EvalCostSummaryView> {
 // (Task 5.7), per served set (Task 12.12). The eval router is mounted at `/eval`,
 // so the path mirrors `/eval/cost-summary`; raises `ApiError` (404 → no report
 // present) like the sibling methods. The static demo bundle deliberately bakes NO
-// report (the 9p2i one is 33 MB — the corpus, not a demo), so in a bundle this
-// 404s onto the dashboard's existing first-class "No tournament report" panel.
+// report (the 9p2i one is 35 MB, was 33 MB on round 2's bytes — the corpus, not a
+// demo), so in a bundle this 404s onto the dashboard's existing first-class "No
+// tournament report" panel.
 export function getTournamentReport(
   set?: string,
 ): Promise<TournamentEvalReport> {

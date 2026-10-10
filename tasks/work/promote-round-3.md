@@ -146,6 +146,35 @@ is weakened, and a retired check is deleted with its mechanism and one history l
 goes through `SPECTATOR_COPY` or the picker data, with no task or audit ID, no unexplained jargon and no threshold
 arithmetic.
 
+- [x] Review correction (round 3): no comment or docstring still gives round 2's report as the shown 9p2i report's
+  size. The module docstring of `scripts/build_demo_bundle.py` reads 34,579,235 bytes uncompressed, about 35 MB, and
+  3,057,359 gzipped (was 32,952,472, about 33 MB, and 2,790,383), and the comments of `frontend/src/api/client.ts`
+  (`getTournamentReport`) and `frontend/e2e/bundle.spec.ts` (the compact-results case) read 35 MB (was 33 MB).
+  Mechanism: `gzip -dc replays/samples/9p2i/tournament-eval-report.json.gz | wc -c` and `stat -f %z` on the same gz;
+  the sweep `git grep -n -E '32,?952,?472|2,?790,?383|33 ?MB|33MB|33 megabytes' -- .`, re-run at the fix head (16
+  hits: the three inline old values and 13 lines of history in round 2's two cards). Perturbed: the present-tense
+  scan `git grep -n -E '(is|one is) (33 MB|32,952,472)' -- .` lists 3 at `9de107b9` and 0 at the fix head.
+- [x] Review correction (round 3): orchestrator ruling 5 (Decisions) replaces the text of the route-field box below.
+  The route field is a recorded setting, named in plain words beside the kill cooldown through
+  `SPECTATOR_COPY.routeLines`; `ADOPTED_RULES` and the "Adopted arms" paragraph stay at seven pairs, and that
+  paragraph's one dated sentence names `route_lines_version = 1` as a setting these recordings carry. Mechanism:
+  `frontend/src/components/PublicResults.test.tsx` ("names the route lines as set for these recordings, never adopted
+  or experimental"), which pins the delivered words and plants a config without the field and one with it null, and
+  `frontend/src/lib/adoptedRules.test.ts` ("are the paragraph's seven pairs, in its order, each held by the shown
+  set's config", with its planted widened list); 57 passed over those two files and `src/api/client.test.ts`.
+- [x] Review correction (round 3): the experiments row of `docs/artifacts.md` reads 7,558,279 tracked bytes / 170
+  files (was 7.0 MB / 170 files, measured at `B`, where the tracked bytes were 7,367,891; this card's lab columns in
+  `fc77fc50` add 190,388), by the audits row's formula. Mechanism: `git ls-tree -r -l HEAD -- experiments/lab
+  experiments/model_probe`, its size column summed, and `git ls-files experiments/lab experiments/model_probe | wc
+  -l`; `verify_ml_evidence.py`'s inventory parity holds a stated tracked-bytes figure exactly, through
+  `test_every_counted_registry_row_matches_the_index`. Planted: 7,558,280, and `B`'s 7,367,891 at the head, each
+  fail that test naming the row.
+- [x] Review correction (round 3): the PR body's gate item names this round's pushed head as the final head and
+  cites every CI run in order, and the thirteen `Co-Authored-By: Claude Opus 5.5` lines of `d9c3ada3` to `9de107b9`
+  are recorded as a deviation from the Delivery constraint, not a decision, under "Review corrections, round 3" and
+  in the PR body's Decisions; this round's commit carries the card's Fable line verbatim. Mechanism: `git log -1
+  --format=%B` at the pushed head, `gh pr view 507 --json body` read against it, and CI's green run at that head,
+  cited by run id in the PR body.
 - [x] Review correction (round 2): no test comment still states round 2's bytes as the shown set's. The three
   the verifiers quoted are re-derived with the old value inline: the marker pin of `test_vote_tally_parity.py`
   reads 10 teammate coercions and 0 invalid targets (was 16 and 1), seed 2 m0 of `test_transcript.py` 12 pairs
@@ -657,7 +686,8 @@ Decisions of this build:
   3's bytes, re-pinned with the old values inline.
 - **The commit trailer.** Commits from `d9c3ada3` on end with `Co-Authored-By: Claude Opus 5.5
   <noreply@anthropic.com>`, the model that wrote them after a mid-session model change; the earlier commits carry
-  the card's `Claude Fable 5.1` line. Both keep the `Card:` trailer immediately before.
+  the card's `Claude Fable 5.1` line. Both keep the `Card:` trailer immediately before. Correction (review round
+  3): this is a deviation from the Delivery constraint, not a decision; "Review corrections, round 3" records it.
 - **The README names the route lines as a recorded setting** in its samples paragraph ("plus the route lines, a
   recorded setting"), so the stamp's third arm is not read as adopted.
 
@@ -969,3 +999,80 @@ to prose. The spans the finding names are comments too, and the assertions besid
 `ruff format --check` are clean, and `scripts/validate_task_docs.py` exits 0. The fix dispatch asks for one local
 `bash scripts/check.sh` at the fix head. Its exit code and CI's run at the head are cited by run id in the PR body,
 and no commit records them.
+
+### Review corrections, round 3 (2026-10-09)
+
+Built on `work/promote-round-3` at `9de107b9`, the head the documentation lens read (CI run 38004651235 and the
+campaign-tier run 38004651280 green there). One blocking finding (the documentation lens) and three nonblocking
+follow-throughs the orchestrator folded into the round, each a sentence the merge would otherwise publish or leave
+stale. The round is documentation only (memo 8.7 item 4): one docstring, two comments, one registry row, this card
+and the PR body. No recorded byte, replay, assertion or production line moves, and no test is weakened. Every census
+stayed count-only, no provider was called and the untracked `.env` was not read. No new Codex comment: the two on
+the PR (at `c9e1a601`) are answered under round 1.
+
+**The shown report's size (the finding).** Three sentences gave round 2's report as the shown 9p2i report, by its
+size. Each is re-derived on the promoted bytes with the old value inline.
+
+| file | sentence | now (was, round 2's report) |
+|---|---|---|
+| `scripts/build_demo_bundle.py` | the module docstring's omitted-report clause | 34,579,235 bytes uncompressed, about 35 MB, 3,057,359 gzipped (32,952,472, about 33 MB, 2,790,383) |
+| `frontend/src/api/client.ts` | the `getTournamentReport` comment | 35 MB (33 MB) |
+| `frontend/e2e/bundle.spec.ts` | the compact-results case's comment | 35 MB (33 MB) |
+
+Read by `gzip -dc replays/samples/9p2i/tournament-eval-report.json.gz | wc -c` (34579235) and `stat -f %z
+replays/samples/9p2i/tournament-eval-report.json.gz` (3057359; `stat -c %s` on Linux). The same two commands on
+`replays/candidates/stage-b-r2/9p2i/tournament-eval-report.json.gz` read 32952472 and 2790383, round 2's figures.
+`gzip -dc replays/ml_corpus/9p2i/tournament-eval-report.json.gz | wc -c` reads 107690098, the docstring's corpus
+figure, unchanged. The sweep `git grep -n -E '32,?952,?472|2,?790,?383|33 ?MB|33MB|33 megabytes' -- .` lists 16
+hits at `9de107b9` and at the fix head. At the fix head they are the three inline old values and 13 lines of history
+in `tasks/work/post-promotion-follow-through.md` (11) and `tasks/work/promote-round-2.md` (2), round 2's cards
+measuring round 2's bytes at their own heads. The present-tense scan `git grep -n -E '(is|one is) (33
+MB|32,952,472)' -- .` lists 3 at `9de107b9` (the three above) and 0 at the fix head. A wider scan outside `tasks/`
+and `audits/` (`32\.9|2\.79 ?MB|about 33|33 ?MiB|2\.[78] ?MB`) finds no other report size: one hit is an unrelated
+percentage in `agent_prompts/` and one a lock-file hash. `docs/deployment.md` already reads 35 MB.
+
+**The route-field box (folded in).** Its ticked text reads as the card's menu default; orchestrator ruling 5
+delivered a recorded setting instead, and a new Review correction item at the head of Acceptance states that the
+ruling replaces the box's text. The delivered words are pinned by `PublicResults.test.tsx` ("names the route lines
+as set for these recordings, never adopted or experimental"), and the seven-pair list by `adoptedRules.test.ts`.
+`npx vitest run src/api/client.test.ts src/lib/adoptedRules.test.ts src/components/PublicResults.test.tsx`: 57
+passed.
+
+**The experiments row (folded in).** `docs/artifacts.md` read `7.0 MB / 170 files`, measured at `B`; this card's
+lab columns (`fc77fc50`: the r3 columns of both route instruments and the r2 constant) moved its bytes. Re-derived
+by the audits row's formula, the row reads 7,558,279 tracked bytes / 170 files (was 7.0 MB / 170 files; 7,367,891
+tracked bytes at `B`, so 190,388 added). Read by `git ls-tree -r -l HEAD -- experiments/lab experiments/model_probe
+| awk '{s+=$4} END {print s}'` (and with `2eed2e92` for `B`) and `git ls-files experiments/lab
+experiments/model_probe | wc -l` (170). A stated tracked-bytes figure is an exact promise:
+`verify_ml_evidence.py`'s inventory parity sums the tracked files, so the row now moves with every lab byte, as the
+audits row does. `test_every_counted_registry_row_matches_the_index` passes; planted, 7,558,280 fails it ("promises
+7,558,280 tracked bytes, the tracked files contain 7,558,279 bytes"), and so does `B`'s 7,367,891.
+
+**The gate item and the trailer (folded in).** The PR body's gate item called `18febe41` the final head. It now
+names this round's pushed head as the final head and cites the CI runs in order: 37983570497 green at `c9e1a601`;
+37985126742 and 37985880305 red at `9b763a98` and `b9cb15fa` (one strict-mypy error on a test's import, fixed in
+`7dfda292`); 37986165157 green at `7dfda292`; 37988023512 at `44546084`, 37996481750 at `736dbdb0` and 37996822272
+at `18febe41`, each green; 38004651235 and the campaign-tier run 38004651280 green at `9de107b9`; then the run at
+this round's head, cited in the PR body.
+
+Deviation, recorded 2026-10-09: the thirteen pushed commits `d9c3ada3` to `9de107b9` end with `Co-Authored-By:
+Claude Opus 5.5 <noreply@anthropic.com>` in place of the line the Delivery constraint names, because their workers
+followed a harness attribution reminder rather than the card. This is a deviation, not a decision. The precedent is
+round 2's promotion: its twelve commits `148fa211` to `4a36dc03` (PR #495) carried the same line, recorded as a
+deviation in `tasks/work/promote-round-2.md`, and were merged on the owner's words of 2026-10-02, "Merge both and
+continue" (quoted in `tasks/work/post-promotion-follow-through.md`; the merge `0e67f42a` is recorded in section 8 of
+the decision memo, before 8.1). Pushed commits are never rewritten. This round's commit, written by an Opus 5.5
+worker, ends with the card's line verbatim, `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`, directly
+after the `Card:` trailer, checked with `git log -1 --format=%B` before the push.
+
+**Mutation (bounded).** Two plants on the one gated span, the experiments row, each applied alone and reverted:
+7,558,280 and `B`'s 7,367,891, both killed by `test_every_counted_registry_row_matches_the_index`. The other changes
+are a docstring and comments, and no listed operator class applies to prose.
+
+**Verification at the fix head.** `pytest tests/scripts/test_check_doc_facts.py tests/scripts/test_verify_ml_evidence.py`:
+423 passed. `scripts/verify_ml_evidence.py` offline: 64 checks, 0 FAIL, the in-tree family inventory OK.
+`tests/scripts/test_build_demo_bundle.py`: 34 passed. The three vitest files: 57 passed. `ruff check`
+and `ruff format --check` are clean on `scripts/build_demo_bundle.py`, `eslint` is clean on the two changed
+TypeScript files, `scripts/validate_task_docs.py` and `scripts/check_doc_facts.py` exit 0. `tests/docs/` does not
+exist. No local `bash scripts/check.sh` runs at this head (memo 8.7 item 1): CI's green run at the pushed head, cited
+by run id in the PR body, is the gate record, and no commit records it.
