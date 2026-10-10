@@ -60,9 +60,10 @@ set: the fifty games the public demo and the README show, recorded once on
 - That one version of the game plays better than another. Each round of
   changes was recorded once, as fifty games, so no difference between rounds is
   claimed as real.
-- That the model reasons about routes. The newest change hands every voter a
-  plain line saying which stated moves the station's doors allow; the tree
-  measures that the line was shown, not that it changed a vote.
+- That the model reasons about routes. The newest change hands a voter, when a
+  candidate's places stated at the table change room, a plain line saying which
+  of those moves the station's doors allow; the tree measures that the line was
+  shown, not that it changed a vote.
 - General social deduction. The machine-learning program is on hold.
 
 **Where to look next.** [The README](../README.md) and its
@@ -140,12 +141,16 @@ The committed replays fall into recorded eras. An
 [era](../docs/glossary.md#era-recordings-that-share-one-recorded-identity) is the
 recorded identity a group of games shares (its settings, temporal delivery,
 substrate stamp and prompt stamps), and `eval/eras.py` is the one place a
-committed set's era is named. Two eras are never pooled: every instrument that
-walks more than one set reads the registry, and `tests/eval/test_eras.py` holds
-the registry to the bytes, including a planted registry that files the shown set
-under baseline 9 and is refused
+committed set's era is named. The instruments its docstring names (the process
+scorecard, the gameplay census, the counterfactual, the watchability referee's
+default floors and the front door's fact checker) read it and pool only within
+an era, and `tests/eval/test_eras.py` holds the registry to the bytes, including
+a planted registry that files the shown set under baseline 9 and is refused
 (`tests/eval/test_eras.py::test_a_registry_filing_samples_9p2i_under_baseline_9_is_refused`).
-Section 2 prints the registry. (claim row `eras`)
+The docstring's "every instrument" is wider than the tree: the offline
+reasoning-evidence scorecard folds all four sets, across both eras, into one
+block without reading the registry (section 7.4, finding 16). Section 2 prints
+the registry. (claim row `eras`)
 
 A record covers 50 seeds, not all 300: the partial-record principle. The owner
 ruled it on 2026-09-24, verbatim: "Let's not re-record all 300 seeds each time.
@@ -325,7 +330,10 @@ score and no rank.
   trip no game on the shown set, and the loosest reading, any ejecting ballot so
   labelled, names one entry, (44, 0) as seed and meeting index.
 - Shelves before the reveal: the reporter saw it happen, 13 games; double kill,
-  7; slow burn, 15; suspicion moved, 16; a third round, 22.
+  7; slow burn, 15; suspicion moved, 16; a third round, 22 (command `shelves`
+  prints
+  `the_reporter_saw_it_happen 13; double_kill 7; slow_burn 15; suspicion_moved 16; a_third_round 22`
+  from the served profile, and `docs/game-profile.md:76-80` holds the same).
 - Behind the reveal, "decided without proof" splits by the ejected player's
   role: the table was right, 19 (21 ejections); wrong on what it held,
   14 (15 ejections). Both halves are reported and gate nothing, and "wrong on
@@ -337,8 +345,9 @@ promotion regenerated it for round 3, and the figures above are those at H.
 ### 3.5 The route lines: offline reach, and round 3's reading of them
 
 A [route line](../docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places)
-tells every voter, the same for every role, which of a candidate's stated
-changes of room the station's doors or the public regroup allow.
+tells a voter, the same for every role, which of a candidate's stated changes of
+room the station's doors or the public regroup allow; a candidate with no such
+change has no line, so on round 3 671/702 (95.6%) of ballots carried one.
 
 - Offline, on round 2's ballots rendered again with the lines on, the lines
   reach 31 of 40 misjudged cases (ejections charged on a stated pair that
@@ -398,9 +407,11 @@ The direction of 2026-09-19 states the goal: "an agent's vote or skip must rest
 on data the agent actually holds, true or false, and a wrong decision on
 believable data is better than a right one on none." On the shown set:
 
-- Every decision names its basis: 394/397 = 0.9924 of ejects and 47/305 = 0.1541
-  of skips carry a grounded citation, and 235/305 (77.0%) of skips say instead
-  that they hold nothing; 6/702 = 0.0085 of ballots are unexplained.
+- Whether a decision names its basis: 394/397 = 0.9924 of ejects and
+  47/305 = 0.1541 of skips carry a grounded citation, 235/305 (77.0%) of skips
+  say instead that they hold nothing, and 6/702 = 0.0085 of ballots are
+  unexplained, an eject whose citation does not resolve or a skip that names no
+  player.
 - What a skip held: 0/235 (0.0%) of the holds-nothing skips had no living
   candidate named in their own inputs.
 - The data is worth following: 245/248 (98.8%) of the checkable cited lines are
@@ -650,9 +661,10 @@ nothing here edits the file a finding names.
 | 10 | Commits carrying a Co-Authored-By line other than the Fable line the later cards name as the house line, never rewritten, some recorded as deviations in their cards: eight pull requests, counted per pull request by command (`#507 13`, `#495 12`, `#484 6`, `#477 21`, `#483 4`, `#498 4`, `#502 9`, `#504 1`). The dispatch named the first three. | `tasks/work/promote-round-3.md:1068` | `trailers` |
 | 11 | The promotion card's Results says its wider scan "finds no other report size" and names two hits; the command as quoted lists nine lines at H (`wide-scan hits 9`). | `tasks/work/promote-round-3.md:1040` | `wide-scan` |
 | 12 | The promotion card's build-decisions bullet says the commits from `d9c3ada3` on carry the Opus line; the two commits after `9de107b9` carry the Fable line (`fable after 9de107b9 2`), so the bullet is stale at the card's head. | `tasks/work/promote-round-3.md:696` | `fable-after` |
-| 13 | The fold-reading Hypothesis case of the profile tests was seen to fail once under xdist with "DID NOT RAISE", as the orchestrator's dispatch reports it from a finish-wave review (no record of it is in the tree); at H it passes alone (`1 passed`). | `tests/eval/test_game_profile.py:1022` | `flaky-alone` |
+| 13 | The fold-reading Hypothesis case of the profile tests was seen to fail once under xdist with "DID NOT RAISE", as the orchestrator's dispatch reports it from a finish-wave review (no record of it is in the tree). Its planted proof expects a random search to find a counterexample, so a search that finds none passes the property and the case fails. At H it passes alone under Hypothesis seed 0 (`1 passed`) and fails under seed 58 with "DID NOT RAISE" on every run (`seed 58 DID NOT RAISE lines 1`), so the case is seed-dependent wherever it runs, and one unseeded run inside this audit's own check printed no pass; the card's Results give the local seed counts. | `tests/eval/test_game_profile.py:1022` | `flaky-alone`, `flaky-seed` |
 | 14 | This card's Validation expects `git grep -n _cross_era_trajectory` to exit 1 once the retirement merged; at H the function is gone from every Python file (`code hits exit 1`), but the bare grep exits 0 on the documents that name it, task cards and this audit among them (`card hits exit 0`). | `tasks/work/close-audit-finalized-state.md:395` | `cross-era` |
 | 15 | The ladder-tip check reads the phrase with a literal space, so a "ladder tip" wrapped across a line is never scanned: the index holds one such sentence, round 3's row (`wrapped ladder-tip phrases 1`), and with its baseline 9 made baseline 10 the checker exits 0 (`wrapped tip exit 0`). This audit's own row keeps the phrase on one line, where the same edit exits 1. | `scripts/check_doc_facts.py:356` | `wrapped-tips`, `slow-wrapped-tip` |
+| 16 | The offline reasoning-evidence scorecard builds one fixed inventory of all four committed sets, the shown set's era and baseline 9's together, and folds them into one block of historical diagnostics without reading the era registry (`era registry reads 0`, `inventory sets 4`). So the registry's docstring, "Every instrument that walks more than one committed set ... read it" (`eval/eras.py:11-15`), and round 3's record, "No instrument pools across eras." (`audits/audit-2026-10-09-stage-b-r3.md:2312`), claim more than the tree holds; neither is edited here. Found by the pull request's automated review. | `eval/reasoning_evidence.py:342` | `reasoning-pool` |
 
 ## 8. Reproduction
 
@@ -705,9 +717,12 @@ process-row-dates: echo "dated process rows $(sed -n 23,26p README.md | grep -cE
 trailers: for p in 507:54dff069 495:0e67f42a 484:8df69e15 477:acf6c604 483:bdfa5b19 498:76270d6c 502:9caac0cf 504:cee6d2f5; do m=${p#*:}; n=$(git log --format='%(trailers:key=Co-Authored-By,valueonly,separator=;)' "$m^1..$m^2" | grep -v '^$' | grep -vc '^Claude Fable 5.1 <noreply@anthropic.com>$'); echo "#${p%%:*} $n"; done
 wide-scan: echo "wide-scan hits $(git grep -n -E '32\.9|2\.79 ?MB|about 33|33 ?MiB|2\.[78] ?MB' -- . ':!tasks' ':!audits' | wc -l | tr -d ' ')"
 fable-after: echo "fable after 9de107b9 $(git log --format='%(trailers:key=Co-Authored-By,valueonly)' 9de107b9..54dff069^2 | grep -c 'Claude Fable 5.1')"
-flaky-alone: uv run pytest -q -p no:cacheprovider tests/eval/test_game_profile.py::test_a_fold_reading_the_carrier_fails_both_properties
+flaky-alone: uv run pytest -q -p no:cacheprovider --hypothesis-seed=0 tests/eval/test_game_profile.py::test_a_fold_reading_the_carrier_fails_both_properties
+flaky-seed: echo "seed 58 DID NOT RAISE lines $(uv run pytest -q -p no:cacheprovider --hypothesis-seed=58 tests/eval/test_game_profile.py::test_a_fold_reading_the_carrier_fails_both_properties 2>&1 | grep -c 'DID NOT RAISE')"
 cross-era: git grep -c _cross_era_trajectory -- '*.py' >/dev/null; echo "code hits exit $?"; git grep -c _cross_era_trajectory >/dev/null; echo "card hits exit $?"
 wrapped-tips: echo "wrapped ladder-tip phrases $(perl -0777 -ne 'my $n = () = /ladder[ \t]*\n[ \t>]*tip/gi; print $n' audits/README.md)"
+shelves: uv run python -c "import json; d = json.load(open('replays/samples/9p2i/results-game-profile.json')); print('; '.join(s['name'] + ' ' + str(len(s['members'])) for s in d['pre_reveal']['shelves']))"
+reasoning-pool: echo "era registry reads $(grep -c -E 'eval\.eras|from eval import eras|era_of|era_groups' eval/reasoning_evidence.py)"; echo "inventory sets $(sed -n 342,352p eval/reasoning_evidence.py | grep -c -E '\("(samples|ml_corpus)", "(4p1i|9p2i)"')"
 slow-wrapped-tip: d=$(mktemp -d) && git archive HEAD | tar -x -C "$d" && perl -0777 -pi -e 's/and the ladder\n  tip stays at baseline 9\./and the ladder\n  tip stays at baseline 10./ or die' "$d/audits/README.md" && uv run python scripts/check_doc_facts.py --repo-root "$d" >/dev/null 2>&1; echo "wrapped tip exit $?"; rm -rf "$d"
 ```
 
@@ -723,7 +738,7 @@ every test node collects, and every command exits 0.
 | `firewall` | agents never read the engine; bounded checks, not complete privacy assurance | `.importlinter`, `eval/leak_scan.py` | `tests/test_firewall.py::test_import_linter_reports_a_planted_agents_to_engine_route` | `lint`, `firewall-test` |
 | `labels` | the tally never reads the grounding label; the teammate firewall re-aims, and is counted | `meetings/voting.py`, `eval/process_scorecard.py` | `tests/meetings/test_grounding_label.py::TestTheTallyNeverReadsTheLabel` | `labels-test`, `scorecard-check` |
 | `shape` | the shape's recorded rules read zero by construction, and a breach stops the census | `docs/game-shape.md`, `eval/gameplay_census.py` | `tests/eval/test_gameplay_census.py::test_every_guarded_cell_has_a_planted_pair` | `census-test`, `census-check` |
-| `eras` | one registry names each set's era, and no instrument pools two | `eval/eras.py` | `tests/eval/test_eras.py::test_a_registry_filing_samples_9p2i_under_baseline_9_is_refused` | `eras-test` |
+| `eras` | one registry names each set's era, and the instruments it names pool only within one | `eval/eras.py` | `tests/eval/test_eras.py::test_a_registry_filing_samples_9p2i_under_baseline_9_is_refused` | `eras-test` |
 | `recorder` | a record covers 50 seeds; a committed set records only its own era's config | `scripts/_declared_experiment.py`, `scripts/refresh_samples.sh` | `tests/scripts/test_refresh_samples.py::test_an_era_refusal_names_the_set_and_the_declared_file_it_found` | `recorder-test` |
 | `citations` | a valid citation is resolvable, not supported | `eval/process_scorecard.py`, `eval/vj_instruments.py` | `tests/eval/test_vj_instruments.py::test_citation_counts_split_valid_from_dangling` | `citations-test` |
 | `role` | role-correct ejection is reported and never a gate | `eval/process_scorecard.py` | `tests/eval/test_process_scorecard.py::test_the_role_correct_row_is_labelled_as_no_gate` | `role-test`, `scorecard-check` |
@@ -859,6 +874,12 @@ command in section 8.1. A cited generated page also passes its own `--check`.
 | 121 | `card hits exit 0` | 7.4 | `cmd:cross-era` |
 | 122 | `wrapped ladder-tip phrases 1` | 7.4 | `cmd:wrapped-tips` |
 | 123 | `wrapped tip exit 0` | 7.4 | `cmd:slow-wrapped-tip` |
+| 124 | `the_reporter_saw_it_happen 13; double_kill 7; slow_burn 15; suspicion_moved 16; a_third_round 22` | 3.4 | `cmd:shelves` |
+| 125 | `671/702 (95.6%)` | 3.5 | `docs/gameplay-census.md:443` |
+| 126 | `era registry reads 0` | 7.4 | `cmd:reasoning-pool` |
+| 127 | `inventory sets 4` | 7.4 | `cmd:reasoning-pool` |
+| 128 | `No instrument pools across eras.` | 7.4 | `audits/audit-2026-10-09-stage-b-r3.md:2312` |
+| 129 | `seed 58 DID NOT RAISE lines 1` | 7.4 | `cmd:flaky-seed` |
 
 ## 9. Limitations of this audit
 
@@ -876,5 +897,7 @@ command in section 8.1. A cited generated page also passes its own `--check`.
 - The two advisory memos were read outside the tree and are the source of no
   figure; where this audit names their decisions it cites the decision memo's
   in-tree line.
-- One finding (finding 13) rests on an observation the tree does not record; it
-  is filed as reported, with the command that shows the case passing alone.
+- Finding 13 starts from an observation the tree does not record; it is filed
+  with the two fixed seeds that show the case passing and failing.
+- One finding (finding 16) came from the pull request's automated review and was
+  re-checked at H with its own command before it was filed.
