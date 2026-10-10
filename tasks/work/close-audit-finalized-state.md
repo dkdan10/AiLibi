@@ -152,6 +152,30 @@ written in the worker's scratch directory, run from the repository root, quoted 
 never committed (this card adds no code). It parses the audit's section 8 tables and exits 1 naming the row on any
 miss.
 
+- [x] Review correction: the finish wave's orchestrator commits are named with the kind git prints. The audit's
+  header and section 6, and Results' opening paragraph, said `docs:` of the four `card:` flips; they now say `card:`
+  and `docs:` where both are meant, and section 6 names all five commits, `3d32d31e`, `2eed2e92`, `76d1c826`,
+  `49498b0b` and `a3b42fd4`, each with its subject. Proof: the new command `finish-commits` (`git log
+  --no-walk=unsorted --format='%h %s'` over the five) prints each subject that figure rows 130 to 134 hold, and
+  `audit_check.py` exits 0; with `card:` made `docs:` again on `76d1c826` in a scratch copy it exits 1 naming row 132.
+- [x] Review correction: finding 16 anchors on the line that holds its symbol. Proof: `grep -n
+  _fixed_recording_inventory eval/reasoning_evidence.py` prints `344:` for the definition (line 342 is blank), and
+  the audit's section 7.4 and these Results now cite `:344`; `reasoning-pool`'s range starts there (`sed -n
+  344,352p`) and still prints `inventory sets 4`; with the range cut to `349,352` in a scratch copy the script exits
+  1 naming row 127.
+- [x] Review correction: D12 is an owner confirmation point whose stated window has closed. Sections 7.1 and 7.3
+  quote the memo's window, "the owner may replace it with a ruling at any time before that card merges"
+  (`tasks/decision-2026-09-24-stage-b-wave.md:1633-1634`), say it closed with the promotion's merge `54dff069`, and
+  label the sentence that a later owner ruling could still replace the form by a new card an orchestrator reading.
+  Proof: the quote occurs in the memo's lines 1633 and 1634 joined (count 1) and not in lines 1629 and 1630 (count
+  0); `git merge-base --is-ancestor 54dff069 HEAD` exits 0; the script's open-items check still resolves all 22 rows.
+- [x] Review correction: the orchestrator's ruling on finding 16 is recorded, and its optional part is taken. The
+  ruling, dated 2026-10-10 and labelled an orchestrator reading, is in Results (Decisions) and in the pull request's
+  Questions; finding 16 stays as filed. Round 2's holds-nothing share (audit section 3.2), its genre column (section
+  3.3) and its seat cells (section 4) are read from committed lines of round 3's record, figure rows 135 to 141;
+  three genre cells stay n/a, with the reason in section 3.3. Proof: the script exits 0 over 141 figure rows; with
+  round 2's `17/93` made `18/93` in a scratch copy it exits 1 naming row 140 and the unrowed token, with row 135's
+  source moved one line it exits 1 naming row 135, and with `0/117` made `0/118` it exits 1 naming row 138.
 - [x] **The audit is indexed once, and its index row agrees with the front door and is plain.** Mechanism:
   `uv run python scripts/check_doc_facts.py` exits 0 at H (`check_audits_index`, `check_relative_links`,
   `check_ladder_tip`, `check_repeated_claims`); the row passes `copy_problems`
@@ -413,11 +437,13 @@ the count it printed.
 
 ### Delivered (2026-10-10)
 
-Built on `work/close-audit-finalized-state` from `origin/main` at B = `a3b42fd4` (the front door's merge `4a08f2aa`
-and the orchestrator's three `docs:` commits `76d1c826`, `49498b0b`, `a3b42fd4`); `main` did not move under the
-branch, so nothing was merged in. Pull request #509. Every count was measured at the head that states it, in a bare
-shell (`env | grep -c '^AILIBI_'` printed 0) after `uv sync --frozen`; every census was count-only, keyed by (set,
-meeting); no rendered prompt, transcript text or seed-band prefix was printed; band 2100-2999 stayed unseen; the
+Built on `work/close-audit-finalized-state` from `origin/main` at B = `a3b42fd4`, after the front door's merge
+`4a08f2aa`; the finish wave's five orchestrator commits on `main` are the four `card:` flips `3d32d31e`, `2eed2e92`,
+`76d1c826` and `49498b0b` and the `docs:` inventory stamp `a3b42fd4` (corrected in review round 1, below). `main`
+did not move under the branch, so nothing was merged in. Pull request #509. Every count was measured at the
+head that states it, in a bare shell (`env | grep -c '^AILIBI_'` printed 0) after `uv sync --frozen`; every census
+was count-only, keyed by (set, meeting); no rendered prompt, transcript text or seed-band prefix was printed; band
+2100-2999 stayed unseen; the
 held-out generator was not run; no provider was called and no recorder ran; the untracked `.env` was not read;
 `scripts/verify_ml_evidence.py` ran offline only, never with `--complete`. Scratch work stayed under the session
 scratchpad (`close-audit-run/`), and nothing from it is committed. The Status line is the orchestrator's on `main`
@@ -1267,6 +1293,11 @@ Decisions of this build:
   Outcome asks for "every defect this audit found on the way ... filed and not fixed here", so a contradiction the
   audit does not rely on is filed. The audit narrows its own sentence and relies on nothing the finding contradicts.
   The orchestrator may read it as a stop instead.
+- The orchestrator's ruling on finding 16, an orchestrator reading dated 2026-10-10 and recorded in review round 1:
+  filing was the right reading. The stop case covers a claim the audit would have to make that the tree
+  contradicts; the worker narrowed the audit's section-1 sentence to the instruments the docstring names and filed
+  the gap, which is the card's own precedent for `docs/architecture.md:89`, so no stop was needed. Finding 16 stays
+  as filed, and nothing else moves on its account.
 - Finding 13's showing commands are pinned to seeds (0 passes, 58 fails), since an unseeded run is not reproducible
   and made one plant run print an extra failure.
 
@@ -1292,7 +1323,7 @@ round 3's record section 12.3.
   about H stand on the Results and the pull request body, which cite the head's figures and CI runs.
 - 4237134946 (P2, the five shelf counts without a row): valid; `082868ca` adds the `shelves` command and its figure
   row, read from the served profile, beside `docs/game-profile.md:76-80`.
-- 4237134953 (P2, "every instrument reads the registry"): valid and re-checked at H (`eval/reasoning_evidence.py:342`,
+- 4237134953 (P2, "every instrument reads the registry"): valid and re-checked at H (`eval/reasoning_evidence.py:344`,
   `_fixed_recording_inventory`, and `:386`, `_measure_historical_inputs`; `era registry reads 0`, `inventory sets
   4`); section 1 and its claim row are narrowed to the instruments the registry names, and the gap is filed as
   finding 16, not fixed (the instrument, the registry's docstring and round 3's record are outside this card).
@@ -1314,3 +1345,111 @@ round 3's record section 12.3.
 - The two advisory memos were read only to name what the undecided items (D9, D12, D13, D15 to D18) ask; they are
   the source of no figure.
 - Local runs are macOS; CI is Linux, and its run is the gate record.
+
+### Review corrections, round 1 (2026-10-10)
+
+The documentation lens passed `e4a1da60` with five nonblocking notes. Because a merged audit is never rewritten, the
+orchestrator ran one documentation-only correction round before the merge, on four findings; this subsection records
+the repair. `main` is still `a3b42fd4`, so nothing was merged in. The Status line stays the orchestrator's on `main`
+(it reads `ready` on this branch and is not touched here). Commits: `f2ed415a`, the audit's corrections and the
+`audits/` row; then this commit, which adds the four acceptance items above, this subsection, the corrected opening
+sentence of Delivered, the Codex assessment's anchor and the Decisions entry, and re-anchors finding 14 in the audit
+because the new acceptance items moved the card line it cites. Each ends with the `Card:` trailer immediately followed
+by `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`, checked with `git log -1 --format=%B` before the push.
+Every count below was read in a bare shell (`env | grep -c '^AILIBI_'` printed 0) after `uv sync --frozen`,
+count-only; band 2100-2999 stayed unseen, no provider was called, `.env` was not read, and
+`scripts/verify_ml_evidence.py` ran offline only.
+
+**1. The commit kinds, and the list of the finish wave's commits.** `git log --no-walk=unsorted --format='%h %s'
+3d32d31e 2eed2e92 76d1c826 49498b0b a3b42fd4` prints four `card: flip ... to done after its merge` subjects and `a3b42fd4
+docs: stamp the task inventory with the day of its last flip`; `git log --first-parent --oneline 9775c9d6..a3b42fd4`
+prints nine lines, the merges of #505 to #508 each followed by its flip, then the stamp. The audit's header now says the four `card:` commits flipped the cards and the `docs:` commit
+stamped the inventory; section 6 says contract documents landed as `card:` and `docs:` commits, keeps the extractor
+closure's two `docs:` commits (`a331ab90`, `97549508`, as printed), and names all five finish-wave commits with their
+subjects, printed by the new command `finish-commits` and held by figure rows 130 to 134. Delivered's opening sentence
+above, which had said "three `docs:` commits", is corrected in place, since this pull request has not merged.
+
+**2. Finding 16's anchor.** `grep -n _fixed_recording_inventory eval/reasoning_evidence.py` prints `344:` for the
+definition, and line 342 is blank (`awk 'NR==342'` piped to `grep -c .` prints 0). The finding's cell in the audit's
+section 7.4 and the Codex assessment above now cite `:344`; `:386` for `_measure_historical_inputs` was already right.
+The `reasoning-pool` command reads `sed -n 344,352p`, which still spans the four inventory tuples and prints
+`inventory sets 4` beside `era registry reads 0`.
+
+**3. D12's window.** The memo's default for the before column ends "the owner may replace it with a ruling at any time
+before that card merges" (`tasks/decision-2026-09-24-stage-b-wave.md:1633-1634`), and the promotion merged as
+`54dff069` (`git log -1 --format='%h %s' 54dff069` prints `54dff069 Merge pull request #507 from
+dkdan10/work/promote-round-3`; `git merge-base --is-ancestor 54dff069 HEAD` exits 0). The audit's section 7.1 row and
+section 7.3 bullet now quote the window with its lines, say it closed with that merge, label the sentence that a
+later owner ruling could still replace the form by a new card an orchestrator reading, and keep D12 an owner
+confirmation point. In the same bullet, D7's default is quoted at its own lines, "unless the owner says otherwise"
+(`:1619-1620`), since the memo gives it no window; the D7 row of section 7.1 is unchanged.
+
+**4. The orchestrator's ruling on finding 16.** Recorded in Decisions above, dated 2026-10-10 and labelled an
+orchestrator reading, and given in the pull request's Questions as the answer; finding 16 stays as filed and nothing
+else moves on its account. The ruling's optional part is taken, every value read from a committed line of round 3's
+record (`audits/audit-2026-10-09-stage-b-r3.md`) and each with its own figure row:
+
+| audit section | cell | round 2 | record line | figure row |
+| --- | --- | --- | --- | --- |
+| 3.2 | `skips_holding_nothing` (was n/a) | 214/281 | `:1916` (record 8.2) | 135 |
+| 3.3 | `trips_closed_by_regroup` | 47/140 | `:2009` (8.8) | 136 |
+| 3.3 | `post_meeting_kills_soon_after` | 0/109 | `:2012` (8.8) | 137 |
+| 3.3 | `impostor_openers`, a conformance cell, written "by construction" as the census page writes it | 0/117 | `:1883` (8.2) | 138 |
+| 3.3 | `impostor_wins` | 24/50 | `:1950` (8.5) | 139 |
+| 4 | `reporter_seats_ejected_without_vent_proof` | 17/93 | `:2020` (8.8) | 140 |
+| 4 | `other_crewmate_seats_ejected_without_vent_proof` | 5/291 | `:2020` (8.8) | 141 |
+
+Each record line's round-3 value equals the census page's cell at H (235/305, 47/140, 0/106, 0/119, 17/50, 10/95 and
+5/302), which is how each cell's identity was checked. Round 2's values are written as fractions, the form the record
+prints them in, with no percentage computed here. Three cells of section 3.3's new column stay n/a, and the section
+says why: `grep -c -E 'vent_exits_seen_by_crew|opener_speaks_again|task_wins_with_sabotage_in_play'` over the record
+prints 0, and so does the same count for their page labels; the record states the neighbouring cells
+`vent_exits_seen_from_exit_room` and `accused_opener_answers` instead, which are different cells and are not
+substituted.
+
+**Finding 14's anchor, follow-through.** The four new acceptance items moved this card's Validation line, the one
+finding 14 cites, from `:395` to `:419`; the audit's section 7.4 cell now cites `:419`, where `git grep -n
+_cross_era_trajectory` stands, so the audit moves again in this commit and the `audits/` row is recomputed here.
+
+**The `audits/` row.** Recomputed from the index at each commit that moves audits bytes (the blob sizes of `git ls-files
+-s audits` through `git cat-file --batch-check='%(objectsize)'`, which equal the `stat -f %z` sum): 31,668,929 / 336 at
+`e4a1da60`, 31,672,081 / 336 at `f2ed415a`, 31,672,081 / 336 at this commit, the same, since the re-anchor keeps the byte count.
+
+**The script, re-run.** `audit_check.py` was taken from the block quoted above and hashed before use: sha256
+`27ef870ddf084bb1b23feda114a3d92e66478808eb4ef92063d3aae8cc92750f`, unchanged, and not edited. The full run at
+`f2ed415a` exited 0 with `audit_check: 0 failures`: section 0's scan 0; nine claim rows and eight test nodes; four
+sets, three candidate paths and four replaced locations; 141 figure rows (129 before) over five cited pages; 184
+tokens (177 before); no role-correct line without "reported"; one claim word (quoted); seven doctrine rows with two
+advisory memos; 37 ledger rows against 37 merges; 22 open items against 20 required keys; 16 findings; and 45
+commands (44 before, plus `finish-commits`), each exit 0. The full run at this commit's head is cited in the pull
+request body, since a commit cannot carry its own run.
+
+**Planted cases, this round's spans only.** Eight mutants, each killed. With `--fast` on scratch copies of the audit
+at `f2ed415a`: `76d1c826`'s subject given `docs:` again in section 6 exits 1 with `FAIL figure table: row 132: '76d1c826
+card: flip promote-round-3 to done after its merge' is not in section 6`; the `reasoning-pool` range cut to
+`349,352` exits 1 with `row 127: 'inventory sets 4' is not in the stdout of reasoning-pool`; round 2's `17/93` made
+`18/93` exits 1 with `row 140: '17/93' is not in section 4` and `number without a figure row: line 468 (fraction):
+'18/93'`; row 135's source moved to `:1917` exits 1 with `row 135: '214/281' is not on
+audits/audit-2026-10-09-stage-b-r3.md:1917`; `0/117` made `0/118` exits 1 with `row 138: '0/117' is not in section
+3.3` and `line 312 (fraction): '0/118'`; row 134's subject given `card:` exits 1 with that row not in section 6 and not
+in the stdout of `finish-commits`. Each printed only its own failure lines. By a count-only join of memo lines, the
+D12 quote occurs in lines 1633 and 1634 (count 1) and not in 1629 and 1630 (count 0), and the D7 quote in 1619 and
+1620 (count 1) and not in 1620 and 1621 (count 0). No exhaustive mutation sweep ran, by the round's instruction.
+
+**Validation, targeted (memo 8.7 item 1: no local `check.sh` at the head).** At `f2ed415a`: `uv run python
+scripts/check_doc_facts.py` exit 0; `uv run python scripts/validate_task_docs.py` exit 0 (390 historical phase tasks,
+390 prompts, 106 work cards); offline `uv run python scripts/verify_ml_evidence.py` exit 0 (64 checks: 52 OK, 0 FAIL, 7
+ABSENT, 5 INFO); `uv run pytest tests/scripts/test_verify_ml_evidence.py -q` 90 passed. At this commit the two
+validators and the offline verifier are re-run before the push, and the pull request body gives the results. `git
+diff --stat e4a1da60..HEAD` lists only `audits/audit-2026-10-10-finalized-state.md`, `docs/artifacts.md` and this
+card; over the held cards, the task index, the plan, the dispositions page and the memo, `git log --first-parent
+--no-merges a3b42fd4..HEAD` prints nothing. The demo bundle was not rebuilt this round: the round writes no baked
+input (only the featured games, their picker metadata and profile entries are baked, `scripts/build_demo_bundle.py:25-37`),
+and the bundle built at `082868ca`, which also moved the `audits/` row, equalled B's.
+
+**The automated review.** No Codex comment arrived after the five on `f24d9ca9`, all assessed above (`gh api
+repos/dkdan10/AiLibi/pulls/509/comments`, read-only, lists the same five ids); its summary comment still names one
+completed review, of `f24d9ca9`.
+
+**CI.** The gate record is CI's green run at the exact head, cited by run id in the pull request body; no card-only
+gate commit is added.
