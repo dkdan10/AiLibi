@@ -5930,6 +5930,77 @@ def test_a_page_with_no_typed_rewrites_reads_a_zero_count(doc_tree: Path) -> Non
     )
 
 
+def _shown_set_page_cells(page: str) -> tuple[dict[str, tuple[str, str]], int]:
+    """The rule's read of the shown set's table: its rows and teammate count."""
+
+    cells = check_doc_facts.scorecard_process_cells(page, "samples/9p2i", "stage-b-r2")
+    return cells.rows, cells.teammate_coerced
+
+
+def test_the_value_and_before_columns_are_found_by_their_headers(
+    doc_tree: Path,
+) -> None:
+    # Each cell is read from the column its header names, never from a fixed
+    # position. Planted: the shown set's table with its before and value
+    # columns traded, the header and every row, so the same cells sit in each
+    # other's place and are read the same.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    traded: list[str] = []
+    for line in section.splitlines(keepends=True):
+        cells = check_doc_facts.table_cells(line)
+        if cells is not None:
+            cells[-2], cells[-1] = cells[-1], cells[-2]
+            line = "| " + " | ".join(cells) + " |\n"
+        traded.append(line)
+    assert "| # | row | value | before: stage-b-r2, as published" in "".join(traded)
+    planted = page.replace(section, "".join(traded))
+    assert _shown_set_page_cells(planted) == _shown_set_page_cells(page)
+    _write(doc_tree, _SCORECARD_PAGE, planted)
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_a_table_ahead_of_the_row_table_is_passed_over(doc_tree: Path) -> None:
+    # The section's row table is the one whose header opens "| # | row |", not
+    # its first table. Planted: a small table between the section's before
+    # sentence and the row table, which the rule reads past.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    header = "| # | row | before: stage-b-r2, as published"
+    assert section.count(header) == 1
+    lead = (
+        "| set | games | meetings |\n| --- | --- | --- |\n"
+        "| samples/9p2i | 50 | 119 |\n\n"
+    )
+    planted = page.replace(section, section.replace(header, lead + header))
+    assert _shown_set_page_cells(planted) == _shown_set_page_cells(page)
+    _write(doc_tree, _SCORECARD_PAGE, planted)
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_the_teammate_count_is_read_among_other_typed_rewrites(
+    doc_tree: Path,
+) -> None:
+    # The row-7 detail line lists each typed reason with its count, sorted by
+    # name, as the ml_corpus/9p2i line on this page and round 2's line at
+    # 2eed2e92 do. Planted: the shown set's line with a reason on either side
+    # of the teammate count; the count read beside the authored share stays
+    # 10, and the front door still agrees.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    mixed = section.replace(
+        "typed guard rewrites teammate_coerced 10;",
+        "typed guard rewrites invalid_target 1, teammate_coerced 10, "
+        "uncited_coerced 2;",
+    )
+    assert mixed != section
+    planted = page.replace(section, mixed)
+    assert _shown_set_page_cells(planted) == _shown_set_page_cells(page)
+    assert _shown_set_page_cells(planted)[1] == 10
+    _write(doc_tree, _SCORECARD_PAGE, planted)
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
 def test_a_truncated_scorecard_row_is_refused(doc_tree: Path) -> None:
     # Planted: the page's row-4 line loses its value cell, so its last cell is
     # the before column's and no cell of it can be read as the value.
