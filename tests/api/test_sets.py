@@ -932,6 +932,80 @@ def test_no_featured_game_is_a_wrong_but_believable_ejection() -> None:
     ]
 
 
+def _crewmate_ejections(replays: dict[tuple[str, int], ReplayView]) -> list[str]:
+    """Each meeting of a featured replay that ejects a player who is not an impostor.
+
+    Every meeting is read, not only the first the tour opens on: the strip
+    renders before any game opens, and no wrong-but-believable ejection is
+    featured, held at its conservative strength, so any crewmate ejection is
+    excluded whatever its ballots held. The role read curates the strip and
+    gates no record.
+    """
+
+    problems: list[str] = []
+    for (set_name, seed), replay in replays.items():
+        roles = {player.agent_id: player.role for player in replay.players}
+        for index, meeting in enumerate(replay.meetings):
+            ejected = meeting.ejected_player_id
+            if ejected is not None and roles[ejected] != "IMPOSTOR":
+                problems.append(
+                    f"{set_name} seed {seed} meeting {index} ejects {ejected}, a crewmate"
+                )
+    return problems
+
+
+def _ejectee_read_as_crewmate(replay: ReplayView, index: int) -> ReplayView:
+    """``replay`` with meeting ``index``'s ejected player's role read as a crewmate."""
+
+    ejected = replay.meetings[index].ejected_player_id
+    assert ejected is not None
+    players = tuple(
+        player.model_copy(update={"role": "CREWMATE"})
+        if player.agent_id == ejected
+        else player
+        for player in replay.players
+    )
+    return replay.model_copy(update={"players": players})
+
+
+def test_no_featured_game_ejects_a_crewmate_at_any_meeting() -> None:
+    """Every meeting of every served featured replay ejects no crewmate.
+
+    Planted: a featured replay copied with one ejectee's role read as a
+    crewmate fails, naming the set, the seed and the meeting index, at a first
+    meeting and at a later one of the same game, and in either set.
+    """
+
+    featured = _parse_featured_games()
+    assert featured
+    registry = SetLoaderRegistry(_PARENT)
+    replays = {
+        (set_name, seed): registry.get(set_name).load_replay(f"headless-seed-{seed}")
+        for set_name, seed in featured
+    }
+    assert len(replays) == len(featured)
+    assert _crewmate_ejections(replays) == []
+
+    # The landing game ejects at its first and its third meeting.
+    head = replays[("9p2i", 19)]
+    assert [meeting.ejected_player_id is not None for meeting in head.meetings] == [
+        True,
+        False,
+        True,
+    ]
+    for index in (0, 2):
+        planted = {**replays, ("9p2i", 19): _ejectee_read_as_crewmate(head, index)}
+        ejected = head.meetings[index].ejected_player_id
+        assert _crewmate_ejections(planted) == [
+            f"9p2i seed 19 meeting {index} ejects {ejected}, a crewmate"
+        ]
+    short = replays[("4p1i", 2)]
+    planted = {**replays, ("4p1i", 2): _ejectee_read_as_crewmate(short, 0)}
+    assert _crewmate_ejections(planted) == [
+        f"4p1i seed 2 meeting 0 ejects {short.meetings[0].ejected_player_id}, a crewmate"
+    ]
+
+
 def _vent_trips_before_the_first_meeting(
     replay: ReplayView,
 ) -> list[tuple[str, int, int | None]]:
