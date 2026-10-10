@@ -119,6 +119,25 @@ Each item names its enforcing mechanism and the planted or perturbed case that t
 seen red before the code it guards exists. Every count is the set shown at dispatch, measured at the head that states
 it.
 
+- [x] Review correction: each baseline's innocent-ejection count sits in its own sentence, so each keeps its check
+  (review round 2 of `7987730c`, the correctness lens: the condensed Phase-20 sentence carried baseline 8's 46 and
+  baseline 9's 42 together, and `check_verdict_figures` passes a wrongful-ejection sentence naming any recorded
+  count, so 46 moved to 47, or 42 to 41, passed). Mechanism: `check_verdict_figures`. Planted:
+  `test_each_baselines_innocent_ejection_count_sits_in_its_own_sentence`, the first whole number after each
+  baseline's conviction fraction moved by one, in the README and the reading guide; red on the condensed README (its
+  two cases, 0 errors where 1 is expected), green on the split text.
+- [x] Review correction: the claim that every figure keeps its check is true at the head (review round 2 of
+  `7987730c`, the integrity lens, the same defect): until the split it was not, which Decision 4 below and the pull
+  request's Decisions 4 now say. Proving command: on a `git archive` of the head, `check_doc_facts.py --repo-root`
+  exits 1 with the README's 46 moved to 47 alone, 1 with 42 moved to 41 alone, 1 with both, and 0 unedited.
+- [x] Review correction: check 22 reads the scorecard page by its column headers, by its row table's own header and
+  by each typed reason's name (review round 2 of `7987730c`, the correctness lens: four listed-class mutants of
+  `scorecard_process_cells` survived the whole doc-facts file). Mechanism: `scorecard_process_cells`. Planted:
+  `test_the_value_and_before_columns_are_found_by_their_headers` (the two columns traded; red on D5, the value
+  column read as the literal 3, and on D6, the before column read as the literal 2);
+  `test_a_table_ahead_of_the_row_table_is_passed_over` (red on D12, the header match made an is-not-None test); and
+  `test_the_teammate_count_is_read_among_other_typed_rewrites` (`invalid_target 1, teammate_coerced 10,
+  uncited_coerced 2` reads 10; red on D16, the reason read made the constant `teammate_coerced`); green on the rule.
 - [x] Review correction: the strip guard is proven to read the picker's own featured list (the three-lens review of
   `1b53d86d`, the correctness and docs lenses: the list read made its literal survived). Mechanism: the guard's
   read-and-load path, `_featured_replays` in `tests/api/test_sets.py`. Planted:
@@ -353,7 +372,10 @@ Orchestrator rulings at dispatch, as applied:
    `compare_before_figure`; the rule refuses a before column whose header names another era. Both pages now say each
    before cell is what the set's "previously shown recording" read (was "replaced recording").
 4. Both ceilings hold without dropping a checked figure. The Phase-20 and Phase-21 bar paragraphs stay on the README;
-   the Phase-20 one is condensed, its verdict word and every figure kept.
+   the Phase-20 one is condensed, its verdict word and every figure kept, each baseline's innocent-ejection count in
+   a sentence of its own. Until review round 2 this was not true: the condensed text joined baseline 8's and baseline
+   9's counts in one sentence, so neither kept its check (each vouched for the other). "Review corrections, round 2"
+   below records the split and its planted case.
 5. Nothing in `docs/media` or `frontend/e2e` moves.
 6. The live-tense sweep is item 7 below.
 7. The three halves held for the owner are untouched and no line of theirs is written: D8-L (the dashboard's "gate"
@@ -411,7 +433,8 @@ Decisions of this build:
    `test_a_shown_set_with_no_replaced_era_is_named`,
    `test_a_row_above_reordered_process_rows_names_the_first_beneath_it`, `test_a_linked_claim_is_still_read_as_its_row`,
    and, from review round 1, `test_an_integrity_row_moved_below_the_process_rows_detected` (both integrity rows).
-2. **Ceilings.** `wc -w README.md docs/reading-guide.md`: 1,585 and 1,339 against 1,600 and 1,350;
+2. **Ceilings.** `wc -w README.md docs/reading-guide.md`: 1,587 and 1,339 at the head against 1,600 and 1,350
+   (1,585 before review round 2 split the bar sentence);
    `_FRONT_DOOR_BUDGETS` is unchanged in the diff. Cut from prose below the rows: a duplicated sentence each in the
    not-demonstrated, ML, firewall, install, scopes, running-locally, real-report and samples paragraphs, and the
    condensed Phase-20 paragraph; in the guide, the Phase-20 sentence, §2's run and click paragraphs and the flag
@@ -419,7 +442,9 @@ Decisions of this build:
    `check_finding_figures`, `check_injustice_cell` and `check_populated_report_example` are unchanged and green.
    Planted: `test_front_door_page_over_its_ceiling_detected` (one word over) and
    `test_verdict_rate_that_contradicts_its_own_fraction_detected` (the condensed sentence's `61 of 103 = 0.5922`
-   moved to `61 of 104`, failing `check_verdict_figures`) pass against the new text.
+   moved to `61 of 104`, failing `check_verdict_figures`) pass against the new text; since review round 2,
+   `test_each_baselines_innocent_ejection_count_sits_in_its_own_sentence` holds each baseline's count to its own
+   sentence.
 3. **The new term.** `### top suspect (the player a voter's own suspicion rates highest)` in `docs/glossary.md`; a
    `_DIALECT_TERMS` row; first README use inside the deviating row's link. No README cell carries threshold
    arithmetic. Planted: `test_top_suspect_unlinked_at_its_first_use_detected`,
@@ -462,7 +487,9 @@ Decisions of this build:
    F1, F4); message arguments 3 (P2, P24, S4). While the pass was designed, four tests were added for mutants the
    earlier cases did not reach (P13, P18, P23, P27); the pass then ran once over all 36. The three-lens review of
    `1b53d86d` then found three listed-class mutants outside those 39 that survived; each is killed by a planted case
-   added in "Review corrections, round 1" below (S5, S6, P32). The mutant list is in the
+   added in "Review corrections, round 1" below (S5, S6, P32). Review round 2 found four more in
+   `scorecard_process_cells` (D5, D6, D12, D16), each killed by a planted case in "Review corrections, round 2"
+   below. The mutant list is in the
    pull request body. The gate record is CI's run at the exact head of the pull request, cited there by run id (memo
    8.7 item 1 bars a further card-only commit to record it); run 38016862362 is CI at `11eb133a`, the head the
    review read.
@@ -550,6 +577,65 @@ replays/ training/ api/ docs/media/ frontend/e2e/ docs/process-scorecard.md docs
 grep -n -i 'correct ejections' -- . ':!tasks' ':!audits'` still 23 hits, as item 7 justifies; ruff, ruff format and
 strict mypy on the two changed test files clean. No file under `frontend/`, `scripts/` or `docs/` and neither page
 changed since `1b53d86d`, so the frontend results and the bundle diff above stand for this head; CI at the exact
+head, cited by run id in the pull request, is the gate record. The card's Status line stays the orchestrator's.
+
+### Review corrections, round 2 (2026-10-09)
+
+The three-lens review of `7987730c` raised three blocking findings, two distinct defects, both fixed, each by a
+planted case seen red first. One acceptance item per finding is prepended above, naming the lens that raised it.
+
+1. **The condensed Phase-20 sentence unbound two checked counts** (the correctness and integrity lenses). At
+   `7987730c` the README's bar paragraph read "Baselines 8 and 9 registered none: 50 of 96 = 0.5208 with 46 innocent
+   ejections, then 43 of 85 = 0.5059 with 42 over four recorded sets, a movement these samples cannot call real."
+   `check_verdict_figures` passes a wrongful-ejection sentence that names any count a record read (pooled 42 and 46;
+   9p2i 15 and 22), so each count vouched for the other: either one moved by one passed alone, where the base text
+   refused each. Decision 4's "every figure kept" and the pull request's matching claim were not true at that head.
+   Fix (`f4dc86a7`): one sentence per baseline, each with its own count and the words "innocent ejections":
+   "Baseline 8 registered none: 50 of 96 = 0.5208 with 46 innocent ejections. Nor did baseline 9: 43 of 85 = 0.5059
+   with 42 innocent ejections over four sets, a movement these samples cannot call real." The round-2 rebuild hunk
+   follows the new text with its assertion kept. Words: the reviewers' suggested wording read 1,589, which put
+   `test_repeated_results_claim_detected` (it adds a 12-word stale row) at 1,601 and red; "Nor did baseline 9" and
+   "four sets" (for "registered none either" and "four recorded sets") hold the README at 1,587 with every figure
+   kept and `_FRONT_DOOR_BUDGETS` unchanged. Planted: `test_each_baselines_innocent_ejection_count_sits_in_its_own_sentence`,
+   each count moved by one in the README and the reading guide. On the condensed text its two README cases failed (0
+   errors where 1 is expected; `2 failed, 5 passed` in a `-k` run with the three cases of item 2) and its two guide
+   cases passed, the guide's sentences never having been joined; on the split text all four pass. Archive probe
+   (`git archive` of the head, then `check_doc_facts.py --repo-root` on each edit): 46 to 47 alone exit 1, 42 to 41
+   alone exit 1, both exit 1 with two errors, unedited exit 0.
+2. **Four listed-class mutants of `scorecard_process_cells` survived** (the correctness lens): D5, the value column's
+   `header.index` read made the literal 3, and D6, `cells[before[0]]` made `cells[2]` (each a loaded source read to
+   its literal); D12, the `| # | row |` header match made an is-not-None test; D16, the typed reason read made the
+   constant `teammate_coerced` (a kind read to a constant). Every planted page had kept the committed page's column
+   order, its one table and its one typed reason. Fix (`24ad9bac`): three planted pages, each read the same as the
+   committed page, with `check_facts` clean on it: the before and value columns traded, header and every row
+   (`test_the_value_and_before_columns_are_found_by_their_headers`); a small table ahead of the row table
+   (`test_a_table_ahead_of_the_row_table_is_passed_over`); and the row-7 detail line reading `invalid_target 1,
+   teammate_coerced 10, uncited_coerced 2`, sorted by name as the ml_corpus/9p2i line on the page and round 2's line
+   at `2eed2e92` are (`test_the_teammate_count_is_read_among_other_typed_rewrites`). No production line moves.
+
+**Probe of the spans named and changed** (scratch `mutate.py`, each an exact-text edit restored byte for byte and
+checked by digest; guarding command the whole `tests/scripts/test_check_doc_facts.py`, 366 passed unmutated): 7
+mutants, all killed. R1 (D5) and R2 (D6), a loaded source read to its literal: `1 failed, 365 passed`, the
+traded-columns case. R3 (D12), a comparison made a None test: `1 failed`, the lead-table case. R4 (D16), a kind read
+made a constant: `1 failed`, the typed-rewrites case. R5, the injustice rule's sentence swapped for the whole
+document (swap a related collection), and R6, its count filter dropped (drop a filter): `8 failed, 358 passed` each,
+the four new cases and four existing verdict cases. R7, the README's two sentences merged back into the condensed one
+(the defect itself): `4 failed, 362 passed`, the two README cases and the two rebuild cases. The pass and the two fix
+rounds cover 49 distinct mutants: the 42 above and these 7.
+
+**Validation at this head** (count-only; no local `check.sh`, memo 8.7 item 1): `check_doc_facts.py` exit 0; `wc -w
+README.md docs/reading-guide.md` 1587 and 1339; `pytest tests/scripts/test_check_doc_facts.py
+tests/scripts/test_public_recording_provenance.py tests/api/test_sets.py tests/api/test_public_results.py -q` 536
+passed; `publish_process_scorecard.py --check`, `publish_gameplay_census.py --check`, `publish_game_profile.py
+--check` exit 0 each; `build_sample_report.py --check` on the four sets exit 0 each; `verify_ml_evidence.py`
+(offline) exit 0, every check passed, 7 EVIDENCE-BRANCH-ABSENT; `validate_task_docs.py` exit 0; `git diff
+--exit-code 76d1c826 -- replays/ training/ api/ docs/media/ frontend/e2e/ docs/process-scorecard.md
+docs/gameplay-census.md` exit 0; `git grep -n -i 'correct ejections' -- . ':!tasks' ':!audits'` still 23 hits, as
+item 7 justifies; ruff, ruff format and strict mypy on the test file clean. The branch changes the 11 Expected-scope
+files only against `76d1c826`; no diff under `TournamentDashboard.tsx`, `MeetingView.tsx`, `BeliefPanel.tsx`,
+`BeliefCell.tsx`, `BallotCard.tsx`, `GuidedTour.tsx` or `api/`; `_FRONT_DOOR_BUDGETS` is unchanged. No file under
+`frontend/` changed since `11eb133a`, so the frontend results and the bundle diff stand for this head. The README's
+split sentences go live on GitHub with the merge; the pull request quotes them old against new. CI at the exact
 head, cited by run id in the pull request, is the gate record. The card's Status line stays the orchestrator's.
 
 ### Limitations
