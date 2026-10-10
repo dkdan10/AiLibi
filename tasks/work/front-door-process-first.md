@@ -1,6 +1,6 @@
 # The front door leads with how the agents decide
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
