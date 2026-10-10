@@ -5978,6 +5978,51 @@ def test_a_table_ahead_of_the_row_table_is_passed_over(doc_tree: Path) -> None:
     assert check_doc_facts.check_facts(doc_tree) == []
 
 
+def test_a_table_after_the_row_table_is_passed_over(doc_tree: Path) -> None:
+    # The row table ends at its first line that is not a table line, so a later
+    # table in the section is never read into it. Planted: a table of the row
+    # table's width between the row table and the row-2 detail line, whose
+    # second cell carries a process row's label; the rule reads past it.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    detail = "\nRow 2 detail: "
+    assert section.count(detail) == 1
+    trail = (
+        "\n| set | row | before | value |\n| --- | --- | --- | --- |\n"
+        "| samples/9p2i | agent-authored share | 1/2 = 0.5000 | 1/1 = 1.0000 |\n"
+    )
+    planted = page.replace(section, section.replace(detail, trail + detail))
+    assert _shown_set_page_cells(planted) == _shown_set_page_cells(page)
+    _write(doc_tree, _SCORECARD_PAGE, planted)
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_a_row_table_with_no_value_column_is_refused(doc_tree: Path) -> None:
+    # Planted: the shown set's table loses its value column, the header and
+    # every row, so no cell of it is the shown recording's own. The page is
+    # refused naming the column, never read from another one.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    dropped: list[str] = []
+    for line in section.splitlines(keepends=True):
+        cells = check_doc_facts.table_cells(line)
+        if cells is not None:
+            line = "| " + " | ".join(cells[:-1]) + " |\n"
+        dropped.append(line)
+    assert "| # | row | before: stage-b-r2, as published at `2eed2e92` |\n" in (
+        "".join(dropped)
+    )
+    planted = page.replace(section, "".join(dropped))
+    refusal = "the '### samples/9p2i' table has no 'value' column"
+    with pytest.raises(check_doc_facts.ScorecardPageError) as raised:
+        _shown_set_page_cells(planted)
+    assert raised.value.args == (refusal,)
+    _write(doc_tree, _SCORECARD_PAGE, planted)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_SCORECARD_PAGE}: {refusal} — ")
+
+
 def test_the_teammate_count_is_read_among_other_typed_rewrites(
     doc_tree: Path,
 ) -> None:
