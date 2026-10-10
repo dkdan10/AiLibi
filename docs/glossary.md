@@ -291,6 +291,17 @@ cited and nothing said), and `not_assessed` (the meeting itself set this vote,
 so there is no voter decision to assess)
 ([`meetings/manager.py`](../meetings/manager.py)).
 
+### top suspect (the player a voter's own suspicion rates highest)
+
+Of the players a crewmate's ballot lets it vote out, the one its own suspicion
+rows, as that ballot shows them, rate highest. A crew eject ballot naming
+someone else departs from that arithmetic: the voter chose against the number
+its memory handed it, which can be right or wrong. When two players tie for the
+top there is no top suspect, and the ballot is left out of the count. The
+reading uses only the target the ballot recorded and the rows its voter was
+shown, and it gates nothing ([process scorecard](process-scorecard.md), row 2;
+[`eval/process_scorecard.py`](../eval/process_scorecard.py)).
+
 ### route line (what the doors say about a player's stated places)
 
 One line of a ballot's `<routes>` block, served only under the recorded setting
