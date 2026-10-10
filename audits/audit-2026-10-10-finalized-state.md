@@ -545,9 +545,12 @@ first-parent merges (command `ledger-count` prints `first-parent merges 37`). A
 read-only
 `gh pr list --repo dkdan10/AiLibi --base main --state merged --search 'merged:>=2026-09-19'`
 at dispatch names the same 37 pull requests, each with a merge commit, so no
-row is a fast-forward. The date is the merge commit's author date. Between merges, contract documents
-landed on `main` as `card:` and `docs:` commits without a pull request, as
-AGENTS.md allows. This audit cites two groups of them: the extractor card's
+row is a fast-forward. The date is the merge commit's author date. Between merges, two kinds of
+commit landed on `main` without a pull request: `docs:` commits, which AGENTS.md
+allows for planning and contract documents, and the orchestrator's `card:`
+flips, which set a merged card's Status line and the task index's inventory
+sentence, the two lines the finish-wave cards reserve to the orchestrator on
+`main`. This audit cites two groups of them: the extractor card's
 closure, two `docs:` commits (`a331ab90`, then `97549508`); and the
 orchestrator's five commits of the finish wave, one after each of its four
 merges and the inventory stamp after the last, each printed with its subject

@@ -516,7 +516,8 @@ the Results of `stage-b-record-r3`, `retire-era-locked-pins`, `promote-round-3` 
   seeds, not all 300", the recorder's era refusal and the planted registry test. Planted: `stage-b-r3` edited to
   `stage-b-r2` in section 2.1 exits 1 with `FAIL era ladder: row 2: table [...'stage-b-r2'...] against printed
   [...'stage-b-r3'...]`.
-- *Every figure of section 3 is read from a committed command at H, count-only.* Section 8.3 holds 129 figure rows,
+- *Every figure of section 3 is read from a committed command at H, count-only.* Section 8.3 holds 141 figure rows (129 at `e4a1da60`,
+  before round 1 added rows 130 to 141),
   each naming the audit section that states it and a `path:line` or a section-8.1 command; the script finds each
   figure in its section and on its source line or in its command's stdout, and runs the `--check` of every cited
   page: the scorecard, census and profile publishers and both route instruments, five pages, each exit 0. Section 3
@@ -529,7 +530,7 @@ the Results of `stage-b-record-r3`, `retire-era-locked-pins`, `promote-round-3` 
   holds-nothing cell edited from `0/235` to `1/235` in the worktree (restored after, `git status` clean),
   `publish_gameplay_census.py --check` exits 1 with `docs/gameplay-census.md is STALE: it does not match a
   recomputation from the committed recordings`, and exits 0 on the restored page.
-- *Every number in sections 0 to 7 has a row in section 8.* The scan reads 177 tokens in sections 0 to 7 and every
+- *Every number in sections 0 to 7 has a row in section 8.* The scan reads 184 tokens in sections 0 to 7 (177 at `e4a1da60`) and every
   one is covered by a figure row stated in its section. The patterns, quoted from the script: tokens are fractions
   `(?<![\w./,-])\d+(?:,\d{3})* ?/ ?\d+(?:,\d{3})*(?![\w/]|\.\d|,\d)`, "N of M" `(?<![\w.,])\d+(?:,\d{3})* of
   \d+(?:,\d{3})*(?![\w]|\.\d|,\d)`, percentages `(?<![\w.,])\d+(?:\.\d+)?%` and decimals
@@ -610,9 +611,9 @@ the Results of `stage-b-record-r3`, `retire-era-locked-pins`, `promote-round-3` 
 audits/audit-2026-10-10-finalized-state.md` (full) or with `--fast` (skipping the `slow-` commands and the claim
 commands, used for the planted copies); sha256 `27ef870ddf084bb1b23feda114a3d92e66478808eb4ef92063d3aae8cc92750f`. The full run at H: exit 0, `audit_check: 0 failures`, with
 section 0's scan 0, nine claim rows and eight test nodes, four sets, three candidate paths and four replaced
-locations, 129 figure rows over five cited pages, 177 tokens, no role-correct line without "reported", one claim word
+locations, 141 figure rows over five cited pages (129 before round 1), 184 tokens (177 before), no role-correct line without "reported", one claim word
 (quoted), seven doctrine rows with two advisory memos, 37 ledger rows against 37 merges, 22 open items against 20
-required keys, 16 findings, and every one of its 44 commands exit 0. In the final run, at `082868ca`, each planted copy
+required keys, 16 findings, and every one of its 45 commands (44 before round 1) exit 0. In the final run, at `082868ca`, each planted copy
 above exited 1 with only its own failure lines (`plant.py`, scratch). An earlier run, before finding 13's command
 was pinned to a seed, also printed `row 119: '1 passed' is not in the stdout of flaky-alone` on the
 firewall-paragraph copy: the unseeded case failed once, the flake the finding files.
@@ -1424,7 +1425,7 @@ advisory memos; 37 ledger rows against 37 merges; 22 open items against 20 requi
 commands (44 before, plus `finish-commits`), each exit 0. The full run at this commit's head is cited in the pull
 request body, since a commit cannot carry its own run.
 
-**Planted cases, this round's spans only.** Eight mutants, each killed. With `--fast` on scratch copies of the audit
+**Planted cases, this round's spans only.** Six planted copies, each killed, and two count-only line joins. With `--fast` on scratch copies of the audit
 at `f2ed415a`: `76d1c826`'s subject given `docs:` again in section 6 exits 1 with `FAIL figure table: row 132: '76d1c826
 card: flip promote-round-3 to done after its merge' is not in section 6`; the `reasoning-pool` range cut to
 `349,352` exits 1 with `row 127: 'inventory sets 4' is not in the stdout of reasoning-pool`; round 2's `17/93` made
