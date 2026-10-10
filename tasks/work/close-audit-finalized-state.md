@@ -1,6 +1,6 @@
 # The close audit: what the project demonstrates, and what it does not
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
