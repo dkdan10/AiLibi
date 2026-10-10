@@ -29,6 +29,7 @@ import {
   MAP_COPY,
   PICKER_COPY,
   PROFILE_COPY,
+  PUBLIC_RESULTS_COPY,
   SPECTATOR_COPY,
   TRANSPORT_COPY,
   dialectHits,
@@ -60,8 +61,8 @@ const IN_SCOPE_SOURCES: readonly { readonly file: string; readonly rendered: str
     // The map stage renders the regroup note through `MAP_COPY` and its one
     // literal fallback inline.
     { file: "MapView.tsx", rendered: "Select a replay to view the map." },
-    // The public results page: its recorded-behavior groups render through
-    // `PUBLIC_RESULTS_COPY`, the rest of the page still inline.
+    // The public results page: its recorded-behavior groups and its ejection
+    // tile render through `PUBLIC_RESULTS_COPY`, the rest of the page still inline.
     { file: "PublicResults.tsx", rendered: "What the recordings show" },
   ];
 
@@ -325,8 +326,8 @@ describe("the in-scope surfaces on disk", () => {
 // claim gets its own check: on that file, the props that CARRY copy must all be
 // expressions, never quoted literals.
 //
-// Only that one file, plus the recorded-behavior group of `PublicResults.tsx`
-// (checked at the end of this section). The other eight keep prose inline by
+// Only that one file, plus the recorded-behavior group and the ejection tile of
+// `PublicResults.tsx` (checked at the end of this section). The other eight keep prose inline by
 // design (the contract scopes `TurnCard.tsx` to a single string, and the
 // transport's button titles are not this task's), and none of them claims
 // otherwise in its header.
@@ -454,6 +455,66 @@ describe("the public results card's copy-ownership claim", () => {
     const text = span.replace("{COPY.noRecordedSettings}", "No enabled experiments recorded");
     expect(text).not.toBe(span);
     expect(proseLiterals(text)).toEqual(["No enabled experiments recorded"]);
+  });
+
+  it("renders the ejection tile's heading and description from the copy", () => {
+    const span = ejectionTileSpan(source);
+    expect(span).toContain("COPY.ejectionsHeading");
+    expect(span).toContain("COPY.ejectionsDescription");
+    expect(proseLiterals(span)).toEqual([]);
+  });
+
+  it("catches the old heading typed back into the tile (planted)", () => {
+    const span = ejectionTileSpan(source);
+    const planted = span.replace("{COPY.ejectionsHeading}", "Correct ejections");
+    expect(planted).not.toBe(span);
+    expect(proseLiterals(planted)).toEqual(["Correct ejections"]);
+  });
+});
+
+// The public results tab's ejection tile counts impostors among ejected players:
+// a role read, reported beside the process figures and never called correct. Its
+// heading describes its own number.
+
+/** The tile that renders the impostor-ejection fraction, class names set aside. */
+function ejectionTileSpan(source: string): string {
+  const fraction = source.indexOf(
+    "<Fraction n={results.impostor_ejections} d={results.ejections} />",
+  );
+  const start = source.lastIndexOf("<div", fraction);
+  const end = source.indexOf("</div>", fraction);
+  if (fraction < 0 || start < 0 || end <= fraction) throw new Error("the ejection tile moved");
+  return source.slice(start, end).replace(/className="[^"]*"/g, "");
+}
+
+/** The path of every string leaf in `tree` that calls an ejection correct. */
+function correctEjectionLeaves(tree: unknown, path: string): readonly string[] {
+  return stringLeaves(tree, path)
+    .filter((leaf) => /correct ejection/i.test(leaf.text))
+    .map((leaf) => leaf.path);
+}
+
+describe("the public results tab's ejection heading", () => {
+  it("says what the fraction counts, and calls no ejection correct", () => {
+    expect(PUBLIC_RESULTS_COPY.ejectionsHeading).toBe("Ejected players who were impostors");
+    expect(PUBLIC_RESULTS_COPY.ejectionsDescription).toBe(
+      "Impostors / all ejected players across {meetings} resolved meetings. {innocent} innocent ejections; skips are excluded.",
+    );
+    expect(correctEjectionLeaves(PUBLIC_RESULTS_COPY, "PUBLIC_RESULTS_COPY")).toEqual([]);
+  });
+
+  it("catches the old heading, or an old sentence, restored as a copy value (planted)", () => {
+    const heading = { ...PUBLIC_RESULTS_COPY, ejectionsHeading: "Correct ejections" };
+    expect(correctEjectionLeaves(heading, "PUBLIC_RESULTS_COPY")).toEqual([
+      "PUBLIC_RESULTS_COPY.ejectionsHeading",
+    ]);
+    const sentence = {
+      ...PUBLIC_RESULTS_COPY,
+      ejectionsDescription: "Correct ejections over all ejected players.",
+    };
+    expect(correctEjectionLeaves(sentence, "PUBLIC_RESULTS_COPY")).toEqual([
+      "PUBLIC_RESULTS_COPY.ejectionsDescription",
+    ]);
   });
 });
 

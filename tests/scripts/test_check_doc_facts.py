@@ -110,6 +110,9 @@ _COPIED = (
     "audits/audit-2026-10-09-stage-b-r3.md",
     "audits/audit-2026-10-01-stage-b-r2.md",
     "docs/process-scorecard-before.json",
+    # ...and the generated scorecard page, whose shown-set table owns the four
+    # process rows the results tables lead with.
+    "docs/process-scorecard.md",
     # ...and the memo that registered the four targets before the bytes
     # existed, which the adopting record's copies of them are held to.
     "audits/audit-phase-21-preregistration.md",
@@ -1713,14 +1716,18 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """The shown 9-player set was recorded 2026-10-09 under the adopted gameplay changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity); the 4-player set and the ML corpus stay at [baseline 9](docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22. No figure pools the two. Each before cell is what that set's replaced recording read.
+        """The shown 9-player set was recorded 2026-10-09 under the adopted gameplay changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity); the 4-player set and the ML corpus stay at [baseline 9](docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22. No figure pools the two. Each before cell is what that set's previously shown recording read.
 """,
         """The shown 9-player set was recorded 2026-10-01 under the adopted gameplay changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity); the 4-player set and the ML corpus stay at [baseline 9](docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22. No figure pools the two. Each before cell is what that set's replaced recording read.
 """,
     ),
     (
-        """| Impostor win rate, committed samples | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
+        """| Eject ballots citing a line the voter held about their target (9p2i) | 394/397 = 0.9924 | 407/410 = 0.9927 | [process scorecard](docs/process-scorecard.md); a floor: the ballot asks every eject to cite |
+| Crew eject ballots naming someone other than the voter's [top suspect](docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56/291 = 19.2% | 65/292 = 22.3% | [process scorecard](docs/process-scorecard.md) |
+| Ballots with no stated reason (9p2i) | 6/702 = 0.0085 | 11/691 = 0.0159 | [process scorecard](docs/process-scorecard.md) |
+| Ballots whose target is the one their voter wrote (9p2i) | 692/702 = 0.9858; 10 impostor votes against a partner turned into skips | 674/691 = 0.9754 | [process scorecard](docs/process-scorecard.md) |
 | Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 397 / 397, zero dangling | 410 / 410, zero dangling | the 2026-10-09 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
+| Impostor win rate, committed samples | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
 | Ejection accuracy with engine-certified proof of the ejectee's role, against without (9p2i) | 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | the 2026-10-09 record (9p2i) — [the record](audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](audits/audit-2026-10-01-stage-b-r2.md) §9.6; 15 of 15 innocent ejections sit in the no-proof cell |
 | Correct 9p ejections riding an ejectee-specific vent sighting | 24 / 46 = 52% | 24 / 44 = 55% | the 2026-10-09 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
 """,
@@ -1731,9 +1738,27 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 46 correct ejections follow certified vent evidence; without it, 22 of 37 ejections target impostors and 15 convict crewmates. This demonstrates processing of certified facts and deception, **not general social deduction**. The [reading guide](docs/reading-guide.md) reads these 50 games alone.
+        """*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 46 correct ejections follow certified vent evidence; without it, 22 of 37 ejections target impostors and 15 convict crewmates. This demonstrates processing of certified facts and deception, **not general social deduction**.
 """,
         """*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 44 correct ejections follow certified vent evidence; without it, 20 of 42 ejections target impostors and 22 convict crewmates. This demonstrates processing of certified facts and deception, **not general social deduction**. The [reading guide](docs/reading-guide.md) reads these 50 games alone.
+""",
+    ),
+    (
+        """**Two bars were written down first, and both were missed.** Baseline 7 measured conviction accuracy without proof at 61 of 103 = 0.5922 against 0.60, and wrongful ejections at 42 against fewer than 35; its rule returned **FINDING**, and Daniel adopted it by explicit owner override on 2026-08-26. Baseline 8 registered none: 50 of 96 = 0.5208 with 46 innocent ejections. Nor did baseline 9: 43 of 85 = 0.5059 with 42 innocent ejections over four sets, a movement these samples cannot call real. [The decision and its limitations](docs/ownership-case-study.md).
+""",
+        """**Two bars were written down first, and both were missed.** Baseline 7 measured conviction accuracy without proof at 61 of 103 = 0.5922 against 0.60, and wrongful ejections at 42 against fewer than 35. Its rule returned **FINDING**, but Daniel adopted that recording by explicit owner override on 2026-08-26; the bars did not pass. Baseline 8 registered no bars and measured 50 of 96 = 0.5208 and 46 innocent ejections. Baseline 9 registered none either and measured 43 of 85 = 0.5059 and 42 innocent ejections over its four recorded sets, a movement too small for these samples to call real. [The decision and its limitations](docs/ownership-case-study.md) preserve both judgments.
+""",
+    ),
+    (
+        """**Four learned impostor policies beat their scripted comparator on wins; none became the default.** Each failed a pre-registered evidence-quality gate; the retained candidate's edge is not significant at 50 games, and no comparison was re-run after two comparator defects were repaired. [ML methods, negative results, and limits](docs/ml-program.md).
+""",
+        """**Four learned impostor policies beat their scripted comparator on wins; none became the default.** Each failed a pre-registered evidence-quality gate. The retained candidate's advantage is not statistically significant at 50 games; the old comparator also had two since-repaired defects, and those learned comparisons were not re-run. [ML methods, negative results, and limits](docs/ml-program.md).
+""",
+    ),
+    (
+        """- **Observation firewall:** agents receive sanitized packets and a public map; the boundary checks above defend it. The spectator is deliberately privileged.
+""",
+        """- **Observation firewall:** agents receive sanitized packets and a public map. Import-linter, planted import leaks, and recursive packet sweeps defend this boundary. The spectator is deliberately privileged.
 """,
     ),
     (
@@ -1743,13 +1768,55 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections, vote correctness 0.783, and ejection accuracy 0.754. The demo publishes a smaller, strictly validated summary; reported usage is separate from verified outcomes and is not a billing guarantee.
+        """The [ownership case study](docs/ownership-case-study.md) traces one decision from its evidence to what remained unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. Phase closes do not claim every issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
+""",
+        """The [ownership case study](docs/ownership-case-study.md) traces one consequential decision through evidence, alternatives, implementation, review, and what remained unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. The cleanup branch merged into main on 2026-09-07; historical phase closes are not a claim that every current issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
+""",
+    ),
+    (
+        """(22.x works from 22.13). Installation downloads locked dependencies over
+""",
+        """(22.x works from 22.13). Installation downloads locked dependencies; allow
+""",
+    ),
+    (
+        """Fake runs test mechanics; samples preserve hosted
+dialogue. Each replay has an audit sidecar, and `--force` replaces both.
+""",
+        """Stop serving with Ctrl-C. Fake runs test mechanics; samples preserve hosted
+dialogue. Each replay has an audit sidecar; `--force` replaces both together.
+""",
+    ),
+    (
+        """### Three reproducibility scopes
+
+""",
+        """### Three reproducibility scopes
+
+Three distinct claims:
+
+""",
+    ),
+    (
+        """3. **Cross-platform optimizer portability** — independent hosts producing bit-identical learned-optimizer bytes. **Designed for, not yet confirmed:** observed on Linux/x86-64 alone, so no caller should rely on it until the recorded failure host reproduces the pinned digest.
+""",
+        """3. **Cross-platform optimizer portability** — independent hosts producing bit-identical learned-optimizer bytes. **Designed for, not yet confirmed.** The sampler uses only operations IEEE-754 requires to be correctly rounded, but has been observed on Linux/x86-64 alone; no caller should rely on it until a run on the recorded failure host reproduces the pinned digest.
+""",
+    ),
+    (
+        """Real generation needs an explicitly selected provider and token, cost, and wall-time limits, even with flat-rate service. Follow [provider setup](llm/README.md), [.env.example](.env.example), and [bounded tournament/resume instructions](docs/deployment.md); keep new outputs in a separate directory.
+""",
+        """The default fake provider tests mechanics offline. Real generation needs an explicitly selected provider and token, cost, and wall-time limits, even with flat-rate service. Follow [provider setup](llm/README.md), [.env.example](.env.example), and [bounded tournament/resume instructions](docs/deployment.md); keep new outputs in a separate directory. Fresh model dialogue is not reproduced by a seed alone.
+""",
+    ),
+    (
+        """**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections, vote correctness 0.783, and ejection accuracy 0.754. The demo publishes a smaller, strictly validated summary.
 """,
         """**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 66 ejections, vote correctness 0.795, and ejection accuracy 0.667. The demo publishes a smaller, strictly validated summary; reported usage is separate from verified outcomes and is not a billing guarantee.
 """,
     ),
     (
-        """**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts with a `v8` ballot, each in its own era. The 4-player set was regenerated 2026-09-22 (4p1i) at [baseline 9](audits/audit-2026-09-22-process-rerecord.md), every experimental switch off: impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the route lines, a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)), its ballot stamped `impostor_ballot_v1`, `ballot_kill_row_v1` and `route_lines_v1`: impostor win rate 34% (9p2i). Each manifest records per-game provenance. The picture above is from the 9-player game the guided tour opens on.
+        """**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts with a `v8` ballot, each in its own era. The 4-player set was regenerated 2026-09-22 (4p1i) at [baseline 9](audits/audit-2026-09-22-process-rerecord.md), every experimental switch off: impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the route lines, a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)), its ballot stamped `impostor_ballot_v1`, `ballot_kill_row_v1` and `route_lines_v1`: impostor win rate 34% (9p2i). The picture above is from the 9-player game the guided tour opens on.
 """,
         """**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts with a `v8` ballot, each in its own era. The 4-player set was regenerated 2026-09-22 (4p1i) at [baseline 9](audits/audit-2026-09-22-process-rerecord.md), every experimental switch off: impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-01 (9p2i) under the adopted gameplay changes ([its record](audits/audit-2026-10-01-stage-b-r2.md)), its ballot stamped `impostor_ballot_v1` and `ballot_kill_row_v1`: impostor win rate 48% (9p2i). Each manifest records per-game provenance. The picture above is from the 9-player game the guided tour opens on.
 """,
@@ -3176,6 +3243,32 @@ def test_wrongful_ejection_count_inside_a_longer_number_detected(
     assert "names none of the counts the records read (pooled 42" in errors[0]
 
 
+@pytest.mark.parametrize("document", [_README, _READING_GUIDE])
+@pytest.mark.parametrize(
+    ("fraction", "recorded", "moved"),
+    [("50 of 96 = 0.5208", "46", "47"), ("43 of 85 = 0.5059", "42", "41")],
+)
+def test_each_baselines_innocent_ejection_count_sits_in_its_own_sentence(
+    doc_tree: Path, document: str, fraction: str, recorded: str, moved: str
+) -> None:
+    # A wrongful-ejection sentence passes when it names any count a record
+    # read, so one sentence carrying baseline 8's 46 and baseline 9's 42 lets
+    # each vouch for the other. Each count sits in its own sentence beside its
+    # own conviction fraction. Planted: the first whole number after that
+    # fraction moved by one, which leaves its sentence naming no recorded count.
+    text = _read(doc_tree, document)
+    planted, landed = re.subn(
+        rf"({re.escape(fraction)}\D+?){recorded}\b", rf"\g<1>{moved}", text, count=1
+    )
+    assert landed == 1, (document, fraction)
+    _write(doc_tree, document, planted)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{document}:")
+    assert "a wrongful-ejection sentence names none of the counts" in errors[0]
+    assert f"{fraction} " in errors[0]  # the quoted sentence is that baseline's
+
+
 def test_wrongful_ejection_sentence_may_state_the_previous_count(
     doc_tree: Path,
 ) -> None:
@@ -4395,9 +4488,16 @@ def test_results_row_absent_from_the_guide_detected(doc_tree: Path) -> None:
         "| Observation checks with no source |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
+    assert len(errors) == 2
     assert "'Observation checks with no source'" in errors[0]
     assert _READING_GUIDE in errors[0]
+    # ...and, being neither an integrity row nor a process row, it may not sit
+    # above the four rows on how each vote was cast.
+    assert errors[1].startswith(
+        f"{_README}: the results row 'Observation checks with no source' sits "
+        "above the process row 'Eject ballots citing a line the voter held about "
+        "their target (9p2i)'"
+    )
 
 
 def test_stubbed_results_table_detected(doc_tree: Path) -> None:
@@ -4407,6 +4507,8 @@ def test_stubbed_results_table_detected(doc_tree: Path) -> None:
     gutted = (
         "| Impostor win rate",
         "| Eject ",
+        "| Crew eject ",
+        "| Ballots ",
         "| Ejection accuracy ",
         "| Learned tactical policies ",
     )
@@ -5444,3 +5546,593 @@ def test_experiment_registry_is_read_from_the_live_module() -> None:
         enabled = MeetingEvidenceProfile.from_environment({variable: "1"})
         assert getattr(enabled, field) is not None
         assert getattr(MeetingEvidenceProfile.from_environment({}), field) is None
+
+
+# ── the four process rows, read off the scorecard page ───────────────────────
+#
+# The front door leads with how the votes were cast. Each of the four rows is
+# held, value and before cell, to the shown set's table on the GENERATED
+# markdown page (never its JSON), and all four sit above every outcome and
+# role-correct row. Every case below fails naming the row it moved.
+
+_SCORECARD_PAGE = "docs/process-scorecard.md"
+_GROUNDED_CLAIM = "Eject ballots citing a line the voter held about their target (9p2i)"
+_DEVIATING_CLAIM = (
+    "Crew eject ballots naming someone other than the voter's top suspect (9p2i)"
+)
+_UNEXPLAINED_CLAIM = "Ballots with no stated reason (9p2i)"
+_AUTHORED_CLAIM = "Ballots whose target is the one their voter wrote (9p2i)"
+_PROOF_CLAIM = (
+    "Ejection accuracy with engine-certified proof of the ejectee's role, "
+    "against without (9p2i)"
+)
+_WIN_RATE_CLAIM = "Impostor win rate, committed samples"
+_SCORECARD_SOURCE = "the samples/9p2i table of docs/process-scorecard.md"
+# The shown set's row-4 and row-7 lines on the page: round 2's before cell,
+# then round 3's value.
+_SCORECARD_UNEXPLAINED_ROW = (
+    "| 4 | unexplained-decision rate | 11/691 = 0.0159 | 6/702 = 0.0085 |"
+)
+_SCORECARD_AUTHORED_ROW = (
+    "| 7 | agent-authored share | 674/691 = 0.9754 | 692/702 = 0.9858 |"
+)
+_TOP_SUSPECT_LINK = (
+    "[top suspect](docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-"
+    "rates-highest)"
+)
+_TOP_SUSPECT_HEADING = (
+    "### top suspect (the player a voter's own suspicion rates highest)"
+)
+
+
+def _results_row_line(text: str, claim: str) -> str:
+    """The one table line of ``text`` whose first cell, links reduced, is ``claim``."""
+
+    lines = [
+        line
+        for line in text.splitlines()
+        if (cells := check_doc_facts.table_cells(line)) is not None
+        and check_doc_facts.strip_links(cells[0]) == claim
+    ]
+    assert len(lines) == 1, claim
+    return lines[0]
+
+
+def _scorecard_section(page: str) -> str:
+    """The shown set's section of the page: its heading to the next heading."""
+
+    start = page.index("\n### samples/9p2i\n")
+    end = page.index("\n### ", start + 1)
+    return page[start:end]
+
+
+def test_the_shown_sets_process_cells_are_read_off_the_page() -> None:
+    # The committed page, read the way the rule reads it: each row's value and
+    # round 2's before cell (the era the shown set replaced), and the row-7
+    # detail line's teammate count.
+    page = (_REPO_ROOT / _SCORECARD_PAGE).read_text(encoding="utf-8")
+    cells = check_doc_facts.scorecard_process_cells(page, "samples/9p2i", "stage-b-r2")
+    assert cells.rows == {
+        "grounded-decision rate, EJECT": ("394/397 = 0.9924", "407/410 = 0.9927"),
+        "argmax-independence: deviating EJECTs": ("56/291 = 19.2%", "65/292 = 22.3%"),
+        "unexplained-decision rate": ("6/702 = 0.0085", "11/691 = 0.0159"),
+        "agent-authored share": ("692/702 = 0.9858", "674/691 = 0.9754"),
+    }
+    assert cells.teammate_coerced == 10
+
+
+def test_the_coerced_clause_counts_in_words() -> None:
+    assert check_doc_facts.coerced_clause(10) == (
+        "10 impostor votes against a partner turned into skips"
+    )
+    assert check_doc_facts.coerced_clause(1) == (
+        "1 impostor vote against a partner turned into a skip"
+    )
+    assert check_doc_facts.coerced_clause(0) == (
+        "0 impostor votes against a partner turned into skips"
+    )
+
+
+def test_a_process_numerator_edited_in_both_tables_detected(doc_tree: Path) -> None:
+    # Planted: the same wrong numerator in both tables, so agreement holds and
+    # only the page can refuse it.
+    for document in (_README, _READING_GUIDE):
+        _substitute(doc_tree, document, "| 394/397 = 0.9924 |", "| 393/397 = 0.9924 |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    for document, error in zip((_README, _READING_GUIDE), errors):
+        assert error.startswith(f"{document}: the results row {_GROUNDED_CLAIM!r}")
+        assert "reads '393/397 = 0.9924'" in error
+        assert f"{_SCORECARD_SOURCE} recomputes to '394/397 = 0.9924'" in error
+
+
+def test_a_process_before_cell_edited_in_both_tables_detected(doc_tree: Path) -> None:
+    # Planted: round 2's deviating count moved by one in both history cells.
+    for document in (_README, _READING_GUIDE):
+        _substitute(doc_tree, document, "| 65/292 = 22.3% |", "| 64/292 = 22.3% |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    for document, error in zip((_README, _READING_GUIDE), errors):
+        assert error.startswith(
+            f"{document}: the 'Before' cell of results row {_DEVIATING_CLAIM!r}"
+        )
+        assert f"{_SCORECARD_SOURCE} recomputes to '65/292 = 22.3%'" in error
+
+
+def test_a_scorecard_value_moved_under_an_unchanged_front_door_detected(
+    doc_tree: Path,
+) -> None:
+    # Planted: the page moves and the front door does not.
+    _substitute(
+        doc_tree,
+        _SCORECARD_PAGE,
+        _SCORECARD_UNEXPLAINED_ROW,
+        _SCORECARD_UNEXPLAINED_ROW.replace("6/702 = 0.0085", "7/702 = 0.0100"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    for document, error in zip((_README, _READING_GUIDE), errors):
+        assert error.startswith(f"{document}: the results row {_UNEXPLAINED_CLAIM!r}")
+        assert "recomputes to '7/702 = 0.0100'" in error
+
+
+def test_a_deleted_process_row_detected(doc_tree: Path) -> None:
+    # Planted: the deviating row gone from both tables.
+    for document in (_README, _READING_GUIDE):
+        line = _results_row_line(_read(doc_tree, document), _DEVIATING_CLAIM)
+        _substitute(doc_tree, document, line + "\n", "")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    for document, error in zip((_README, _READING_GUIDE), errors):
+        assert error.startswith(
+            f"{document}: the results table has no {_DEVIATING_CLAIM!r} row"
+        )
+
+
+@pytest.mark.parametrize("document", [_README, _READING_GUIDE])
+def test_the_proof_row_moved_above_a_process_row_detected(
+    doc_tree: Path, document: str
+) -> None:
+    # Planted: the role-correct pair put back above the first process row, as
+    # the front door stood before the process rows led it.
+    text = _read(doc_tree, document)
+    proof = _results_row_line(text, _PROOF_CLAIM)
+    grounded = _results_row_line(text, _GROUNDED_CLAIM)
+    text = text.replace(proof + "\n", "").replace(grounded, f"{proof}\n{grounded}")
+    _write(doc_tree, document, text)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{document}: the results row {_PROOF_CLAIM!r} sits above the process "
+        f"row {_GROUNDED_CLAIM!r}"
+    )
+
+
+def test_a_process_row_moved_below_the_win_rate_detected(doc_tree: Path) -> None:
+    # Planted: the last process row dropped below an outcome row.
+    text = _read(doc_tree, _README)
+    authored = _results_row_line(text, _AUTHORED_CLAIM)
+    win = _results_row_line(text, _WIN_RATE_CLAIM)
+    text = text.replace(authored + "\n", "").replace(win, f"{win}\n{authored}")
+    _write(doc_tree, _README, text)
+    errors = check_doc_facts.check_facts(doc_tree)
+    # The citation row above the win rate now sits above that process row too.
+    assert len(errors) == 2
+    for error, row in zip(errors, (_CITATION_ROW_CLAIM, _WIN_RATE_CLAIM)):
+        assert error.startswith(
+            f"{_README}: the results row {row!r} sits above the process "
+            f"row {_AUTHORED_CLAIM!r}"
+        )
+
+
+def test_the_shown_sets_table_removed_detected(doc_tree: Path) -> None:
+    # Planted: the page loses the shown set's section heading, then its table.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    _write(
+        doc_tree,
+        _SCORECARD_PAGE,
+        page.replace("\n### samples/9p2i\n", "\n### samples/9p2i, moved\n"),
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_SCORECARD_PAGE}: no '### samples/9p2i' section")
+    section = _scorecard_section(page)
+    table = "\n".join(line for line in section.splitlines() if line.startswith("|"))
+    assert table in page
+    _write(doc_tree, _SCORECARD_PAGE, page.replace(table + "\n", ""))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{_SCORECARD_PAGE}: the '### samples/9p2i' section has no '| # | row |' table"
+    )
+
+
+def test_a_scorecard_row_missing_from_the_page_detected(doc_tree: Path) -> None:
+    _substitute(doc_tree, _SCORECARD_PAGE, _SCORECARD_AUTHORED_ROW + "\n", "")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{_SCORECARD_PAGE}: the '### samples/9p2i' table has no "
+        "'agent-authored share' row"
+    )
+
+
+def test_a_before_column_of_another_era_detected(doc_tree: Path) -> None:
+    # Planted: the page's before column names an era the shown set did not
+    # replace, so its cells are not the previously shown recording's.
+    _substitute(
+        doc_tree,
+        _SCORECARD_PAGE,
+        "| # | row | before: stage-b-r2, as published",
+        "| # | row | before: baseline-9, as published",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{_SCORECARD_PAGE}: the '### samples/9p2i' table has no before column "
+        "naming the stage-b-r2 era"
+    )
+
+
+def test_the_teammate_count_edited_in_both_tables_detected(doc_tree: Path) -> None:
+    # Planted: the count beside the authored share moved in both tables...
+    for document in (_README, _READING_GUIDE):
+        _substitute(
+            doc_tree,
+            document,
+            "; 10 impostor votes against a partner turned into skips |",
+            "; 9 impostor votes against a partner turned into skips |",
+        )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    for document, error in zip((_README, _READING_GUIDE), errors):
+        assert error.startswith(f"{document}: the results row {_AUTHORED_CLAIM!r}")
+        assert (
+            "recomputes to '692/702 = 0.9858; 10 impostor votes against a partner "
+            "turned into skips'"
+        ) in error
+
+
+def test_the_page_teammate_count_moved_detected(doc_tree: Path) -> None:
+    # ...and the page's row-7 detail moved under an unchanged front door.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    moved = section.replace(
+        "typed guard rewrites teammate_coerced 10;",
+        "typed guard rewrites teammate_coerced 11;",
+    )
+    assert moved != section
+    _write(doc_tree, _SCORECARD_PAGE, page.replace(section, moved))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert all(f"results row {_AUTHORED_CLAIM!r}" in error for error in errors)
+    assert all("11 impostor votes against a partner" in error for error in errors)
+
+
+def test_the_row_7_detail_line_missing_detected(doc_tree: Path) -> None:
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    detail = next(
+        line for line in section.splitlines() if line.startswith("Row 7 detail:")
+    )
+    _write(
+        doc_tree, _SCORECARD_PAGE, page.replace(section, section.replace(detail, ""))
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{_SCORECARD_PAGE}: the '### samples/9p2i' section has no "
+        "'Row 7 detail: typed guard rewrites' line"
+    )
+
+
+def test_top_suspect_unlinked_at_its_first_use_detected(doc_tree: Path) -> None:
+    # Planted: the new term's first README use loses its glossary link.
+    _substitute(doc_tree, _README, _TOP_SUSPECT_LINK, "top suspect")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert "the private-dialect term 'top suspect' first appears" in errors[0]
+    assert "outside a glossary link" in errors[0]
+
+
+def test_top_suspect_glossary_heading_deleted_detected(doc_tree: Path) -> None:
+    # Planted: the link survives, the entry it names does not.
+    _substitute(doc_tree, _GLOSSARY, _TOP_SUSPECT_HEADING, "### the voter's favourite")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_GLOSSARY}: no entry anchored")
+    assert "'top suspect'" in errors[0]
+
+
+def test_an_unreadable_row_7_detail_detected(doc_tree: Path) -> None:
+    # Planted: the detail line's typed reasons lose their counts, so the
+    # teammate count beside the authored share has nothing to be read from.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    garbled = section.replace(
+        "typed guard rewrites teammate_coerced 10;",
+        "typed guard rewrites teammate_coerced ten;",
+    )
+    assert garbled != section
+    _write(doc_tree, _SCORECARD_PAGE, page.replace(section, garbled))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{_SCORECARD_PAGE}: the '### samples/9p2i' section's row-7 detail reads "
+        "'teammate_coerced ten'"
+    )
+
+
+def test_a_shown_set_with_no_replaced_era_is_named(
+    doc_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A shown set read at the ladder tip has no replaced era, so no before
+    # column on the page can be the previously shown recording's: refused by
+    # name, never read from whichever column the page carries.
+    from eval.eras import BASELINE_9
+
+    monkeypatch.setattr(check_doc_facts, "era_of", lambda path: BASELINE_9)
+    errors: list[str] = []
+    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _README), errors)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{_SCORECARD_PAGE}: no replaced era is named for the baseline-9 era"
+    )
+
+
+def test_the_before_column_follows_the_registrys_replaced_era(
+    doc_tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The before column is picked by the era the registry says the shown set's
+    # recording replaced, never by a fixed id. Planted: the registry filing
+    # samples/9p2i under round 2, whose recording replaced baseline 9's. The
+    # committed page's before column names round 2, so it is refused, naming
+    # baseline 9...
+    from eval.eras import STAGE_B_R2
+
+    monkeypatch.setattr(check_doc_facts, "era_of", lambda path: STAGE_B_R2)
+    errors: list[str] = []
+    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _README), errors)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{_SCORECARD_PAGE}: the '### samples/9p2i' table has no before column "
+        "naming the baseline-9 era"
+    )
+    # ...and a page whose before column names baseline 9 is read from it.
+    _substitute(
+        doc_tree,
+        _SCORECARD_PAGE,
+        "| # | row | before: stage-b-r2, as published",
+        "| # | row | before: baseline-9, as published",
+    )
+    errors = []
+    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _README), errors)
+    assert errors == []
+
+
+def test_a_page_with_no_typed_rewrites_reads_a_zero_count(doc_tree: Path) -> None:
+    # Planted: the page's row-7 detail reads "none", the way a set with no
+    # guard rewrite prints it; the count beside the authored share is then 0.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    none = section.replace(
+        "typed guard rewrites teammate_coerced 10;", "typed guard rewrites none;"
+    )
+    assert none != section
+    _write(doc_tree, _SCORECARD_PAGE, page.replace(section, none))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    assert all(f"results row {_AUTHORED_CLAIM!r}" in error for error in errors)
+    assert all(
+        "'692/702 = 0.9858; 0 impostor votes against a partner turned into skips'"
+        in error
+        for error in errors
+    )
+
+
+def _shown_set_page_cells(page: str) -> tuple[dict[str, tuple[str, str]], int]:
+    """The rule's read of the shown set's table: its rows and teammate count."""
+
+    cells = check_doc_facts.scorecard_process_cells(page, "samples/9p2i", "stage-b-r2")
+    return cells.rows, cells.teammate_coerced
+
+
+def test_the_value_and_before_columns_are_found_by_their_headers(
+    doc_tree: Path,
+) -> None:
+    # Each cell is read from the column its header names, never from a fixed
+    # position. Planted: the shown set's table with its before and value
+    # columns traded, the header and every row, so the same cells sit in each
+    # other's place and are read the same.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    traded: list[str] = []
+    for line in section.splitlines(keepends=True):
+        cells = check_doc_facts.table_cells(line)
+        if cells is not None:
+            cells[-2], cells[-1] = cells[-1], cells[-2]
+            line = "| " + " | ".join(cells) + " |\n"
+        traded.append(line)
+    assert "| # | row | value | before: stage-b-r2, as published" in "".join(traded)
+    planted = page.replace(section, "".join(traded))
+    assert _shown_set_page_cells(planted) == _shown_set_page_cells(page)
+    _write(doc_tree, _SCORECARD_PAGE, planted)
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_a_table_ahead_of_the_row_table_is_passed_over(doc_tree: Path) -> None:
+    # The section's row table is the one whose header opens "| # | row |", not
+    # its first table. Planted: a small table between the section's before
+    # sentence and the row table, which the rule reads past.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    header = "| # | row | before: stage-b-r2, as published"
+    assert section.count(header) == 1
+    lead = (
+        "| set | games | meetings |\n| --- | --- | --- |\n"
+        "| samples/9p2i | 50 | 119 |\n\n"
+    )
+    planted = page.replace(section, section.replace(header, lead + header))
+    assert _shown_set_page_cells(planted) == _shown_set_page_cells(page)
+    _write(doc_tree, _SCORECARD_PAGE, planted)
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_a_table_after_the_row_table_is_passed_over(doc_tree: Path) -> None:
+    # The row table ends at its first line that is not a table line, so a later
+    # table in the section is never read into it. Planted: a table of the row
+    # table's width between the row table and the row-2 detail line, whose
+    # second cell carries a process row's label; the rule reads past it.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    detail = "\nRow 2 detail: "
+    assert section.count(detail) == 1
+    trail = (
+        "\n| set | row | before | value |\n| --- | --- | --- | --- |\n"
+        "| samples/9p2i | agent-authored share | 1/2 = 0.5000 | 1/1 = 1.0000 |\n"
+    )
+    planted = page.replace(section, section.replace(detail, trail + detail))
+    assert _shown_set_page_cells(planted) == _shown_set_page_cells(page)
+    _write(doc_tree, _SCORECARD_PAGE, planted)
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_a_row_table_with_no_value_column_is_refused(doc_tree: Path) -> None:
+    # Planted: the shown set's table loses its value column, the header and
+    # every row, so no cell of it is the shown recording's own. The page is
+    # refused naming the column, never read from another one.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    dropped: list[str] = []
+    for line in section.splitlines(keepends=True):
+        cells = check_doc_facts.table_cells(line)
+        if cells is not None:
+            line = "| " + " | ".join(cells[:-1]) + " |\n"
+        dropped.append(line)
+    assert "| # | row | before: stage-b-r2, as published at `2eed2e92` |\n" in (
+        "".join(dropped)
+    )
+    planted = page.replace(section, "".join(dropped))
+    refusal = "the '### samples/9p2i' table has no 'value' column"
+    with pytest.raises(check_doc_facts.ScorecardPageError) as raised:
+        _shown_set_page_cells(planted)
+    assert raised.value.args == (refusal,)
+    _write(doc_tree, _SCORECARD_PAGE, planted)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_SCORECARD_PAGE}: {refusal} — ")
+
+
+def test_the_teammate_count_is_read_among_other_typed_rewrites(
+    doc_tree: Path,
+) -> None:
+    # The row-7 detail line lists each typed reason with its count, sorted by
+    # name, as the ml_corpus/9p2i line on this page and round 2's line at
+    # 2eed2e92 do. Planted: the shown set's line with a reason on either side
+    # of the teammate count; the count read beside the authored share stays
+    # 10, and the front door still agrees.
+    page = _read(doc_tree, _SCORECARD_PAGE)
+    section = _scorecard_section(page)
+    mixed = section.replace(
+        "typed guard rewrites teammate_coerced 10;",
+        "typed guard rewrites invalid_target 1, teammate_coerced 10, "
+        "uncited_coerced 2;",
+    )
+    assert mixed != section
+    planted = page.replace(section, mixed)
+    assert _shown_set_page_cells(planted) == _shown_set_page_cells(page)
+    assert _shown_set_page_cells(planted)[1] == 10
+    _write(doc_tree, _SCORECARD_PAGE, planted)
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_a_truncated_scorecard_row_is_refused(doc_tree: Path) -> None:
+    # Planted: the page's row-4 line loses its value cell, so its last cell is
+    # the before column's and no cell of it can be read as the value.
+    _substitute(
+        doc_tree,
+        _SCORECARD_PAGE,
+        _SCORECARD_UNEXPLAINED_ROW,
+        "| 4 | unexplained-decision rate | 11/691 = 0.0159 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{_SCORECARD_PAGE}: the '### samples/9p2i' table has no "
+        "'unexplained-decision rate' row"
+    )
+
+
+def test_a_row_above_reordered_process_rows_names_the_first_beneath_it(
+    doc_tree: Path,
+) -> None:
+    # Planted: the authored row moved to the top of the four, and the win rate
+    # moved above it. The error names the process row that sits first in the
+    # table, not the first in the rule's own list.
+    text = _read(doc_tree, _README)
+    authored = _results_row_line(text, _AUTHORED_CLAIM)
+    grounded = _results_row_line(text, _GROUNDED_CLAIM)
+    win = _results_row_line(text, _WIN_RATE_CLAIM)
+    text = text.replace(authored + "\n", "").replace(win + "\n", "")
+    text = text.replace(grounded, f"{win}\n{authored}\n{grounded}")
+    _write(doc_tree, _README, text)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(
+        f"{_README}: the results row {_WIN_RATE_CLAIM!r} sits above the process "
+        f"row {_AUTHORED_CLAIM!r}"
+    )
+
+
+def test_a_linked_claim_is_still_read_as_its_row(doc_tree: Path) -> None:
+    # A glossary link inside a claim leaves it the same claim in both tables,
+    # and every check that reads the whole row still finds it: planted, the
+    # proof row's claim carries a link and its injustice clause moves.
+    linked = _PROOF_CLAIM.replace(
+        "engine-certified proof",
+        "[engine-certified proof]({}#hard-evidence-certified-role-evidence)",
+    )
+    for document, glossary in ((_README, _GLOSSARY), (_READING_GUIDE, "glossary.md")):
+        _substitute(
+            doc_tree, document, f"| {_PROOF_CLAIM} |", f"| {linked.format(glossary)} |"
+        )
+    assert check_doc_facts.check_facts(doc_tree) == []
+    _substitute(
+        doc_tree,
+        _README,
+        "15 of 15 innocent ejections sit in the no-proof cell",
+        "14 of 14 innocent ejections sit in the no-proof cell",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert (
+        "does not state '15 of 15 innocent ejections sit in the no-proof cell'"
+        in errors[0]
+    )
+
+
+@pytest.mark.parametrize(
+    "integrity",
+    [
+        "Committed sample replays that reconstruct byte-identically",
+        "Observation boundary checks",
+    ],
+)
+def test_an_integrity_row_moved_below_the_process_rows_detected(
+    doc_tree: Path, integrity: str
+) -> None:
+    # Planted: one integrity row moved below the last process row in both
+    # tables, so agreement holds and only the order rule can refuse it.
+    for document in (_README, _READING_GUIDE):
+        text = _read(doc_tree, document)
+        row = _results_row_line(text, integrity)
+        authored = _results_row_line(text, _AUTHORED_CLAIM)
+        text = text.replace(row + "\n", "").replace(authored, f"{authored}\n{row}")
+        _write(doc_tree, document, text)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2
+    for document, error in zip((_README, _READING_GUIDE), errors):
+        assert error.startswith(
+            f"{document}: the integrity row {integrity!r} sits below the process "
+            f"row {_GROUNDED_CLAIM!r}"
+        )

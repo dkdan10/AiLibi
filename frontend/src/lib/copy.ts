@@ -477,8 +477,14 @@ export const SPECTATOR_COPY = Object.freeze({
       "This emergency opening claimed a body nobody had found; the claim was stripped before the transcript.",
   }),
 
-  /** One recorded-behavior group on the public results page. */
+  /** The public results page: its ejection tile and its recorded-behavior groups. */
   publicResults: Object.freeze({
+    // The tile counts impostors among ejected players, a role read reported
+    // beside the process figures, so its heading says what the fraction counts
+    // and never calls an ejection correct.
+    ejectionsHeading: "Ejected players who were impostors",
+    ejectionsDescription:
+      "Impostors / all ejected players across {meetings} resolved meetings. {innocent} innocent ejections; skips are excluded.",
     // The group's agents, by the factory kind its recordings stamp. The
     // `experimental` kind is exact built-in agents run with recorded tactical
     // settings, so its label says that and not "experimental".

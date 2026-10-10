@@ -932,6 +932,126 @@ def test_no_featured_game_is_a_wrong_but_believable_ejection() -> None:
     ]
 
 
+def _crewmate_ejections(replays: dict[tuple[str, int], ReplayView]) -> list[str]:
+    """Each meeting of a featured replay that ejects a player who is not an impostor.
+
+    Every meeting is read, not only the first the tour opens on: the strip
+    renders before any game opens, and no wrong-but-believable ejection is
+    featured, held at its conservative strength, so any crewmate ejection is
+    excluded whatever its ballots held. The role read curates the strip and
+    gates no record.
+    """
+
+    problems: list[str] = []
+    for (set_name, seed), replay in replays.items():
+        roles = {player.agent_id: player.role for player in replay.players}
+        for index, meeting in enumerate(replay.meetings):
+            ejected = meeting.ejected_player_id
+            if ejected is not None and roles[ejected] != "IMPOSTOR":
+                problems.append(
+                    f"{set_name} seed {seed} meeting {index} ejects {ejected}, a crewmate"
+                )
+    return problems
+
+
+def _ejectee_read_as_crewmate(replay: ReplayView, index: int) -> ReplayView:
+    """``replay`` with meeting ``index``'s ejected player's role read as a crewmate."""
+
+    ejected = replay.meetings[index].ejected_player_id
+    assert ejected is not None
+    players = tuple(
+        player.model_copy(update={"role": "CREWMATE"})
+        if player.agent_id == ejected
+        else player
+        for player in replay.players
+    )
+    return replay.model_copy(update={"players": players})
+
+
+def _featured_replays() -> dict[tuple[str, int], ReplayView]:
+    """Every pair the picker's ``FEATURED_GAMES`` lists, loaded from its served set."""
+
+    featured = _parse_featured_games()
+    assert featured
+    registry = SetLoaderRegistry(_PARENT)
+    replays = {
+        (set_name, seed): registry.get(set_name).load_replay(f"headless-seed-{seed}")
+        for set_name, seed in featured
+    }
+    assert len(replays) == len(featured)
+    return replays
+
+
+def test_no_featured_game_ejects_a_crewmate_at_any_meeting() -> None:
+    """Every meeting of every served featured replay ejects no crewmate.
+
+    Planted: a featured replay copied with one ejectee's role read as a
+    crewmate fails, naming the set, the seed and the meeting index, at a first
+    meeting and at a later one of the same game, in either set, and in a game
+    that is not its set's head.
+    """
+
+    replays = _featured_replays()
+    assert _crewmate_ejections(replays) == []
+
+    # The landing game ejects at its first and its third meeting.
+    head = replays[("9p2i", 19)]
+    assert [meeting.ejected_player_id is not None for meeting in head.meetings] == [
+        True,
+        False,
+        True,
+    ]
+    for index in (0, 2):
+        planted = {**replays, ("9p2i", 19): _ejectee_read_as_crewmate(head, index)}
+        ejected = head.meetings[index].ejected_player_id
+        assert _crewmate_ejections(planted) == [
+            f"9p2i seed 19 meeting {index} ejects {ejected}, a crewmate"
+        ]
+    short = replays[("4p1i", 2)]
+    planted = {**replays, ("4p1i", 2): _ejectee_read_as_crewmate(short, 0)}
+    assert _crewmate_ejections(planted) == [
+        f"4p1i seed 2 meeting 0 ejects {short.meetings[0].ejected_player_id}, a crewmate"
+    ]
+    # A featured game behind its set's head is read too, not only the openers.
+    for set_name, seed in (("9p2i", 14), ("4p1i", 11)):
+        game = replays[(set_name, seed)]
+        planted = {**replays, (set_name, seed): _ejectee_read_as_crewmate(game, 0)}
+        assert _crewmate_ejections(planted) == [
+            f"{set_name} seed {seed} meeting 0 ejects "
+            f"{game.meetings[0].ejected_player_id}, a crewmate"
+        ]
+
+
+def test_the_strip_guard_reads_the_pickers_featured_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A crewmate-ejecting game added to ``FEATURED_GAMES`` is named by the guard.
+
+    Planted: a copy of the picker with 9p2i seed 1, a shown game whose one
+    meeting ejects a crewmate, appended to the featured list. The guard's own
+    read-and-load path reads the copy and names that seed and meeting, so a
+    guard that stopped reading the picker's list would miss it.
+    """
+
+    source = _PICKER_TSX.read_text(encoding="utf-8")
+    block = _FEATURED_BLOCK.search(source)
+    assert block is not None
+    entry = (
+        '\n  {\n    set: "9p2i",\n    seed: 1,\n    label: "A planted entry.",\n  },'
+    )
+    picker = tmp_path / "ReplayPicker.tsx"
+    picker.write_text(
+        source[: block.end(1)] + entry + source[block.end(1) :], encoding="utf-8"
+    )
+    monkeypatch.setitem(globals(), "_PICKER_TSX", picker)
+    assert _parse_featured_games()[-1] == ("9p2i", 1)
+    replays = _featured_replays()
+    ejected = replays[("9p2i", 1)].meetings[0].ejected_player_id
+    assert _crewmate_ejections(replays) == [
+        f"9p2i seed 1 meeting 0 ejects {ejected}, a crewmate"
+    ]
+
+
 def _vent_trips_before_the_first_meeting(
     replay: ReplayView,
 ) -> list[tuple[str, int, int | None]]:

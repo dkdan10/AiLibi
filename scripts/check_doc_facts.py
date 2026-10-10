@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Twenty-one checks. Each accumulates precise errors; all of them are reported
+Twenty-two checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -190,6 +190,16 @@ together, so one run names every drifted fact rather than the first.
     adopting record. An ``AILIBI_*=`` line in that section that no registry
     name claims is a renamed or never-registered switch this build does not
     read. Same shape as check 3, second registry.
+22. **The process rows lead both results tables, read off the scorecard page.**
+    The four rows on how each vote was cast (an eject citing a line its voter
+    held about the player named, a crew eject against someone other than the
+    voter's top suspect, a ballot with no stated reason, a ballot whose target
+    is the one its voter wrote, with the teammate firewall's count beside it)
+    are held, figure and before cell, in BOTH tables to the shown set's table
+    on the generated ``docs/process-scorecard.md`` — never its JSON — whose
+    before column must name the era the shown set's recording replaced. The two
+    integrity rows open both tables, the four follow, and every other row sits
+    below all four.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -464,6 +474,13 @@ _DIALECT_TERMS: Final[tuple[tuple[str, str, str], ...]] = (
         r"\bevidence-gated default flip\b",
         "evidence-gated-default-flip",
     ),
+    # Named by the process row on eject ballots that leave the voter's own
+    # suspicion arithmetic.
+    (
+        "top suspect",
+        r"\btop suspects?\b",
+        "top-suspect-the-player-a-voters-own-suspicion-rates-highest",
+    ),
 )
 # A markdown link whose target is the glossary, with the anchor it names and the
 # span of its link TEXT — the only place a dialect term counts as defined.
@@ -693,11 +710,52 @@ _EMPHASIS: Final = re.compile(r"[*`]")
 _INJUSTICE_CLAIM: Final = (
     "{count} of {count} innocent ejections sit in the no-proof cell"
 )
+# The four rows the results tables lead with: how each vote was cast, read off
+# the shown set's table on the GENERATED scorecard page. The markdown page, never
+# its JSON, which no component reads (``eval/process_scorecard.py``'s
+# ``NO_CONSUMER_NOTE``). Each pair is the row's claim and the page's row label.
+_SCORECARD_PAGE: Final = "docs/process-scorecard.md"
+_GROUNDED_EJECT_CLAIM: Final = (
+    "Eject ballots citing a line the voter held about their target (9p2i)"
+)
+_DEVIATING_EJECT_CLAIM: Final = (
+    "Crew eject ballots naming someone other than the voter's top suspect (9p2i)"
+)
+_UNEXPLAINED_CLAIM: Final = "Ballots with no stated reason (9p2i)"
+_AUTHORED_CLAIM: Final = "Ballots whose target is the one their voter wrote (9p2i)"
+_PROCESS_ROWS: Final[tuple[tuple[str, str], ...]] = (
+    (_GROUNDED_EJECT_CLAIM, "grounded-decision rate, EJECT"),
+    (_DEVIATING_EJECT_CLAIM, "argmax-independence: deviating EJECTs"),
+    (_UNEXPLAINED_CLAIM, "unexplained-decision rate"),
+    (_AUTHORED_CLAIM, "agent-authored share"),
+)
+# The two rows that open both tables, above the process rows: the replays
+# reconstruct, and the observation boundary holds. Every other row of either
+# table, outcome and role-correct rows among them, sits below all four.
+_INTEGRITY_CLAIMS: Final[tuple[str, ...]] = (
+    _REPLAY_COUNT_CLAIM,
+    "Observation boundary checks",
+)
+# The authored share's residual on the shown set is the teammate firewall: the
+# impostor votes against a partner the meeting layer turned into skips. The
+# row-7 detail line names it by its typed rewrite reason.
+_TEAMMATE_REASON: Final = "teammate_coerced"
+# The page's own shapes: the set's section heading, the table's first two header
+# cells, the before column's header (it names the era whose frozen block it
+# reads), the value column, and the row-7 detail line's typed rewrites.
+_SCORECARD_SET_HEADING: Final = "### {label}"
+_SCORECARD_HEADER: Final[tuple[str, str]] = ("#", "row")
+_SCORECARD_BEFORE_HEADER: Final = "before: {era},"
+_SCORECARD_VALUE_HEADER: Final = "value"
+_SCORECARD_REWRITES: Final = "Row 7 detail: typed guard rewrites "
+_SCORECARD_REWRITE_ENTRY: Final = re.compile(r"\A(\w+) (\d+)\Z")
+_SCORECARD_NO_REWRITES: Final = "none"
 # A results row whose history cell this checker RE-DERIVES from the audit that
-# owns it, rather than only comparing the two tables' copies.
+# owns it, rather than only comparing the two tables' copies; the process rows'
+# history cells are re-derived from the scorecard page's before column.
 _WIN_RATE_ROW_CLAIM: Final = "Impostor win rate, committed samples"
 _DERIVED_BEFORE_CLAIMS: Final[frozenset[str]] = frozenset(
-    {_WIN_RATE_ROW_CLAIM, _PROOF_CLAIM}
+    {_WIN_RATE_ROW_CLAIM, _PROOF_CLAIM, *(claim for claim, _ in _PROCESS_ROWS)}
 )
 # ...and the ones it only compares, because the previous recording's value for
 # them was published on the front door of its own day and in no audit table a
@@ -1032,7 +1090,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{_HISTORY} account for every {_TASKS_DIR}/{_PHASE_GLOB}; "
         f"{_AUDITS_INDEX} indexes every top-level {_AUDITS_DIR}/*.md once; the "
         f"{_README} results figures are re-derived from their sources and equal "
-        f"{_READING_GUIDE}'s, before column included; the real-report example "
+        f"{_READING_GUIDE}'s, before column included, led in both by the four "
+        f"process rows {_SCORECARD_PAGE} owns; the real-report example "
         f"matches {_POPULATED_REPORT}; every volatile count is as-of stamped; "
         f"{_READING_GUIDE} carries no file:line citation, narrates the cells "
         f"{_DEDUCTION_INSTRUMENT} pins, and names only games {_PICKER} "
@@ -1067,6 +1126,7 @@ def check_facts(repo_root: Path) -> list[str]:
         check_dialect_terms(repo_root, readme, errors)
         check_results_agreement(repo_root, readme, errors)
         check_result_sources(repo_root, readme, errors)
+        check_process_rows(repo_root, readme, errors)
         check_populated_report_example(repo_root, readme, errors)
         check_volatile_stamps(readme, errors)
     check_ladder_tip(repo_root, errors)
@@ -3138,6 +3198,202 @@ def check_conviction_partition(
         )
 
 
+class ScorecardPageError(ValueError):
+    """The scorecard page lacks a section, table, column, row or line the front door reads."""
+
+
+class _ProcessCells(NamedTuple):
+    """One set's process cells on the scorecard page.
+
+    ``rows`` maps each process row's page label to its ``(value, before)`` cells,
+    verbatim; ``teammate_coerced`` is the row-7 detail line's teammate count.
+    """
+
+    rows: dict[str, tuple[str, str]]
+    teammate_coerced: int
+
+
+def check_process_rows(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """The four process rows, held to the scorecard page and kept at the top.
+
+    The front door leads with how each vote was cast: on a line its voter held,
+    with or against its own top suspect, with a reason, and as its voter wrote
+    it. Each row's figure and before cell, in BOTH results tables, is the shown
+    set's own cell on ``docs/process-scorecard.md`` — the generated markdown,
+    which ``scripts/publish_process_scorecard.py --check`` recomputes from the
+    recordings — and its before cell is the page's frozen before column, the
+    block of the era the shown set's recording replaced. The authored share
+    carries the teammate firewall's count beside it, from the row-7 detail line.
+
+    Then the order: the two integrity rows open the table, the four follow, and
+    every other row sits below all four, so no outcome or role-correct figure
+    heads either table. A page that
+    lacks the section, the table, a row, the before column or the detail line is
+    refused by name rather than read around.
+    """
+
+    page = read_document(repo_root, _SCORECARD_PAGE, errors)
+    if page is None:
+        return
+    path = _SAMPLE_REPLAY_DIR.format(name=_PROOF_SET)
+    label = _WIN_SPLIT_ROW.format(name=_PROOF_SET)
+    try:
+        replaced = replaced_era(era_of(path))
+        cells = scorecard_process_cells(page, label, replaced.id)
+    except (KeyError, ScorecardPageError) as error:
+        errors.append(
+            f"{_SCORECARD_PAGE}: {error.args[0]} — the four process rows the "
+            "results tables lead with have no committed source to be held to."
+        )
+        return
+    expected = {claim: cells.rows[row] for claim, row in _PROCESS_ROWS}
+    value, before = expected[_AUTHORED_CLAIM]
+    expected[_AUTHORED_CLAIM] = (
+        f"{value}; {coerced_clause(cells.teammate_coerced)}",
+        before,
+    )
+    source = f"the {label} table of {_SCORECARD_PAGE}"
+    guide = read_document(repo_root, _READING_GUIDE, errors)
+    for document, text in ((_README, readme), (_READING_GUIDE, guide)):
+        if text is None:
+            continue
+        rows = results_rows(text)
+        if rows is None:
+            continue  # check_results_agreement reports the missing table
+        figures = dict(rows)
+        for claim, (figure, history) in expected.items():
+            compare_result_figure(
+                claim, figures, figure, source, errors, document=document
+            )
+            if claim in figures:
+                compare_before_figure(
+                    text, claim, history, source, errors, document=document
+                )
+        check_process_order(document, [claim for claim, _ in rows], errors)
+
+
+def check_process_order(
+    document: str, claims: Sequence[str], errors: list[str]
+) -> None:
+    """The two integrity rows open the table, the four process rows follow, and
+    every other row sits below all four.
+
+    An integrity row found below a process row is named with the first process
+    row above it; any other row found above a process row is named with the
+    first process row beneath it, so a moved row reads as one error, not one per
+    process row.
+    """
+
+    process = [claim for claim, _ in _PROCESS_ROWS]
+    positions = {claim: index for index, claim in enumerate(claims)}
+    for index, claim in enumerate(claims):
+        if claim in process:
+            continue
+        if claim in _INTEGRITY_CLAIMS:
+            above = [row for row in process if -1 < positions.get(row, -1) < index]
+            if above:
+                errors.append(
+                    f"{document}: the integrity row {claim!r} sits below the "
+                    f"process row {min(above, key=positions.__getitem__)!r} — the "
+                    "two integrity rows open the table, above the four rows on how "
+                    "each vote was cast."
+                )
+            continue
+        below = [row for row in process if positions.get(row, -1) > index]
+        if not below:
+            continue
+        first = min(below, key=positions.__getitem__)
+        errors.append(
+            f"{document}: the results row {claim!r} sits above the process row "
+            f"{first!r} — the four rows on how each vote was cast lead the table, "
+            "after the two integrity rows and above every outcome and "
+            "role-correct row."
+        )
+
+
+def scorecard_process_cells(page: str, label: str, before_era: str) -> _ProcessCells:
+    """The process cells of ``label``'s table on the generated scorecard page.
+
+    The section runs from the ``### <label>`` heading to the next heading. Its
+    table is the one whose header opens ``| # | row |``; the before column is
+    the one whose header names ``before_era``, the era the set's recording
+    replaced, so a page whose frozen block belongs to another era is refused
+    rather than quoted. Raises :class:`ScorecardPageError` naming the missing
+    section, table, column, row or detail line.
+    """
+
+    heading = _SCORECARD_SET_HEADING.format(label=label)
+    lines = page.splitlines()
+    if heading not in lines:
+        raise ScorecardPageError(f"no {heading!r} section")
+    section: list[str] = []
+    for line in lines[lines.index(heading) + 1 :]:
+        if _HEADING.match(line):
+            break
+        section.append(line)
+    header: list[str] | None = None
+    table: dict[str, list[str]] = {}
+    for line in section:
+        cells = table_cells(line)
+        if cells is None:
+            if header is not None:
+                break
+            continue
+        if header is None:
+            if tuple(cells[: len(_SCORECARD_HEADER)]) == _SCORECARD_HEADER:
+                header = cells
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        table[cells[1] if len(cells) > 1 else ""] = cells
+    if header is None:
+        raise ScorecardPageError(
+            f"the {heading!r} section has no '| {' | '.join(_SCORECARD_HEADER)} |' table"
+        )
+    marker = _SCORECARD_BEFORE_HEADER.format(era=before_era)
+    before = [index for index, cell in enumerate(header) if cell.startswith(marker)]
+    if not before:
+        raise ScorecardPageError(
+            f"the {heading!r} table has no before column naming the {before_era} era"
+        )
+    if _SCORECARD_VALUE_HEADER not in header:
+        raise ScorecardPageError(
+            f"the {heading!r} table has no {_SCORECARD_VALUE_HEADER!r} column"
+        )
+    value = header.index(_SCORECARD_VALUE_HEADER)
+    rows: dict[str, tuple[str, str]] = {}
+    for _, row in _PROCESS_ROWS:
+        cells = table.get(row)
+        if cells is None or len(cells) != len(header):
+            raise ScorecardPageError(f"the {heading!r} table has no {row!r} row")
+        rows[row] = (cells[value], cells[before[0]])
+    detail = [line for line in section if line.startswith(_SCORECARD_REWRITES)]
+    if not detail:
+        raise ScorecardPageError(
+            f"the {heading!r} section has no {_SCORECARD_REWRITES.strip()!r} line"
+        )
+    stated = detail[0][len(_SCORECARD_REWRITES) :].split(";", 1)[0].strip()
+    counts: dict[str, int] = {}
+    if stated != _SCORECARD_NO_REWRITES:
+        for entry in stated.split(", "):
+            match = _SCORECARD_REWRITE_ENTRY.match(entry)
+            if match is None:
+                raise ScorecardPageError(
+                    f"the {heading!r} section's row-7 detail reads {stated!r}, "
+                    "not a list of typed rewrite reasons with their counts"
+                )
+            counts[match.group(1)] = int(match.group(2))
+    return _ProcessCells(rows, counts.get(_TEAMMATE_REASON, 0))
+
+
+def coerced_clause(count: int) -> str:
+    """The teammate firewall's count, as the authored-share row states it."""
+
+    if count == 1:
+        return "1 impostor vote against a partner turned into a skip"
+    return f"{count} impostor votes against a partner turned into skips"
+
+
 def proof_set_records() -> tuple[str, str]:
     """``(after, before)``: the records the proof row's two columns read.
 
@@ -3550,36 +3806,45 @@ def compare_result_figure(
     expected: str,
     source: str,
     errors: list[str],
+    *,
+    document: str = _README,
 ) -> None:
-    """One results row, held to the figure its source recomputes to."""
+    """One results row of ``document``, held to the figure its source recomputes to."""
 
     stated = figures.get(claim)
     if stated is None:
         errors.append(
-            f"{_README}: the results table has no {claim!r} row — the figure "
+            f"{document}: the results table has no {claim!r} row — the figure "
             f"{source} recomputes to ({expected!r}) has nowhere to be stated, "
             "so nothing is being checked."
         )
     elif stated != expected:
         errors.append(
-            f"{_README}: the results row {claim!r} reads {stated!r}, but "
+            f"{document}: the results row {claim!r} reads {stated!r}, but "
             f"{source} recomputes to {expected!r}."
         )
 
 
 def compare_before_figure(
-    readme: str, claim: str, expected: str, source: str, errors: list[str]
+    readme: str,
+    claim: str,
+    expected: str,
+    source: str,
+    errors: list[str],
+    *,
+    document: str = _README,
 ) -> None:
-    """One README results row's before cell, held to the recording that owns it.
+    """One results row's before cell, held to the recording that owns it.
 
-    The README's table is the one checked here; the guide's is held to it, cell
-    for cell, by :func:`check_before_columns`.
+    ``readme`` is the text of ``document``. Most rows check the README's table
+    here and hold the guide's to it, cell for cell, by
+    :func:`check_before_columns`; the process rows check both.
     """
 
     before = results_before_column(readme)
     if before is None:
         errors.append(
-            f"{_README}: the results table has no {_BEFORE_COLUMN_HEADER!r} "
+            f"{document}: the results table has no {_BEFORE_COLUMN_HEADER!r} "
             "column — every figure a recording moved states what it moved from, "
             "so the column is the page's own before/after."
         )
@@ -3587,12 +3852,12 @@ def compare_before_figure(
     stated = before.get(claim)
     if stated is None:
         errors.append(
-            f"{_README}: the results row {claim!r} has no "
+            f"{document}: the results row {claim!r} has no "
             f"{_BEFORE_COLUMN_HEADER!r} cell."
         )
     elif strip_links(stated) != expected:
         errors.append(
-            f"{_README}: the {_BEFORE_COLUMN_HEADER!r} cell of results row "
+            f"{document}: the {_BEFORE_COLUMN_HEADER!r} cell of results row "
             f"{claim!r} reads {stated!r}, but {source} recomputes to "
             f"{expected!r}."
         )
@@ -3605,6 +3870,8 @@ def results_before_column(markdown: str) -> dict[str, str] | None:
     rather than dropping out or reading a neighbour's cell: a truncated row has
     no history cell, which is the same finding as an empty one, and a row that
     dropped a delimiter would otherwise be checked against the wrong column.
+    Claims are keyed with their links reduced to text, as :func:`results_rows`
+    keys them.
     """
 
     before: dict[str, str] | None = None
@@ -3628,7 +3895,9 @@ def results_before_column(markdown: str) -> dict[str, str] | None:
             continue
         if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
             continue
-        before.setdefault(cells[0], cells[index] if len(cells) == width else "")
+        before.setdefault(
+            strip_links(cells[0]), cells[index] if len(cells) == width else ""
+        )
     return before
 
 
@@ -5566,8 +5835,10 @@ def results_rows(markdown: str) -> list[tuple[str, str]] | None:
     Located by its header cells rather than by the heading above it, so
     renaming the section does not silently disable the agreement check. A list
     rather than a mapping, because a repeated claim is itself a finding and
-    collapsing it here would erase the evidence for it. ``None`` when no such
-    table exists (format drift the caller reports).
+    collapsing it here would erase the evidence for it. A claim is read with
+    its links reduced to their text, so each table may link a term to the
+    glossary from its own directory and still state the same claim. ``None``
+    when no such table exists (format drift the caller reports).
     """
 
     rows: list[tuple[str, str]] | None = None
@@ -5583,7 +5854,7 @@ def results_rows(markdown: str) -> list[tuple[str, str]] | None:
             continue
         if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
             continue
-        rows.append((cells[0], cells[1]))
+        rows.append((strip_links(cells[0]), cells[1]))
     return rows
 
 
@@ -5596,7 +5867,7 @@ def results_row(markdown: str, claim: str) -> list[str] | None:
 
     for line in markdown.splitlines():
         cells = table_cells(line)
-        if cells is not None and cells and cells[0] == claim:
+        if cells is not None and cells and strip_links(cells[0]) == claim:
             return cells
     return None
 
