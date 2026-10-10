@@ -119,6 +119,22 @@ Each item names its enforcing mechanism and the planted or perturbed case that t
 seen red before the code it guards exists. Every count is the set shown at dispatch, measured at the head that states
 it.
 
+- [x] Review correction: the strip guard is proven to read the picker's own featured list (the three-lens review of
+  `1b53d86d`, the correctness and docs lenses: the list read made its literal survived). Mechanism: the guard's
+  read-and-load path, `_featured_replays` in `tests/api/test_sets.py`. Planted:
+  `test_the_strip_guard_reads_the_pickers_featured_list`, a copy of `ReplayPicker.tsx` with 9p2i seed 1 appended to
+  `FEATURED_GAMES`, named `9p2i seed 1 meeting 0`; red on the literal-list mutant (S5), green on the guard.
+- [x] Review correction: the strip guard is proven to read every featured game, not only each set's head (the
+  three-lens review of `1b53d86d`, the integrity lens: the featured list swapped for the featured heads survived).
+  Mechanism: `test_no_featured_game_ejects_a_crewmate_at_any_meeting`. Planted: 9p2i seed 14's and 4p1i seed 11's
+  meeting-0 ejectee read as a crewmate, each named by set, seed and meeting index; red on the heads mutant (S6),
+  green on the guard.
+- [x] Review correction: check 22 is proven to pick the before column by the era the registry says the shown set
+  replaced (the three-lens review of `1b53d86d`, the correctness and integrity lenses: the replaced-era read made
+  the literal `stage-b-r2` survived). Mechanism: `check_process_rows`. Planted:
+  `test_the_before_column_follows_the_registrys_replaced_era`, the registry filing samples/9p2i under round 2, so
+  the committed page is refused naming the baseline-9 era, and a page whose before column names baseline 9 is read
+  clean; red on the literal-era mutant (P32), green on the rule.
 - [x] Review correction: the order rule holds the two integrity rows above the four process rows, as its
   docstring and message say (review round 1, the Codex review of `11eb133a`). Mechanism: `check_process_order`.
   Planted: `test_an_integrity_row_moved_below_the_process_rows_detected`, either integrity row moved below the
@@ -419,9 +435,11 @@ Decisions of this build:
    pinned), so `test_no_featured_game_ejects_a_crewmate_at_any_meeting` is added. Count-only on the served bytes: 9p2i
    seed 19 meetings (impostor, skip, impostor), seed 14 (impostor); 4p1i seeds 2 (impostor), 11 (impostor), 29
    (skip): 5 impostor ejections, 2 skips, 0 crewmate ejections. Planted inside the test: seed 19's meeting-0 and then
-   meeting-2 ejectee, and 4p1i seed 2's, read as a crewmate, each named by set, seed and meeting index. Perturbed
-   strip probe (scratch): the list plus 9p2i seed 1, one of 14 shown-set games that eject a crewmate at some meeting,
-   reads `9p2i seed 1 meeting 0`.
+   meeting-2 ejectee, and 4p1i seed 2's, read as a crewmate, each named by set, seed and meeting index; since the
+   three-lens review, 9p2i seed 14's and 4p1i seed 11's too, two games behind their set's head. Perturbed strip,
+   committed since that review as `test_the_strip_guard_reads_the_pickers_featured_list`: the picker's list plus
+   9p2i seed 1, one of 14 shown-set games that eject a crewmate at some meeting, read through the guard's own
+   read-and-load path (`_featured_replays`), names `9p2i seed 1 meeting 0` and nothing else.
 6. **The stills.** `git diff --stat B H -- docs/media frontend/e2e/media.spec.ts
    tests/scripts/test_public_recording_provenance.py` prints nothing; both provenance tests pass unchanged. Perturbed
    (scratch copy through `_scratch_front_door`): the caption's tick edited by one reads `names tick 10, the picture
@@ -442,7 +460,9 @@ Decisions of this build:
    related collection 4 (P5, P14, S3, F3); drop a tuple member 4 (P4, P6, P7, P28); a role, kind, room or tick read
    made a constant 3 (P11, P19, S1); swap adjacent branches 2 (P10, P22); a loaded source read as its literal 3 (P1,
    F1, F4); message arguments 3 (P2, P24, S4). While the pass was designed, four tests were added for mutants the
-   earlier cases did not reach (P13, P18, P23, P27); the pass then ran once over all 36. The mutant list is in the
+   earlier cases did not reach (P13, P18, P23, P27); the pass then ran once over all 36. The three-lens review of
+   `1b53d86d` then found three listed-class mutants outside those 39 that survived; each is killed by a planted case
+   added in "Review corrections, round 1" below (S5, S6, P32). The mutant list is in the
    pull request body. The gate record is CI's run at the exact head of the pull request, cited there by run id (memo
    8.7 item 1 bars a further card-only commit to record it); run 38016862362 is CI at `11eb133a`, the head the
    review read.
@@ -485,6 +505,52 @@ every process row and is named with the first process row above it when it is no
 each (README and guide); run against the previous rule it failed (`2 failed`), against the fix it passes. Mutants
 of the new branch, each killed by the doc-facts file: P29 its missing-row filter (`-1 <`) dropped, P30 its comparison
 inverted, P31 its report dropped. The doc-facts file then reads 358 passed, and `check_doc_facts.py` exits 0.
+
+### Review corrections, round 1 (2026-10-09)
+
+The three-lens review of `1b53d86d` (correctness, integrity, docs) raised five blocking findings, three distinct
+defects, each a listed-class mutant the pass above never applied; all three are fixed by planted cases, and no
+production line moves (`scripts/check_doc_facts.py`, the frontend, the README and the reading guide are
+byte-identical to `1b53d86d`). One acceptance item per defect is prepended above, naming the lenses that raised it.
+
+1. **The strip guard's featured-list read made its literal** (correctness lens S3, docs lens V5; here S5). The
+   guard's read of `FEATURED_GAMES` replaced by today's five pairs passed, because no case varied the picker's
+   source. Fix: the read and the loads moved, unchanged, into `_featured_replays`, which the guard calls, and the new
+   `test_the_strip_guard_reads_the_pickers_featured_list` writes a copy of `ReplayPicker.tsx` with 9p2i seed 1
+   appended (count-only: one meeting, a crewmate ejected), points `_PICKER_TSX` at it, and asserts the guard's output
+   is exactly `9p2i seed 1 meeting 0 ejects <its ejectee>, a crewmate`. S5 red (`1 failed, 65 passed`, that test),
+   green on the guard.
+2. **The featured list swapped for the featured heads** (integrity lens; here S6). Every planted case sat in a head
+   game, so a guard reading only 9p2i seed 19 and 4p1i seed 2 passed. Fix: the guard test now also reads 9p2i seed
+   14's and 4p1i seed 11's meeting-0 ejectee as a crewmate and asserts each is named by set, seed and meeting index.
+   S6 red (`2 failed, 64 passed`: this case on `KeyError: ('9p2i', 14)`, and the picker case on seed 1), green on
+   the guard.
+3. **Check 22's replaced-era read made the literal `stage-b-r2`** (correctness lens P01, integrity lens; here P32).
+   Only the `KeyError` path varied the era, so following the registry's replaced era was unpinned. Fix:
+   `test_the_before_column_follows_the_registrys_replaced_era` files samples/9p2i under round 2 (`era_of`
+   monkeypatched to `STAGE_B_R2`), whose recording replaced baseline 9's: on the committed page `check_process_rows`
+   returns one error, `the '### samples/9p2i' table has no before column naming the baseline-9 era`; with the page's
+   before header renamed to baseline 9 it returns none. P32 red (`1 failed, 358 passed`, that test), green on the rule.
+
+**Probe of the spans named and changed** (scratch `mutate.py`, each an exact-text edit restored byte for byte,
+checked by digest; guarding command the whole file: `tests/api/test_sets.py` or
+`tests/scripts/test_check_doc_facts.py`): 7 runs, all killed. New: S5 (a loaded source read to the canonical
+literal), S6 (swap a related collection), P32 (a loaded source read to the canonical literal). Re-run on the guard
+the refactor touched: S1 the role read made a constant, S2 the None test inverted, S3 only the first meeting read, S4
+the meeting index in the message made 0. The pass and this round together cover 42 distinct mutants: the 39 above
+and the three the review named.
+
+**Validation at this commit** (count-only; no local `check.sh`, memo 8.7 item 1): `check_doc_facts.py` exit 0;
+`wc -w README.md docs/reading-guide.md` 1585 and 1339; `pytest tests/scripts/test_check_doc_facts.py
+tests/scripts/test_public_recording_provenance.py tests/api/test_sets.py tests/api/test_public_results.py -q`
+529 passed; `publish_process_scorecard.py --check`, `publish_gameplay_census.py --check`,
+`publish_game_profile.py --check` exit 0 each; `build_sample_report.py --check` on the four sets exit 0 each;
+`verify_ml_evidence.py` (offline) exit 0, every check passed; `validate_task_docs.py` exit 0; `git diff --exit-code 76d1c826 --
+replays/ training/ api/ docs/media/ frontend/e2e/ docs/process-scorecard.md docs/gameplay-census.md` exit 0; `git
+grep -n -i 'correct ejections' -- . ':!tasks' ':!audits'` still 23 hits, as item 7 justifies; ruff, ruff format and
+strict mypy on the two changed test files clean. No file under `frontend/`, `scripts/` or `docs/` and neither page
+changed since `1b53d86d`, so the frontend results and the bundle diff above stand for this head; CI at the exact
+head, cited by run id in the pull request, is the gate record. The card's Status line stays the orchestrator's.
 
 ### Limitations
 
