@@ -119,6 +119,20 @@ Each item names its enforcing mechanism and the planted or perturbed case that t
 seen red before the code it guards exists. Every count is the set shown at dispatch, measured at the head that states
 it.
 
+- [x] Review correction: check 22's row table ends at its first line that is not a table line (review round 3 of
+  `3c2d1f97`, the correctness lens: with that stop made a `continue`, a later table in the section whose second cell
+  carries a process row's label was read into the row table, and the doc-facts file still read 366 passed).
+  Mechanism: `scorecard_process_cells`. Planted: `test_a_table_after_the_row_table_is_passed_over`, a table of the
+  row table's width between the shown set's row table and its row-2 detail line, with a row labelled
+  `agent-authored share`, read the same as the committed page with `check_facts` clean; red on the mutant (T1, `1
+  failed, 367 passed`), green on the rule (368 passed).
+- [x] Review correction: a shown-set table with no value column is refused by name (review round 3 of `3c2d1f97`,
+  the correctness lens's nonblocking C7, folded by the orchestrator: with the refusal's test made `if False`, the
+  doc-facts file still read 366 passed, and such a page crashed with an uncaught `ValueError` from `header.index`).
+  Mechanism: `scorecard_process_cells`. Planted: `test_a_row_table_with_no_value_column_is_refused`, the value
+  column dropped from the table's header and every row: `scorecard_process_cells` raises `ScorecardPageError` with
+  exactly `the '### samples/9p2i' table has no 'value' column`, and `check_facts` returns that one refusal; red on
+  the mutant (V1, `1 failed, 367 passed`, on `ValueError: 'value' is not in list`), green on the rule.
 - [x] Review correction: each baseline's innocent-ejection count sits in its own sentence, so each keeps its check
   (review round 2 of `7987730c`, the correctness lens: the condensed Phase-20 sentence carried baseline 8's 46 and
   baseline 9's 42 together, and `check_verdict_figures` passes a wrongful-ejection sentence naming any recorded
@@ -489,7 +503,9 @@ Decisions of this build:
    `1b53d86d` then found three listed-class mutants outside those 39 that survived; each is killed by a planted case
    added in "Review corrections, round 1" below (S5, S6, P32). Review round 2 found four more in
    `scorecard_process_cells` (D5, D6, D12, D16), each killed by a planted case in "Review corrections, round 2"
-   below. The mutant list is in the
+   below. Review round 3 found one more there (the row table's stop, T1) and folded in C7 (the
+   value-column refusal, V1), each killed by a planted page in "Review corrections, round 3" below. The
+   mutant list is in the
    pull request body. The gate record is CI's run at the exact head of the pull request, cited there by run id (memo
    8.7 item 1 bars a further card-only commit to record it); run 38016862362 is CI at `11eb133a`, the head the
    review read.
@@ -637,6 +653,51 @@ files only against `76d1c826`; no diff under `TournamentDashboard.tsx`, `Meeting
 `frontend/` changed since `11eb133a`, so the frontend results and the bundle diff stand for this head. The README's
 split sentences go live on GitHub with the merge; the pull request quotes them old against new. CI at the exact
 head, cited by run id in the pull request, is the gate record. The card's Status line stays the orchestrator's.
+
+### Review corrections, round 3 (2026-10-10)
+
+The correctness lens's review of `3c2d1f97` (the integrity and docs lenses passed there and are not re-run) raised one
+blocking finding, and the orchestrator folded in one nonblocking finding on the same reader; both are fixed by
+planted pages in `tests/scripts/test_check_doc_facts.py` (`62369262`), each seen red on its mutant first. No
+production line moves: `git diff 3c2d1f97 HEAD -- scripts frontend README.md docs` prints nothing. One acceptance
+item per finding is prepended above.
+
+1. **The row table's stop made a `continue`** (blocking). `scorecard_process_cells` ends the row table at its first
+   line that is not a table line once the table's header is found. With that `break` made a `continue`, every later
+   table line of the section was read as a row, so a later table whose second cell carries a process row's label
+   replaced that row's cells. The reviewer's scratch demo on a `git archive` of `3c2d1f97`: a 4-column table after
+   the row table, with a row labelled `agent-authored share`, read 692/702 and 674/691 on the head (`check_facts` 0
+   errors) and 1/1 = 1.0000 for both cells under the mutant (4 errors). Fix:
+   `test_a_table_after_the_row_table_is_passed_over`, the twin of `test_a_table_ahead_of_the_row_table_is_passed_over`:
+   a table of the row table's width between the row table and the `Row 2 detail:` line, whose row reads `|
+   samples/9p2i | agent-authored share | 1/2 = 0.5000 | 1/1 = 1.0000 |`. `_shown_set_page_cells` reads the planted
+   page the same as the committed one, and `check_facts` is clean on it.
+2. **The value-column refusal untested** (C7, nonblocking, folded). With `if _SCORECARD_VALUE_HEADER not in header:`
+   made `if False:`, a page with no value column crashed in `header.index` instead of being refused by name, where
+   the reader's docstring names the missing column (AGENTS.md: invalid input raises, never a silent fallback). Fix:
+   `test_a_row_table_with_no_value_column_is_refused` drops the last cell, the value column, from every table line of
+   the shown set's section. `scorecard_process_cells` raises `ScorecardPageError` whose only argument is `the '###
+   samples/9p2i' table has no 'value' column`, and `check_facts` returns one error, that refusal after the page's
+   path.
+
+**Probe of the spans the findings name** (scratch `mutate.py`: each an exact-text edit of `scripts/check_doc_facts.py`,
+restored byte for byte and checked by digest; guarding command the whole doc-facts file, `pytest
+tests/scripts/test_check_doc_facts.py -q -n 8`, 368 passed unmutated): 5 mutants, all killed. T1, the finding's
+mutant (the stop dropped: its `break` made `continue`): `1 failed, 367 passed`, the trailing-table case, on its cells
+assertion. T2, the stop removed with its `if` (drop a wrapper): `1 failed, 367 passed`, the same case. T3, the stop's
+`is not None` test inverted: `220 failed, 148 passed`. V1, C7's mutant (the refusal's test made `if False`, a dropped
+filter): `1 failed, 367 passed`, the no-value-column case, on `ValueError: 'value' is not in list`. V2, the refusal's
+message argument made a constant: `1 failed, 367 passed`, the same case. With the 49 above, the pass and the three
+fix rounds have run 54 mutants; T3 may repeat the pass's P16 (a header None test inverted), whose exact edit its list
+does not quote. The nonblocking survivors already filed stay as filed (C34, a message argument; G4, the
+roster-missing equivalence; M12 and M18, gate-equivalent), and the probe was not widened beyond these two spans.
+
+**Validation at this head** (count-only; no local `check.sh`, memo 8.7 item 1): `pytest
+tests/scripts/test_check_doc_facts.py -q` 368 passed (366 at `3c2d1f97`, plus the two planted pages);
+`validate_task_docs.py` exit 0; `check_doc_facts.py` exit 0; ruff, ruff format and strict mypy on the test file clean.
+No file under `scripts/`, `frontend/` or `docs/`, and neither page, changed since `3c2d1f97`, so every other result
+above stands for this head. CI at the exact head, cited by run id in the pull request, is the gate record. The card's
+Status line stays the orchestrator's.
 
 ### Limitations
 
