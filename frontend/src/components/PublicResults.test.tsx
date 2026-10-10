@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { PublicResultsView } from "./PublicResults";
+import { fmt, PUBLIC_RESULTS_COPY } from "../lib/copy";
 import type { ExperimentConfigView, PublicResultsView as Summary, ReportProvenanceGroupView } from "../types/api";
 
 const summary: Summary = { format_version: 1, set_name: "9p2i", source_fingerprint: "sha256:example", recorded_from: "2026-08-30", recorded_until: "2026-08-30", models: ["recorded-model"], prompt_versions: ["v5"], source_url: "https://example.com/source", games: 50, completed: 48, aborted: 1, tick_limited: 1, unfinished: 0, crew_wins: 35, impostor_wins: 13, task_wins: 0, meetings: 151, ejections: 95, impostor_ejections: 82, innocent_ejections: 13, proof_backed_ejections: 68, proof_backed_correct: 68, proof_free_ejections: 27, proof_free_correct: 14, reported_cost_usd: 0, input_tokens: 100, output_tokens: 50, cases: [{ case_id: "example", title: "A disputed route", setup: "Investigate the sighting.", explanation: "HIDDEN OUTCOME ROLE", game_id: "headless-seed-46", meeting_id: "headless-seed-46:meeting-3", meeting_tick: 31, observer_id: "p-9", turn_id: "turn-1", observation_id: "p-9:29:3", source_sha256: "hash", source_url: "https://example.com/source", classification: "unsupported" }] };
@@ -69,6 +70,16 @@ describe("public result interpretation", () => {
     expect(html).toContain("evidenceId=p-9%3A29%3A3");
     expect(html).not.toContain("HIDDEN OUTCOME ROLE");
     expect(html).not.toContain("unsupported");
+  });
+  it("heads the ejection tile with what its fraction counts, in the copy's words", () => {
+    const html = renderToStaticMarkup(<PublicResultsView results={summary} />);
+    const tile = /<h3[^>]*>([^<]*)<\/h3><strong[^>]*>82\/95 \(86%\)<\/strong><p[^>]*>([^<]*)<\/p>/.exec(html);
+    expect(tile).not.toBeNull();
+    expect(tile?.[1]).toBe(PUBLIC_RESULTS_COPY.ejectionsHeading);
+    expect(tile?.[2]).toBe(fmt(PUBLIC_RESULTS_COPY.ejectionsDescription, { meetings: "151", innocent: "13" }));
+    expect(tile?.[1]).toBe("Ejected players who were impostors");
+    expect(tile?.[2]).toBe("Impostors / all ejected players across 151 resolved meetings. 13 innocent ejections; skips are excluded.");
+    expect(html).not.toMatch(/correct ejections/i);
   });
   it("keeps an empty denominator explicit instead of displaying a fabricated rate", () => {
     const html = renderToStaticMarkup(<PublicResultsView results={{ ...summary, completed: 0, crew_wins: 0 }} />);

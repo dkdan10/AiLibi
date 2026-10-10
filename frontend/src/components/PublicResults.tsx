@@ -92,9 +92,9 @@ export function PublicResultsView({ results }: { results: PublicResultsDTO }) {
         <p className="mt-2 text-xs">Crew victories / verified completed games. {results.impostor_wins} impostor wins; {results.task_wins} crew victories by tasks.</p>
       </div>
       <div className="rounded-lg border border-ink-300 bg-paper-0 p-4">
-        <h3 className="mb-2 text-base">Correct ejections</h3>
+        <h3 className="mb-2 text-base">{COPY.ejectionsHeading}</h3>
         <Fraction n={results.impostor_ejections} d={results.ejections} />
-        <p className="mt-2 text-xs">Impostors / all ejected players across {results.meetings} resolved meetings. {results.innocent_ejections} innocent ejections; skips are excluded.</p>
+        <p className="mt-2 text-xs">{fmt(COPY.ejectionsDescription, { meetings: String(results.meetings), innocent: String(results.innocent_ejections) })}</p>
       </div>
     </div>
     <div className="rounded-lg border-2 border-ink-900 bg-paper-2 p-4">
