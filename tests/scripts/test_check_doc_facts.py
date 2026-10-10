@@ -1744,7 +1744,7 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """**Two bars were written down first, and both were missed.** Baseline 7 measured conviction accuracy without proof at 61 of 103 = 0.5922 against 0.60, and wrongful ejections at 42 against fewer than 35; its rule returned **FINDING**, and Daniel adopted it by explicit owner override on 2026-08-26. Baselines 8 and 9 registered none: 50 of 96 = 0.5208 with 46 innocent ejections, then 43 of 85 = 0.5059 with 42 over four recorded sets, a movement these samples cannot call real. [The decision and its limitations](docs/ownership-case-study.md).
+        """**Two bars were written down first, and both were missed.** Baseline 7 measured conviction accuracy without proof at 61 of 103 = 0.5922 against 0.60, and wrongful ejections at 42 against fewer than 35; its rule returned **FINDING**, and Daniel adopted it by explicit owner override on 2026-08-26. Baseline 8 registered none: 50 of 96 = 0.5208 with 46 innocent ejections. Nor did baseline 9: 43 of 85 = 0.5059 with 42 innocent ejections over four sets, a movement these samples cannot call real. [The decision and its limitations](docs/ownership-case-study.md).
 """,
         """**Two bars were written down first, and both were missed.** Baseline 7 measured conviction accuracy without proof at 61 of 103 = 0.5922 against 0.60, and wrongful ejections at 42 against fewer than 35. Its rule returned **FINDING**, but Daniel adopted that recording by explicit owner override on 2026-08-26; the bars did not pass. Baseline 8 registered no bars and measured 50 of 96 = 0.5208 and 46 innocent ejections. Baseline 9 registered none either and measured 43 of 85 = 0.5059 and 42 innocent ejections over its four recorded sets, a movement too small for these samples to call real. [The decision and its limitations](docs/ownership-case-study.md) preserve both judgments.
 """,
@@ -3241,6 +3241,32 @@ def test_wrongful_ejection_count_inside_a_longer_number_detected(
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "names none of the counts the records read (pooled 42" in errors[0]
+
+
+@pytest.mark.parametrize("document", [_README, _READING_GUIDE])
+@pytest.mark.parametrize(
+    ("fraction", "recorded", "moved"),
+    [("50 of 96 = 0.5208", "46", "47"), ("43 of 85 = 0.5059", "42", "41")],
+)
+def test_each_baselines_innocent_ejection_count_sits_in_its_own_sentence(
+    doc_tree: Path, document: str, fraction: str, recorded: str, moved: str
+) -> None:
+    # A wrongful-ejection sentence passes when it names any count a record
+    # read, so one sentence carrying baseline 8's 46 and baseline 9's 42 lets
+    # each vouch for the other. Each count sits in its own sentence beside its
+    # own conviction fraction. Planted: the first whole number after that
+    # fraction moved by one, which leaves its sentence naming no recorded count.
+    text = _read(doc_tree, document)
+    planted, landed = re.subn(
+        rf"({re.escape(fraction)}\D+?){recorded}\b", rf"\g<1>{moved}", text, count=1
+    )
+    assert landed == 1, (document, fraction)
+    _write(doc_tree, document, planted)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{document}:")
+    assert "a wrongful-ejection sentence names none of the counts" in errors[0]
+    assert f"{fraction} " in errors[0]  # the quoted sentence is that baseline's
 
 
 def test_wrongful_ejection_sentence_may_state_the_previous_count(
