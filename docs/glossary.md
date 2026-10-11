@@ -187,7 +187,20 @@ witness's ballot evidence (`_own_channel_evidence_rows` in
 [`meetings/manager.py`](../meetings/manager.py)). Other spoken placements,
 contradictions and agreement are different evidence classes; a citation alone
 does not certify their inference
-([observation contract](observation-contract.md)).
+([observation contract](observation-contract.md)). The meeting view lists this
+proof under “Role proof”, and the Results tab counts ejected players with and
+without such a vent sighting.
+
+### weak signal (a clash marked weak)
+
+A contradiction the meeting layer flags but marks weak because the clash is
+thin: an alibi a player gave for themselves that someone else's sighting
+contradicts, a very short stated stretch, a sighting on the first or last tick
+of a stated stretch, and a few more shapes, each with its reason, in
+[`meetings/transcript.py`](../meetings/transcript.py) (the `WEAK_REASON_`
+constants). A weak flag is still shown to the voters and still counted; it moves
+a voter's suspicion less than a strong one. The meeting view lists these last,
+under “Weak signals”.
 
 ### conviction economy (what a meeting does with evidence)
 
@@ -290,6 +303,19 @@ contradiction raised at that meeting, and nothing else), `uncited` (nothing
 cited and nothing said), and `not_assessed` (the meeting itself set this vote,
 so there is no voter decision to assess)
 ([`meetings/manager.py`](../meetings/manager.py)).
+
+### vote rule (what the meeting changes on a ballot)
+
+The few cases where the meeting layer changes the vote a ballot records, each
+named on the ballot card by a chip: a vote for someone who could not be voted
+out (the voter itself, or a player no longer alive) becomes a skip, an
+impostor's vote for its own teammate becomes a skip,
+and a ballot that could not be read counts as a skip. Older recordings also
+carry two retired rules, which no recording made today applies: a vote moved
+onto the player the voter's own suspicion rated highest (its chip says the vote
+was changed by the vote rule), and a vote to eject with no cited reason changed
+to a skip ([`meetings/schemas.py`](../meetings/schemas.py),
+`BallotTargetRewriteReason`).
 
 ### top suspect (the player a voter's own suspicion rates highest)
 

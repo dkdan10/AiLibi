@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import threading
 from collections.abc import Callable
@@ -75,6 +76,33 @@ def test_current_summary_is_bounded_and_source_checked(
     assert r.source_url == _ROOT_9P2I
     assert len(r.model_dump_json().encode()) < public.MAX_PUBLIC_RESULTS_BYTES
     assert r.reported_cost_usd == 0 and r.input_tokens > 0
+
+
+_COPY = Path(__file__).resolve().parents[2] / "frontend/src/lib/copy.ts"
+_COUNT_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+
+
+def _empty_state_count(copy_source: str) -> int:
+    """The number of cases the Results tab's empty state says the 9-player set has."""
+    match = re.search(r'noCases: "[^"]*the 9-player set has (\w+)\."', copy_source)
+    if match is None:
+        raise ValueError("the Results tab's empty state moved")
+    return _COUNT_WORDS[match.group(1)]
+
+
+def test_the_empty_state_counts_the_curated_cases(
+    canonical_summary: PublicResultsView,
+) -> None:
+    # The 4-player set publishes no case, and its empty state points at the
+    # 9-player set's in words; the word follows the published cases.
+    source = _COPY.read_text(encoding="utf-8")
+    assert _empty_state_count(source) == len(canonical_summary.cases) == 2
+    # Planted: a third curated case, or a changed word, no longer agrees.
+    third = [*canonical_summary.cases, canonical_summary.cases[0]]
+    assert _empty_state_count(source) != len(third)
+    assert _empty_state_count(source.replace("has two.", "has three.")) != len(
+        canonical_summary.cases
+    )
 
 
 @pytest.mark.parametrize("mutation", ["winner", "tick", "order"])

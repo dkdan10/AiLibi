@@ -1,9 +1,66 @@
 import { useEffect, useRef, useState } from "react";
+import { OBSERVATION_EVENT_SEGMENTS } from "../lib/contradictions";
+import { EVIDENCE_SOURCE_COPY, TURN_COPY, fmt } from "../lib/copy";
 import { evidenceDomId, observationSource, statementSource, type EvidenceSelection } from "../lib/evidence";
 import { useReplayStore } from "../store/replayStore";
 import { ClaimLine } from "../ui/ClaimLine";
 import { ObservationLine } from "../ui/ObservationLine";
-import type { ObservationReferenceView } from "../types/api";
+import type { ObservationReferenceView, TurnView } from "../types/api";
+
+// A contradiction event id is `turn:<turn_id>:<segment>:<i>`; greedy `.+`
+// captures the whole turn id before the final suffix. The segment alternation is
+// built from `lib/contradictions.ts`'s exported list, the same list that mints
+// the ids on the cards, so a new segment cannot be taught to only one reader.
+const EVENT_ID_PATTERN = new RegExp(
+  `^turn:(.+):(?:${OBSERVATION_EVENT_SEGMENTS.join("|")}):\\d+$`,
+);
+
+/** The turn id inside a contradiction event id, or `null` when it is not one. */
+export function eventTurnId(eventId: string): string | null {
+  const match = EVENT_ID_PATTERN.exec(eventId);
+  return match ? match[1]! : null;
+}
+
+// A statement id is `{meeting_id}:turn-{k}`; an observation id is
+// `{agent_id}:{tick}:{seq}`. Only the label reads them; the selection still
+// resolves the exact id and never a nearby one.
+const STATEMENT_ID = /^.+:turn-(\d+)$/;
+const OBSERVATION_ID = /^(.+):(-?\d+):\d+$/;
+
+/**
+ * What a citation points at, in words: "Statement by p-3 (turn 3)", "What p-1
+ * saw at tick 12". A statement's speaker is read from the meeting's public turn
+ * with that id, everything else from the id itself; an id that names no turn in
+ * the meeting, or that cannot be read, says so.
+ */
+export function citationLabel(
+  kind: EvidenceSelection["kind"],
+  id: string,
+  turns: readonly TurnView[],
+): string {
+  if (kind === "observation") {
+    const match = OBSERVATION_ID.exec(id);
+    return match === null
+      ? EVIDENCE_SOURCE_COPY.observationUnreadable
+      : fmt(EVIDENCE_SOURCE_COPY.observation, { observer: match[1]!, tick: match[2]! });
+  }
+  const statement = kind === "statement";
+  const turnId = statement ? id : eventTurnId(id);
+  const turnNumber = turnId === null ? undefined : STATEMENT_ID.exec(turnId)?.[1];
+  if (turnId === null || turnNumber === undefined) {
+    return statement ? EVIDENCE_SOURCE_COPY.statementUnreadable : EVIDENCE_SOURCE_COPY.partUnreadable;
+  }
+  const turn = turns.find((candidate) => candidate.turn_id === turnId);
+  if (turn === undefined) {
+    return fmt(statement ? EVIDENCE_SOURCE_COPY.statementMissing : EVIDENCE_SOURCE_COPY.partMissing, {
+      turn: turnNumber,
+    });
+  }
+  return fmt(statement ? EVIDENCE_SOURCE_COPY.statement : EVIDENCE_SOURCE_COPY.part, {
+    speaker: turn.speaker,
+    turn: turnNumber,
+  });
+}
 
 export function ObservationClock({ observation }: { observation: ObservationReferenceView }) {
   if (!observation.observation_phase || observation.source_tick == null) return <p className="text-xs text-ink-500">Scene frame {observation.scene_tick ?? "unavailable"}. Observation time and replay input-frame time use different boundaries.</p>;
@@ -14,9 +71,10 @@ export function ObservationClock({ observation }: { observation: ObservationRefe
   </div>;
 }
 
+/** A citation's link: its words name what it points at; the exact id it selects is on hover. */
 export function EvidenceLink({ target, children }: { target: EvidenceSelection; children: React.ReactNode }) {
   const select = useReplayStore((s) => s.selectEvidence);
-  return <button type="button" className="rounded border border-ink-300 bg-paper-0 px-2 py-1 text-left text-xs text-ink-900 underline underline-offset-2 hover:bg-paper-2" onClick={() => select(target)}>{children}</button>;
+  return <button type="button" title={target.id} className="rounded border border-ink-300 bg-paper-0 px-2 py-1 text-left text-xs text-ink-900 underline underline-offset-2 hover:bg-paper-2" onClick={() => select(target)}>{children}</button>;
 }
 
 /** The same evidence context follows a viewer out of the meeting onto the map. */
@@ -48,6 +106,9 @@ export function EvidencePanel({ inMeeting = false }: { inMeeting?: boolean }) {
   // An evidence link may only seek an exact recorded frame, never a nearby one.
   const sceneIndex = sceneTick === null ? -1 : replay.ticks.findIndex((frame) => frame.tick === sceneTick);
   const missing = meeting === undefined || (target.kind !== "observation" && source === null) || (target.kind === "observation" && canInspect && memory !== undefined && observation === null);
+  // The caveat that a citation is not proof belongs to a citation that found its
+  // source: a statement in this meeting, or an observation this view may read.
+  const resolved = !missing && (target.kind === "observation" ? canInspect && observation !== null : source !== null);
   const store = useReplayStore.getState();
   const goToMeeting = () => {
     if (!meeting) return;
@@ -60,15 +121,15 @@ export function EvidencePanel({ inMeeting = false }: { inMeeting?: boolean }) {
       <h3 className="text-lg">Check the source</h3>
       <button type="button" className="text-sm underline" onClick={() => store.selectEvidence(null)}>Close evidence</button>
     </div>
-    <p className="mt-1 break-all font-mono text-xs">{target.id}</p>
-    <p className="my-2 text-xs text-ink-500">A resolved citation identifies a source. It does not establish that the source supports the accusation.</p>
+    <p data-citation-label className="mt-1 break-words font-mono text-xs" title={target.id}>{citationLabel(target.kind, target.id, meeting?.turns ?? [])}</p>
+    {resolved && <p data-citation-note className="my-2 text-xs text-ink-500">{EVIDENCE_SOURCE_COPY.resolvedNote}</p>}
     {missing ? <p role="status">Reference unavailable in this recording and meeting. No substitute was selected.</p> : target.kind === "observation" ? !canInspect ? <p>This is {observer ?? "another agent"}'s private observation. Your current perspective stays unchanged.</p> : errors[key] ? <p role="status">Observation snapshot unavailable. <button type="button" className="underline" onClick={() => observer && void fetchMemory(target.meetingId, observer)}>Retry snapshot</button>
     </p> : !memory ? <p role="status">Loading the cited observation…</p> : observation ? <div>
       <p className="text-xs font-semibold">{observation.observer_id} · observation tick {observation.observation_tick} · {observation.provenance}</p>
       <p className="my-2 whitespace-pre-wrap">{observation.text}</p>
       <ObservationClock observation={observation} />
     </div> : null : source ? <div>
-      <p className="text-xs font-semibold">{source.turn.speaker} · public {source.turn.turn_kind === "opt_in" ? "opt-in" : source.turn.turn_kind} · meeting tick {meeting?.tick}</p>{source.kind === "statement" ? <p className="my-2 whitespace-pre-wrap">{source.turn.free_text}</p> : source.kind === "claim" ? <ClaimLine claim={source.value} /> : <ObservationLine obs={source.value} />}</div> : null}
+      <p className="text-xs font-semibold">{fmt(EVIDENCE_SOURCE_COPY.publicLine, { speaker: source.turn.speaker, kind: TURN_COPY.kinds[source.turn.turn_kind], tick: String(meeting?.tick) })}</p>{source.kind === "statement" ? <p className="my-2 whitespace-pre-wrap">{source.turn.free_text}</p> : source.kind === "claim" ? <ClaimLine claim={source.value} /> : <ObservationLine obs={source.value} />}</div> : null}
     <div className="mt-3 flex flex-wrap gap-2">
       {sceneIndex >= 0 && (target.kind !== "observation" || canInspect) && <button type="button" className="rounded border border-ink-900 px-3 py-1 text-sm" onClick={() => { store.setCurrentTick(sceneIndex); store.selectMeeting(null); }}>View scene frame {sceneTick}</button>}
       {meeting && <button type="button" className="rounded border border-ink-900 px-3 py-1 text-sm" onClick={goToMeeting}>Return to meeting and ballots</button>}

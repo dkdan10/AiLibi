@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { PublicResultsView } from "./PublicResults";
-import { fmt, PUBLIC_RESULTS_COPY } from "../lib/copy";
+import { fmt, PUBLIC_RESULTS_COPY, setOptionLabel } from "../lib/copy";
 import type { ExperimentConfigView, PublicResultsView as Summary, ReportProvenanceGroupView } from "../types/api";
 
 const summary: Summary = { format_version: 1, set_name: "9p2i", source_fingerprint: "sha256:example", recorded_from: "2026-08-30", recorded_until: "2026-08-30", models: ["recorded-model"], prompt_versions: ["v5"], source_url: "https://example.com/source", games: 50, completed: 48, aborted: 1, tick_limited: 1, unfinished: 0, crew_wins: 35, impostor_wins: 13, task_wins: 0, meetings: 151, ejections: 95, impostor_ejections: 82, innocent_ejections: 13, proof_backed_ejections: 68, proof_backed_correct: 68, proof_free_ejections: 27, proof_free_correct: 14, reported_cost_usd: 0, input_tokens: 100, output_tokens: 50, cases: [{ case_id: "example", title: "A disputed route", setup: "Investigate the sighting.", explanation: "HIDDEN OUTCOME ROLE", game_id: "headless-seed-46", meeting_id: "headless-seed-46:meeting-3", meeting_tick: 31, observer_id: "p-9", turn_id: "turn-1", observation_id: "p-9:29:3", source_sha256: "hash", source_url: "https://example.com/source", classification: "unsupported" }] };
@@ -15,15 +15,15 @@ const SHOWN_CONFIG = resolve(dirname(fileURLToPath(import.meta.url)), "../../../
 /** An older payload: none of the later keys is present, every field at its default. */
 const OLDER: ExperimentConfigView = { format_version: 1, redistribution_policy: "lowest_id", meeting_reset: "preserve", crew_idle_policy: "hub_wait", vent_exit_policy: "target_distance", post_meeting_retarget: false, self_report: false, sabotage_threshold: "six_sevenths", evidence_reasoning_version: null, bounded_rebuttal_version: null, public_account_version: null, attributed_testimony_version: null };
 
-/** The seven adopted rules, each with the words the card must use for it. */
+/** The seven adopted rules, each with the sentence the card must use for it. */
 const ADOPTED_WORDS: ReadonlyArray<readonly [keyof ExperimentConfigView, string | number, string]> = [
-  ["vent_witness_rule", "physical", "vent use seen only in the room where it happens"],
-  ["vent_entry_policy", "own_fresh_kill", "impostors enter a vent only beside a body they have just killed"],
-  ["meeting_reset", "hub_with_grace", "after each meeting, the survivors start again from the meeting room with the bodies cleared"],
-  ["bounded_rebuttal_version", 1, "one reply to a late accusation"],
-  ["report_body_handle_version", 1, "body reports without the time of death"],
-  ["ballot_kill_row_version", 1, "witnessed kills listed on the voter's ballot"],
-  ["impostor_ballot_version", 1, "impostor ballots cast by strategy"],
+  ["vent_witness_rule", "physical", "Vent use is seen only in the room where it happens."],
+  ["vent_entry_policy", "own_fresh_kill", "Impostors enter a vent only beside a body they have just killed."],
+  ["meeting_reset", "hub_with_grace", "After each meeting, the survivors start again from the meeting room with the bodies cleared."],
+  ["bounded_rebuttal_version", 1, "A player accused after already speaking gets one reply."],
+  ["report_body_handle_version", 1, "A body report does not give the time of death."],
+  ["ballot_kill_row_version", 1, "Each ballot lists the kills its voter saw a player from the other side make."],
+  ["impostor_ballot_version", 1, "An impostor is asked to vote as a move for its own side."],
 ];
 
 /** One non-default value of every other config field, and the experiment words it earns. */
@@ -62,8 +62,8 @@ describe("public result interpretation", () => {
     expect(html).toContain("35/48");
     expect(html).toContain("68/68");
     expect(html).toContain("14/27");
-    expect(html).toContain("100% by construction");
-    expect(html).toContain("27 ejections without role proof");
+    expect(html).toContain("Only impostors can vent, so the first count says nothing about how well the table reasoned.");
+    expect(html).toContain("27 ejections without a sighting");
     expect(html).toContain("1 aborted");
     expect(html).toContain("not a bill");
     expect(html).toContain("https://example.com/source");
@@ -110,7 +110,7 @@ describe("public result interpretation", () => {
     const unstamped = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [
       { ...base, temporal_observation_version: null },
     ] }} />);
-    expect(unstamped).toContain("Observation clock: not recorded.");
+    expect(unstamped).toContain("Observation clock: unknown.");
     expect(unstamped).not.toContain("Observation clock: v1.");
   });
   it("calls each adopted rule adopted, in plain words, and leaves a default group unchanged", () => {
@@ -118,17 +118,17 @@ describe("public result interpretation", () => {
     const quiet = groupLines(OLDER);
     expect(quiet).toContain("No enabled experiments recorded. This alone does not certify the default behavior.");
     const adopted: Array<[Partial<ExperimentConfigView>, string]> = [
-      [{ vent_witness_rule: "physical" }, "vent use seen only in the room where it happens"],
-      [{ vent_entry_policy: "own_fresh_kill" }, "impostors enter a vent only beside a body they have just killed"],
-      [{ meeting_reset: "hub_with_grace" }, "after each meeting, the survivors start again from the meeting room with the bodies cleared"],
-      [{ bounded_rebuttal_version: 1 }, "one reply to a late accusation"],
-      [{ report_body_handle_version: 1 }, "body reports without the time of death"],
-      [{ ballot_kill_row_version: 1 }, "witnessed kills listed on the voter's ballot"],
-      [{ impostor_ballot_version: 1 }, "impostor ballots cast by strategy"],
+      [{ vent_witness_rule: "physical" }, "Vent use is seen only in the room where it happens."],
+      [{ vent_entry_policy: "own_fresh_kill" }, "Impostors enter a vent only beside a body they have just killed."],
+      [{ meeting_reset: "hub_with_grace" }, "After each meeting, the survivors start again from the meeting room with the bodies cleared."],
+      [{ bounded_rebuttal_version: 1 }, "A player accused after already speaking gets one reply."],
+      [{ report_body_handle_version: 1 }, "A body report does not give the time of death."],
+      [{ ballot_kill_row_version: 1 }, "Each ballot lists the kills its voter saw a player from the other side make."],
+      [{ impostor_ballot_version: 1 }, "An impostor is asked to vote as a move for its own side."],
     ];
     for (const [change, words] of adopted) {
       const lines = groupLines({ ...OLDER, ...change });
-      expect(lines).toContain(`Rules adopted for the current game: ${words}.`);
+      expect(lines).toContain(`Rules adopted for the current game: ${words}`);
       // The words these rules carried as experiments, now absent.
       expect(lines.join("\n")).not.toContain("Recorded experiments:");
       expect(lines.join("\n")).not.toContain("experimental movement or action policies");
@@ -186,7 +186,7 @@ describe("public result interpretation", () => {
     expect(lines.join("\n")).not.toContain("Experimental agent factory");
     const many = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [{ ...group(OLDER), game_ids: ["headless-seed-1", "headless-seed-2"] }] }} />);
     expect(many).toContain("Built-in agents with recorded tactical settings</strong> · 2 recordings.");
-    expect(lines).toContain("Impostor policy: not recorded. Crew policy: not recorded. Rule settings: not recorded.");
+    expect(lines).toContain("Impostor policy: the built-in scripted policy. Crew policy: the built-in scripted policy. Rule settings: unknown.");
     const policy = { policy_id: "id", encoder_version: "e1", weights_sha256: "sha", anchor_policy: "anchor" };
     const recorded = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [{ ...group(OLDER), tactical_policy: { ...policy, method: "rule-based impostor" }, crew_tactical_policy: { ...policy, method: "rule-based crew" }, substrate_flags: {}, temporal_observation_version: 2 }] }} />);
     expect(recorded).toContain("Impostor policy: rule-based impostor. Crew policy: rule-based crew. Rule settings: recorded.");
@@ -202,11 +202,11 @@ describe("public result interpretation", () => {
     expect(html).not.toMatch(/\b(?:arms?|regroup|era|stage-b)\b/i);
     expect(groupLines(config)).toEqual([
       "Built-in agents with recorded tactical settings · 1 recording.",
-      "Rules adopted for the current game: vent use seen only in the room where it happens; impostors enter a vent only beside a body they have just killed; after each meeting, the survivors start again from the meeting room with the bodies cleared; one reply to a late accusation; body reports without the time of death; witnessed kills listed on the voter's ballot; impostor ballots cast by strategy.",
+      "Rules adopted for the current game: Vent use is seen only in the room where it happens. Impostors enter a vent only beside a body they have just killed. After each meeting, the survivors start again from the meeting room with the bodies cleared. A player accused after already speaking gets one reply. A body report does not give the time of death. Each ballot lists the kills its voter saw a player from the other side make. An impostor is asked to vote as a move for its own side.",
       // was without the route lines, while round 2's config was the shown set's
       "Also in place: impostors in a vent wait briefly for the rooms they can see to clear before coming out, set for these recordings; a kill cooldown of 6 ticks set for these recordings; each ballot lists which changes of room stated at the meeting the doors, or the restart after a meeting, allow, set for these recordings.",
-      "Impostor policy: not recorded. Crew policy: not recorded. Rule settings: not recorded.",
-      "Observation clock: not recorded.",
+      "Impostor policy: the built-in scripted policy. Crew policy: the built-in scripted policy. Rule settings: unknown.",
+      "Observation clock: unknown.",
     ]);
     expect(declared.route_lines_version).toBe(1);
   });
@@ -245,7 +245,7 @@ describe("public result interpretation", () => {
             renders += 1;
             const adoptedLine = lines.find((line) => line.startsWith("Rules adopted for the current game: "));
             if (on.length === 0) expect(adoptedLine).toBeUndefined();
-            else expect(adoptedLine).toBe(`Rules adopted for the current game: ${on.map(([, , words]) => words).join("; ")}.`);
+            else expect(adoptedLine).toBe(`Rules adopted for the current game: ${on.map(([, , words]) => words).join(" ")}`);
             const experimentsLine = lines.find((line) => line.startsWith("Recorded experiments: ")) ?? "";
             const placeLine = lines.find((line) => line.startsWith("Also in place: ")) ?? "";
             for (const [, , words] of ADOPTED_WORDS) {
@@ -274,6 +274,113 @@ describe("public result interpretation", () => {
     expect(one).not.toMatch(/\b(?:three|two|one) decisions\b/i);
     const none = renderToStaticMarkup(<PublicResultsView results={{ ...summary, cases: [] }} />);
     expect(none).not.toContain("Decisions to investigate");
-    expect(none).toContain("No source-matched editorial cases are published for this set.");
+    expect(none).toContain("No worked examples for this set yet; the 9-player set has two.");
+    expect(none).not.toContain("source-matched");
   });
 });
+
+/** Markup as text: tags and React's text-joining comments dropped. */
+function textOf(html: string): string {
+  return html.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]*>/g, "").replaceAll("&#x27;", "'").replaceAll("&amp;", "&");
+}
+
+/** The proof row's markup, or a failure naming its absence. */
+function proofRow(html: string): string {
+  const match = /<section aria-label="[^"]*" data-proof-row="true"[^>]*>[\s\S]*?<\/section>/.exec(html);
+  if (match === null) throw new Error("no proof row rendered");
+  return match[0];
+}
+
+describe("the Results tab's proof row", () => {
+  it("sits after the cases, in the body style, headed by what it counts", () => {
+    const html = renderToStaticMarkup(<PublicResultsView results={summary} />);
+    const row = proofRow(html);
+    expect(html.indexOf("Decisions to investigate")).toBeGreaterThan(0);
+    expect(html.indexOf(row)).toBeGreaterThan(html.indexOf("Decisions to investigate"));
+    expect(row).toContain(">Ejected players who were impostors, with and without a vent sighting</h3>");
+    // Never the old bold bordered box.
+    expect(row).not.toMatch(/border-2|bg-paper-2|<strong/);
+    expect(html).not.toContain("Separate direct proof from uncertain inference");
+    const text = textOf(row);
+    expect(text).toContain("With a vent sighting: 68/68 (100%) · Without one: 14/27 (52%)");
+    expect(text).toContain("Only impostors can vent");
+    expect(text).toContain("A sighting in a meeting does not show that it caused the vote");
+    expect(text).toContain("these counts describe this set of recordings only");
+    expect(html).not.toMatch(/by construction|ejectee|role proof/i);
+  });
+
+  it("sits after the empty state when a set publishes no case", () => {
+    const html = renderToStaticMarkup(<PublicResultsView results={{ ...summary, cases: [] }} />);
+    expect(html.indexOf(proofRow(html))).toBeGreaterThan(html.indexOf(PUBLIC_RESULTS_COPY.noCases));
+  });
+
+  it("reads one ejection in the singular", () => {
+    const html = renderToStaticMarkup(<PublicResultsView results={{ ...summary, proof_free_ejections: 1, proof_free_correct: 0 }} />);
+    expect(textOf(proofRow(html))).toContain("The 1 ejection without a sighting shows how the table decided without proof.");
+    expect(html).not.toMatch(/\b1 ejections\b/);
+  });
+});
+
+describe("the Results tab's case links and prose", () => {
+  it("labels the meeting link and the raw file plainly, hrefs and reveal kept", () => {
+    const html = renderToStaticMarkup(<PublicResultsView results={summary} />);
+    const meetingLink = /<a [^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/.exec(html);
+    expect(meetingLink?.[2]).toBe("Inspect the meeting (shows roles)");
+    expect(meetingLink?.[1]).toContain("selectedMeeting=headless-seed-46%3Ameeting-3");
+    expect(meetingLink?.[1]).toContain("evidenceId=p-9%3A29%3A3");
+    expect(html).toContain('href="https://example.com/source" target="_blank" rel="noreferrer">Raw recording file</a>');
+    expect(html).toContain(">Reveal case analysis (spoilers)</button>");
+    expect(html).not.toContain("Pinned recording source");
+  });
+
+  it("says each recording was replayed and checked, naming the set through the set-name helper", () => {
+    const text = textOf(renderToStaticMarkup(<PublicResultsView results={summary} />));
+    expect(text).toContain(`Results cover all 50 games with ${setOptionLabel("9p2i")};`);
+    expect(text).toContain("Each recording was replayed and checked before counting.");
+    expect(text).not.toContain("The engine reconstructed");
+  });
+});
+
+describe("the Results tab's provenance defaults", () => {
+  const scripted = { game_ids: ["headless-seed-1"], agent_factory_kind: "scripted" as const, experiment_config: null, tactical_policy: null, crew_tactical_policy: null };
+  const lines = (provenance: ReportProvenanceGroupView): string[] => {
+    const html = renderToStaticMarkup(<PublicResultsView results={{ ...summary, provenance_groups: [provenance] }} />);
+    const card = /aria-label="Recorded behavior groups"[^>]*>([\s\S]*?)<\/ul>/.exec(html)?.[1] ?? "";
+    return [...card.matchAll(/<p>([\s\S]*?)<\/p>/g)].map((match) => textOf(match[1] ?? ""));
+  };
+
+  it("names the default policy and the standard timing, as both shown sets record them", () => {
+    const shown = lines({ ...scripted, substrate_flags: { temporal_observations: false }, temporal_observation_version: null });
+    expect(shown).toContain("Impostor policy: the built-in scripted policy. Crew policy: the built-in scripted policy. Rule settings: recorded.");
+    expect(shown).toContain("Observation clock: the standard timing.");
+    expect(shown.join("\n")).not.toContain("not recorded");
+  });
+
+  it("keeps unknown for what the record cannot say, and a recorded version or stamp as it is", () => {
+    expect(lines({ ...scripted, substrate_flags: null, temporal_observation_version: null })).toContain("Observation clock: unknown.");
+    expect(lines({ ...scripted, substrate_flags: { temporal_observations: true }, temporal_observation_version: null })).toContain("Observation clock: unknown.");
+    expect(lines({ ...scripted, substrate_flags: { temporal_observations: true }, temporal_observation_version: 2 })).toContain("Observation clock: v2.");
+    const policy = { policy_id: "id", encoder_version: "e1", weights_sha256: "sha", anchor_policy: "anchor" };
+    expect(lines({ ...scripted, substrate_flags: null, temporal_observation_version: null, tactical_policy: { ...policy, method: "learned impostor" } })).toContain(
+      "Impostor policy: learned impostor. Crew policy: the built-in scripted policy. Rule settings: unknown.",
+    );
+  });
+
+  it("puts the prompt versions and the fingerprint under the technical identifiers", () => {
+    const html = renderToStaticMarkup(<PublicResultsView results={summary} />);
+    const technical = textOf(/<div data-technical-identifiers="true"[^>]*>([\s\S]*?)<\/div>/.exec(html)?.[1] ?? "");
+    expect(technical).toContain("Technical identifiers, for reproduction");
+    expect(technical).toContain("Prompt versions: v5.");
+    expect(technical).toContain("Source fingerprint: sha256:example");
+  });
+
+  it("reads a zero cost as the flat-rate service and keeps any other figure", () => {
+    const zero = textOf(renderToStaticMarkup(<PublicResultsView results={summary} />));
+    expect(zero).toContain("100 input tokens · 50 output tokens · $0: a flat-rate service, so usage, not a bill.");
+    const paid = textOf(renderToStaticMarkup(<PublicResultsView results={{ ...summary, reported_cost_usd: 1.5 }} />));
+    expect(paid).toContain("· $1.5000 of usage, not a bill.");
+    expect(paid).not.toContain("$0:");
+    expect(paid).not.toContain("flat-rate");
+  });
+});
+

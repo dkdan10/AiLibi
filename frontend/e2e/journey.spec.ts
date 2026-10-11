@@ -946,12 +946,14 @@ test.describe("spectator journey", () => {
       return url.toString();
     };
     const meetingDialog = page.getByRole("dialog", { name: `Meeting at tick ${first.tick}`, exact: true });
-    const record = page.getByRole("region", { name: "What the recording shows" });
+    const record = page.getByRole("region", { name: "Where everyone really was" });
     const recordMarks = ["killed at tick", "really was", "spoke again", "speak again"];
     await page.goto(meetingUrl(null));
     await expect(meetingDialog).toBeVisible();
     await expect(record).toBeVisible();
     await expect(record).toContainText("really was");
+    // The heading says "really was" too, so the route lead is also held by its own words.
+    await expect(record).toContainText("accused player really was");
     if (first.trigger_kind === "body") {
       await expect(record).toContainText("killed at tick");
     }

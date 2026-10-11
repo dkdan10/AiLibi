@@ -4,7 +4,7 @@
 // in two different places:
 //
 //   1. VALUES — every string in `SPECTATOR_COPY` is clean.
-//   2. DISK   — the ten component sources, read off disk with comments
+//   2. DISK   — the component sources, read off disk with comments
 //               stripped, carry no dialect either. This is the leg that catches
 //               a NEW literal typed straight into JSX, which leg 1 cannot see.
 //
@@ -25,20 +25,29 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  BALLOT_COPY,
+  BELIEF_PANEL_COPY,
+  BUCKET_COPY,
   DASHBOARD_COPY,
+  EVIDENCE_SOURCE_COPY,
   HEADER_COPY,
+  INSPECTOR_COPY,
   MAP_COPY,
+  MEETING_COPY,
   PICKER_COPY,
   PROFILE_COPY,
   PUBLIC_RESULTS_COPY,
   SPECTATOR_COPY,
   TRANSPORT_COPY,
+  TURN_COPY,
+  bucketWord,
   dialectHits,
   expandSetName,
   fmt,
   setOptionLabel,
   showsBallotCorrectness,
 } from "./copy";
+import { suspicionBucketOf } from "../tokens";
 
 const LIB_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -65,6 +74,13 @@ const IN_SCOPE_SOURCES: readonly { readonly file: string; readonly rendered: str
     // The public results page: its recorded-behavior groups and its ejection
     // tile render through `PUBLIC_RESULTS_COPY`, the rest of the page still inline.
     { file: "PublicResults.tsx", rendered: "What the recordings show" },
+    // The meeting's source panel, the inspector, the belief panel and its
+    // cells, and the transcript's claim line.
+    { file: "EvidencePanel.tsx", rendered: "Check the source" },
+    { file: "MindInspector.tsx", rendered: "Open a mind" },
+    { file: "BeliefPanel.tsx", rendered: "Cell detail" },
+    { file: "BeliefCell.tsx", rendered: "no belief yet (not 0)" },
+    { file: "../ui/ClaimLine.tsx", rendered: "accusation" },
   ];
 
 // EMPTY, and staying that way is the point: every in-scope surface — TurnCard.tsx
@@ -960,5 +976,382 @@ describe("the copy's substance", () => {
       expect(dialectHits(text)).toEqual([]);
       expect(text).not.toMatch(/successor|legacy_note|compute_/);
     }
+  });
+});
+
+// ── the meeting, the panels and the Results tab ──────────────────────────────
+//
+// The meeting dialog, the ballots, the inspector, the belief panel and the
+// Results tab read in plain words: the readout carries no figure, numbers sit
+// behind Low / Med / High, the evidence and the vote rule are defined in the
+// glossary, and no retired phrase comes back, either typed into a component or
+// as a copy value.
+
+const SRC_DIR = resolve(LIB_DIR, "..");
+
+/** A source of this card's, comments stripped, by its path under `src/`. */
+function strippedSource(path: string): string {
+  return stripComments(readFileSync(resolve(SRC_DIR, path), "utf8"));
+}
+
+/** A retired phrase, named so a failure says which one came back. */
+interface RetiredPhrase {
+  readonly name: string;
+  readonly pattern: RegExp;
+}
+
+const RETIRED_PHRASES: readonly RetiredPhrase[] = [
+  { name: "post-hoc", pattern: /post-hoc/ },
+  { name: "plurality leader", pattern: /plurality leader/ },
+  { name: "top ballot", pattern: /top ballot/ },
+  { name: "your ballot", pattern: /your ballot/ },
+  { name: "guilt is never", pattern: /guilt is never/ },
+  { name: "distrust orange", pattern: /distrust orange/ },
+  { name: "redirects", pattern: /\bredirects\b/ },
+  { name: "suspicion matrix", pattern: /suspicion matrix/ },
+  { name: "never a hue", pattern: /never a hue/ },
+  { name: "role-neutral", pattern: /role-neutral/ },
+  { name: "suspicion file", pattern: /suspicion file/ },
+  { name: "(mono)", pattern: /\(mono\)/ },
+  { name: "Thought → Action", pattern: /Thought → Action/ },
+  { name: "conf", pattern: /\bconf\b/ },
+  { name: "Cited statement", pattern: /Cited statement/ },
+  { name: "Cited observation", pattern: /Cited observation/ },
+  { name: "opt-in", pattern: /\bopt-in\b/ },
+  { name: "Vote redirected", pattern: /Vote redirected/ },
+  { name: "Recorded vote adjustment", pattern: /Recorded vote adjustment/ },
+  { name: "by construction", pattern: /by construction/ },
+  { name: "ejectee", pattern: /ejectee/ },
+  { name: "Separate direct proof", pattern: /Separate direct proof/ },
+  { name: "Pinned recording", pattern: /Pinned recording/ },
+  { name: "source-matched", pattern: /source-matched/ },
+  { name: "The engine reconstructed", pattern: /The engine reconstructed/ },
+  { name: "What the recording shows", pattern: /What the recording shows/ },
+  { name: "ground truth", pattern: /[Gg]round[- ][Tt]ruth|GROUND[- ]TRUTH/ },
+];
+
+/** The two view words the belief panel retires, beside the phrases above. */
+const BELIEF_PANEL_VIEW_WORDS: readonly RetiredPhrase[] = [
+  { name: "As-agent", pattern: /As-agent/ },
+  { name: "fog", pattern: /\bfog\b/i },
+];
+
+/**
+ * The files this card writes, each with the phrases its rendered code may not
+ * carry. The inspector's "Open a mind" empty state is not surveyed and keeps
+ * its "Ground truth renders solid" sentence, so that one sentence is set aside,
+ * exactly once, before the walk.
+ */
+const WALKED_SOURCES: readonly {
+  readonly path: string;
+  readonly phrases: readonly RetiredPhrase[];
+  readonly setAside?: RegExp;
+}[] = [
+  { path: "components/MeetingView.tsx", phrases: RETIRED_PHRASES },
+  { path: "components/TurnCard.tsx", phrases: RETIRED_PHRASES },
+  { path: "components/EvidencePanel.tsx", phrases: RETIRED_PHRASES },
+  { path: "components/BallotCard.tsx", phrases: RETIRED_PHRASES },
+  { path: "components/MindInspector.tsx", phrases: RETIRED_PHRASES, setAside: /Ground truth renders\s+solid/g },
+  { path: "components/BeliefPanel.tsx", phrases: [...RETIRED_PHRASES, ...BELIEF_PANEL_VIEW_WORDS] },
+  { path: "components/BeliefCell.tsx", phrases: RETIRED_PHRASES },
+  { path: "components/PublicResults.tsx", phrases: RETIRED_PHRASES },
+  { path: "ui/ClaimLine.tsx", phrases: RETIRED_PHRASES },
+];
+
+/** Each retired phrase a source's rendered code carries, named by the file. */
+function retiredInSource(file: string, source: string, phrases: readonly RetiredPhrase[]): readonly string[] {
+  return phrases.filter((phrase) => phrase.pattern.test(source)).map((phrase) => `${file}: ${phrase.name}`);
+}
+
+/** Each retired phrase a copy value carries, named by the key that holds it. */
+function retiredInCopy(tree: unknown, path: string): readonly string[] {
+  return stringLeaves(tree, path).flatMap((leaf) =>
+    RETIRED_PHRASES.filter((phrase) => phrase.pattern.test(leaf.text)).map((phrase) => `${leaf.path}: ${phrase.name}`),
+  );
+}
+
+/** A source with its one allowed sentence set aside; throws unless it is there exactly once. */
+function withoutSetAside(path: string, source: string, setAside: RegExp | undefined): string {
+  if (setAside === undefined) return source;
+  const found = source.match(setAside) ?? [];
+  if (found.length !== 1) throw new Error(`${path}: the set-aside sentence appears ${String(found.length)} times`);
+  return source.replace(setAside, "");
+}
+
+describe("the retired phrases stay retired", () => {
+  it.each(WALKED_SOURCES.map((source) => [source.path, source] as const))("%s renders none of them", (path, entry) => {
+    const source = withoutSetAside(path, strippedSource(path), entry.setAside);
+    expect(retiredInSource(path, source, entry.phrases)).toEqual([]);
+  });
+
+  it("no copy value carries one", () => {
+    expect(retiredInCopy(SPECTATOR_COPY, "SPECTATOR_COPY")).toEqual([]);
+  });
+
+  it("names the file of a phrase restored as a literal, and ignores one in a comment (planted)", () => {
+    const meeting = strippedSource("components/MeetingView.tsx");
+    const literal = `${meeting}\nconst shown = "post-hoc: p-4 was impostor";\n`;
+    expect(retiredInSource("MeetingView.tsx", literal, RETIRED_PHRASES)).toEqual(["MeetingView.tsx: post-hoc"]);
+    const comment = stripComments(`${meeting}\n// post-hoc: p-4 was impostor\n`);
+    expect(retiredInSource("MeetingView.tsx", comment, RETIRED_PHRASES)).toEqual([]);
+    const panel = `${strippedSource("components/BeliefPanel.tsx")}\nconst chip = "fog · ground-truth hidden";\n`;
+    expect(retiredInSource("BeliefPanel.tsx", panel, [...RETIRED_PHRASES, ...BELIEF_PANEL_VIEW_WORDS])).toEqual([
+      "BeliefPanel.tsx: ground truth",
+      "BeliefPanel.tsx: fog",
+    ]);
+  });
+
+  it("names the key of a phrase restored as a copy value (planted)", () => {
+    const planted = {
+      ...SPECTATOR_COPY,
+      meeting: { ...MEETING_COPY, roleImpostor: "post-hoc: {player} was impostor" },
+      publicResults: { ...PUBLIC_RESULTS_COPY, rawRecording: "Pinned recording source" },
+    };
+    expect(retiredInCopy(planted, "SPECTATOR_COPY")).toEqual([
+      "SPECTATOR_COPY.meeting.roleImpostor: post-hoc",
+      "SPECTATOR_COPY.publicResults.rawRecording: Pinned recording",
+    ]);
+  });
+
+  it("sets aside the inspector's empty state once, and fails if it is not there", () => {
+    const inspector = strippedSource("components/MindInspector.tsx");
+    expect(() => withoutSetAside("MindInspector.tsx", inspector, /Ground truth renders\s+solid/g)).not.toThrow();
+    expect(() => withoutSetAside("MindInspector.tsx", `${inspector}\n"Ground truth renders solid"`, /Ground truth renders\s+solid/g)).toThrow(/2 times/);
+  });
+});
+
+/** Class names and inline styles are presentation, not copy. */
+function presentationless(span: string): string {
+  return span
+    .replace(/className="[^"]*"/g, "")
+    .replace(/className=\{[^{}]*\}/g, "")
+    .replace(/style=\{\{[\s\S]*?\}\}/g, "");
+}
+
+/** The source between two markers, each present exactly once. */
+function spanBetween(path: string, source: string, start: string, end: string): string {
+  const from = source.indexOf(start);
+  const to = source.indexOf(end, from + start.length);
+  if (from < 0 || to <= from || source.indexOf(start, from + 1) >= 0) {
+    throw new Error(`${path}: the span from ${start} moved`);
+  }
+  return presentationless(source.slice(from, to));
+}
+
+/** The reworded spans, each with a copy read it must carry. */
+const REWORDED_SPANS: readonly { path: string; start: string; end: string; reads: string }[] = [
+  { path: "components/MeetingView.tsx", start: "export function gateReadout(", end: "function EngineRecordPanel(", reads: "MEETING_COPY.readoutEjected" },
+  { path: "components/MeetingView.tsx", start: "function AccusationChainSummary(", end: "function tallyBallots(", reads: "MEETING_COPY.chainCaption" },
+  { path: "components/MeetingView.tsx", start: "{omniscient && ejected !== null && ejectedRole !== null && (", end: "</section>", reads: "roleLine(" },
+  { path: "components/EvidencePanel.tsx", start: "export function citationLabel(", end: "export function ObservationClock(", reads: "EVIDENCE_SOURCE_COPY.statement" },
+  { path: "components/EvidencePanel.tsx", start: "<p data-citation-label", end: "{missing ?", reads: "EVIDENCE_SOURCE_COPY.resolvedNote" },
+  { path: "components/BallotCard.tsx", start: "export function rewriteLabel(", end: "function groundingLabelText(", reads: "BALLOT_COPY.rewriteLabels" },
+  { path: "components/BallotCard.tsx", start: "{privateVisible && <div className=\"mb-2 flex flex-wrap gap-2\">", end: "</div>}", reads: "citationLabel(" },
+  { path: "components/BallotCard.tsx", start: "{grounding !== null && (", end: "{ballot.considered_alternatives.length > 0", reads: "BALLOT_COPY.groundingLabel" },
+  { path: "components/MindInspector.tsx", start: "const TRAIL_STYLE", end: "function coverTasksOf(", reads: "INSPECTOR_COPY.resultEjected" },
+  { path: "components/MindInspector.tsx", start: "function ReasoningTrail(", end: "function BeliefBar(", reads: "INSPECTOR_COPY.trailEmpty" },
+  { path: "components/MindInspector.tsx", start: "function BeliefBar(", end: "function BeliefTab(", reads: "INSPECTOR_COPY.confidenceTitle" },
+  { path: "components/BeliefPanel.tsx", start: "const LAYERS", end: "interface BeliefPanelProps", reads: "COPY.layers.truth" },
+  { path: "components/BeliefPanel.tsx", start: "<h2 className=\"text-base leading-tight\">", end: "{LAYERS.map(", reads: "COPY.perspectiveChip" },
+  { path: "components/BeliefPanel.tsx", start: "function Legend(", end: "{layer === \"error\" && (", reads: "COPY.daggerDesc" },
+  { path: "components/BeliefPanel.tsx", start: "{!omniscient && (\n        <p data-perspective-note", end: "function LegendRow(", reads: "COPY.perspectiveNote" },
+  { path: "components/BeliefPanel.tsx", start: "export function describeChange(", end: "function PairChip(", reads: "COPY.changeRose" },
+  { path: "components/BeliefCell.tsx", start: "function beliefValueLook(", end: "function truthValueLook(", reads: "BELIEF_PANEL_COPY.cellTitle" },
+  { path: "components/PublicResults.tsx", start: "function CaseCard(", end: "function Fraction(", reads: "COPY.rawRecording" },
+  { path: "components/PublicResults.tsx", start: "function ProofRow(", end: "export function PublicResultsView(", reads: "COPY.proofHeading" },
+  { path: "components/PublicResults.tsx", start: "{fmt(COPY.intro", end: "</p>", reads: "setOptionLabel(" },
+  { path: "components/PublicResults.tsx", start: "<p data-no-cases", end: "</p>", reads: "COPY.noCases" },
+  { path: "components/PublicResults.tsx", start: "<p>{fmt(COPY.usageLine", end: "Inspect this pinned source set", reads: "COPY.technicalHeading" },
+  { path: "ui/ClaimLine.tsx", start: "case \"accusation\":", end: "case \"corroboration\":", reads: "INSPECTOR_COPY.confidence" },
+];
+
+describe("the reworded spans take their words from the copy", () => {
+  it.each(REWORDED_SPANS.map((span) => [`${span.path} from ${span.start.slice(0, 40)}`, span] as const))(
+    "%s types no prose of its own",
+    (_name, span) => {
+      const text = spanBetween(span.path, strippedSource(span.path), span.start, span.end);
+      expect(text).toContain(span.reads);
+      expect(proseLiterals(text)).toEqual([]);
+    },
+  );
+
+  it("catches a reworded string typed back into its span (planted)", () => {
+    const readout = REWORDED_SPANS[0]!;
+    const text = spanBetween(readout.path, strippedSource(readout.path), readout.start, readout.end);
+    const planted = text.replace("return MEETING_COPY.readoutNoLeader;", "return `no plurality leader (tie or SKIP led) → SKIPPED`;");
+    expect(planted).not.toBe(text);
+    expect(proseLiterals(planted)).toEqual(["no plurality leader (tie or SKIP led) → SKIPPED"]);
+  });
+});
+
+describe("the meeting's words in the copy", () => {
+  it("keeps the held badge and the readout's lead", () => {
+    expect(MEETING_COPY.resolutionGateBadge).toBe("vote gate");
+    expect(MEETING_COPY.resolutionGateLead).toBe("How the vote resolved");
+  });
+
+  it("holds the adopted strings as the survey wrote them", () => {
+    expect(fmt(MEETING_COPY.readoutEjected, { leader: "p-4" })).toBe("Most votes went to p-4 and a voter was sure enough, so p-4 was ejected.");
+    expect(fmt(MEETING_COPY.roleImpostor, { player: "p-4" })).toBe("p-4 was an impostor");
+    expect(MEETING_COPY.chainCaption).toBe("Arrows point from accuser to accused");
+    expect(MEETING_COPY.chainVerb).toBe("accuses");
+    expect(MEETING_COPY.engineRecordHeading).toBe("Where everyone really was");
+    expect(BALLOT_COPY.rewriteLabels.under_gate_redirect).toContain("changed by the vote rule");
+    expect(fmt(EVIDENCE_SOURCE_COPY.statement, { speaker: "p-3", turn: "3" })).toBe("Statement by p-3 (turn 3)");
+    expect(fmt(EVIDENCE_SOURCE_COPY.observation, { observer: "p-1", tick: "12" })).toBe("What p-1 saw at tick 12");
+    expect(BALLOT_COPY.groundingLabel).toBe("Basis on the record:");
+    expect(EVIDENCE_SOURCE_COPY.resolvedNote).toBe("A citation shows where a claim came from, not that it is right.");
+    expect(INSPECTOR_COPY.trailHeading).toBe("Said / Claimed / Voted / Result");
+    expect(fmt(INSPECTOR_COPY.resultEjected, { player: "p-4" })).toBe("Meeting: p-4 was ejected");
+    expect(BELIEF_PANEL_COPY.heading).toBe("Who suspects whom");
+    expect(BELIEF_PANEL_COPY.layers.truth).toBe("Real roles");
+    expect(BELIEF_PANEL_COPY.daggerLabel).toBe("Dagger");
+    expect(BELIEF_PANEL_COPY.daggerDesc).toBe("A real impostor, all-roles view only.");
+    expect(PUBLIC_RESULTS_COPY.proofHeading).toBe("Ejected players who were impostors, with and without a vent sighting");
+    expect(PUBLIC_RESULTS_COPY.inspectMeeting).toBe("Inspect the meeting (shows roles)");
+    expect(PUBLIC_RESULTS_COPY.rawRecording).toBe("Raw recording file");
+    expect(PUBLIC_RESULTS_COPY.intro).toContain("Each recording was replayed and checked before counting.");
+    expect(PUBLIC_RESULTS_COPY.noCases).toBe("No worked examples for this set yet; the 9-player set has two.");
+    expect(PUBLIC_RESULTS_COPY.defaultPolicy).toBe("the built-in scripted policy");
+    expect(PUBLIC_RESULTS_COPY.technicalHeading).toBe("Technical identifiers, for reproduction");
+    expect(PUBLIC_RESULTS_COPY.costZero).toBe("$0: a flat-rate service, so usage, not a bill");
+  });
+
+  it("states no threshold in the readout or the role line", () => {
+    for (const template of [
+      MEETING_COPY.readoutEjected,
+      MEETING_COPY.readoutNotSure,
+      MEETING_COPY.readoutNoLeader,
+      MEETING_COPY.roleImpostor,
+      MEETING_COPY.roleCrewmate,
+    ]) {
+      expect(thresholdHits(template), template).toEqual([]);
+      expect(template).not.toMatch(/plurality|threshold|[<>≥≤=→]/);
+    }
+    // A template with a cut point in it fails (planted).
+    expect(thresholdHits("Most votes went to {leader}, at 0.6 or more, so {leader} was ejected.")).not.toEqual([]);
+  });
+
+  it("names each kind of turn once, for the tag, the evidence list and the source panel", () => {
+    expect(TURN_COPY.kinds).toEqual({ opening: "first statement", reply: "reply", opt_in: "spoke up" });
+    expect(fmt(TURN_COPY.tag, { tick: "12", kind: TURN_COPY.kinds.opt_in })).toBe("tick 12 · spoke up");
+  });
+});
+
+/** A turn-kind map typed by hand, instead of read from `TURN_COPY.kinds`. */
+const HAND_TYPED_KIND = /\bopt_in\s*:\s*["'`]|["'`]opt-in["'`]|===\s*["'`]opt_in["'`]/;
+
+describe("the turn kinds have one map", () => {
+  it.each(["components/TurnCard.tsx", "components/MeetingView.tsx", "components/EvidencePanel.tsx"])("%s reads them from the copy", (path) => {
+    const source = strippedSource(path);
+    expect(source).toContain("TURN_COPY.kinds");
+    expect(HAND_TYPED_KIND.test(source)).toBe(false);
+  });
+
+  it("catches a leftover hand-typed map (planted)", () => {
+    const turnCard = strippedSource("components/TurnCard.tsx");
+    expect(HAND_TYPED_KIND.test(`${turnCard}\nconst TURN_KIND_LABELS = { opening: "opening", reply: "reply", opt_in: "opt-in" };`)).toBe(true);
+    const panel = strippedSource("components/EvidencePanel.tsx");
+    expect(HAND_TYPED_KIND.test(`${panel}\nconst kind = turn.turn_kind === "opt_in" ? "spoke up" : turn.turn_kind;`)).toBe(true);
+  });
+});
+
+/** The rewrite reasons the served ballots can carry, read from the replay loader. */
+function servedRewriteReasons(loader: string): readonly string[] {
+  const block = /_BALLOT_PREFIX_MARKERS[^=]*= \(([\s\S]*?)\n\)/.exec(loader)?.[1];
+  const parseDefault = /_VOTE_PARSE_DEFAULT_LABEL: Final\[str\] = "(\w+)"/.exec(loader)?.[1];
+  if (block === undefined || parseDefault === undefined) throw new Error("the loader's rewrite reasons moved");
+  return [...[...block.matchAll(/\("(\w+)", [A-Z_]+\)/g)].map((match) => match[1] ?? ""), parseDefault].sort();
+}
+
+describe("the ballot's adjustment chips", () => {
+  const loader = readFileSync(resolve(LIB_DIR, "../../../api/replay_loader.py"), "utf8");
+
+  it("give every reason a served ballot can carry its own words, and keep a fallback", () => {
+    expect(Object.keys(BALLOT_COPY.rewriteLabels).sort()).toEqual(servedRewriteReasons(loader));
+    expect(Object.keys(BALLOT_COPY.rewriteLabels)).toHaveLength(10);
+    const words = Object.values(BALLOT_COPY.rewriteLabels);
+    expect(new Set(words).size).toBe(words.length);
+    expect(words).not.toContain(BALLOT_COPY.rewriteFallback);
+    expect(BALLOT_COPY.rewriteFallback).toBe("The meeting changed this ballot");
+  });
+
+  it("notices a reason the loader adds that the copy does not name (planted)", () => {
+    const planted = loader.replace('("invalid_basis", INVALID_BASIS_MARKER),', '("invalid_basis", INVALID_BASIS_MARKER),\n    ("new_reason", NEW_REASON_MARKER),');
+    expect(planted).not.toBe(loader);
+    expect(Object.keys(BALLOT_COPY.rewriteLabels).sort()).not.toEqual(servedRewriteReasons(planted));
+  });
+});
+
+describe("bucketWord", () => {
+  it.each([
+    [0, "Low"],
+    [0.35, "Low"],
+    [0.36, "Med"],
+    [0.72, "Med"],
+    [0.73, "High"],
+    [1, "High"],
+  ])("reads %s as %s", (value, word) => {
+    expect(bucketWord(value)).toBe(word);
+  });
+
+  it("cuts exactly where the heat ramp cuts, with one word per bucket", () => {
+    expect(BUCKET_COPY).toEqual({ low: "Low", med: "Med", high: "High" });
+    for (let step = 0; step <= 100; step += 1) {
+      expect(bucketWord(step / 100)).toBe(BUCKET_COPY[suspicionBucketOf(step / 100)]);
+    }
+  });
+});
+
+/** The glossary's "How a meeting works" section. */
+function meetingSection(glossary: string): string {
+  const start = glossary.indexOf("## How a meeting works");
+  const end = glossary.indexOf("\n## ", start + 1);
+  if (start < 0 || end <= start) throw new Error("the glossary's meeting section moved");
+  return glossary.slice(start, end);
+}
+
+/** One entry of a glossary section, from its heading to the next. */
+function entryOf(section: string, heading: string): string | null {
+  const start = section.indexOf(`\n### ${heading}`);
+  if (start < 0) return null;
+  const end = section.indexOf("\n### ", start + 1);
+  return section.slice(start, end < 0 ? undefined : end);
+}
+
+/** The terms the meeting view keeps that need defining, and where each is defined. */
+const MEETING_TERMS: readonly { term: string; entry: string; says: string }[] = [
+  { term: "Role proof", entry: "hard evidence", says: "“Role proof”" },
+  { term: "Weak signals", entry: "weak signal", says: "“Weak signals”" },
+  { term: "vote rule", entry: "vote rule", says: "changed by the vote rule" },
+];
+
+/** The kept terms the glossary's meeting section does not define, each named. */
+function undefinedMeetingTerms(glossary: string): readonly string[] {
+  const section = meetingSection(glossary);
+  return MEETING_TERMS.filter((term) => !(entryOf(section, term.entry)?.includes(term.says) ?? false)).map((term) => term.term);
+}
+
+describe("the glossary defines the meeting's kept terms", () => {
+  const glossary = readFileSync(resolve(LIB_DIR, "../../../docs/glossary.md"), "utf8");
+
+  it("defines each one under how a meeting works", () => {
+    expect(undefinedMeetingTerms(glossary)).toEqual([]);
+  });
+
+  it("states no figure and no id in the new entries", () => {
+    const section = meetingSection(glossary);
+    for (const heading of ["weak signal", "vote rule"]) {
+      const entry = entryOf(section, heading) ?? "";
+      expect(entry).not.toBe("");
+      expect(entry.replace(/\[[^\]]*\]\([^)]*\)/g, ""), heading).not.toMatch(/\d/);
+      expect(dialectHits(entry), heading).toEqual([]);
+    }
+  });
+
+  it.each(MEETING_TERMS.map((term) => [term.term, term.entry] as const))("names %s when its entry is deleted (planted)", (term, entry) => {
+    const planted = glossary.replace(`\n### ${entry}`, "\n### a renamed entry");
+    expect(planted).not.toBe(glossary);
+    expect(undefinedMeetingTerms(planted)).toEqual([term]);
   });
 });

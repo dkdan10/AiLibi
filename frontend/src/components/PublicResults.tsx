@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getPublicResults } from "../api/client";
 import { ADOPTED_RULES, holdsAdoptedValue } from "../lib/adoptedRules";
-import { fmt, PUBLIC_RESULTS_COPY as COPY } from "../lib/copy";
+import { fmt, PUBLIC_RESULTS_COPY as COPY, setOptionLabel } from "../lib/copy";
 import { serializePlaybackParams, OMNISCIENT } from "../lib/playback";
 import type { ExperimentConfigView, PublicCaseView, PublicResultsView as PublicResultsDTO, ReportProvenanceGroupView } from "../types/api";
 
@@ -38,6 +38,16 @@ export function recordedSettings(config: ExperimentConfigView | null | undefined
 // An older payload may omit the factory kind; it reads as not recorded.
 const FACTORY_LABELS = { custom: COPY.factoryCustom, experimental: COPY.factoryBuiltInWithSettings, scripted: COPY.factoryScripted, unrecorded: COPY.factoryUnknown } as const;
 
+/**
+ * The observation clock a group ran on: its recorded version, the standard
+ * timing when the recorded settings show timed observations off, and unknown
+ * only when the record cannot say.
+ */
+export function observationClock(group: ReportProvenanceGroupView): string {
+  if (group.temporal_observation_version !== null) return fmt(COPY.clockVersion, { version: String(group.temporal_observation_version) });
+  return group.substrate_flags?.temporal_observations === false ? COPY.clockStandard : COPY.unknown;
+}
+
 function BehaviorIdentity({ group }: { group: ReportProvenanceGroupView }) {
   const settings = recordedSettings(group.experiment_config);
   const factory = FACTORY_LABELS[group.agent_factory_kind ?? "unrecorded"];
@@ -45,14 +55,15 @@ function BehaviorIdentity({ group }: { group: ReportProvenanceGroupView }) {
   const nothingRecorded = settings.adopted.length === 0 && settings.setForRecordings.length === 0 && settings.experiments.length === 0;
   return <li className="rounded border border-ink-300 p-3">
     <p><strong>{factory}</strong> · {fmt(count === 1 ? COPY.recordingCountOne : COPY.recordingCountMany, { count: String(count) })}.</p>
-    {settings.adopted.length > 0 && <p>{fmt(COPY.adoptedLead, { rules: settings.adopted.join(COPY.ruleSeparator) })}</p>}
+    {settings.adopted.length > 0 && <p>{fmt(COPY.adoptedLead, { rules: settings.adopted.join(COPY.sentenceSeparator) })}</p>}
     {settings.setForRecordings.length > 0 && <p>{fmt(COPY.setForRecordingsLead, { settings: settings.setForRecordings.join(COPY.ruleSeparator) })}</p>}
     {settings.experiments.length > 0 && <p>{fmt(COPY.experimentsLead, { experiments: settings.experiments.join(COPY.experimentSeparator) })}</p>}
     {nothingRecorded && <p>{COPY.noRecordedSettings}</p>}
-    <p>{fmt(COPY.policyLine, { impostor: group.tactical_policy?.method ?? COPY.notRecorded, crew: group.crew_tactical_policy?.method ?? COPY.notRecorded, rules: group.substrate_flags ? COPY.recorded : COPY.notRecorded })}</p>
+    {/* An absent policy stamp is the default scripted mover (`orchestrator/replay.py`). */}
+    <p>{fmt(COPY.policyLine, { impostor: group.tactical_policy?.method ?? COPY.defaultPolicy, crew: group.crew_tactical_policy?.method ?? COPY.defaultPolicy, rules: group.substrate_flags ? COPY.recorded : COPY.unknown })}</p>
     {/* Two groups can differ by the observation clock alone; without this line the
         mixed-configuration banner fires above cards that read identically. */}
-    <p>{fmt(COPY.clockLine, { clock: group.temporal_observation_version === null ? COPY.notRecorded : fmt(COPY.clockVersion, { version: String(group.temporal_observation_version) }) })}</p>
+    <p>{fmt(COPY.clockLine, { clock: observationClock(group) })}</p>
   </li>;
 }
 
@@ -62,22 +73,42 @@ function CaseCard({ example, setName }: { example: PublicCaseView; setName: stri
   return <article className="flex flex-col gap-3 rounded-lg border-2 border-ink-900 bg-paper-0 p-4 shadow-chrome-1">
     <h3 className="text-lg">{example.title}</h3>
     <p className="text-sm leading-relaxed">{example.setup}</p>
-    <a className="w-fit rounded border-2 border-ink-900 bg-ink-900 px-3 py-2 text-sm font-bold text-paper-0" href={href}>Inspect the meeting</a>
-    <button className="w-fit text-left text-sm underline" type="button" aria-expanded={revealed} onClick={() => setRevealed(!revealed)}>{revealed ? "Hide analysis" : "Reveal case analysis (spoilers)"}</button>
+    <a className="w-fit rounded border-2 border-ink-900 bg-ink-900 px-3 py-2 text-sm font-bold text-paper-0" href={href}>{COPY.inspectMeeting}</a>
+    <button className="w-fit text-left text-sm underline" type="button" aria-expanded={revealed} onClick={() => setRevealed(!revealed)}>{revealed ? COPY.hideAnalysis : COPY.revealAnalysis}</button>
     {revealed && <p className="text-sm leading-relaxed">{example.explanation}</p>}
-    <a className="text-xs underline" href={example.source_url} target="_blank" rel="noreferrer">Pinned recording source</a>
+    <a className="text-xs underline" href={example.source_url} target="_blank" rel="noreferrer">{COPY.rawRecording}</a>
   </article>;
 }
 
-function Fraction({ n, d }: { n: number; d: number }) {
-  return <strong className="font-mono">{n}/{d}{d > 0 ? ` (${Math.round(100 * n / d)}%)` : " (no eligible records)"}</strong>;
+function Fraction({ n, d, plain = false }: { n: number; d: number; plain?: boolean }) {
+  const text = `${n}/${d}${d > 0 ? ` (${Math.round(100 * n / d)}%)` : " (no eligible records)"}`;
+  return plain ? <span className="font-mono">{text}</span> : <strong className="font-mono">{text}</strong>;
+}
+
+/**
+ * Impostors among ejected players, split by whether a vent sighting named them:
+ * a role read, so it sits after the cases in the page's body style and says why
+ * its first half measures no deduction.
+ */
+function ProofRow({ results }: { results: PublicResultsDTO }) {
+  const count = results.proof_free_ejections;
+  return <section aria-label={COPY.proofHeading} data-proof-row className="space-y-2 text-sm">
+    <h3 className="text-base">{COPY.proofHeading}</h3>
+    <p>{COPY.proofWith} <Fraction plain n={results.proof_backed_correct} d={results.proof_backed_ejections} /> · {COPY.proofWithout} <Fraction plain n={results.proof_free_correct} d={results.proof_free_ejections} /></p>
+    <p className="max-w-3xl text-xs leading-relaxed">{COPY.proofCaptionLead} {fmt(count === 1 ? COPY.proofCaptionOne : COPY.proofCaptionMany, { count: String(count) })} {COPY.proofCaptionTail}</p>
+  </section>;
+}
+
+/** What the recorded usage cost: a zero is the flat-rate service, anything else keeps its figure. */
+export function usageCost(cost: number): string {
+  return cost === 0 ? COPY.costZero : fmt(COPY.costValue, { cost: `$${cost.toFixed(4)}` });
 }
 
 export function PublicResultsView({ results }: { results: PublicResultsDTO }) {
   return <section aria-label="Recorded results and cases" className="space-y-5 text-ink-900">
     <header>
       <h2 className="text-2xl">What the recordings show</h2>
-      <p className="mt-2 max-w-3xl text-sm leading-relaxed">These are recorded games, not live AI responses. Results cover all {results.games} games in {results.set_name}; the replay browser may offer a smaller featured selection. The engine reconstructed each recording before these outcomes were counted.</p>
+      <p className="mt-2 max-w-3xl text-sm leading-relaxed">{fmt(COPY.intro, { games: String(results.games), set: setOptionLabel(results.set_name) })}</p>
       {(results.provenance_groups?.length ?? 0) > 1 && <p className="mt-2 text-sm font-bold">This set mixes recorded behavior configurations. Its totals are descriptive; inspect the groups below before comparing policies.</p>}
     </header>
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -97,29 +128,23 @@ export function PublicResultsView({ results }: { results: PublicResultsDTO }) {
         <p className="mt-2 text-xs">{fmt(COPY.ejectionsDescription, { meetings: String(results.meetings), innocent: String(results.innocent_ejections) })}</p>
       </div>
     </div>
-    <div className="rounded-lg border-2 border-ink-900 bg-paper-2 p-4">
-      <h3 className="text-lg">Separate direct proof from uncertain inference</h3>
-      <div className="my-3 flex flex-wrap gap-x-8 gap-y-2 text-sm">
-        <p>With role proof: <Fraction n={results.proof_backed_correct} d={results.proof_backed_ejections} />
-        </p>
-        <p>Without role proof: <Fraction n={results.proof_free_correct} d={results.proof_free_ejections} />
-        </p>
-      </div>
-      <p className="max-w-3xl text-xs leading-relaxed">Each fraction counts impostors among ejected players in that group. “Role proof” here is certified witnessed venting about the ejectee. Only impostors can vent, so this group is 100% by construction when present; it does not measure deduction quality. The {results.proof_free_ejections} ejections without role proof are the informative split for decisions under uncertainty. Proof appearing in a meeting does not establish that it caused the vote. These groups describe this recording set; they are not a controlled comparison or a general measure of model reasoning.</p>
-    </div>
     {results.cases.length > 0 ? <div>
       <h3 className="mb-3 text-xl">Decisions to investigate</h3>
       <div className="grid gap-4 lg:grid-cols-3">{results.cases.map((example) => <CaseCard key={example.case_id} example={example} setName={results.set_name} />)}</div>
-    </div> : <p className="text-sm">No source-matched editorial cases are published for this set.</p>}
+    </div> : <p data-no-cases className="text-sm">{COPY.noCases}</p>}
+    <ProofRow results={results} />
     <details className="rounded-lg border border-ink-300 bg-paper-0 p-4">
       <summary className="cursor-pointer text-sm font-bold">Recording provenance and reported usage</summary>
       <div className="mt-3 space-y-2 break-words text-xs">
         {results.provenance_groups?.length ? <ul className="space-y-2" aria-label="Recorded behavior groups">{results.provenance_groups.map((group, index) => <BehaviorIdentity key={index} group={group} />)}</ul> : <p>Behavior provenance is unavailable in this bundle; the agent factory and experiment settings are unknown.</p>}
         <p>Manifest recording dates: {results.recorded_from ?? "not recorded"}{results.recorded_until !== results.recorded_from ? ` – ${results.recorded_until ?? "not recorded"}` : ""}.</p>
         <p>Models: {results.models.join(", ") || "no model calls recorded"}.</p>
-        <p>Prompt versions: {results.prompt_versions.join(", ") || "not recorded"}.</p>
-        <p>Reported call usage, including incomplete attempts: {results.input_tokens.toLocaleString()} input tokens · {results.output_tokens.toLocaleString()} output tokens · ${results.reported_cost_usd.toFixed(4)}. This is recorded usage, not a bill: a flat-rate adapter can report $0 and an interrupted call may lack provider usage. Outcome verification does not certify billing completeness.</p>
-        <p className="font-mono">Source fingerprint: {results.source_fingerprint}</p>{results.source_url && <a className="inline-block underline" href={results.source_url} target="_blank" rel="noreferrer">Inspect this pinned source set and manifest</a>}</div>
+        <p>{fmt(COPY.usageLine, { input: results.input_tokens.toLocaleString(), output: results.output_tokens.toLocaleString(), cost: usageCost(results.reported_cost_usd) })}</p>
+        <div data-technical-identifiers className="space-y-2">
+          <p className="font-bold">{COPY.technicalHeading}</p>
+          <p>{fmt(COPY.promptVersions, { versions: results.prompt_versions.join(", ") || COPY.promptVersionsNone })}</p>
+          <p className="font-mono">{fmt(COPY.fingerprint, { fingerprint: results.source_fingerprint })}</p>{results.source_url && <a className="inline-block underline" href={results.source_url} target="_blank" rel="noreferrer">Inspect this pinned source set and manifest</a>}
+        </div></div>
     </details>
   </section>;
 }

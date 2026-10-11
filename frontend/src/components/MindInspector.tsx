@@ -5,8 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import { useReplayStore } from "../store/replayStore";
+import { INSPECTOR_COPY, bucketWord, fmt } from "../lib/copy";
 import type { Perspective } from "../lib/playback";
-import { tokens, suspicionBucketOf, type SuspicionBucket } from "../tokens";
+import { tokens } from "../tokens";
 import { EmptyState } from "../ui/EmptyState";
 import { PlayerSwatch } from "../ui/PlayerSwatch";
 import type {
@@ -36,34 +37,33 @@ const TABS: ReadonlyArray<{ id: MindTab; label: string }> = [
   { id: "flags", label: "Flags" },
 ];
 
-const BUCKET_LABEL: Record<SuspicionBucket, string> = {
-  low: "Low",
-  med: "Med",
-  high: "High",
-};
+// ── Said / Claimed / Voted / Result trail ───────────────────────────────────
+// Synthesised from the agent's part in the meeting: each spoken turn yields what
+// it Said (its free text) then what it Claimed (its structured claims); the
+// agent's ballot, its written reason and its vote, is what it Voted, never what
+// it said, because the table never heard it; the meeting's outcome is the
+// closing Result.
 
-// ── Thought → Action → Observation trail ────────────────────────────────────
-// Synthesised from the agent's role in the meeting: each spoken turn yields a
-// Thought (its free text) then an Action (its structured claims); the agent's
-// ballot is the terminal Action; the meeting outcome is the closing Observation.
-
-type TrailKind = "thought" | "action" | "observation";
+type TrailKind = "said" | "claimed" | "voted" | "result";
 
 interface TrailStep {
   kind: TrailKind;
   text: string;
+  // A recorded confidence, shown as its word with the number on hover.
+  confidence: number | null;
 }
 
 const TRAIL_STYLE: Record<TrailKind, { label: string; color: string }> = {
-  thought: { label: "Thought", color: tokens.trust.strong },
-  action: { label: "Action", color: tokens.distrust.strong },
-  observation: { label: "Observation", color: tokens.ink[700] },
+  said: { label: INSPECTOR_COPY.trailLabels.said, color: tokens.trust.strong },
+  claimed: { label: INSPECTOR_COPY.trailLabels.claimed, color: tokens.distrust.strong },
+  voted: { label: INSPECTOR_COPY.trailLabels.voted, color: tokens.distrust.strong },
+  result: { label: INSPECTOR_COPY.trailLabels.result, color: tokens.ink[700] },
 };
 
 function claimText(claim: StatementClaimView): string {
   switch (claim.type) {
     case "accusation":
-      return `accused ${claim.against} (conf ${claim.confidence.toFixed(2)}) — ${claim.reason}`;
+      return fmt(INSPECTOR_COPY.accused, { against: claim.against, reason: claim.reason });
     case "alibi": {
       // An alibi is a route; a claim recorded before that change carries the
       // flat one-room envelope instead, and reads the same way it always did.
@@ -79,15 +79,25 @@ function claimText(claim: StatementClaimView): string {
             ]
           : []);
       if (legs.length === 0) {
-        return `alibi for ${claim.subject}: no route stated`;
+        return fmt(INSPECTOR_COPY.alibiNoRoute, { subject: claim.subject });
       }
       const path = legs
-        .map((leg) => `${leg.room}, ticks ${leg.from_tick}–${leg.to_tick}`)
+        .map((leg) =>
+          fmt(INSPECTOR_COPY.alibiLeg, {
+            room: leg.room,
+            from: String(leg.from_tick),
+            to: String(leg.to_tick),
+          }),
+        )
         .join(" → ");
-      return `alibi for ${claim.subject}: ${path}`;
+      return fmt(INSPECTOR_COPY.alibi, { subject: claim.subject, path });
     }
     case "corroboration":
-      return `corroborated ${claim.supports} on tick ${claim.on_tick} — ${claim.reason}`;
+      return fmt(INSPECTOR_COPY.corroborated, {
+        supports: claim.supports,
+        tick: String(claim.on_tick),
+        reason: claim.reason,
+      });
   }
 }
 
@@ -105,33 +115,53 @@ function buildTrail(
 
   for (const turn of turns) {
     if (turn.free_text.trim() !== "") {
-      steps.push({ kind: "thought", text: turn.free_text });
+      steps.push({ kind: "said", text: turn.free_text, confidence: null });
     }
     for (const claim of turn.claims) {
-      steps.push({ kind: "action", text: claimText(claim) });
+      steps.push({
+        kind: "claimed",
+        text: claimText(claim),
+        confidence: claim.type === "accusation" ? claim.confidence : null,
+      });
     }
   }
 
   const ballot = meeting.ballots.find((b) => b.voter === agentId);
   if (ballot !== undefined) {
     if (ballot.rationale_text_clean.trim() !== "") {
-      steps.push({ kind: "thought", text: ballot.rationale_text_clean });
+      steps.push({ kind: "voted", text: ballot.rationale_text_clean, confidence: null });
     }
     const target =
-      ballot.target === "SKIP" ? "voted to skip" : `voted to eject ${ballot.target}`;
-    steps.push({
-      kind: "action",
-      text: `${target} (conf ${ballot.confidence.toFixed(2)})`,
-    });
+      ballot.target === "SKIP"
+        ? INSPECTOR_COPY.votedSkip
+        : fmt(INSPECTOR_COPY.votedEject, { target: ballot.target });
+    steps.push({ kind: "voted", text: target, confidence: ballot.confidence });
   }
 
-  const ejected =
-    meeting.outcome === "EJECTED" && meeting.ejected_player_id !== null
-      ? `${meeting.ejected_player_id} ejected`
-      : "no one ejected";
-  steps.push({ kind: "observation", text: `Meeting ${meeting.outcome.toLowerCase()} — ${ejected}` });
+  steps.push({
+    kind: "result",
+    text:
+      meeting.outcome === "EJECTED" && meeting.ejected_player_id !== null
+        ? fmt(INSPECTOR_COPY.resultEjected, { player: meeting.ejected_player_id })
+        : INSPECTOR_COPY.resultNone,
+    confidence: null,
+  });
 
   return steps;
+}
+
+/**
+ * A recorded confidence as its word, with the number on hover and in the text
+ * a screen reader reads; the face carries no figure.
+ */
+function ConfidenceWord({ value }: { value: number }) {
+  const number = value.toFixed(2);
+  return (
+    <span data-bucket title={number}>
+      {fmt(INSPECTOR_COPY.confidence, { bucket: bucketWord(value) })}
+      <span className="sr-only"> ({number})</span>
+    </span>
+  );
 }
 
 // An impostor's fabricated cover tasks are the `completed_task` observations it
@@ -160,9 +190,7 @@ function coverTasksOf(
 function ReasoningTrail({ steps }: { steps: TrailStep[] }) {
   if (steps.length === 0) {
     return (
-      <p className="text-xs italic text-ink-500">
-        No recorded decisions for this agent in this meeting.
-      </p>
+      <p className="text-xs italic text-ink-500">{INSPECTOR_COPY.trailEmpty}</p>
     );
   }
   return (
@@ -179,6 +207,12 @@ function ReasoningTrail({ steps }: { steps: TrailStep[] }) {
             </span>
             <span className="min-w-0 break-words text-sm leading-snug text-ink-900">
               {step.text}
+              {step.confidence !== null && (
+                <>
+                  {" · "}
+                  <ConfidenceWord value={step.confidence} />
+                </>
+              )}
             </span>
           </li>
         );
@@ -192,7 +226,7 @@ function ReasoningTrail({ steps }: { steps: TrailStep[] }) {
 function BeliefBar({ belief }: { belief: BeliefEntryView }) {
   const suspicion = Math.max(0, Math.min(1, belief.suspicion));
   const pct = Math.round(suspicion * 100);
-  const bucket = suspicionBucketOf(suspicion);
+  const bucket = bucketWord(suspicion);
   return (
     <div className="flex items-center gap-2">
       <span className="w-12 shrink-0 truncate font-mono text-xs text-ink-900">
@@ -203,7 +237,7 @@ function BeliefBar({ belief }: { belief: BeliefEntryView }) {
         aria-valuenow={suspicion}
         aria-valuemin={0}
         aria-valuemax={1}
-        aria-label={`suspicion of ${belief.subject}: ${BUCKET_LABEL[bucket]}`}
+        aria-label={fmt(INSPECTOR_COPY.suspicionOf, { subject: belief.subject, bucket })}
         className="h-2.5 flex-1 overflow-hidden rounded-pill border border-ink-300 bg-paper-0"
       >
         <div
@@ -212,13 +246,17 @@ function BeliefBar({ belief }: { belief: BeliefEntryView }) {
         />
       </div>
       <span className="w-8 shrink-0 text-right font-mono text-3xs font-semibold uppercase text-ink-500">
-        {BUCKET_LABEL[bucket]}
+        {bucket}
       </span>
       <span
-        title={`confidence ${belief.confidence.toFixed(2)} · snapshot tick ${belief.snapshot_tick}`}
+        title={fmt(INSPECTOR_COPY.confidenceTitle, {
+          value: belief.confidence.toFixed(2),
+          tick: String(belief.snapshot_tick),
+        })}
         className="shrink-0 rounded-pill border border-ink-300 bg-paper-0 px-1.5 py-1 font-mono text-3xs text-ink-700"
       >
-        conf {belief.confidence.toFixed(2)}
+        <span data-bucket>{fmt(INSPECTOR_COPY.confidence, { bucket: bucketWord(belief.confidence) })}</span>
+        <span className="sr-only"> ({belief.confidence.toFixed(2)})</span>
       </span>
     </div>
   );
@@ -248,7 +286,7 @@ function BeliefTab({
         )}
       </section>
       <section>
-        <TabHeading>Thought → Action → Observation</TabHeading>
+        <TabHeading>{INSPECTOR_COPY.trailHeading}</TabHeading>
         <ReasoningTrail steps={trail} />
       </section>
     </div>

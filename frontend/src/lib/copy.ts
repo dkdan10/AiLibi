@@ -22,9 +22,13 @@
 //
 // Also here: `showsBallotCorrectness`, the ballot correctness-badge gate. It is
 // a display gate over copy (the ✓/✗ mark), stated as a pure predicate so the
-// four perspective × reveal combinations are assertable with no DOM.
+// four perspective × reveal combinations are assertable with no DOM. And
+// `bucketWord`, which turns a suspicion or confidence value into the Low / Med
+// / High word a face shows, the number going on hover.
 //
 // AGENTS.md craft rule 4 ("no internal dialect on user-facing surfaces").
+
+import { suspicionBucketOf } from "../tokens";
 
 // ── the dialect matcher ──────────────────────────────────────────────────────
 
@@ -142,6 +146,17 @@ export function showsBallotCorrectness(
   revealOutcome: boolean,
 ): boolean {
   return omniscient && revealOutcome;
+}
+
+// ── suspicion and confidence in words ────────────────────────────────────────
+
+/**
+ * A 0–1 suspicion or confidence value as the word a face shows: Low, Med or
+ * High, cut where the heat ramp cuts (`suspicionBucketOf`), with no cut point of
+ * its own. The number itself belongs on hover, never on the face.
+ */
+export function bucketWord(value: number): string {
+  return SPECTATOR_COPY.buckets[suspicionBucketOf(value)];
 }
 
 // ── the copy itself ──────────────────────────────────────────────────────────
@@ -379,15 +394,55 @@ export const SPECTATOR_COPY = Object.freeze({
     costColGames: "Games",
   }),
 
-  /** The meeting dialog's Resolution card, and its omniscient-only record. */
+  /**
+   * The meeting dialog: the accusation chain, the evidence list, the
+   * Resolution card and its omniscient-only record.
+   */
   meeting: Object.freeze({
     resolutionGateBadge: "vote gate",
     resolutionGateLead: "How the vote resolved",
+    // Why the vote came out as it did, in words. No number, threshold or
+    // comparison sign: a player's view may not learn another voter's
+    // confidence, and the all-roles view needs no figure to say whether a
+    // voter was sure enough. One sentence per way a vote can end.
+    readoutEjected:
+      "Most votes went to {leader} and a voter was sure enough, so {leader} was ejected.",
+    readoutNotSure:
+      "Most votes went to {leader}, but none of those voters was sure enough, so no one was ejected.",
+    readoutNoLeader:
+      "No single player got the most votes (a tie, or skip led), so no one was ejected.",
+    // The ejected player's real role, shown in the all-roles view only.
+    roleImpostor: "{player} was an impostor",
+    roleCrewmate: "{player} was a crewmate",
+    chainCaption: "Arrows point from accuser to accused",
+    chainVerb: "accuses",
+    // The three kinds of evidence a meeting can carry, each with what it holds.
+    evidenceGroups: Object.freeze({
+      role_proof: Object.freeze({
+        heading: "Role proof",
+        caption:
+          "A vent sighting that matches what the witness really saw: one source, not two statements at odds.",
+        label: "proof",
+      }),
+      cross_statement: Object.freeze({
+        heading: "Contradictions",
+        caption: "These two statements cannot both be true; nothing here says which one is false.",
+        label: "contradiction",
+      }),
+      weak_signal: Object.freeze({
+        heading: "Weak signals",
+        caption:
+          "Clashes marked weak when found, such as an alibi a player gave for themselves, a very short time window, or a clash only at the first or last tick of a stated stretch.",
+        label: "weak signal",
+      }),
+    }),
+    evidenceSource: "Source {index} · {endpoint}",
+    evidenceSourceMissing: "not found in this meeting",
     // Three facts the omniscient view adds to a meeting (`lib/annotations.ts`).
     // None renders under a player's lens: the kill tick is withheld from every
     // player at the table, and the rooms are the engine's record of where each
     // accused player stood, not anyone's account of it.
-    engineRecordHeading: "What the recording shows",
+    engineRecordHeading: "Where everyone really was",
     engineRecordLead: "Shown in the omniscient view only, and read from the recording itself.",
     corpseAgeOneTick:
       "The reported body is {victim}'s, killed at tick {killTick}, one tick before this meeting.",
@@ -447,7 +502,8 @@ export const SPECTATOR_COPY = Object.freeze({
     // nothing, the target beside it is the one the voter chose, and no layer
     // weighed it against them.
     counterLabel: "Weighed against it",
-    groundingLabel: "Basis on the record",
+    // Shown on the chip itself, before what the meeting found.
+    groundingLabel: "Basis on the record:",
     groundingLabels: Object.freeze({
       // Both subjects in one line: an ejection's is the player it names, a
       // skip's is the alternatives it weighed (or any living candidate when it
@@ -460,6 +516,43 @@ export const SPECTATOR_COPY = Object.freeze({
       uncited: "No basis given",
       not_assessed: "Not assessed — the meeting set this vote",
     }),
+    // What the meeting changed about a recorded ballot, keyed by the reason the
+    // recording gives. Each names what changed, never the voter's intent; a
+    // reason this build has not been taught reads as the fallback.
+    rewriteLabels: Object.freeze({
+      invalid_target: "Vote for someone who could not be voted out changed to skip",
+      teammate_coerced: "Vote for a teammate changed to skip",
+      under_gate_redirect: "Vote changed by the vote rule",
+      invalid_reason_id: "The statement it cited was not found, so the citation was removed",
+      invalid_observation_id: "The observation it cited was not found, so the citation was removed",
+      uncited_coerced: "Vote with no cited reason changed to skip",
+      off_target_coerced: "Vote citing evidence about someone else changed to skip",
+      invalid_basis: "Unreadable stated reason removed",
+      invalid_counter_reason_id: "The evidence it weighed against the vote was not found, so it was removed",
+      parse_default: "Unreadable ballot counted as a skip",
+    }),
+    rewriteFallback: "The meeting changed this ballot",
+    redirectNote:
+      "The recorded explanation describes the original choice, before the vote rule changed the vote.",
+  }),
+
+  /**
+   * Where a citation points, in words: a statement by its speaker and turn, an
+   * observation by who saw it and when. An id that names nothing in the meeting,
+   * or that cannot be read, says so.
+   */
+  evidenceSource: Object.freeze({
+    statement: "Statement by {speaker} (turn {turn})",
+    statementMissing: "Statement (turn {turn}), not found in this meeting",
+    statementUnreadable: "A statement this recording cannot read",
+    observation: "What {observer} saw at tick {tick}",
+    observationUnreadable: "An observation this recording cannot read",
+    part: "Part of the statement by {speaker} (turn {turn})",
+    partMissing: "Part of a statement (turn {turn}), not found in this meeting",
+    partUnreadable: "A source this recording cannot read",
+    // Shown only once the citation has found its source.
+    resolvedNote: "A citation shows where a claim came from, not that it is right.",
+    publicLine: "{speaker} · public · {kind} · meeting tick {tick}",
   }),
 
   /** The Replays browser and the Highlights reel. */
@@ -485,10 +578,121 @@ export const SPECTATOR_COPY = Object.freeze({
   turn: Object.freeze({
     fabricatedOpeningTitle:
       "This emergency opening claimed a body nobody had found; the claim was stripped before the transcript.",
+    // One name per kind of turn, read by the turn card's tag, the evidence
+    // list and the source panel alike.
+    kinds: Object.freeze({
+      opening: "first statement",
+      reply: "reply",
+      opt_in: "spoke up",
+    }),
+    tag: "tick {tick} · {kind}",
   }),
+
+  /** The mind inspector's belief tab: what the player did at the meeting. */
+  inspector: Object.freeze({
+    trailHeading: "Said / Claimed / Voted / Result",
+    trailLabels: Object.freeze({
+      said: "Said",
+      claimed: "Claimed",
+      voted: "Voted",
+      result: "Result",
+    }),
+    resultEjected: "Meeting: {player} was ejected",
+    resultNone: "Meeting: no one was ejected",
+    trailEmpty: "No recorded decisions for this agent in this meeting.",
+    // Each step's own words: a claim as the player made it, the vote as cast.
+    accused: "accused {against} — {reason}",
+    alibi: "alibi for {subject}: {path}",
+    alibiNoRoute: "alibi for {subject}: no route stated",
+    alibiLeg: "{room}, ticks {from}–{to}",
+    corroborated: "corroborated {supports} on tick {tick} — {reason}",
+    votedSkip: "voted to skip",
+    votedEject: "voted to eject {target}",
+    // A confidence's face is its word; the number is on hover.
+    confidence: "confidence {bucket}",
+    confidenceTitle: "confidence {value} · snapshot tick {tick}",
+    suspicionOf: "suspicion of {subject}: {bucket}",
+  }),
+
+  /** The belief panel: who suspects whom, the real roles, and its legend. */
+  beliefPanel: Object.freeze({
+    heading: "Who suspects whom",
+    rowsColumns: "Read across a row: how much that player suspects each of the others.",
+    // The layer names. "Error" is the held layer's own word.
+    layers: Object.freeze({ belief: "Belief", truth: "Real roles", error: "Error" }),
+    layerGroup: "Belief / Real roles / Error layer",
+    perspectiveChip: "One player's perspective · real roles hidden",
+    hiddenTitle: "Hidden in one player's perspective, because it would show real roles",
+    legendTruthHeading: "READING: REAL ROLES",
+    suspicionLabel: "Suspicion",
+    suspicionDesc:
+      "How much the row's player suspects the column's player: Low, Med or High. Hover a cell for the number.",
+    noBeliefLabel: "No belief yet",
+    noBeliefDesc: "Hatched: this player has formed no view yet, which is not the same as no suspicion.",
+    selfLabel: "Self",
+    selfDesc: "The diagonal: a player holds no suspicion of themselves.",
+    daggerLabel: "Dagger",
+    daggerDesc: "A real impostor, all-roles view only.",
+    impostorColumnLabel: "Impostor column",
+    impostorColumnDesc: "A faint hatch on a real impostor's column.",
+    deadLabel: "Dead",
+    deadDesc: "A frozen row and column: this player was dead at this meeting.",
+    perspectiveNote:
+      "One player's perspective: real roles and error are hidden (they would show who the impostor is).",
+    cellTitle: "suspicion {value} of 100",
+    cellLabel: "{pair}: suspicion {bucket} ({value} of 100), confidence {confidenceBucket} ({confidence})",
+    // The change since the last meeting, as a move between words; the points
+    // are on hover.
+    changeAbsent: "Agent absent at this meeting.",
+    changeNoBelief: "No belief formed about this subject yet.",
+    changeFirst: "First recorded meeting.",
+    changeBelieverAbsent: "Believer was absent before — first belief here.",
+    changeNew: "New belief formed this meeting.",
+    changeNone: "No change in suspicion since the previous meeting.",
+    changeRose: "Suspicion rose from {from} to {to} since the previous meeting.",
+    changeFell: "Suspicion fell from {from} to {to} since the previous meeting.",
+    changeRoseWithin: "Suspicion rose but stayed {bucket} since the previous meeting.",
+    changeFellWithin: "Suspicion fell but stayed {bucket} since the previous meeting.",
+    changeTitle: "{points} points, from {from} to {to} of 100",
+  }),
+
+  /** Suspicion and confidence in words, cut where the heat ramp cuts. */
+  buckets: Object.freeze({ low: "Low", med: "Med", high: "High" }),
 
   /** The public results page: its ejection tile and its recorded-behavior groups. */
   publicResults: Object.freeze({
+    intro:
+      "These are recorded games, not live AI responses. Results cover all {games} games with {set}; the replay browser may offer a smaller featured selection. Each recording was replayed and checked before counting.",
+    // The curated cases: two, both on the 9-player set, so the other set's
+    // empty state points there (`tests/api/test_public_results.py` holds the
+    // count word to the published cases).
+    noCases: "No worked examples for this set yet; the 9-player set has two.",
+    inspectMeeting: "Inspect the meeting (shows roles)",
+    revealAnalysis: "Reveal case analysis (spoilers)",
+    hideAnalysis: "Hide analysis",
+    rawRecording: "Raw recording file",
+    // The proof row, after the cases: a role read, reported and never a
+    // headline, so it says what it counts and why its first half measures no
+    // deduction.
+    proofHeading: "Ejected players who were impostors, with and without a vent sighting",
+    proofWith: "With a vent sighting:",
+    proofWithout: "Without one:",
+    proofCaptionLead:
+      "Each count is impostors among the ejected players in that group. Only impostors can vent, so the first count says nothing about how well the table reasoned.",
+    proofCaptionOne: "The {count} ejection without a sighting shows how the table decided without proof.",
+    proofCaptionMany: "The {count} ejections without a sighting show how the table decided without proof.",
+    proofCaptionTail:
+      "A sighting in a meeting does not show that it caused the vote, and these counts describe this set of recordings only.",
+    usageLine:
+      "Reported call usage, including incomplete attempts: {input} input tokens · {output} output tokens · {cost}. An interrupted call may lack provider usage.",
+    // Both shown sets were recorded on a flat-rate service, so a zero reads as
+    // that; any other value keeps its figure.
+    costZero: "$0: a flat-rate service, so usage, not a bill",
+    costValue: "{cost} of usage, not a bill",
+    technicalHeading: "Technical identifiers, for reproduction",
+    promptVersions: "Prompt versions: {versions}.",
+    promptVersionsNone: "not recorded",
+    fingerprint: "Source fingerprint: {fingerprint}",
     // The tile counts impostors among ejected players, a role read reported
     // beside the process figures, so its heading says what the fraction counts
     // and never calls an ejection correct.
@@ -508,23 +712,25 @@ export const SPECTATOR_COPY = Object.freeze({
     // adopted only at a value `lib/adoptedRules.ts` names; a setting these
     // recordings carry without its being adopted is named as set for them; any
     // other value off its default stays an experiment.
-    adoptedLead: "Rules adopted for the current game: {rules}.",
+    adoptedLead: "Rules adopted for the current game: {rules}",
     setForRecordingsLead: "Also in place: {settings}.",
     experimentsLead: "Recorded experiments: {experiments}.",
     noRecordedSettings:
       "No enabled experiments recorded. This alone does not certify the default behavior.",
     ruleSeparator: "; ",
+    // The adopted rules are each a sentence of their own.
+    sentenceSeparator: " ",
     experimentSeparator: ", ",
-    // Each adopted rule in plain words, keyed by the field it adopts.
+    // Each adopted rule as a plain sentence, keyed by the field it adopts.
     adoptedRules: Object.freeze({
-      vent_witness_rule: "vent use seen only in the room where it happens",
-      vent_entry_policy: "impostors enter a vent only beside a body they have just killed",
+      vent_witness_rule: "Vent use is seen only in the room where it happens.",
+      vent_entry_policy: "Impostors enter a vent only beside a body they have just killed.",
       meeting_reset:
-        "after each meeting, the survivors start again from the meeting room with the bodies cleared",
-      bounded_rebuttal_version: "one reply to a late accusation",
-      report_body_handle_version: "body reports without the time of death",
-      ballot_kill_row_version: "witnessed kills listed on the voter's ballot",
-      impostor_ballot_version: "impostor ballots cast by strategy",
+        "After each meeting, the survivors start again from the meeting room with the bodies cleared.",
+      bounded_rebuttal_version: "A player accused after already speaking gets one reply.",
+      report_body_handle_version: "A body report does not give the time of death.",
+      ballot_kill_row_version: "Each ballot lists the kills its voter saw a player from the other side make.",
+      impostor_ballot_version: "An impostor is asked to vote as a move for its own side.",
     }),
     // Kept in these recordings, not part of the adopted list.
     ventExitWaits:
@@ -543,9 +749,14 @@ export const SPECTATOR_COPY = Object.freeze({
     movementPolicies: "experimental movement or action policies",
     roundRules: "experimental round or task rules",
     policyLine: "Impostor policy: {impostor}. Crew policy: {crew}. Rule settings: {rules}.",
-    notRecorded: "not recorded",
+    // A recording with no policy stamp ran the default movers; "unknown" is
+    // kept for what the record cannot say.
+    defaultPolicy: "the built-in scripted policy",
     recorded: "recorded",
+    unknown: "unknown",
     clockLine: "Observation clock: {clock}.",
+    // Recorded settings with timed observations off mean the standard timing.
+    clockStandard: "the standard timing",
     clockVersion: "v{version}",
   }),
 
@@ -706,8 +917,12 @@ export const SPECTATOR_COPY = Object.freeze({
 } as const);
 
 export const BALLOT_COPY = SPECTATOR_COPY.ballot;
+export const BELIEF_PANEL_COPY = SPECTATOR_COPY.beliefPanel;
+export const BUCKET_COPY = SPECTATOR_COPY.buckets;
 export const DASHBOARD_COPY = SPECTATOR_COPY.dashboard;
+export const EVIDENCE_SOURCE_COPY = SPECTATOR_COPY.evidenceSource;
 export const HEADER_COPY = SPECTATOR_COPY.header;
+export const INSPECTOR_COPY = SPECTATOR_COPY.inspector;
 export const MAP_COPY = SPECTATOR_COPY.map;
 export const MEETING_COPY = SPECTATOR_COPY.meeting;
 export const PICKER_COPY = SPECTATOR_COPY.picker;

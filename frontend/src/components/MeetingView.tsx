@@ -15,7 +15,7 @@
 // replicated.
 //
 // FIREWALL: the outcome banner is ROLE-NEUTRAL (shape / label, never
-// red-vs-green); the post-hoc impostor reveal is Omniscient-only, and the
+// red-vs-green); the ejected player's role line is Omniscient-only, and the
 // per-ballot correctness mark additionally waits for the outcome reveal (the
 // ballots panel threads `revealOutcome` down for it). The claim↔map
 // cross-highlight (wired in TurnCard → store → MapView) lights only the PUBLIC
@@ -30,8 +30,7 @@ import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
 import { type RouteLeg, meetingAnnotations } from "../lib/annotations";
-import { OBSERVATION_EVENT_SEGMENTS } from "../lib/contradictions";
-import { MEETING_COPY, fmt } from "../lib/copy";
+import { MEETING_COPY, TURN_COPY, fmt } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { tokens } from "../tokens";
@@ -44,7 +43,7 @@ import type {
   ReplayView,
   TurnView,
 } from "../types/api";
-import { EvidenceLink, EvidencePanel } from "./EvidencePanel";
+import { EvidenceLink, EvidencePanel, eventTurnId } from "./EvidencePanel";
 import { BallotCard } from "./BallotCard";
 import { TurnCard } from "./TurnCard";
 
@@ -107,8 +106,9 @@ function buildDepths(turns: readonly TurnView[]): Map<string, number> {
 }
 
 // The accusation-chain summary at the top of the transcript panel: one segment
-// per turn carrying an accusation (speaker → target), in chain order. Direction
-// (who points at whom) uses distrust orange, exactly as the converge render.
+// per turn carrying an accusation (speaker → target), in chain order. The arrow
+// is drawn in the distrust channel; every segment, reply or not, reads with the
+// one verb, because a reply's accusation is still an accusation.
 function AccusationChainSummary({
   turns,
   players,
@@ -124,7 +124,7 @@ function AccusationChainSummary({
         key: turn.turn_id,
         speaker: turn.speaker,
         target: accusation.against,
-        verb: turn.turn_kind === "reply" ? "redirects" : "accuses",
+        verb: MEETING_COPY.chainVerb,
       },
     ];
   });
@@ -162,8 +162,7 @@ function AccusationChainSummary({
         </span>
       ))}
       <span className="ml-auto max-w-[14rem] text-xs leading-snug text-ink-500">
-        Accusation edges use <span className="font-semibold text-distrust-strong">distrust orange</span> —
-        direction = who points at whom.
+        {MEETING_COPY.chainCaption}
       </span>
     </div>
   );
@@ -190,30 +189,24 @@ function tallyBallots(ballots: readonly BallotView[]): { target: string; count: 
 }
 
 // The REAL vote-gate readout from `GateView` (NEVER the mock's "simple
-// majority"):
-// plurality + at least one leader ballot ≥ threshold; tie / SKIP-plurality → SKIP.
-function gateReadout(
-  gate: GateView,
-  ballots: readonly BallotView[],
-  omniscient: boolean,
-  observerId: string | null,
-): string {
+// majority"): plurality, plus at least one ballot for the leader at or over the
+// recorded cut; a tie or a skip plurality skips. It says which of those three
+// happened in words and carries no number, so it reads the same under every
+// perspective and no player's view learns another voter's confidence from it.
+export function gateReadout(gate: GateView): string {
   if (gate.leader === null) {
-    return `no plurality leader (tie or SKIP led) → SKIPPED`;
+    return MEETING_COPY.readoutNoLeader;
   }
-  // The aggregate can expose another voter even when that voter's card is hidden.
-  // An agent lens may name its own ballot, never the table's private maximum.
-  if (!omniscient) {
-    const ownBallot = ballots.find((ballot) => ballot.voter === observerId && ballot.target === gate.leader);
-    const ownReadout = ownBallot ? `, your ballot ${ownBallot.confidence.toFixed(2)}` : "";
-    return `plurality leader ${gate.leader}${ownReadout}, threshold ${gate.passed ? "met" : "not met"} → ${gate.passed ? "EJECTED" : "SKIPPED"}`;
-  }
-  const conf = gate.leader_max_confidence.toFixed(2);
-  const thr = gate.threshold.toFixed(2);
-  if (gate.passed) {
-    return `plurality leader ${gate.leader}, top ballot ${conf} ≥ ${thr} threshold → EJECTED`;
-  }
-  return `plurality leader ${gate.leader}, top ballot ${conf} < ${thr} threshold → SKIPPED`;
+  return fmt(gate.passed ? MEETING_COPY.readoutEjected : MEETING_COPY.readoutNotSure, {
+    leader: gate.leader,
+  });
+}
+
+/** The ejected player's real role, in words; the caller shows it in the all-roles view only. */
+export function roleLine(player: string, role: PlayerView["role"]): string {
+  return fmt(role === "IMPOSTOR" ? MEETING_COPY.roleImpostor : MEETING_COPY.roleCrewmate, {
+    player,
+  });
 }
 
 // The omniscient-only record of a meeting (`lib/annotations.ts`): the reported
@@ -289,17 +282,15 @@ function EngineRecordPanel({ replay, meetingId }: { replay: ReplayView; meetingI
 }
 
 // The dark resolution panel: tally, the real vote-gate readout, a role-neutral
-// outcome banner, and (Omniscient only) the post-hoc impostor reveal.
+// outcome banner, and (Omniscient only) the ejected player's real role.
 function VerdictPanel({
   meeting,
   players,
   omniscient,
-  observerId,
 }: {
   meeting: MeetingViewDTO;
   players: PlayerView[];
   omniscient: boolean;
-  observerId: string | null;
 }) {
   const tally = tallyBallots(meeting.ballots)
     .filter((row) => row.count > 0 || row.target === "SKIP")
@@ -326,8 +317,8 @@ function VerdictPanel({
           <span className="font-mono text-sm font-bold text-paper-1">{tally}</span>
         </div>
 
-        <p className="font-mono text-2xs leading-relaxed text-ink-300">
-          {MEETING_COPY.resolutionGateLead} — {gateReadout(meeting.gate, meeting.ballots, omniscient, observerId)}
+        <p data-vote-readout className="font-mono text-2xs leading-relaxed text-ink-300">
+          {MEETING_COPY.resolutionGateLead}: {gateReadout(meeting.gate)}
         </p>
 
         {/* Role-neutral outcome banner: never coloured by guilt. */}
@@ -342,18 +333,16 @@ function VerdictPanel({
             <div className="text-base text-paper-0">
               {ejected !== null ? `Ejected — ${ejected}` : "Skipped — no ejection"}
             </div>
-            <div className="font-mono text-3xs text-ink-300">
-              outcome is role-neutral · guilt is never coloured in
-            </div>
           </div>
         </div>
 
-        {/* Post-hoc reveal is role ground truth → Omniscient only (an explicit,
-            hideable badge — never a hue; suppressed under As-agent fog). */}
+        {/* The ejected player's role is ground truth → Omniscient only (an
+            explicit, hideable badge — never a hue; absent from every player's
+            perspective). */}
         {omniscient && ejected !== null && ejectedRole !== null && (
-          <div className="inline-flex items-center gap-2 rounded-md border border-ink-700 bg-ink-700/40 px-2 py-1 font-mono text-3xs text-paper-2">
+          <div data-role-line className="inline-flex items-center gap-2 rounded-md border border-ink-700 bg-ink-700/40 px-2 py-1 font-mono text-3xs text-paper-2">
             <span aria-hidden>⌖</span>
-            post-hoc: {ejected} was {ejectedRole === "IMPOSTOR" ? "impostor" : "crewmate"}
+            {roleLine(ejected, ejectedRole)}
           </div>
         )}
       </div>
@@ -393,28 +382,9 @@ function TranscriptPanel({
   );
 }
 
-const TURN_KIND_LABEL: Record<TurnView["turn_kind"], string> = {
-  opening: "opening",
-  reply: "reply",
-  opt_in: "opt-in",
-};
-
-// A contradiction event id is `turn:<turn_id>:<segment>:<i>`. Pull the turn id
-// out so `link()` below can name WHO said each half of a flag; greedy `.+`
-// captures the whole turn id before the final suffix.
-//
-// The segment alternation is built from `lib/contradictions.ts`'s exported list
-// rather than hand-written here, because that list is also what mints the ids on
-// the cards — one vocabulary, two readers, no way to teach a new segment to only
-// one of them.
-const EVENT_ID_PATTERN = new RegExp(
-  `^turn:(.+):(?:${OBSERVATION_EVENT_SEGMENTS.join("|")}):\\d+$`,
-);
-
-function eventTurnId(eventId: string): string | null {
-  const match = EVENT_ID_PATTERN.exec(eventId);
-  return match ? match[1]! : null;
-}
+// A contradiction event id is `turn:<turn_id>:<segment>:<i>`; `eventTurnId`
+// (shared with the source panel's citation label) pulls the turn id out so
+// `link()` below can name WHO said each half of a flag.
 
 // THE EVIDENCE TAXONOMY (Task 19.11; audits/audit-phase-19-triage.md §7 item 12,
 // §8 rows 10/14). Every flag used to render under one "Contradictions" heading
@@ -437,49 +407,36 @@ type EvidenceCategory = ContradictionView["category"];
 // added to the DTO is a compile error here rather than a flag that silently
 // renders as nothing. `role_proof` deliberately does NOT spend the reserved
 // fuchsia contradiction channel: proof is not a contradiction, which is the
-// whole point of the taxonomy, so it draws as authoritative solid ink.
+// whole point of the taxonomy, so it draws as authoritative solid ink. The
+// words (heading, caption, label) are each group's copy.
 interface EvidenceGroupStyle {
-  heading: string;
-  caption: string;
   chip: string;
   stroke: string;
   strokeWidth: number;
   dash: string | undefined;
-  label: string;
   row: string;
 }
 
 const EVIDENCE_STYLES: Record<EvidenceCategory, EvidenceGroupStyle> = {
   role_proof: {
-    heading: "Role proof",
-    caption:
-      "grounded against the witness's own record — one source, not a conflict between two statements",
     chip: "border-ink-900 text-ink-900",
     stroke: tokens.ink[900],
     strokeWidth: 3,
     dash: undefined,
-    label: "proof",
     row: "text-sm text-ink-900",
   },
   cross_statement: {
-    heading: "Contradictions",
-    caption:
-      "the detector says these two statements cannot both be true — never which one is false",
     chip: "border-contradiction-strong text-contradiction-strong",
     stroke: tokens.contradiction,
     strokeWidth: 3,
     dash: undefined,
-    label: "contradiction",
     row: "text-sm text-ink-900",
   },
   weak_signal: {
-    heading: "Weak signals",
-    caption: "the detector stamped these weak (self-stated alibi, narrow window, endpoint tick)",
     chip: "border-ink-300 text-ink-500",
     stroke: tokens.ink[500],
     strokeWidth: 1.6,
     dash: "4 4",
-    label: "weak signal",
     row: "text-xs text-ink-600",
   },
 };
@@ -514,19 +471,19 @@ function EvidenceSection({
     const turn = turnById.get(eventTurnId(eventId) ?? "");
     return turn === undefined
       ? null
-      : `${turn.speaker} (${TURN_KIND_LABEL[turn.turn_kind]})`;
+      : `${turn.speaker} (${TURN_COPY.kinds[turn.turn_kind]})`;
   };
   // `A ↔ B` is only honest when there really are two sides. Three shapes exist
   // in the committed corpus and each gets its own reading — the whole point of
   // this task is that a flag must never be drawn as a conflict with itself:
   //
   //   • SELF-LINKED (one artifact, cited twice — every grounded `vent_sighting`,
-  //     by design): "from p-1 (opening)".
+  //     by design): "from p-1 (first statement)".
   //   • SAME TURN, two artifacts (a speaker's roll-call placement against their
   //     own alibi claim — the `[weak signal: self-stated alibi pair]` class):
-  //     "within p-5 (opt-in)". Both endpoints resolve to the same label, so the
-  //     pair form would print the literal `p-5 (opt-in) ↔ p-5 (opt-in)`.
-  //   • TWO TURNS: the genuine pair, "p-3 (opening) ↔ p-5 (reply)".
+  //     "within p-5 (spoke up)". Both endpoints resolve to the same label, so the
+  //     pair form would print the literal `p-5 (spoke up) ↔ p-5 (spoke up)`.
+  //   • TWO TURNS: the genuine pair, "p-3 (first statement) ↔ p-5 (reply)".
   //
   // The subjects fallback (an endpoint that will not resolve) is de-duplicated
   // for the same reason, so no input can drive a repeated id through the join.
@@ -560,13 +517,14 @@ function EvidenceSection({
       <div className="space-y-3">
         {categories.map((category) => {
           const group = EVIDENCE_STYLES[category];
+          const words = MEETING_COPY.evidenceGroups[category];
           const rows = contradictions.filter((c) => c.category === category);
           return (
             <div key={category}>
               <h5 className="font-mono text-3xs uppercase tracking-wide text-ink-500">
-                {group.heading} ({rows.length})
+                {words.heading} ({rows.length})
               </h5>
-              <p className="mb-1.5 font-mono text-3xs italic text-ink-600">{group.caption}</p>
+              <p className="mb-1.5 font-mono text-3xs italic text-ink-600">{words.caption}</p>
               <ul className="space-y-2">
                 {rows.map((c) => {
                   const endpoints = link(c);
@@ -599,7 +557,7 @@ function EvidenceSection({
                             strokeDasharray={group.dash}
                           />
                         </svg>
-                        {group.label}
+                        {words.label}
                       </span>
                       {endpoints !== null && (
                         <span className="font-mono text-2xs font-bold text-ink-700">
@@ -610,7 +568,7 @@ function EvidenceSection({
                         <span className="font-mono text-2xs font-bold text-ink-900">{names}</span>
                       )}
                       <span className="min-w-0 break-words">{c.description}</span>
-                      {meetingId !== null && Array.from(new Set([c.event_a_id, c.event_b_id])).map((id, index) => <EvidenceLink key={id} target={{kind: "artifact", id, meetingId, observerId: null}}>Source {index + 1} · {endpoint(id) ?? "unresolved reference"}</EvidenceLink>)}
+                      {meetingId !== null && Array.from(new Set([c.event_a_id, c.event_b_id])).map((id, index) => <EvidenceLink key={id} target={{kind: "artifact", id, meetingId, observerId: null}}>{fmt(MEETING_COPY.evidenceSource, { index: String(index + 1), endpoint: endpoint(id) ?? MEETING_COPY.evidenceSourceMissing })}</EvidenceLink>)}
                     </li>
                   );
                 })}
@@ -788,7 +746,6 @@ export function MeetingView() {
               meeting={meeting}
               players={replay.players}
               omniscient={omniscient}
-              observerId={perspective.mode === "agent" ? perspective.agentId : null}
             />
             {/* A replay that carries no frames (an isolated meeting fixture)
                 has no record to read; every served replay carries them. */}

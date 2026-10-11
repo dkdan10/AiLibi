@@ -19,6 +19,7 @@ import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { tokens } from "../tokens";
+import { BELIEF_PANEL_COPY as COPY, bucketWord, fmt } from "../lib/copy";
 import type { BeliefViewMode } from "../lib/playback";
 import type { BeliefErrorView, BeliefFrameView, PlayerView } from "../types/api";
 import { BeliefRow } from "./BeliefRow";
@@ -31,9 +32,9 @@ const ROW_HEADER_W = 42;
 const COL_HEADER_H = 44;
 
 const LAYERS: ReadonlyArray<{ id: BeliefViewMode; label: string }> = [
-  { id: "belief", label: "Belief" },
-  { id: "truth", label: "Ground-truth" },
-  { id: "error", label: "Error" },
+  { id: "belief", label: COPY.layers.belief },
+  { id: "truth", label: COPY.layers.truth },
+  { id: "error", label: COPY.layers.error },
 ];
 
 interface BeliefPanelProps {
@@ -80,7 +81,6 @@ export function BeliefPanel({
   // Fog forces Belief (Truth/Error are role-derived → would leak).
   const effectiveLayer: BeliefViewMode = omniscient ? layer : "belief";
 
-  const n = players.length;
   const impostorIds = new Set(
     players.filter((p) => p.role === "IMPOSTOR").map((p) => p.agent_id),
   );
@@ -151,7 +151,6 @@ export function BeliefPanel({
   return (
     <section className={containerClass} aria-label="Belief × Truth matrix">
       <Header
-        n={n}
         layer={effectiveLayer}
         omniscient={omniscient}
         onPick={pickLayer}
@@ -225,7 +224,6 @@ export function BeliefPanel({
 // ── header (title + segmented toggle + overlay chrome) ─────────────────────────
 
 function Header({
-  n,
   layer,
   omniscient,
   onPick,
@@ -233,7 +231,6 @@ function Header({
   isFullscreen,
   onToggleFullscreen,
 }: {
-  n: number;
   layer: BeliefViewMode;
   omniscient: boolean;
   onPick: (l: BeliefViewMode) => void;
@@ -244,18 +241,18 @@ function Header({
   return (
     <header className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-ink-900 bg-paper-1 px-4 py-3">
       <div>
-        <h2 className="text-base leading-tight">{n}×{n} suspicion matrix</h2>
-        <p className="font-mono text-2xs text-ink-500">rows = believer · columns = subject</p>
+        <h2 className="text-base leading-tight">{COPY.heading}</h2>
+        <p className="font-mono text-2xs text-ink-500">{COPY.rowsColumns}</p>
       </div>
       <div className="flex items-center gap-3">
         {!omniscient && (
-          <span className="rounded-md border border-ink-300 px-2 py-1 font-mono text-3xs uppercase tracking-wide text-ink-500">
-            fog · ground-truth hidden
+          <span data-perspective-chip className="rounded-md border border-ink-300 px-2 py-1 font-mono text-3xs uppercase tracking-wide text-ink-500">
+            {COPY.perspectiveChip}
           </span>
         )}
         <div
           role="group"
-          aria-label="Belief / Ground-truth / Error layer"
+          aria-label={COPY.layerGroup}
           className="flex gap-2 rounded-md border-2 border-ink-900 bg-paper-1 p-1"
         >
           {LAYERS.map((opt) => {
@@ -267,7 +264,7 @@ function Header({
                 type="button"
                 aria-pressed={active}
                 disabled={disabled}
-                title={disabled ? "Hidden in fog (reveals ground truth)" : undefined}
+                title={disabled ? COPY.hiddenTitle : undefined}
                 onClick={() => {
                   onPick(opt.id);
                 }}
@@ -475,7 +472,7 @@ function Dagger() {
 
 function Legend({ layer, omniscient }: { layer: BeliefViewMode; omniscient: boolean }) {
   const heading =
-    layer === "belief" ? "READING: BELIEF" : layer === "truth" ? "READING: GROUND TRUTH" : "READING: ERROR";
+    layer === "belief" ? "READING: BELIEF" : layer === "truth" ? COPY.legendTruthHeading : "READING: ERROR";
   return (
     <div>
       <div className="mb-3 font-mono text-3xs font-bold uppercase tracking-[0.08em] text-ink-500">
@@ -485,18 +482,18 @@ function Legend({ layer, omniscient }: { layer: BeliefViewMode; omniscient: bool
         <>
           <LegendRow
             swatch={<Swatch style={{ background: `linear-gradient(90deg, ${tokens.suspicion[0]}, ${tokens.suspicion[3]})` }} />}
-            label="Suspicion heat"
-            desc="Cell = believer's suspicion of subject, 0–100 (mono). Bucketed Low / Med / High."
+            label={COPY.suspicionLabel}
+            desc={COPY.suspicionDesc}
           />
           <LegendRow
             swatch={<Swatch style={{ background: `repeating-linear-gradient(45deg, ${tokens.paper[0]}, ${tokens.paper[0]} 3px, ${tokens.paper[2]} 3px, ${tokens.paper[2]} 6px)` }} />}
-            label="No belief yet"
-            desc="Hatched — the agent has formed no view. This is not 0%."
+            label={COPY.noBeliefLabel}
+            desc={COPY.noBeliefDesc}
           />
           <LegendRow
             swatch={<Swatch style={{ background: tokens.paper[2] }} />}
-            label="Self"
-            desc="Diagonal; an agent holds no suspicion file on itself."
+            label={COPY.selfLabel}
+            desc={COPY.selfDesc}
           />
         </>
       )}
@@ -508,18 +505,18 @@ function Legend({ layer, omniscient }: { layer: BeliefViewMode; omniscient: bool
                 <Dagger />
               </span>
             }
-            label="Impostor — true"
-            desc="Dagger badge marks the real impostors. A badge, never a hue — and hidden in fog."
+            label={COPY.daggerLabel}
+            desc={COPY.daggerDesc}
           />
           <LegendRow
             swatch={<Swatch style={{ background: `repeating-linear-gradient(45deg, ${tokens.paper[0]}, ${tokens.paper[0]} 4px, ${tokens.paper[2]} 4px, ${tokens.paper[2]} 8px)` }} />}
-            label="Impostor column"
-            desc="A faint hatch marks an impostor's column — role-neutral, no hue."
+            label={COPY.impostorColumnLabel}
+            desc={COPY.impostorColumnDesc}
           />
           <LegendRow
             swatch={<Swatch style={{ background: `repeating-linear-gradient(45deg, ${tokens.paper[2]}, ${tokens.paper[2]} 3px, ${tokens.paper[3]} 3px, ${tokens.paper[3]} 6px)` }} />}
-            label="Dead"
-            desc="A frozen row & column for an agent dead at this meeting."
+            label={COPY.deadLabel}
+            desc={COPY.deadDesc}
           />
         </>
       )}
@@ -548,8 +545,8 @@ function Legend({ layer, omniscient }: { layer: BeliefViewMode; omniscient: bool
         </>
       )}
       {!omniscient && (
-        <p className="mt-3 font-mono text-3xs leading-snug text-ink-500">
-          As-agent fog: ground truth & error are suppressed (they would reveal who the impostor is).
+        <p data-perspective-note className="mt-3 font-mono text-3xs leading-snug text-ink-500">
+          {COPY.perspectiveNote}
         </p>
       )}
     </div>
@@ -585,7 +582,7 @@ function GlyphSwatch({ glyph }: { glyph: string }) {
 
 // ── cell detail (the "popover": cross-meeting trajectory + what-changed diff) ──
 
-function CellDetail({
+export function CellDetail({
   players,
   frames,
   step,
@@ -688,7 +685,16 @@ function CellDetail({
               ) : null}
             </div>
             <span className="w-12 shrink-0 text-right font-mono text-3xs text-ink-700">
-              {!point.present ? "absent" : !point.hasBelief ? "—" : Math.round(point.suspicion * 100)}
+              {!point.present ? (
+                "absent"
+              ) : !point.hasBelief ? (
+                "—"
+              ) : (
+                <span data-bucket title={fmt(COPY.cellTitle, { value: String(Math.round(point.suspicion * 100)) })}>
+                  {bucketWord(point.suspicion)}
+                  <span className="sr-only"> ({Math.round(point.suspicion * 100)})</span>
+                </span>
+              )}
             </span>
           </div>
         ))}
@@ -699,7 +705,9 @@ function CellDetail({
             (api/replay_loader.py), so this delta is the change SINCE the previous
             meeting boundary, not what meeting N itself decided — labelled as such. */}
         <div className="font-mono text-3xs uppercase tracking-wide text-ink-500">since previous meeting</div>
-        <div className="mt-1 text-xs text-ink-900">{changed}</div>
+        <div data-change className="mt-1 text-xs text-ink-900" {...(changed.title === null ? {} : { title: changed.title })}>
+          {changed.text}
+        </div>
         {showError && current !== undefined && current.present && current.hasBelief && current.error !== undefined && (
           <div className="mt-1 font-mono text-2xs text-ink-700">
             error {current.error >= 0 ? "+" : ""}
@@ -717,16 +725,38 @@ interface SeriesPoint {
   suspicion: number;
 }
 
-function describeChange(current: SeriesPoint | undefined, prev: SeriesPoint | undefined): string {
-  if (current === undefined || !current.present) return "Agent absent at this meeting.";
-  if (!current.hasBelief) return "No belief formed about this subject yet.";
-  if (prev === undefined) return "First recorded meeting.";
-  if (!prev.present) return "Believer was absent before — first belief here.";
-  if (!prev.hasBelief) return "New belief formed this meeting.";
+/**
+ * The change since the previous meeting, as a move between Low / Med / High
+ * ("rose from Med to High"); the points are the hover title, never the face.
+ */
+export function describeChange(
+  current: SeriesPoint | undefined,
+  prev: SeriesPoint | undefined,
+): { text: string; title: string | null } {
+  const plain = (text: string) => ({ text, title: null });
+  if (current === undefined || !current.present) return plain(COPY.changeAbsent);
+  if (!current.hasBelief) return plain(COPY.changeNoBelief);
+  if (prev === undefined) return plain(COPY.changeFirst);
+  if (!prev.present) return plain(COPY.changeBelieverAbsent);
+  if (!prev.hasBelief) return plain(COPY.changeNew);
   const delta = current.suspicion - prev.suspicion;
-  if (Math.abs(delta) < 0.005) return "No change in suspicion since the previous meeting.";
+  if (Math.abs(delta) < 0.005) return plain(COPY.changeNone);
   const pts = Math.round(delta * 100);
-  return `Suspicion ${pts > 0 ? "rose" : "fell"} ${pts > 0 ? "+" : ""}${pts} since the previous meeting.`;
+  const from = bucketWord(prev.suspicion);
+  const to = bucketWord(current.suspicion);
+  const rose = delta > 0;
+  const text =
+    from === to
+      ? fmt(rose ? COPY.changeRoseWithin : COPY.changeFellWithin, { bucket: to })
+      : fmt(rose ? COPY.changeRose : COPY.changeFell, { from, to });
+  return {
+    text,
+    title: fmt(COPY.changeTitle, {
+      points: `${pts > 0 ? "+" : ""}${pts}`,
+      from: String(Math.round(prev.suspicion * 100)),
+      to: String(Math.round(current.suspicion * 100)),
+    }),
+  };
 }
 
 function PairChip({ player, fallback }: { player: PlayerView | undefined; fallback: string }) {
