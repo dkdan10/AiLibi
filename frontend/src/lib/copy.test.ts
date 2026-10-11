@@ -572,6 +572,18 @@ function headerSpans(source: string): readonly [string, string] {
   ];
 }
 
+/** The copy keys the title block reads, each as a `HEADER_COPY` read. */
+const HEADER_READS: readonly (keyof typeof HEADER_COPY)[] = [
+  "tagline",
+  "sourceLinkText",
+  "sourceUrl",
+];
+
+/** The `HEADER_COPY` reads missing from the title block; empty when it reads all three. */
+function missingHeaderReads(title: string): readonly string[] {
+  return HEADER_READS.filter((key) => !title.includes(`HEADER_COPY.${key}`));
+}
+
 /** The tour's welcome step, and the one link inside it. */
 function welcomeSpans(source: string): readonly [string, string] {
   const stepStart = source.indexOf("export const STEPS");
@@ -644,12 +656,21 @@ describe("the header's and the tour's source link", () => {
   it("renders the header's words from the copy", () => {
     const [title, header] = headerSpans(app);
     expect(header).toContain("<ShellTitle />");
-    for (const key of ["tagline", "sourceLinkText", "sourceUrl"]) {
-      expect(title).toContain(`HEADER_COPY.${key}`);
-    }
+    expect(missingHeaderReads(title)).toEqual([]);
     expect(proseLiterals(title)).toEqual([]);
     expect(proseLiterals(header)).toEqual([]);
     expect(ATTRIBUTION_WORDS.test(title + header)).toBe(false);
+  });
+
+  it.each([
+    ["tagline", "{HEADER_COPY.tagline}", "Recorded AI social deduction"],
+    ["sourceLinkText", "{HEADER_COPY.sourceLinkText}", "GitHub"],
+    ["sourceUrl", "{HEADER_COPY.sourceUrl}", '"https://github.com/dkdan10/AiLibi"'],
+  ])("names the %s read when the title types it as a literal (planted)", (key, read, literal) => {
+    const [title] = headerSpans(app);
+    const planted = title.replace(read, literal);
+    expect(planted).not.toBe(title);
+    expect(missingHeaderReads(planted)).toEqual([key]);
   });
 
   it("catches the old strip typed back into the header (planted)", () => {

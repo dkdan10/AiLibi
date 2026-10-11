@@ -115,6 +115,18 @@ describe("the shell header", () => {
       "the header says ownership",
     ]);
   });
+
+  it("names the heading when its name changes or another tag carries it (planted)", () => {
+    const renamed = html.replace(">AiLibi</h1>", ">AiLibi Studio</h1>");
+    expect(renamed).not.toBe(html);
+    expect(titleProblems(renamed)).toEqual([
+      "the heading reads AiLibi Studio",
+      `the header reads AiLibi Studio${HEADER_COPY.tagline} · ${HEADER_COPY.sourceLinkText}`,
+    ]);
+    const demoted = html.replace(/<h1\b([^>]*)>AiLibi<\/h1>/, "<h2$1>AiLibi</h2>");
+    expect(demoted).not.toBe(html);
+    expect(titleProblems(demoted)).toEqual(["the heading reads undefined"]);
+  });
 });
 
 describe("the guided tour's welcome step", () => {
