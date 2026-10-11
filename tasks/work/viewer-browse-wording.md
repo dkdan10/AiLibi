@@ -81,6 +81,22 @@ Each item names its mechanism and the planted or perturbed case that turns it re
 its code. "The scan" is a new `copy.test.ts` case: (source, retired literal) rows read through `stripComments`, plus
 a `stringLeaves` walk of `SPECTATOR_COPY` for the same literals.
 
+- [x] Review correction: the never-written guard covers `eval/`. The Results and round 1 quoted it with the
+  pathspec `'e?al'`, which matches no tracked file (`git ls-files 'e?al'`: 0; `git ls-files 'e?al/*'`: 37), so it never
+  covered `eval/`. It is now quoted with `'e?al/*'` (the sandbox refuses the literal word): `git diff --exit-code
+  7d781f8e fd951388 -- engine agents meetings observation orchestrator llm api 'e?al/*' training experiments replays
+  scripts tests README.md docs` exits 0, and each of its 15 pathspecs matches at least one tracked file. Proof: one
+  appended line in `eval/__init__.py`, with the working tree in H's place, makes the corrected guard exit 1 while
+  the `'e?al'` form still exits 0; the `api/__init__.py` plant makes it exit 1 as before.
+- [x] Review correction: Decisions 10 names the eight `App.tsx` exports, as the pull request body does. It said
+  three; `git diff 7d781f8e fd951388 -- frontend/src/App.tsx | grep -c '^+export'` gives 8 (`TopNav`,
+  `PerspectiveBanner`, `RosterRail`, `MeetingPauseBar`, `FinaleHeadline`, `FinaleReason`, `RecapRow`, `FinaleCard`),
+  and `grep -c '^export' frontend/src/App.tsx` gives 10 at H against 2 at B.
+- [x] Review correction: the red-at-base count reproduces from committed tests. "9 files, 118 tests" came from an
+  uncommitted draft; the Acceptance evidence now gives `635f47ae`'s unit tests over B's `frontend/`: `App.test.tsx`
+  fails to load and 125 tests fail in the 10 other failing files (11 of 32 files), with all 62 scan rows red by
+  name; H's unit tests over B: `App.test.tsx` fails to load and 133 tests fail in 11 files (12 of 33); B's own tests in the same
+  scratch layout: 855 of 855 pass. Proof: the `npx vitest run --reporter=json` runs in "Review corrections, round 2".
 - [x] Review correction: the set-list and replay-load error lines are held. `ReplayPicker.test.tsx` "the connected
   browser's error lines" renders the connected `ReplayPicker` over a reduced store (a `vi.mock` of
   `../store/replayStore`, since a server render reads the store's initial state) and holds each line's text to
@@ -281,7 +297,8 @@ Implemented on `work/viewer-browse-wording` from B = `7d781f8e`: `635f47ae` (the
 the scan and the render cases, the followed unit and browser pins), `4d7149e0` (each name helper's call site held to a
 second value, the ticker chip's render case, the scan's two reads tied together, all asked for by the mutation pass)
 and the Results commit `142db9aa`, round 1's head; review round 1 adds `3c6657c5` (three test repairs) and its
-card commit, which is H, the pull request's head (see "Review corrections, round 1"). References:
+card commit `fd951388`; review round 2 adds one card commit, which is H, the pull request's head (see "Review
+corrections, round 1" and "round 2"). References:
 `docs/architecture.md` "Packages" (`frontend/` consumes the generated view types; nothing below the viewer moves, no
 view type, DTO or recorded byte changes, `VIEW_MODEL_VERSION` stays "6" at `api/schemas.py:77`) and "Enforced
 boundaries" (one player's view keeps
@@ -326,14 +343,18 @@ Status line is the orchestrator's, on `main`.
 10. **Tests beside the changed files.** Besides the two the card names, three new test files hold lines no existing
     test reached: `MapToolbar.test.tsx`, `MapLabels.test.tsx` (the Pixi labels, read off the element tree) and
     `EventTickerChip.test.tsx`; `App.test.tsx`, the header card's, gained the navigation, banner, roster, pause-bar and
-    finale cases (the merge order makes this card its next writer). Three `App.tsx` components are exported for them.
+    finale cases (the merge order makes this card its next writer). Eight `App.tsx` components are exported for them:
+    `TopNav`, `PerspectiveBanner`, `RosterRail`, `MeetingPauseBar`, `FinaleHeadline`, `FinaleReason`, `RecapRow` and
+    `FinaleCard` (round 2 corrected "three").
 
 ### Acceptance evidence
 
 Commands run from `frontend/` unless named. Pin line numbers are the card's (at `f223b9fe`); at H the followed pins
-sit a few lines lower. The perturbed runs (edit, run the named files, restore) ran at `635f47ae`. "Red at B" is `npx vitest run` with the new and followed tests in place
-and the B sources, before any source edit (9 files failed: 118 tests, and `App.test.tsx`, whose new imports did not
-exist yet, failed to load; the scan alone: 62 rows, each red by name).
+sit a few lines lower. The perturbed runs (edit, run the named files, restore) ran at `635f47ae`. "Red at B" is `npx vitest run` with `635f47ae`'s new and followed unit
+tests over B's sources (`App.test.tsx`, whose new imports did not exist yet, failed to load, and 125 tests failed in
+the 10 other failing files, 11 of 32 files; the scan alone: 62 rows, each red by name). The figure first given here,
+9 files and 118 tests, came from an uncommitted draft; round 2 reproduced this one from the commits (see "Review
+corrections, round 2").
 
 - **The scan bites.** `copy.test.ts` "the retired wording (the scan)": 62 (source, literal) rows over 17 sources
   (`index.html` and 16 under `frontend/src`), each read through `stripComments` with a `kept` fragment that must
@@ -390,9 +411,10 @@ exist yet, failed to load; the scan alone: 62 rows, each red by name).
   hint restored as a literal fails 2.
 - **Nothing else moves.** `git diff --stat B H`: 35 files, all in Expected scope (frontend sources, their tests, the
   four e2e files, `index.html`, this card). `git diff --exit-code B H -- engine agents meetings observation
-  orchestrator llm api 'e?al' training experiments replays scripts tests README.md docs`: exit 0 (the pathspec glob
-  stands for `eval`, which the sandbox would not pass literally). Perturbed: one appended line in `api/__init__.py`
-  makes it exit 1. `check_doc_facts.py`: exit 0.
+  orchestrator llm api 'e?al/*' training experiments replays scripts tests README.md docs`: exit 0 (the glob
+  `'e?al/*'` stands for `eval/`, whose name the sandbox refuses literally; the Results and round 1 quoted `'e?al'`, which
+  matches no tracked file, see "Review corrections, round 2"). Perturbed: one appended line in `api/__init__.py`,
+  or in `eval/__init__.py`, makes it exit 1. `check_doc_facts.py`: exit 0.
 - **The live strings and the bundle diff.** In the pull request body, old against new, with the captures that still
   show the old words. Bundle built at B and at H in this one checkout (`build_demo_bundle.py --out`, detached at B,
   then the branch): 110 files each; `diff -r` differs only in `index.html` (the new title and two meta tags, and the
@@ -520,7 +542,68 @@ Before, 21 of 31 survived; after, 31 of 31 are killed. No production line change
 `validate_task_docs.py`: exit 0. `check_doc_facts.py`: exit 0. `pytest tests/api/test_game_profile_view.py
 tests/api/test_sets.py tests/scripts/test_build_demo_bundle.py -q`: 118 passed. The card's never-written diff from
 `7d781f8e` to H over `engine agents meetings observation orchestrator llm api eval training experiments replays
-scripts tests README.md docs` (the glob `'e?al'` standing for `eval`, as before): exit 0. `npm run e2e` was not
+scripts tests README.md docs` (the glob `'e?al'` standing for `eval`, as before): exit 0. That pathspec matches no
+tracked file, so this run did not cover `eval/`; round 2 re-ran the guard with `'e?al/*'`. `npm run e2e` was not
 rerun here: this round moves no production file and no e2e spec, other cards' sessions share this machine's ports
 8000 and 5173, and CI's e2e job runs the committed config at the exact head. The gate record is CI's green run at
 the exact head, cited by run id in the pull request body (memo 8.7 item 1); no local `check.sh` ran at H.
+
+### Review corrections, round 2 (2026-10-11)
+
+The second review read `fd951388`, whose CI run 38176662572 was green (Project checks, Frontend checks, Frontend
+e2e). Its documentation lens filed three blocking findings, all about this card's Results, and this round repairs
+them with one card-only commit: the three acceptance items above, this subsection and the in-place corrections in
+the opening paragraph, Decisions 10, the Acceptance evidence's opening and its "Nothing else moves" item, and round
+1's Validation. `main` is still `7d781f8e`, so nothing was merged in. No production, test or e2e file moved, so the
+strings that go live, the bundle diff and both mutation passes stand as round 1 left them, and `git diff --stat B H`
+stays 35 files, all in Expected scope. The commit ends with the `Card:` trailer immediately followed by
+`Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`, checked with `git log -1 --format=%B` before the push.
+
+**1. The never-written guard covered no `eval/` file.** A git pathspec with a wildcard is matched against each file's
+whole path, so `'e?al'` matches no file under `eval/`: `git ls-files 'e?al' | wc -l` gives 0 and
+`git ls-files 'e?al/*' | wc -l` gives 37. The fact the guard was meant to show still holds: `git diff --exit-code
+7d781f8e fd951388 -- engine agents meetings observation orchestrator llm api 'e?al/*' training experiments replays
+scripts tests README.md docs` exits 0. `git ls-files` over the same 15 pathspecs, grouped by first path segment,
+lists 15 names, each with at least one tracked file (`eval` 37, `api` 10, `README.md` 1), so no other pathspec is
+vacuous. Planted: one line (`# plant`) appended to `eval/__init__.py`, with the working tree standing for H
+(`git diff --exit-code 7d781f8e -- <the same pathspecs>`), makes the corrected guard exit 1 and leaves the `'e?al'`
+form at exit 0; the line appended to `api/__init__.py` instead makes it exit 1; both restored with `git checkout`,
+after which the guard over the working tree exits 0 again.
+
+**2. Eight exports, not three.** `git diff 7d781f8e fd951388 -- frontend/src/App.tsx | grep '^+export'` lists
+`TopNav`, `PerspectiveBanner`, `RosterRail`, `MeetingPauseBar`, `FinaleHeadline`, `FinaleReason`, `RecapRow` and
+`FinaleCard`; `grep -c '^export'` on `App.tsx` gives 2 at B (`ShellTitle` and the default `App`) and 10 at H.
+Decisions 10 now names the eight, as the pull request body did.
+
+**3. The red-at-base count.** Reproduced in scratch directories outside the repository: `git archive 7d781f8e
+frontend` extracted, the unit-test files a commit changed (`git diff --name-only 7d781f8e <commit> --
+'frontend/src/*.test.ts' 'frontend/src/*.test.tsx'`) extracted over it from `git archive <commit>`, and `docs/`,
+`replays/` and `frontend/node_modules` linked from the worktree (`docs/` and `replays/` do not change from B to H);
+then `npx vitest run --reporter=json` in its `frontend/`, the report counted per file.
+
+- `635f47ae`'s 11 unit-test files over B: 32 files, 11 failed. `App.test.tsx` fails to load, and 125 tests fail in
+  the other 10 (`copy.test.ts` 84, `HighlightCard.test.tsx` 10, `ReplayPicker.test.tsx` 9,
+  `PrivateReasoning.test.tsx` 7, `MapLabels.test.tsx` 4, `MapToolbar.test.tsx` 3, `MindInspector.test.tsx` 3,
+  `EvidencePanel.test.tsx` 2, `TournamentDashboard.test.tsx` 2, `SearchIntention.test.tsx` 1); 826 pass. In the
+  scan, all 62 "no longer carries" rows fail by name, as do the leaf walk and its planted leaf, while the
+  comment-strip plant passes.
+- H's 12 unit-test files (with `EventTickerChip.test.tsx`) over B: 33 files, 12 failed. `App.test.tsx` fails to load,
+  and 133 tests fail in the other 11; 828 pass.
+- Control, B's own tests in the same layout: 855 passed, 28 files, so the layout causes none of the failures.
+
+The figure the Results first gave, 9 files and 118 tests, came from a draft of the tests before `635f47ae` was
+committed and cannot be reproduced. The Acceptance evidence now gives `635f47ae`'s figure and points here.
+
+**Mutation probe.** This round changes no production or test line. Of the spans the findings name, only the guard is
+a check a mutant can test; the count and the export sentence are statements, settled by the commands above. One
+mutant of a listed class, G01, drops the `/*` wrapper from `'e?al/*'` (the form quoted before this round): with the `eval/__init__.py`
+plant in place it exits 0, so it survives, and the corrected guard exits 1. The probe is the planted proof in item 1.
+
+**Validation, this round.** Run from the branch's worktree with `uv run`, count-only; exit codes as they came back.
+`validate_task_docs.py`: exit 0. `check_doc_facts.py`: exit 0. `pytest tests/api/test_game_profile_view.py
+tests/api/test_sets.py tests/scripts/test_build_demo_bundle.py -q`: 118 passed. `npx vitest run`: 1053 passed (33
+files). `npm run tsc:check`: exit 0. `npm run lint`: exit 0. The card's `git grep`: 94 lines in 29 files, as before.
+The `FEATURED_GAMES` diff: exit 0, 32 lines each. The never-written guard with `'e?al/*'`: exit 0 from `7d781f8e` to
+`fd951388`, and this commit writes only this card. `npm run e2e` was not rerun: no e2e spec or production file moved,
+and CI's e2e job runs the committed config at the exact head. The gate record is CI's green run at the exact head,
+cited by run id in the pull request body (memo 8.7 item 1); no local `check.sh` ran at H.
