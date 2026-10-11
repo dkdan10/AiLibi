@@ -14,18 +14,18 @@ Before is what each set's previously shown recording read.
 
 | What | Figure | Before | Recorded on, and where it lives |
 |---|---|---|---|
-| Sample games that replay byte for byte | 100 of 100 | 100 of 100 | every commit — `bash scripts/verify_samples.sh` |
+| Sample games that replay byte for byte | 100 of 100 (100%) | 100 of 100 (100%) | every commit — `bash scripts/verify_samples.sh` |
 | Observation boundary checks | import rules and planted/recursive leak checks | import rules and planted/recursive leak checks | bounded mechanisms, described below |
-| Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394/397 = 0.9924 | 407/410 = 0.9927 | [process scorecard](process-scorecard.md); a floor: the ballot asks every eject to cite |
-| Crew eject ballots naming someone other than the voter's [top suspect](glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56/291 = 19.2% | 65/292 = 22.3% | [process scorecard](process-scorecard.md) |
-| Ballots with no stated reason (9p2i) | 6/702 = 0.0085 | 11/691 = 0.0159 | [process scorecard](process-scorecard.md) |
-| Ballots whose target is the one their voter wrote (9p2i) | 692/702 = 0.9858; 10 impostor votes against a partner turned into skips | 674/691 = 0.9754 | [process scorecard](process-scorecard.md) |
-| Eject ballots with a valid citation of a statement or sighting (9p2i) | 397 / 397, zero dangling | 410 / 410, zero dangling | the 2026-10-09 record (9p2i) — [instrument](../tests/eval/test_vj_instruments.py) |
+| Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394 of 397 (99%) | 407 of 410 (99%) | [process scorecard](process-scorecard.md); a floor: the ballot asks every eject to cite |
+| Crew eject ballots naming someone other than the voter's [top suspect](glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56 of 291 (19%) | 65 of 292 (22%) | [process scorecard](process-scorecard.md) |
+| Ballots with no stated reason (9p2i) | 6 of 702 (1%) | 11 of 691 (2%) | [process scorecard](process-scorecard.md) |
+| Ballots whose target is the one their voter wrote (9p2i) | 692 of 702 (99%); 10 impostor votes against a partner turned into skips | 674 of 691 (98%) | [process scorecard](process-scorecard.md) |
+| Eject ballots with a valid citation of a statement or sighting (9p2i) | 397 of 397 (100%), zero dangling | 410 of 410 (100%), zero dangling | the 2026-10-09 record (9p2i) — [instrument](../tests/eval/test_vj_instruments.py) |
 | Impostor win rate, sample games | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
-| Impostors among those ejected, with and without proof of their role (9p2i) | 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | the 2026-10-09 record (9p2i) — [the record](../audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](../audits/audit-2026-10-01-stage-b-r2.md) §9.6 |
-| Impostors ejected after a reported sighting of them venting (9p2i) | 24 / 46 = 52% | 24 / 44 = 55% | the 2026-10-09 record (9p2i) — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
-| Impostor ballots cast against a partner (9p2i) | 0 of 198 | 0 of 200 | enforced by the meeting layer, not shown by the model — §3 |
-| Learned behaviours the ML program set out to show | 0 of 14 | 0 of 14 | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
+| Impostors among those ejected, with and without proof of their role (9p2i) | 24 of 24 (100%) vs 22 of 37 (59%) | 24 of 24 (100%) vs 20 of 42 (48%) | the 2026-10-09 record (9p2i) — [the record](../audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](../audits/audit-2026-10-01-stage-b-r2.md) §9.6 |
+| Impostors ejected after a reported sighting of them venting (9p2i) | 24 of 46 (52%) | 24 of 44 (55%) | the 2026-10-09 record (9p2i) — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
+| Impostor ballots cast against a partner (9p2i) | 0 of 198 (0%) | 0 of 200 (0%) | enforced by the meeting layer, not shown by the model — §3 |
+| Learned behaviours the ML program set out to show | 0 of 14 (0%) | 0 of 14 (0%) | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
 | Learned tactical policies that became the default | none, ruled twice | none, ruled twice | [phase 17](../audits/audit-phase-17-close.md), [18](../audits/audit-phase-18-close.md) |
 
 Two of baseline 7's pre-registered bars missed: conviction accuracy without

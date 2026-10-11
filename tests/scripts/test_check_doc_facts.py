@@ -250,7 +250,7 @@ _FINDING_INNOCENT_SECTION_POOLED = "| pooled | 46 | **20** |"
 # The history cell both front-door tables carry for the conviction partition:
 # the 9p2i set's own read on round 2, the recording round 3's promotion replaced
 # (was baseline 9's "70 / 70 = 1.0000 vs 11 / 20 = 0.5500", before it).
-_PREVIOUS_PARTITION_CELL = "24 / 24 = 1.0000 vs 20 / 42 = 0.4762"
+_PREVIOUS_PARTITION_CELL = "24 of 24 (100%) vs 20 of 42 (48%)"
 _ML_PAGE = "docs/ml-program.md"
 _ML_ARM_ROW = "| `ea4bc955…` (put to the bar) | 26/50 = 0.52 | 13/50 = 0.26 |"
 _ML_DROPPED_ARM_ROW = (
@@ -1565,10 +1565,10 @@ def test_glossary_entry_for_an_unused_term_still_required(doc_tree: Path) -> Non
 def test_repeated_results_claim_detected(doc_tree: Path) -> None:
     # A stale row left beside a corrected one would otherwise satisfy the
     # row-by-row comparison while the page shows a reader two numbers.
-    row = "| Sample games that replay byte for byte | 100 of 100 |"
+    row = "| Sample games that replay byte for byte | 100 of 100 (100%) |"
     text = _read(doc_tree, _README)
     assert row in text
-    stale = row.replace("| 100 of 100 |", "| 99 of 100 |")
+    stale = row.replace("| 100 of 100 (100%) |", "| 99 of 100 (99%) |")
     # The stale row carries an empty third cell rather than a worded one: the
     # README sits close enough to its word ceiling that a few words of padding
     # would fire a second, unrelated error beside the drift under test.
@@ -1576,7 +1576,7 @@ def test_repeated_results_claim_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 4
     assert "states 'Sample games that replay byte for byte' twice" in (errors[0])
-    assert "'99 of 100'" in errors[1]
+    assert "'99 of 100 (99%)'" in errors[1]
     # The stale copy is too narrow to reach the history column, so it has no
     # before cell at all — and the page then answers the history question two
     # ways as well.
@@ -1603,12 +1603,15 @@ def test_replay_count_figure_derived_from_the_committed_replays(
 ) -> None:
     # Agreement between the two tables cannot catch a figure edited identically
     # in both, so this row is recomputed from the replay files on disk.
-    _substitute(doc_tree, _README, "| 100 of 100 |", "| 96 of 96 |")
-    _substitute(doc_tree, _READING_GUIDE, "| 100 of 100 |", "| 96 of 96 |")
+    _substitute(doc_tree, _README, "| 100 of 100 (100%) |", "| 96 of 96 (100%) |")
+    _substitute(
+        doc_tree, _READING_GUIDE, "| 100 of 100 (100%) |", "| 96 of 96 (100%) |"
+    )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert any(
-        "'96 of 96'" in error and "100 committed replays" in error for error in errors
+        "'96 of 96 (100%)'" in error and "100 committed replays" in error
+        for error in errors
     )
     # The edit also leaves the row claiming its figure moved from 100 to 96,
     # which nothing owns — the same drift read from the history column.
@@ -1634,18 +1637,18 @@ def test_citation_figure_derived_from_the_committed_instrument(
     _substitute(
         doc_tree,
         _README,
-        "| 397 / 397, zero dangling |",
-        "| 396 / 397, zero dangling |",
+        "| 397 of 397 (100%), zero dangling |",
+        "| 396 of 397 (100%), zero dangling |",
     )
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 397 / 397, zero dangling |",
-        "| 396 / 397, zero dangling |",
+        "| 397 of 397 (100%), zero dangling |",
+        "| 396 of 397 (100%), zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'396 / 397, zero dangling'" in errors[0]
+    assert "'396 of 397 (100%), zero dangling'" in errors[0]
     assert _CITATION_INSTRUMENT in errors[0]
 
 
@@ -1660,7 +1663,7 @@ def test_instrument_pin_move_reaches_the_front_door(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'397 / 397, 3 dangling'" in errors[0]
+    assert "'397 of 397 (100%), 3 dangling'" in errors[0]
 
 
 def test_vent_headline_derived_from_the_crosstab(doc_tree: Path) -> None:
@@ -1671,8 +1674,8 @@ def test_vent_headline_derived_from_the_crosstab(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
-    assert "'24 / 46 = 52%'" in errors[0]
-    assert "'14 / 36 = 39%'" in errors[0]
+    assert "'24 of 46 (52%)'" in errors[0]
+    assert "'14 of 36 (39%)'" in errors[0]
     # ...and the drifted cell is no longer the one the instrument pins.
     assert "cross-tab's 'yes' row reads 14 impostor / 0 innocent" in errors[1]
 
@@ -1716,7 +1719,7 @@ def test_swapped_vent_crosstab_labels_detected(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "'24 / 46 = 52%'" in error and "'22 / 46 = 48%'" in error for error in errors
+        "'24 of 46 (52%)'" in error and "'22 of 46 (48%)'" in error for error in errors
     )
     # The pins name the same swap in their own terms: the flagged row is the
     # one the instrument recorded 24/0 for, whichever way round it is written.
@@ -1749,7 +1752,7 @@ def test_proof_partition_derived_from_the_previous_record(doc_tree: Path) -> Non
     errors = check_doc_facts.check_facts(doc_tree)
     figure = [error for error in errors if _PREVIOUS_PARTITION_CELL in error]
     assert len(figure) == 1
-    assert "'23 / 23 = 1.0000 vs 20 / 42 = 0.4762'" in figure[0]
+    assert "'23 of 23 (100%) vs 20 of 42 (48%)'" in figure[0]
 
 
 def test_summands_split_the_pooled_direct_cell_per_set() -> None:
@@ -1788,7 +1791,7 @@ def test_previous_set_row_reaches_the_before_column(doc_tree: Path) -> None:
         "| `samples/9p2i` | 11/20 = 0.5500 | **21/42 = 0.5000** [0.3336, 0.6228] |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert any("'24 / 24 = 1.0000 vs 21 / 42 = 0.5000'" in error for error in errors)
+    assert any("'24 of 24 (100%) vs 21 of 42 (50%)'" in error for error in errors)
     assert any(
         error.startswith(_PROMOTION_AUDIT)
         and "before cells for samples/9p2i read 20/42" in error
@@ -1817,20 +1820,20 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """| Sample games that replay byte for byte | 100 of 100 | 100 of 100 | every commit — `scripts/verify_samples.sh` |
+        """| Sample games that replay byte for byte | 100 of 100 (100%) | 100 of 100 (100%) | every commit — `scripts/verify_samples.sh` |
 """,
         """| Committed sample replays that reconstruct byte-identically | 100 of 100 | 100 of 100 | every commit — `scripts/verify_samples.sh` |
 """,
     ),
     (
-        """| Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394/397 = 0.9924 | 407/410 = 0.9927 | [process scorecard](docs/process-scorecard.md); a floor: the ballot asks every eject to cite |
-| Crew eject ballots naming someone other than the voter's [top suspect](docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56/291 = 19.2% | 65/292 = 22.3% | [process scorecard](docs/process-scorecard.md) |
-| Ballots with no stated reason (9p2i) | 6/702 = 0.0085 | 11/691 = 0.0159 | [process scorecard](docs/process-scorecard.md) |
-| Ballots whose target is the one their voter wrote (9p2i) | 692/702 = 0.9858; 10 impostor votes against a partner turned into skips | 674/691 = 0.9754 | [process scorecard](docs/process-scorecard.md) |
-| Eject ballots with a valid citation of a statement or sighting (9p2i) | 397 / 397, zero dangling | 410 / 410, zero dangling | the 2026-10-09 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
+        """| Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394 of 397 (99%) | 407 of 410 (99%) | [process scorecard](docs/process-scorecard.md); a floor: the ballot asks every eject to cite |
+| Crew eject ballots naming someone other than the voter's [top suspect](docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56 of 291 (19%) | 65 of 292 (22%) | [process scorecard](docs/process-scorecard.md) |
+| Ballots with no stated reason (9p2i) | 6 of 702 (1%) | 11 of 691 (2%) | [process scorecard](docs/process-scorecard.md) |
+| Ballots whose target is the one their voter wrote (9p2i) | 692 of 702 (99%); 10 impostor votes against a partner turned into skips | 674 of 691 (98%) | [process scorecard](docs/process-scorecard.md) |
+| Eject ballots with a valid citation of a statement or sighting (9p2i) | 397 of 397 (100%), zero dangling | 410 of 410 (100%), zero dangling | the 2026-10-09 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
 | Impostor win rate, sample games | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
-| Impostors among those ejected, with and without proof of their role (9p2i) | 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | the 2026-10-09 record (9p2i) — [the record](audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](audits/audit-2026-10-01-stage-b-r2.md) §9.6; 15 of 15 innocent ejections sit in the no-proof cell |
-| Impostors ejected after a reported sighting of them venting (9p2i) | 24 / 46 = 52% | 24 / 44 = 55% | the 2026-10-09 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
+| Impostors among those ejected, with and without proof of their role (9p2i) | 24 of 24 (100%) vs 22 of 37 (59%) | 24 of 24 (100%) vs 20 of 42 (48%) | the 2026-10-09 record (9p2i) — [the record](audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](audits/audit-2026-10-01-stage-b-r2.md) §9.6; 15 of 15 innocent ejections sit in the no-proof cell |
+| Impostors ejected after a reported sighting of them venting (9p2i) | 24 of 46 (52%) | 24 of 44 (55%) | the 2026-10-09 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
 """,
         """| Impostor win rate, committed samples | 36% (4p1i), 48% (9p2i) | 36% (4p1i), 22% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-01 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
 | Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 410 / 410, zero dangling | 496 / 496, zero dangling | the 2026-10-01 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
@@ -2093,12 +2096,12 @@ def test_four_set_figure_kept_as_the_current_figure_detected(doc_tree: Path) -> 
         _substitute(
             doc_tree,
             document,
-            "| 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 |",
-            "| 326 / 326 = 1.0000 vs 43 / 85 = 0.5059 |",
+            "| 24 of 24 (100%) vs 22 of 37 (59%) |",
+            "| 326 of 326 (100%) vs 43 of 85 (51%) |",
         )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "'24 / 24 = 1.0000 vs 22 / 37 = 0.5946'" in error and _PROMOTION_AUDIT in error
+        "'24 of 24 (100%) vs 22 of 37 (59%)'" in error and _PROMOTION_AUDIT in error
         for error in errors
     )
 
@@ -2113,7 +2116,7 @@ def test_published_partition_derived_from_the_record(doc_tree: Path) -> None:
         "| `samples/9p2i` | 20/42 = 0.4762 | **23/37 = 0.6216** [0.4349, 0.7365] |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert any("'24 / 24 = 1.0000 vs 23 / 37 = 0.6216'" in error for error in errors)
+    assert any("'24 of 24 (100%) vs 23 of 37 (62%)'" in error for error in errors)
     # ...and the record's two published cells now contradict each other.
     assert any(
         error.startswith(_PROMOTION_AUDIT)
@@ -2148,7 +2151,7 @@ def test_record_direct_proof_cell_reaches_the_front_door(doc_tree: Path) -> None
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("1 proof-present innocent ejection(s)" in error for error in errors)
-    assert any("'23 / 24 = 0.9583 vs 22 / 37 = 0.5946'" in error for error in errors)
+    assert any("'23 of 24 (96%) vs 22 of 37 (59%)'" in error for error in errors)
 
 
 def test_missing_record_bar_fails_loud(doc_tree: Path) -> None:
@@ -2986,9 +2989,10 @@ def test_older_recording_date_is_left_alone(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| Learned behaviours the ML program set out to show | 0 of 14 | 0 of 14 |",
-        "| Learned behaviours the ML program set out to show | 0 of 14 | 0 of 14 "
-        "(reference recording 6, 2026-07-20) |",
+        "| Learned behaviours the ML program set out to show | 0 of 14 (0%) | "
+        "0 of 14 (0%) |",
+        "| Learned behaviours the ML program set out to show | 0 of 14 (0%) | "
+        "0 of 14 (0%) (reference recording 6, 2026-07-20) |",
     )
     assert check_doc_facts.check_facts(doc_tree) == []
 
@@ -3001,8 +3005,8 @@ def test_moved_figure_quoted_without_its_baseline_stamp_detected(
     _substitute(
         doc_tree,
         _README,
-        "| 397 / 397, zero dangling | 410 / 410, zero dangling |",
-        "| 397 / 397, zero dangling |",
+        "| 397 of 397 (100%), zero dangling | 410 of 410 (100%), zero dangling |",
+        "| 397 of 397 (100%), zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
@@ -3035,13 +3039,13 @@ def test_before_column_drift_between_the_two_tables_detected(doc_tree: Path) -> 
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 397 / 397, zero dangling | 410 / 410, zero dangling |",
-        "| 397 / 397, zero dangling | 512 / 512, zero dangling |",
+        "| 397 of 397 (100%), zero dangling | 410 of 410 (100%), zero dangling |",
+        "| 397 of 397 (100%), zero dangling | 512 of 512 (100%), zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'410 / 410, zero dangling'" in errors[0]
-    assert "'512 / 512, zero dangling'" in errors[0]
+    assert "'410 of 410 (100%), zero dangling'" in errors[0]
+    assert "'512 of 512 (100%), zero dangling'" in errors[0]
 
 
 def test_before_column_win_rate_held_to_the_record(doc_tree: Path) -> None:
@@ -3224,11 +3228,11 @@ def test_deleted_guide_no_proof_ratio_fails_loud(doc_tree: Path) -> None:
 def test_stale_partner_ballot_denominator_detected(doc_tree: Path) -> None:
     # The teammate-firewall row lives only in the guide, so README agreement
     # cannot reach it; the instrument that counts those ballots owns it.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 |", "| 0 of 197 |")
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 (0%) |", "| 0 of 197 (0%) |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'0 of 197'" in errors[0]
-    assert "pins '0 of 198'" in errors[0]
+    assert "'0 of 197 (0%)'" in errors[0]
+    assert "pins '0 of 198 (0%)'" in errors[0]
 
 
 def test_partner_ballot_row_without_its_pin_fails_loud(doc_tree: Path) -> None:
@@ -3246,7 +3250,12 @@ def test_partner_ballot_row_without_its_pin_fails_loud(doc_tree: Path) -> None:
 
 def test_guide_only_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
     # The guide carries rows the README does not, and they state history too.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 | 0 of 200 |", "| 0 of 198 |  |")
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 0 of 198 (0%) | 0 of 200 (0%) |",
+        "| 0 of 198 (0%) |  |",
+    )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -3258,7 +3267,12 @@ def test_truncated_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
     # Removing the cell AND its delimiter must fail like an emptied one: a row
     # narrower than the header has no history cell, and reading whatever cell
     # happens to sit at the index would check it against the wrong column.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 | 0 of 200 |", "| 0 of 198 |")
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 0 of 198 (0%) | 0 of 200 (0%) |",
+        "| 0 of 198 (0%) |",
+    )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -3271,13 +3285,14 @@ def test_unowned_moved_history_cell_detected(doc_tree: Path) -> None:
     # Either this checker re-derives that value or the row is named as one it
     # only compares — otherwise the two tables can drift together, which is the
     # one failure the before/after column exists to prevent.
-    row = "| 100 of 100 | 100 of 100 |"
-    drifted = "| 100 of 100 | 99 of 100 |"
+    row = "| 100 of 100 (100%) | 100 of 100 (100%) |"
+    drifted = "| 100 of 100 (100%) | 99 of 100 (99%) |"
     _substitute(doc_tree, _README, row, drifted)
     # One-sided first: that is the agreement check's finding, not this one.
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'99 of 100'" in errors[0] and "records '100 of 100'" in errors[0]
+    assert "'99 of 100 (99%)'" in errors[0]
+    assert "records '100 of 100 (100%)'" in errors[0]
     # Made in BOTH tables it survives agreement, and only this check sees it —
     # no row is exempt, including the ones whose FIGURE is re-derived, because
     # deriving today's count says nothing about the one before it.
@@ -3285,7 +3300,7 @@ def test_unowned_moved_history_cell_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "states a moved figure" in errors[0]
-    assert "'99 of 100'" in errors[0]
+    assert "'99 of 100 (99%)'" in errors[0]
 
 
 def test_verdict_rate_that_contradicts_its_own_fraction_detected(
@@ -4395,7 +4410,7 @@ def test_history_cell_naming_the_recording_before_the_previous_one_detected(
     # holding the value from the recording BEFORE that — correct once, and
     # still internally consistent between the two tables — has to fail.
     # baseline 9's read (was baseline 8's "68 / 68 = 1.0000 vs 14 / 27 = 0.5185")
-    stale = "70 / 70 = 1.0000 vs 11 / 20 = 0.5500"
+    stale = "70 of 70 (100%) vs 11 of 20 (55%)"
     for document in (_README, _READING_GUIDE):
         _substitute(doc_tree, document, _PREVIOUS_PARTITION_CELL, stale)
     errors = check_doc_facts.check_facts(doc_tree)
@@ -5769,26 +5784,26 @@ def test_a_process_numerator_edited_in_both_tables_detected(doc_tree: Path) -> N
     # Planted: the same wrong numerator in both tables, so agreement holds and
     # only the page can refuse it.
     for document in (_README, _READING_GUIDE):
-        _substitute(doc_tree, document, "| 394/397 = 0.9924 |", "| 393/397 = 0.9924 |")
+        _substitute(doc_tree, document, "| 394 of 397 (99%) |", "| 393 of 397 (99%) |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     for document, error in zip((_README, _READING_GUIDE), errors):
         assert error.startswith(f"{document}: the results row {_GROUNDED_CLAIM!r}")
-        assert "reads '393/397 = 0.9924'" in error
-        assert f"{_SCORECARD_SOURCE} recomputes to '394/397 = 0.9924'" in error
+        assert "reads '393 of 397 (99%)'" in error
+        assert f"{_SCORECARD_SOURCE} recomputes to '394 of 397 (99%)'" in error
 
 
 def test_a_process_before_cell_edited_in_both_tables_detected(doc_tree: Path) -> None:
     # Planted: round 2's deviating count moved by one in both history cells.
     for document in (_README, _READING_GUIDE):
-        _substitute(doc_tree, document, "| 65/292 = 22.3% |", "| 64/292 = 22.3% |")
+        _substitute(doc_tree, document, "| 65 of 292 (22%) |", "| 64 of 292 (22%) |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     for document, error in zip((_README, _READING_GUIDE), errors):
         assert error.startswith(
             f"{document}: the 'Before' cell of results row {_DEVIATING_CLAIM!r}"
         )
-        assert f"{_SCORECARD_SOURCE} recomputes to '65/292 = 22.3%'" in error
+        assert f"{_SCORECARD_SOURCE} recomputes to '65 of 292 (22%)'" in error
 
 
 def test_a_scorecard_value_moved_under_an_unchanged_front_door_detected(
@@ -5805,7 +5820,7 @@ def test_a_scorecard_value_moved_under_an_unchanged_front_door_detected(
     assert len(errors) == 2
     for document, error in zip((_README, _READING_GUIDE), errors):
         assert error.startswith(f"{document}: the results row {_UNEXPLAINED_CLAIM!r}")
-        assert "recomputes to '7/702 = 0.0100'" in error
+        assert "recomputes to '7 of 702 (1%)'" in error
 
 
 def test_a_deleted_process_row_detected(doc_tree: Path) -> None:
@@ -5920,7 +5935,7 @@ def test_the_teammate_count_edited_in_both_tables_detected(doc_tree: Path) -> No
     for document, error in zip((_README, _READING_GUIDE), errors):
         assert error.startswith(f"{document}: the results row {_AUTHORED_CLAIM!r}")
         assert (
-            "recomputes to '692/702 = 0.9858; 10 impostor votes against a partner "
+            "recomputes to '692 of 702 (99%); 10 impostor votes against a partner "
             "turned into skips'"
         ) in error
 
@@ -6056,7 +6071,7 @@ def test_a_page_with_no_typed_rewrites_reads_a_zero_count(doc_tree: Path) -> Non
     assert len(errors) == 2
     assert all(f"results row {_AUTHORED_CLAIM!r}" in error for error in errors)
     assert all(
-        "'692/702 = 0.9858; 0 impostor votes against a partner turned into skips'"
+        "'692 of 702 (99%); 0 impostor votes against a partner turned into skips'"
         in error
         for error in errors
     )
@@ -6268,3 +6283,147 @@ def test_an_integrity_row_moved_below_the_process_rows_detected(
             f"{document}: the integrity row {integrity!r} sits below the process "
             f"row {_GROUNDED_CLAIM!r}"
         )
+
+
+# ── one number style in both results tables ──────────────────────────────────
+#
+# Every fraction in a figure or before cell reads "k of n (p%)", the percentage
+# rounded as the win rates are. One helper renders the form for every derived
+# cell; the style rule refuses the forms it replaced in any cell of either table.
+
+
+@pytest.mark.parametrize(
+    ("numerator", "denominator", "figure"),
+    [
+        (394, 397, "394 of 397 (99%)"),
+        (56, 291, "56 of 291 (19%)"),
+        (6, 702, "6 of 702 (1%)"),
+        (0, 198, "0 of 198 (0%)"),
+        (24, 24, "24 of 24 (100%)"),
+        # Rounded as the win rates are, round(100 * k / n): half to even.
+        (1, 8, "1 of 8 (12%)"),
+        (3, 8, "3 of 8 (38%)"),
+    ],
+)
+def test_one_helper_renders_each_fraction(
+    numerator: int, denominator: int, figure: str
+) -> None:
+    assert check_doc_facts.fraction_figure(numerator, denominator) == figure
+
+
+def test_a_fraction_over_no_population_raises() -> None:
+    with pytest.raises(ValueError, match="no population"):
+        check_doc_facts.fraction_figure(0, 0)
+
+
+@pytest.mark.parametrize(
+    ("cell", "figure"),
+    [
+        ("394/397 = 0.9924", "394 of 397 (99%)"),
+        ("56/291 = 19.2%", "56 of 291 (19%)"),
+        (" 11/691 = 0.0159 ", "11 of 691 (2%)"),
+    ],
+)
+def test_a_scorecard_cell_is_restated_in_the_tables_form(
+    cell: str, figure: str
+) -> None:
+    assert check_doc_facts.scorecard_fraction(cell) == figure
+
+
+@pytest.mark.parametrize(
+    "cell", ["394 / 397 = 0.9924", "394/397", "0.9924", "394 of 397 (99%)", ""]
+)
+def test_a_scorecard_cell_of_another_shape_is_refused(cell: str) -> None:
+    with pytest.raises(check_doc_facts.ScorecardPageError, match="is not a 'k/n"):
+        check_doc_facts.scorecard_fraction(cell)
+
+
+def test_a_partition_cell_is_two_fractions_in_the_tables_form() -> None:
+    assert (
+        check_doc_facts.partition_figure((24, 24), (22, 37))
+        == "24 of 24 (100%) vs 22 of 37 (59%)"
+    )
+
+
+def test_a_wrong_percentage_fails_by_row(doc_tree: Path) -> None:
+    # Planted: the cited-eject figure with its percentage off by one, in the
+    # README only. The style rule names the row and the percentage it reads.
+    _substitute(doc_tree, _README, "| 394 of 397 (99%) |", "| 394 of 397 (98%) |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    style = [error for error in errors if "that fraction reads" in error]
+    assert style == [
+        f"{_README}: the results row {_GROUNDED_CLAIM!r} states '394 of 397 (98%)', "
+        "but that fraction reads '394 of 397 (99%)' — both tables carry each "
+        "fraction's percentage, rounded as the win rates are."
+    ]
+    # ...and the process row and the agreement check see the same edit.
+    assert any("recomputes to '394 of 397 (99%)'" in error for error in errors)
+    assert any("records '394 of 397 (99%)'" in error for error in errors)
+
+
+def test_a_fraction_without_its_percentage_fails(doc_tree: Path) -> None:
+    # Planted: a guide-only cell, compared with nothing, losing its percentage.
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 0 of 14 (0%) | 0 of 14 (0%) |",
+        "| 0 of 14 (0%) | 0 of 14 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{_READING_GUIDE}: the results row 'Learned behaviours the ML program set "
+        "out to show' states '0 of 14', but that fraction reads '0 of 14 (0%)' — "
+        "both tables carry each fraction's percentage, rounded as the win rates are."
+    ]
+
+
+def test_the_vent_before_cell_in_its_old_form_fails_the_rule(doc_tree: Path) -> None:
+    # Planted: the vent row's before cell put back as "24 / 44 = 55%" in both
+    # tables. The cell is only compared between the tables, so agreement holds,
+    # and only the style rule refuses it, once per table.
+    for document in (_README, _READING_GUIDE):
+        _substitute(doc_tree, document, "| 24 of 44 (55%) |", "| 24 / 44 = 55% |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{document}: the results row 'Impostors ejected after a reported sighting "
+        "of them venting (9p2i)' writes '24 / 44' — both tables state a fraction "
+        "as 'k of n (p%)' and print no decimal rate."
+        for document in (_README, _READING_GUIDE)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("cell", "retired"),
+    [
+        ("0/14", "0/14"),
+        ("0 / 14", "0 / 14"),
+        ("0 of 14 (0%) = 0.0000", "= 0.0000"),
+    ],
+)
+def test_each_retired_number_form_is_refused(
+    doc_tree: Path, cell: str, retired: str
+) -> None:
+    # Planted in a cell no other check reads: the guide-only row's before cell.
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 0 of 14 (0%) | 0 of 14 (0%) |",
+        f"| 0 of 14 (0%) | {cell} |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(f"writes {retired!r}" in error for error in errors), errors
+
+
+def test_a_retired_form_in_the_source_column_is_refused_too(doc_tree: Path) -> None:
+    # The refusal reads every value cell, not only the two fraction columns.
+    _substitute(
+        doc_tree,
+        _README,
+        "15 of 15 innocent ejections sit in the no-proof cell",
+        "15 of 15 innocent ejections sit in the no-proof cell (15/15)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{_README}: the results row {_PROOF_CLAIM!r} writes '15/15' — both tables "
+        "state a fraction as 'k of n (p%)' and print no decimal rate."
+    ]

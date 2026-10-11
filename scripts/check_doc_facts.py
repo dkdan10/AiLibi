@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Twenty-two checks. Each accumulates precise errors; all of them are reported
+Twenty-three checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -205,6 +205,11 @@ together, so one run names every drifted fact rather than the first.
     before column must name the era the shown set's recording replaced. The two
     integrity rows open both tables, the four follow, and every other row sits
     below all four.
+23. **Both results tables state a fraction one way.** Every fraction in a
+    figure or before cell reads ``k of n (p%)``, the percentage rounded as the
+    win rates are (``round(100 * k / n)``); one helper renders that form for
+    every derived cell, and the forms it replaced (``k/n``, ``k / n`` and a
+    printed ``= 0.…`` rate) are refused in any cell of either table.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -615,7 +620,10 @@ _VENT_ROW_MEETINGS: Final = re.compile(r"\|\s*(yes|no)\s*\((\d+) meetings\)")
 # the recording. The zero is the firewall holding; the total is a pinned count
 # of the impostor ballots it held over.
 _PARTNER_BALLOT_CLAIM: Final = "Impostor ballots cast against a partner (9p2i)"
-_PARTNER_BALLOT_FIGURE: Final = "0 of {total}"
+# None is cast: the firewall rewrites every ballot naming a partner to a skip,
+# so the row's numerator is that zero, and the pin's own first count is the
+# ballots the model wrote naming one before the rewrite.
+_PARTNER_BALLOTS_CAST: Final = 0
 _PARTNER_BALLOT_PIN: Final = re.compile(
     r"samples\.model_partner_naming_ballots,\s*samples\.impostor_ballots\)\s*"
     r"==\s*\(\d+,\s*(\d+)\)"
@@ -776,6 +784,15 @@ _QUOTED_BEFORE_CLAIMS: Final[frozenset[str]] = frozenset(
         _PARTNER_BALLOT_CLAIM,
     }
 )
+# The one form both results tables state a fraction in, ``k of n (p%)``, read
+# with its percentage when it carries one; and the forms it replaced, refused in
+# any cell of either table: a slash between two counts, or a printed decimal
+# rate after an equals sign.
+_TABLE_FRACTION: Final = re.compile(r"\b(\d+) of (\d+)\b(?: \((\d+)%\))?")
+_RETIRED_NUMBER_FORM: Final = re.compile(r"\d+\s*/\s*\d+|=\s*\d*\.\d+")
+# A scorecard page cell as the generated page prints it, ``k/n = rate``; its two
+# counts are what the tables restate in their own form.
+_SCORECARD_FRACTION: Final = re.compile(r"\A(\d+)/(\d+) = \d*\.?\d+%?\Z")
 # A whole integer, so a count is matched as a number and not as a run of digits
 # inside a longer one.
 _WHOLE_NUMBER: Final = re.compile(r"\b\d+\b")
@@ -2970,6 +2987,67 @@ def check_results_agreement(repo_root: Path, readme: str, errors: list[str]) -> 
                 "same claim."
             )
     check_before_columns(readme, guide, errors)
+    for document, text in ((_README, readme), (_READING_GUIDE, guide)):
+        check_number_style(document, text, errors)
+
+
+def check_number_style(document: str, markdown: str, errors: list[str]) -> None:
+    """Every fraction in the results table, stated one way: ``k of n (p%)``.
+
+    The figure and before cells carry the fractions, so each ``k of n`` in them
+    must be followed by its percentage, rounded as :func:`fraction_figure`
+    rounds it. Every value cell of the table (all but the claim) is also read
+    for the forms that one style replaced, ``k/n``, ``k / n`` and a printed
+    ``= 0.…`` rate, so a cell this module only compares between the two tables
+    cannot keep an old form the derived cells have left.
+    """
+
+    header: list[str] | None = None
+    for line in markdown.splitlines():
+        cells = table_cells(line)
+        if cells is None or len(cells) < 2:
+            if header is not None:
+                break
+            continue
+        if header is None:
+            if tuple(cells[:2]) == _RESULTS_TABLE_HEADER:
+                header = [strip_links(cell) for cell in cells]
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        claim = strip_links(cells[0])
+        for cell in cells[1:]:
+            retired = _RETIRED_NUMBER_FORM.search(strip_links(cell))
+            if retired is not None:
+                errors.append(
+                    f"{document}: the results row {claim!r} writes "
+                    f"{retired.group(0)!r} — both tables state a fraction as "
+                    "'k of n (p%)' and print no decimal rate."
+                )
+        fractions = [
+            cells[index]
+            for index, name in enumerate(header)
+            if name in (_RESULTS_TABLE_HEADER[1], _BEFORE_COLUMN_HEADER)
+            and index < len(cells)
+        ]
+        for cell in fractions:
+            for match in _TABLE_FRACTION.finditer(strip_links(cell)):
+                numerator, denominator = int(match.group(1)), int(match.group(2))
+                stated = match.group(0)
+                if denominator <= 0:
+                    errors.append(
+                        f"{document}: the results row {claim!r} states "
+                        f"{stated!r}, a fraction over no population."
+                    )
+                    continue
+                expected = fraction_figure(numerator, denominator)
+                if stated != expected:
+                    errors.append(
+                        f"{document}: the results row {claim!r} states "
+                        f"{stated!r}, but that fraction reads {expected!r} — "
+                        "both tables carry each fraction's percentage, rounded "
+                        "as the win rates are."
+                    )
 
 
 def check_before_columns(readme: str, guide: str, errors: list[str]) -> None:
@@ -3110,7 +3188,7 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
         compare_result_figure(
             _REPLAY_COUNT_CLAIM,
             figures,
-            f"{replays} of {replays}",
+            fraction_figure(replays, replays),
             f"the {replays} committed replays under replays/samples/",
             errors,
         )
@@ -3128,7 +3206,8 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
             dangling = (
                 pins["turn_citations_dangling"] + pins["observation_citations_dangling"]
             )
-            expected = f"{pins['cited_eject_ballots']} / {pins['eject_ballots']}, " + (
+            cited = fraction_figure(pins["cited_eject_ballots"], pins["eject_ballots"])
+            expected = f"{cited}, " + (
                 "zero dangling" if dangling == 0 else f"{dangling} dangling"
             )
             compare_result_figure(
@@ -3151,7 +3230,7 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
         else:
             (flagged, _), (unflagged, _) = crosstab
             correct = flagged + unflagged
-            expected = f"{flagged} / {correct} = {round(100 * flagged / correct)}%"
+            expected = fraction_figure(flagged, correct)
             compare_result_figure(
                 _VENT_CLAIM,
                 figures,
@@ -3254,7 +3333,8 @@ def check_process_rows(repo_root: Path, readme: str, errors: list[str]) -> None:
     The front door leads with how each vote was cast: on a line its voter held,
     with or against its own top suspect, with a reason, and as its voter wrote
     it. Each row's figure and before cell, in BOTH results tables, is the shown
-    set's own cell on ``docs/process-scorecard.md`` — the generated markdown,
+    set's own cell on ``docs/process-scorecard.md``, restated in the tables'
+    ``k of n (p%)`` form (:func:`scorecard_fraction`) — the generated markdown,
     which ``scripts/publish_process_scorecard.py --check`` recomputes from the
     recordings — and its before cell is the page's frozen before column, the
     block of the era the shown set's recording replaced. The authored share
@@ -3275,13 +3355,19 @@ def check_process_rows(repo_root: Path, readme: str, errors: list[str]) -> None:
     try:
         replaced = replaced_era(era_of(path))
         cells = scorecard_process_cells(page, label, replaced.id)
+        expected = {
+            claim: (
+                scorecard_fraction(cells.rows[row][0]),
+                scorecard_fraction(cells.rows[row][1]),
+            )
+            for claim, row in _PROCESS_ROWS
+        }
     except (KeyError, ScorecardPageError) as error:
         errors.append(
             f"{_SCORECARD_PAGE}: {error.args[0]} — the four process rows the "
             "results tables lead with have no committed source to be held to."
         )
         return
-    expected = {claim: cells.rows[row] for claim, row in _PROCESS_ROWS}
     value, before = expected[_AUTHORED_CLAIM]
     expected[_AUTHORED_CLAIM] = (
         f"{value}; {coerced_clause(cells.teammate_coerced)}",
@@ -3532,10 +3618,38 @@ def set_before_cells(audit: str, label: str) -> tuple[tuple[int, int], int] | No
 def partition_figure(proof: tuple[int, int], non_proof: tuple[int, int]) -> str:
     """One conviction-partition cell, as the front door states it."""
 
-    return (
-        f"{proof[0]} / {proof[1]} = {proof[0] / proof[1]:.4f} vs "
-        f"{non_proof[0]} / {non_proof[1]} = {non_proof[0] / non_proof[1]:.4f}"
-    )
+    return f"{fraction_figure(*proof)} vs {fraction_figure(*non_proof)}"
+
+
+def fraction_figure(numerator: int, denominator: int) -> str:
+    """One fraction as both results tables state it: ``k of n (p%)``.
+
+    The percentage is rounded the way the win rates are, ``round(100 * k / n)``,
+    so every percentage the tables print follows one rule. A fraction over no
+    population has no percentage and raises rather than printing one.
+    """
+
+    if denominator <= 0:
+        raise ValueError(
+            f"{numerator} of {denominator}: a fraction over no population has no "
+            "percentage to state"
+        )
+    return f"{numerator} of {denominator} ({round(100 * numerator / denominator)}%)"
+
+
+def scorecard_fraction(cell: str) -> str:
+    """A scorecard page cell, ``k/n = rate``, restated as the tables state it.
+
+    The page is generated and stays as it is printed; its two counts are read
+    and handed to :func:`fraction_figure`. Raises :class:`ScorecardPageError`
+    for a cell of any other shape, so a page format change is named rather than
+    read around.
+    """
+
+    match = _SCORECARD_FRACTION.match(cell.strip())
+    if match is None:
+        raise ScorecardPageError(f"the cell {cell!r} is not a 'k/n = rate' fraction")
+    return fraction_figure(int(match.group(1)), int(match.group(2)))
 
 
 def check_record_partition_arithmetic(
@@ -4285,7 +4399,7 @@ def check_partner_ballot_row(repo_root: Path, guide: str, errors: list[str]) -> 
         return
     rows = results_rows(guide)
     figures = dict(rows) if rows is not None else {}
-    expected = _PARTNER_BALLOT_FIGURE.format(total=pin.group(1))
+    expected = fraction_figure(_PARTNER_BALLOTS_CAST, int(pin.group(1)))
     stated = figures.get(_PARTNER_BALLOT_CLAIM)
     if stated is None:
         errors.append(
