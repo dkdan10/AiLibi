@@ -26,6 +26,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DASHBOARD_COPY,
+  HEADER_COPY,
   MAP_COPY,
   PICKER_COPY,
   PROFILE_COPY,
@@ -515,6 +516,262 @@ describe("the public results tab's ejection heading", () => {
     expect(correctEjectionLeaves(sentence, "PUBLIC_RESULTS_COPY")).toEqual([
       "PUBLIC_RESULTS_COPY.ejectionsDescription",
     ]);
+  });
+});
+
+// ── the header's and the tour's source link ──────────────────────────────────
+//
+// The header reads the name, the tagline and one link to the repository, and
+// the guided tour's welcome step keeps the same link in plain words; the
+// attribution line both used to carry is gone. Their words live in
+// `HEADER_COPY`, so the attribution's words are refused anywhere in the copy
+// tree, and the two places that typed them inline carry no prose of their own.
+
+/**
+ * The removed attribution line's words, refused anywhere a viewer reads copy.
+ * "directed by" is bounded so the ballot label "Vote redirected by the meeting
+ * rule" is not mistaken for it.
+ */
+const ATTRIBUTION_WORDS = /\bdirected by|Claude Code|Codex|AI-reviewed|ownership/i;
+
+/** The path of every string leaf in `tree` that carries an attribution word. */
+function attributionLeaves(tree: unknown, path: string): readonly string[] {
+  return stringLeaves(tree, path)
+    .filter((leaf) => ATTRIBUTION_WORDS.test(leaf.text))
+    .map((leaf) => leaf.path);
+}
+
+/** Class names are styling, not copy, so a span sets them aside first. */
+function bareSpan(span: string): string {
+  return span.replace(/className="[^"]*"/g, "");
+}
+
+/**
+ * The header's title block and the shell's `<header>` that mounts it (the
+ * workspace's mode banner is a `<header>` too, so the shell's is found inside
+ * `App`).
+ */
+function headerSpans(source: string): readonly [string, string] {
+  const titleStart = source.indexOf("export function ShellTitle(");
+  const titleEnd = source.indexOf("\n}\n", titleStart);
+  const app = source.indexOf("export default function App(");
+  const headerStart = source.indexOf("<header", app);
+  const headerEnd = source.indexOf("</header>", headerStart);
+  if (
+    titleStart < 0 ||
+    titleEnd <= titleStart ||
+    app < 0 ||
+    headerStart < 0 ||
+    headerEnd <= headerStart
+  ) {
+    throw new Error("the header moved");
+  }
+  return [
+    bareSpan(source.slice(titleStart, titleEnd)),
+    bareSpan(source.slice(headerStart, headerEnd)),
+  ];
+}
+
+/** The copy keys the title block reads, each as a `HEADER_COPY` read. */
+const HEADER_READS: readonly (keyof typeof HEADER_COPY)[] = [
+  "tagline",
+  "sourceLinkText",
+  "sourceUrl",
+];
+
+/** The `HEADER_COPY` reads missing from the title block; empty when it reads all three. */
+function missingHeaderReads(title: string): readonly string[] {
+  return HEADER_READS.filter((key) => !title.includes(`HEADER_COPY.${key}`));
+}
+
+/** The tour's welcome step, and the one link inside it. */
+function welcomeSpans(source: string): readonly [string, string] {
+  const stepStart = source.indexOf("export const STEPS");
+  const stepEnd = source.indexOf('title: "Perspective switcher', stepStart);
+  const step = source.slice(stepStart, stepEnd);
+  const linkStart = step.indexOf("<a ");
+  const linkEnd = step.indexOf("</a>", linkStart);
+  if (stepStart < 0 || stepEnd <= stepStart || linkStart < 0 || linkEnd <= linkStart) {
+    throw new Error("the welcome step moved");
+  }
+  return [bareSpan(step), bareSpan(step.slice(linkStart, linkEnd + "</a>".length))];
+}
+
+/**
+ * What the header's two spans carry beyond copy reads: each prose literal,
+ * named by the span that types it, then the first attribution word either span
+ * says. Empty when every word is a copy read.
+ */
+function headerSpanProblems(title: string, header: string): readonly string[] {
+  const problems = [
+    ...proseLiterals(title).map((text) => `the title block types ${text}`),
+    ...proseLiterals(header).map((text) => `the shell header types ${text}`),
+  ];
+  const hit = ATTRIBUTION_WORDS.exec(title + header);
+  if (hit !== null) problems.push(`the header says ${hit[0]}`);
+  return problems;
+}
+
+/**
+ * What the welcome step of a tour source carries beyond copy reads: each prose
+ * literal its link types, then the first attribution word anywhere in the step,
+ * inside the link or outside it. Empty when the step says none. The helper cuts
+ * both spans from the source itself, so no caller can hand it one span in the
+ * other's place.
+ */
+function welcomeSpanProblems(source: string): readonly string[] {
+  const [step, link] = welcomeSpans(source);
+  const problems = proseLiterals(link).map((text) => `the link types ${text}`);
+  const hit = ATTRIBUTION_WORDS.exec(step);
+  if (hit !== null) problems.push(`the step says ${hit[0]}`);
+  return problems;
+}
+
+/**
+ * The attribution strip's two lines, as a planted case types them beside the
+ * title block (class names set aside): the first is a prose text node, the
+ * second runs into its link, so only the word check names it.
+ */
+const OLD_STRIP_PROSE = "<p>Recorded AI social deduction · directed by Daniel Keinan</p>";
+const OLD_STRIP_LINE =
+  '<p>Code and supporting material by Claude Code and Codex · AI-reviewed · <a href="https://github.com/dkdan10/AiLibi" target="_blank" rel="noreferrer">Source & ownership</a></p>';
+
+describe("the header's and the tour's source link", () => {
+  const app = stripComments(readFileSync(resolve(LIB_DIR, "../App.tsx"), "utf8"));
+  const tour = stripComments(
+    readFileSync(resolve(LIB_DIR, "../components/GuidedTour.tsx"), "utf8"),
+  );
+
+  it("holds the tagline, the two link texts and the repository", () => {
+    expect(HEADER_COPY).toEqual({
+      tagline: "Recorded AI social deduction",
+      sourceLinkText: "GitHub",
+      tourSourceLinkText: "Read the source on GitHub.",
+      sourceUrl: "https://github.com/dkdan10/AiLibi",
+    });
+  });
+
+  it("carries no attribution word anywhere in SPECTATOR_COPY", () => {
+    expect(stringLeaves(SPECTATOR_COPY, "SPECTATOR_COPY").length).toBeGreaterThan(20);
+    expect(attributionLeaves(SPECTATOR_COPY, "SPECTATOR_COPY")).toEqual([]);
+  });
+
+  it.each([
+    "directed by Daniel Keinan",
+    "code by Claude Code",
+    "and Codex",
+    "AI-reviewed",
+    "Source & ownership",
+  ])("catches %s restored as a copy value, naming the key (planted)", (words) => {
+    const planted = {
+      ...SPECTATOR_COPY,
+      header: { ...HEADER_COPY, tagline: `${HEADER_COPY.tagline} · ${words}` },
+    };
+    expect(attributionLeaves(planted, "SPECTATOR_COPY")).toEqual([
+      "SPECTATOR_COPY.header.tagline",
+    ]);
+  });
+
+  it("walks the whole tree, not only the header group (planted)", () => {
+    const planted = {
+      ...SPECTATOR_COPY,
+      dashboard: { ...DASHBOARD_COPY, intro: "Directed by Daniel Keinan." },
+    };
+    expect(attributionLeaves(planted, "SPECTATOR_COPY")).toEqual([
+      "SPECTATOR_COPY.dashboard.intro",
+    ]);
+    // A list leaf is named by its index, so a word inside one points at its slot.
+    expect(attributionLeaves({ lines: ["GitHub", "AI-reviewed"] }, "TREE")).toEqual([
+      "TREE.lines[1]",
+    ]);
+  });
+
+  it("lets a ballot that was redirected by the meeting rule through", () => {
+    expect(attributionLeaves({ ballot: "Vote redirected by the meeting rule" }, "TREE")).toEqual(
+      [],
+    );
+  });
+
+  it("renders the header's words from the copy", () => {
+    const [title, header] = headerSpans(app);
+    expect(header).toContain("<ShellTitle />");
+    expect(missingHeaderReads(title)).toEqual([]);
+    expect(headerSpanProblems(title, header)).toEqual([]);
+  });
+
+  it.each([
+    ["tagline", "{HEADER_COPY.tagline}", "Recorded AI social deduction"],
+    ["sourceLinkText", "{HEADER_COPY.sourceLinkText}", "GitHub"],
+    ["sourceUrl", "{HEADER_COPY.sourceUrl}", '"https://github.com/dkdan10/AiLibi"'],
+  ])("names the %s read when the title types it as a literal (planted)", (key, read, literal) => {
+    const [title] = headerSpans(app);
+    const planted = title.replace(read, literal);
+    expect(planted).not.toBe(title);
+    expect(missingHeaderReads(planted)).toEqual([key]);
+  });
+
+  it("catches the old strip typed back into the title block (planted)", () => {
+    const [title, header] = headerSpans(app);
+    const literal = title.replace(
+      "{HEADER_COPY.tagline}",
+      "Recorded AI social deduction · directed by Daniel Keinan",
+    );
+    expect(literal).not.toBe(title);
+    expect(headerSpanProblems(literal, header)).toEqual([
+      "the title block types Recorded AI social deduction · directed by Daniel Keinan",
+      "the header says directed by",
+    ]);
+    const link = title.replace("{HEADER_COPY.sourceLinkText}", "Source & ownership");
+    expect(link).not.toBe(title);
+    expect(headerSpanProblems(link, header)).toEqual(["the header says ownership"]);
+  });
+
+  it("catches the old strip typed into the shell header beside the title block (planted)", () => {
+    const [title, header] = headerSpans(app);
+    const strip = header.replace(
+      "<ShellTitle />",
+      `<ShellTitle />${OLD_STRIP_PROSE}${OLD_STRIP_LINE}`,
+    );
+    expect(strip).not.toBe(header);
+    expect(headerSpanProblems(title, strip)).toEqual([
+      "the shell header types Recorded AI social deduction · directed by Daniel Keinan",
+      "the header says directed by",
+    ]);
+    const line = header.replace("<ShellTitle />", `<ShellTitle />${OLD_STRIP_LINE}`);
+    expect(line).not.toBe(header);
+    expect(headerSpanProblems(title, line)).toEqual(["the header says Claude Code"]);
+    const prose = header.replace("<ShellTitle />", "<ShellTitle /><p>Watch saved games</p>");
+    expect(prose).not.toBe(header);
+    expect(headerSpanProblems(title, prose)).toEqual([
+      "the shell header types Watch saved games",
+    ]);
+  });
+
+  it("renders the welcome step's one link from the copy", () => {
+    const [step, link] = welcomeSpans(tour);
+    expect(step.split("<a ")).toHaveLength(2);
+    expect(link).toContain("HEADER_COPY.sourceUrl");
+    expect(link).toContain("HEADER_COPY.tourSourceLinkText");
+    expect(welcomeSpanProblems(tour)).toEqual([]);
+  });
+
+  it("catches the old link text, or the old sentence, typed back into the step (planted)", () => {
+    const literal = tour.replace(
+      "{HEADER_COPY.tourSourceLinkText}",
+      "Read the source and ownership case study.",
+    );
+    expect(literal).not.toBe(tour);
+    expect(welcomeSpanProblems(literal)).toEqual([
+      "the link types Read the source and ownership case study.",
+      "the step says ownership",
+    ]);
+    // The old sentence sits outside the link, so only the step-wide word check reaches it.
+    const sentence = tour.replace(
+      "not making live model calls.",
+      "not making live model calls. Daniel Keinan directs the project; Claude Code and Codex agents write code and supporting material, with separate AI review.",
+    );
+    expect(sentence).not.toBe(tour);
+    expect(welcomeSpanProblems(sentence)).toEqual(["the step says Claude Code"]);
   });
 });
 

@@ -48,6 +48,7 @@ import {
 } from "./components/ReplayControls";
 import { ThoughtStream } from "./components/ThoughtStream";
 import { usePlayback, usePlaybackEngine } from "./hooks/usePlayback";
+import { HEADER_COPY } from "./lib/copy";
 import { OMNISCIENT, type ViewId } from "./lib/playback";
 import { useReplayStore } from "./store/replayStore";
 import type { FinaleAgentRecapView, FinaleEventView } from "./types/api";
@@ -196,6 +197,22 @@ function KeyboardTransport() {
     };
   }, []);
   return null;
+}
+
+// The shell's title block: the name, the tagline and one link to the source.
+// Each text sits in its own element, so a literal typed in place of the copy is
+// a text node the copy test can see.
+export function ShellTitle() {
+  return (
+    <div>
+      <h1 className="text-2xl">AiLibi</h1>
+      <p className="text-xs text-ink-500">
+        <span>{HEADER_COPY.tagline}</span>
+        <span aria-hidden="true"> · </span>
+        <a href={HEADER_COPY.sourceUrl} target="_blank" rel="noreferrer" className="underline">{HEADER_COPY.sourceLinkText}</a>
+      </p>
+    </div>
+  );
 }
 
 const TABS: ReadonlyArray<{ id: Exclude<ViewId, "workspace">; label: string }> = [
@@ -1198,7 +1215,7 @@ export default function App() {
       <GuidedTour />
       {!meetingOpen && (
         <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div><h1 className="text-2xl">AiLibi</h1><p className="text-xs text-ink-500">Recorded AI social deduction · directed by Daniel Keinan</p><p className="text-xs text-ink-500">Code and supporting material by Claude Code and Codex · AI-reviewed · <a href="https://github.com/dkdan10/AiLibi" target="_blank" rel="noreferrer" className="underline">Source & ownership</a></p></div>
+          <ShellTitle />
           <TopNav />
         </header>
       )}

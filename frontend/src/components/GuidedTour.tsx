@@ -21,6 +21,7 @@ import type { ReactNode } from "react";
 
 import { getSets, listReplays } from "../api/client";
 import { OVERLAY_RANK, useFocusTrap } from "../hooks/useFocusTrap";
+import { HEADER_COPY } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { tokens } from "../tokens";
 
@@ -148,16 +149,15 @@ interface Step {
   readonly body: ReactNode;
 }
 
-const STEPS: readonly Step[] = [
+// Exported so the welcome step's render is testable without opening the tour.
+export const STEPS: readonly Step[] = [
   {
     title: "Welcome — investigate a recorded decision",
     body: (
       <>
         <p className="mb-2 text-sm text-ink-700">
           AiLibi asks whether AI agents can reason from what they actually saw.
-          You are watching saved games, not making live model calls. Daniel Keinan
-          directs the project; Claude Code and Codex agents write code and supporting
-          material, with separate AI review. <a className="underline" href="https://github.com/dkdan10/AiLibi" target="_blank" rel="noreferrer">Read the source and ownership case study.</a>
+          You are watching saved games, not making live model calls. <a className="underline" href={HEADER_COPY.sourceUrl} target="_blank" rel="noreferrer">{HEADER_COPY.tourSourceLinkText}</a>
         </p>
         <p className="mb-2 text-sm text-ink-700">
           Players move one room edge per tick. Crew complete tasks or eject every
