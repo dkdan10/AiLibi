@@ -6879,10 +6879,27 @@ _ERA_SENTENCE_NOW = (
         ),
         pytest.param(
             _README,
+            f"{_BYLINE}\n",
+            f"{_BYLINE} · [Lessons](docs/lessons.md)\n",
+            ["README.md: the byline is not kept byte for byte"],
+            id="byline-with-a-link-appended",
+        ),
+        pytest.param(
+            _README,
             "AI agents wrote it,",
             "Claude Code implemented it,",
             ["README.md: under '## Who did what', carries 'Claude Code'"],
             id="agent-named-under-the-heading",
+        ),
+        pytest.param(
+            _README,
+            "and the audits here are AI reviews, not independent human assurance.",
+            "and the audits here are AI reviews.",
+            [
+                "README.md: under '## Who did what', missing 'not independent "
+                "human assurance'"
+            ],
+            id="second-honesty-fact-dropped",
         ),
         pytest.param(
             _README,
@@ -6932,6 +6949,13 @@ _ERA_SENTENCE_NOW = (
         ),
         pytest.param(
             _README,
+            _MISSED_BARS,
+            f"{_MISSED_BARS} Both are adopted now.",
+            ["README.md: the missed-targets sentence is not kept as answered"],
+            id="missed-targets-sentence-with-a-clause-appended",
+        ),
+        pytest.param(
+            _README,
             "and nothing from the second",
             "and the second as well",
             ["README.md: the missed-targets sentence is not kept as answered"],
@@ -6957,6 +6981,47 @@ _ERA_SENTENCE_NOW = (
             "using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts.",
             ["README.md: carries 'qwen3_6_27b'", "README.md: carries 'v6'"],
             id="stamps-restored",
+        ),
+        pytest.param(
+            _README,
+            "played by the `Qwen/Qwen3.6-27B` model.",
+            "played by the `Qwen/Qwen3.6-27B` model with a `v8` ballot.",
+            ["README.md: carries 'v8'"],
+            id="ballot-stamp-restored",
+        ),
+        pytest.param(
+            _README,
+            "a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)):",
+            "a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)), "
+            "its ballot stamped `impostor_ballot_v1`, `ballot_kill_row_v1` and "
+            "`route_lines_v1`:",
+            [
+                "README.md: carries 'impostor_ballot_v1'",
+                "README.md: carries 'ballot_kill_row_v1'",
+                "README.md: carries 'route_lines_v1'",
+            ],
+            id="arm-stamps-restored",
+        ),
+        pytest.param(
+            _README,
+            "name each body by a label that reveals when it died",
+            "reveal a hidden death tick through a body identifier",
+            ["README.md: carries 'body identifier'"],
+            id="body-identifier-restored",
+        ),
+        pytest.param(
+            _README,
+            "The full repair stays switched off,",
+            "The full temporal repair stays switched off,",
+            ["README.md: carries 'temporal repair'"],
+            id="temporal-repair-restored",
+        ),
+        pytest.param(
+            _README,
+            "The full repair stays switched off,",
+            "The full repair stays default-off,",
+            ["README.md: carries 'default-off'"],
+            id="default-off-restored",
         ),
         pytest.param(
             _READING_GUIDE,
@@ -7004,11 +7069,28 @@ _ERA_SENTENCE_NOW = (
             id="filename-as-link-text",
         ),
         pytest.param(
+            _READING_GUIDE,
+            "## 4. Four audits, in this order",
+            "## 4. Three audits, in this order",
+            [
+                "docs/reading-guide.md: missing 'Four audits'",
+                "docs/reading-guide.md: no '## 4. Four audits, in this order' section",
+            ],
+            id="three-audits-heading-restored",
+        ),
+        pytest.param(
             _LESSONS,
             "# What I learned\n",
             "<!-- OWNER: confirm wording -->\n# What I learned\n",
             ["docs/lessons.md: carries 'OWNER: confirm'"],
             id="lessons-marker-restored",
+        ),
+        pytest.param(
+            _LESSONS,
+            "personally written every artifact.\n",
+            "personally written every artifact.\n<!-- OWNER: end. -->\n",
+            ["docs/lessons.md: carries 'OWNER: end'"],
+            id="lessons-end-marker-restored",
         ),
         pytest.param(
             _OWNERSHIP_CASE,

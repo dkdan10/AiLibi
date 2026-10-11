@@ -64,6 +64,20 @@ states them; no rendered prompt, transcript text or seed-band prefix was printed
 
 Each item names its mechanism and the planted case that turns it red; each new test is seen red first.
 
+- [x] Review correction: the wording pin's two line reads and every member of its term lists are held. Ten
+  planted cases join `test_the_wording_pin_refuses_each_restored_text`, each failing naming its page while
+  `check_doc_facts.py` exits 0: the byline with a link appended, the missed-targets sentence with a clause
+  appended, the "Who did what" sentence without "not independent human assurance", "body identifier", "temporal
+  repair" and "default-off" back on the README, the `v8` ballot and the three arm stamps back in the samples
+  paragraph, the guide's "Three audits" heading and the lessons end marker. Red first under L1, L2, D3 to D6, D9 to
+  D11, D13, D27 and D32 (round 2 below).
+- [x] Review correction: the counts are restated at `3761eac0` and at this head, the earlier text kept as the
+  record of `3f116d60`: 46 problems on the pages at B (README 25), 24 planted cases at `3761eac0` and 34 here, 30 new
+  tests against B. Mechanism: the scratch count script and `pytest --collect-only` (commands in round 2 below).
+- [ ] Review correction: the guide's "Results" (`docs/reading-guide.md:72`) names the viewer's tab only once PR #511
+  lands; at this head `frontend/src/App.tsx:221` reads "Results & cases", so this head is not for merging. Open
+  until `main` is merged after #511 (never rebased), `App.tsx` and `copy.ts` are seen to give "Results", and the pin
+  and every count are re-run (round 2 below).
 - [x] Review correction: the report example's evidence denominator and total are held to the report. Planted:
   the report's `impostor_ejections` moved to 47 fails naming "36 of those 47 with evidence against that player"
   (`test_eval_report_count_drift_reaches_the_report_example`); its `total_ejections` moved to 62 fails naming "62
@@ -513,3 +527,63 @@ on the changed test file and the checker exit 0. `grep -c 'assert '`: `test_chec
 lessons 1,420. `git diff --stat 3f116d60` lists this card and `tests/scripts/test_check_doc_facts.py` only. The
 gate record is CI's run at the exact head of #513, cited there by run id (memo 8.7 item 1). Item 17's box stays
 open: the capture runs after the viewer cards merge, as the Limitations say.
+
+### Review corrections, round 2 (2026-10-11)
+
+The second review, at `3761eac0`, found three blocking problems. This round adds planted cases to the wording pin
+and restates counts; no page, asset, production line of `scripts/check_doc_facts.py` or viewer file moves, so the
+word counts, the media, the live strings and the bundle stated above hold. `main` had not moved (merge base
+`7d781f8e`); PRs #511 and #512 were open.
+
+1. **The wording pin's line reads and term lists** (correctness lens). The reviewer's five survivors were the
+   byline's and the missed-targets sentence's line tests read against the whole page instead of its lines (L1, L2,
+   swapped collection) and "not independent human assurance", "temporal repair" and `route_lines_v1` dropped from
+   their tuples (D13, D10, D6, dropped tuple member). This round probes every member of the pin's table in that
+   class: 12 of 39 survived at `3761eac0`, namely L1, L2, `v8`, `impostor_ballot_v1`, `ballot_kill_row_v1` and
+   `route_lines_v1` (D3 to D6), "body identifier", "temporal repair" and "default-off" (D9 to D11), the second honesty
+   fact (D13), "Four audits" (D27) and "OWNER: end" (D32). Ten planted cases join
+   `test_the_wording_pin_refuses_each_restored_text`: `byline-with-a-link-appended`,
+   `missed-targets-sentence-with-a-clause-appended` ("Both are adopted now." after it),
+   `second-honesty-fact-dropped`, `ballot-stamp-restored`, `arm-stamps-restored`, `body-identifier-restored`,
+   `temporal-repair-restored`, `default-off-restored`, `three-audits-heading-restored` (B's "## 4. Three audits, in
+   this order") and `lessons-end-marker-restored`. With each planted text on the real page, `check_doc_facts.py`
+   exits 0 (ten of ten, a scratch script, each page restored), so the pin is each one's only guard. On re-run all 39
+   are killed, each new case the first to fail under its mutant.
+2. **The counts at the head** (docs lens). The counts earlier in these Results are the record of `3f116d60`. At
+   `3761eac0` the pin, run over the six pages as they stood at B, finds 46 problems (README 25, guide 15, lessons 2,
+   case study 1, SECURITY 2, CONTRIBUTING 1): the README's added one is the missed-targets line of round 1.
+   `test_the_wording_pin_refuses_each_restored_text` had 24 cases there, and an AST diff of test names against B
+   finds 30 new tests, 3 renamed or replaced. At this head: 46 problems, the same, since the pin's code is
+   unchanged; 34 planted cases; 30 new tests, since the ten cases are parameters of an existing test. `grep -c
+   'assert '` is unchanged: 862 and 63. Commands: a scratch script imports `_wording_problems` from the test file
+   and runs it on copies of each page read at `7d781f8e`; `uv run pytest tests/scripts/test_check_doc_facts.py
+   --collect-only -q | grep -c 'test_the_wording_pin_refuses_each_restored_text\['`; Python's `ast` over the test
+   names of the test file at `7d781f8e` and at this head.
+3. **The guide's tab name** (docs lens, Codex P1). Valid. At this head `frontend/src/App.tsx:221` labels the tab
+   "Results & cases", and `docs/reading-guide.md:72` says "**Results** shows each set's figures": true only once PR
+   #511 lands, which names it "Results" (`NAV_COPY.tournament`). This head is not for merging. No code change here:
+   a check tying the guide to the viewer's label would be red at this head until #511 merges. The next round,
+   after #511 and #512 merge, merges `main` (never rebases), confirms that `App.tsx` and `copy.ts` give "Results",
+   re-runs the pin and every count, runs the capture (item 17) and records each here. Its Acceptance box stays
+   open until then, as item 17's does.
+
+**Mutation probe of this round.** 39 mutants over the spans the findings name, the pin's two line reads and its
+term table, one exact replacement each, run against the pin's tests (`-k 'wording or rates_are_not_its_claims'`)
+and restored (a scratch script): swapped collection 2 (L1, L2), dropped tuple member 37 (D1 to D37). At
+`3761eac0`: 27 killed, 12 survived (above). At this head: 39 of 39 killed. First test to fail, by case id of
+`test_the_wording_pin_refuses_each_restored_text`: L1 `byline-with-a-link-appended`; L2
+`missed-targets-sentence-with-a-clause-appended`; D1, D2 `stamps-restored`; D3 `ballot-stamp-restored`; D4 to D6
+`arm-stamps-restored`; D7, D8 `era-link-restored`; D9 `body-identifier-restored`; D10 `temporal-repair-restored`;
+D11 `default-off-restored`; D12, D15 `per-agent-paragraph-restored`; D13 `second-honesty-fact-dropped`; D14
+`agent-named-under-the-heading`; D16, D17 `results-link-restored`; D18 `report-rate-restored`; D19, D21, D22, D24
+`missed-bar-paragraph-restored`; D20, D23 `experiment-paragraph-restored`; D25, D28 `tab-name-restored`; D26, D29
+`deception-claim-restored`; D27 `three-audits-heading-restored`; D30 `unscored-restored`; D31
+`lessons-marker-restored`; D32 `lessons-end-marker-restored`; D33 `ruling-not-quoted`; D34 `opening-edited`; D35,
+D36 `no-hosted-instance-restored`; D37 `human-review-restored`.
+
+**Validation at this commit, count-only.** `check_doc_facts.py` exit 0; `validate_task_docs.py` exit 0; the two
+test files 481 passed (471 at `3761eac0`); `ruff check`, `ruff format --check` and `mypy` on the changed test file
+and the checker exit 0; `wc -w` unchanged: README 1,474, guide 1,340, lessons 1,420; `verify_ml_evidence.py` exit 0
+(64 checks: 52 OK, 0 FAIL, 7 evidence-branch absent, 5 info). The diff against `3761eac0` is this card and
+`tests/scripts/test_check_doc_facts.py` only. The gate record is CI's run at the exact head of #513, cited there by
+run id (memo 8.7 item 1).
