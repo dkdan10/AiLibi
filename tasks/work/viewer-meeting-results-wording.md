@@ -71,6 +71,19 @@ rule" or "weak signal" in `:158-392`; front-door page `scripts/check_doc_facts.p
 
 Each item names its enforcing mechanism and a planted or perturbed case that turns it red; new tests are seen red first.
 
+- [x] Review correction (round 2): the trail's other claim kinds carry no confidence. `MindInspector.tsx` reads a
+  claim's confidence only for an accusation. Mechanism: `MindInspector.test.tsx` "reads an alibi and a corroboration
+  as Claimed, with no confidence word" renders a route alibi, a one-room alibi recorded before routes, an alibi with no
+  route and a corroboration, each a Claimed step in words with no confidence. Proof: S1, the kind read made the
+  constant "accusation", turns it red (the inspector crashes reading a missing number), as do S2, S3 and S10-S14.
+- [x] Review correction (round 2): the ballot looks a statement up in the selected meeting, not the first.
+  `BallotCard.tsx` reads the turns of the meeting whose id is selected. Mechanism: `PrivateReasoning.test.tsx` "names
+  a statement's speaker from the selected meeting, not the replay's first" selects the second of two meetings, cites a
+  statement only it holds, and reads "Statement by p-3 (turn 3)" in the link and the counter. Proof: S4, the filter
+  dropped (`meetings[0]`), turns it red, as do S6-S8.
+- [x] Review correction (round 2): the same lookup with its comparison made a None test. Mechanism: the case above,
+  which also reads the not-found label with no replay loaded. Proof: S5 (`m.meeting_id !== null`) turns it red, and
+  S9 (the empty-list fallback dropped) turns its no-replay leg red.
 - [x] Review correction (round 1): a custom factory's absent policy stamp reads "unknown". `PublicResults.tsx`
   `absentPolicy(factory)` gives "the built-in scripted policy" for a scripted, experimental or unrecorded factory and
   "unknown" for a custom one; a stamp that is present stays. Mechanism: `PublicResults.test.tsx` "keeps a custom
@@ -472,3 +485,64 @@ line (step 3, pending the merge). `git diff --quiet 7d781f8e 50fd2f4e` over the 
 (one checkout): 110 files each side, 35 under `assets/`; all 72 `data/` files byte-identical; `index.html`, the index
 chunk (`index-clC97fic.js` to `index-BkjKJRyy.js`), the stylesheet (`index-D7ay7349.css` to `index-B6Y7MwOb.css`)
 and six renamed chunks differ. Gate record: CI's green run at the exact head, cited in the PR by run id.
+
+### Review corrections, round 2 (2026-10-11)
+
+The three lenses' three blocking findings at `da41645e`, each a listed-class mutant that survived on a production line
+this card wrote, repaired at `07217a70` (tests only; no production line moves); this subsection and the three Review
+correction items at the head of Acceptance follow it. `main` has not moved (`7d781f8e`) and `viewer-browse-wording`
+(#511) has not merged, so the merge of `main` and the boxes it opens stay pending as above.
+
+- **The trail's claim-kind read made a constant (the correctness lens, `MindInspector.tsx:124`).** No test put an
+  alibi or a corroboration in the trail, so `claim.type === "accusation"` read as a constant survived; on a real
+  alibi the inspector would crash reading a confidence the claim does not carry. The new `MindInspector.test.tsx`
+  case renders all four non-accusation shapes; the copy's own en dash is kept in "ticks 1–4".
+- **The ballot's turn lookup with its filter dropped (the correctness lens, `BallotCard.tsx:170-171`) and with its
+  comparison made a None test (the integrity lens, N8).** Every fixture held one meeting, so `meetings[0]` and
+  `m.meeting_id !== null` both read the right turns. The new `PrivateReasoning.test.tsx` case holds two meetings with
+  the second selected; in a real replay every ballot after the first meeting would otherwise call its cited statement
+  not found.
+
+**Mutation probe, round 2.** Only the spans the findings name (`MindInspector.tsx:124`, `BallotCard.tsx:170-171`) and
+the claim words the new trail case now reads (`MindInspector.tsx` `claimText`), exactly the listed classes: 14
+mutants, each an exact edit, a full `npx vitest run` (1126 tests) and a restore (`mutate.py` in the run's scratch
+directory, `python3 mutate.py <frontend>`). Killed 14, survived 0. By class: comparison to a None test or its inverse
+4, dropped filter or wrapper 3, message argument to a constant 3, kind or key read to a constant 2, swapped related
+collection 1, swapped adjacent branches 1. The first probe of this round found S9 and S13 alive (the trail case then
+held one alibi shape and the ballot case no unloaded replay); the cases gained the one-room and no-route alibis and the
+no-replay leg, and the 14 were run again at `07217a70`, each red.
+
+| Mutant | Class | Edit | Red tests |
+| --- | --- | --- | --- |
+| S1 | kind read | the claim's `claim.type` made `"accusation"` | the new trail case (a crash on a missing number) |
+| S2 | None test inverse | `claim.type === "accusation"` made `!==` | 3: the new trail case, the earlier trail case, the numbers case |
+| S3 | swapped branches | the claim's confidence and `null` swapped | 3, as S2 |
+| S4 | dropped filter | the ballot's meeting `find(…)` made `meetings[0]` | the new two-meeting case |
+| S5 | None test | `m.meeting_id === meetingId` made `m.meeting_id !== null` | the new two-meeting case |
+| S6 | None test inverse | `m.meeting_id === meetingId` made `!==` | 2: the new case and "names each citation by what it points at" |
+| S7 | key read | the selected `meetingId` in the lookup made `"meeting-0"` | the new two-meeting case |
+| S8 | swapped collection | the meeting's `turns` read its `ballots` | 2, as S6 |
+| S9 | dropped wrapper | the lookup's `?? []` dropped | the new case's no-replay leg |
+| S10 | message argument | the corroboration's tick made "0" | the new trail case |
+| S11 | message argument | an alibi leg's first tick made "0" | the new trail case |
+| S12 | message argument | the alibi's path made "x" | the new trail case |
+| S13 | dropped wrapper | the one-room fallback behind `claim.route ??` dropped | the new trail case |
+| S14 | None test inverse | `legs.length === 0` made `!==` | the new trail case |
+
+Seen red first: each new case is seen red by the mutants named on it above (S1, the finding's own mutant, on the
+trail case; S4 and S5, the findings' own, on the two-meeting case), each an edit to the code under test, a run and a
+restore; both cases pass at `07217a70`.
+
+**Validation, count-only, at `07217a70`** (this subsection changes only the card). `validate_task_docs.py` exit 0;
+`check_doc_facts.py` exit 0; `pytest tests/api/test_public_results.py tests/api/test_view_model.py -q` 126 passed,
+1 skipped; `npm test` 1126 passed (31 files); `tsc:check` exit 0; `lint` exit 0; `npm run e2e` 15 passed, 3 skipped,
+run locally through a scratch copy of the config on the cached headless shell (build 1234) and UI port 5712, because
+another worktree's dev server holds 5173 (CI's `frontend-e2e` job on the pinned browser is the record). The card's
+retired-phrase grep: 18 lines, as before; the `As-agent` / `fog` grep: 4 comment lines; the `Ground-Truth` grep: 1
+line (step 3, pending the merge). `git diff --quiet 7d781f8e 07217a70` over the never-written paths: exit 0;
+`git diff --name-only 7d781f8e 07217a70`: the same 23 files, none under `eval/`; `git diff --stat 50fd2f4e 07217a70`:
+the two test files and this card only, so no compiled byte moves. The bundle at `7d781f8e` and `07217a70` (one
+checkout): 110 files each side, 35 under `assets/`; all 72 `data/` files byte-identical; `index.html`, the index chunk
+(`index-clC97fic.js` to `index-BkjKJRyy.js`), the stylesheet (`index-D7ay7349.css` to `index-B6Y7MwOb.css`) and six
+renamed chunks differ, the same names as at `50fd2f4e`. Gate record: CI's green run at the exact head, cited in the PR
+by run id.
