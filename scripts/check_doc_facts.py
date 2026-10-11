@@ -154,7 +154,9 @@ together, so one run names every drifted fact rather than the first.
     ``k of n = rate`` is held to its own arithmetic at the precision it prints,
     and every sentence naming a wrongful or innocent ejection must name the
     count the record read — or the count the recording before it read, which
-    is what the before column is for.
+    is what the before column is for. The deciding record's verdict passage
+    lives on docs/history.md, which must carry it whole; the README gives the
+    missed bars one sentence and a link there.
 18. **The published review index accounts for every finding, and its map
     resolves.** Every register id named on a ``**Section refs:**`` line of
     ``tasks/phase-20.md`` must appear somewhere in
@@ -910,15 +912,19 @@ _FINDING_VERDICT: Final = "a finding"
 _ADOPTION_VERDICT: Final = "an adoption"
 # The opening of each required claim. A document that states the claim AT ALL
 # must state it with the record's own numbers; a document that never mentions
-# it is not required to. The README is the exception — it is where the verdict
-# passage lives, so it must carry both.
+# it is not required to. The verdict passage's home is the exception — it is
+# where the figures and the verdict live, so it must carry all three.
 _FINDING_CLAIM_STEMS: Final[tuple[str | None, ...]] = (
     "innocent ejections fell from",
     "the meeting's own reporter",
-    # The verdict word is the README's alone: it is the sentence that reports
-    # the rule, and a page may narrate the counts without restating the rule.
+    # The verdict word is the home's alone: it is the sentence that reports the
+    # rule, and a page may narrate the counts without restating the rule.
     None,
 )
+# The page that carries the verdict passage whole. The README gives the missed
+# bars one plain sentence and links here, so the figures and the verdict word
+# are required on this page and held, wherever else they appear, to its wording.
+_VERDICT_HOME: Final = _HISTORY
 # The tally beside that verdict: how many bars were registered, and how many of
 # them passed. The verdict WORD does not carry it — one bar missed and three
 # reads "a finding" exactly as three missed and one does — so the inventory is
@@ -5458,10 +5464,12 @@ def check_verdict_passage(
     wrongful-ejection gate admits only a count one of the conviction partitions
     carries and neither of this record's counts is one.
 
-    The README must carry the whole passage: it is where the verdict is first
-    written. Every other claim document is held to the same wording only where
-    it states the claim at all — a page that never mentions the fall is not
-    required to, and a page that does may not state it with other numbers.
+    The history page (:data:`_VERDICT_HOME`) must carry the whole passage: it
+    is where the figures and the verdict live, the README giving the missed bars
+    one sentence and a link there. Every other claim document is held to the
+    same wording only where it states the claim at all — a page that never
+    mentions the fall is not required to, and a page that does may not state it
+    with other numbers.
     """
 
     reporter, innocent = bars[_REPORTER_BAR], bars[_INNOCENT_BAR]
@@ -5486,7 +5494,7 @@ def check_verdict_passage(
     for claim, stem in zip(required, _FINDING_CLAIM_STEMS):
         if claim.casefold() in flat:
             continue
-        if document != _README and (stem is None or stem.casefold() not in flat):
+        if document != _VERDICT_HOME and (stem is None or stem.casefold() not in flat):
             continue
         errors.append(
             f"{document}: its verdict passage does not state {claim!r} — "

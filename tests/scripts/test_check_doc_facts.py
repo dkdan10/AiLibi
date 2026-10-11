@@ -1744,9 +1744,11 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """**Two bars were written down first, and both were missed.** Baseline 7 measured conviction accuracy without proof at 61 of 103 = 0.5922 against 0.60, and wrongful ejections at 42 against fewer than 35; its rule returned **FINDING**, and Daniel adopted it by explicit owner override on 2026-08-26. Baseline 8 registered none: 50 of 96 = 0.5208 with 46 innocent ejections. Nor did baseline 9: 43 of 85 = 0.5059 with 42 innocent ejections over four sets, a movement these samples cannot call real. [The decision and its limitations](docs/ownership-case-study.md).
+        """**Targets written down before measuring were missed twice:** the owner adopted the first recording anyway, in writing, and nothing from the second ([what each measured](docs/history.md#evidence-honesty-phase-20)).
 """,
         """**Two bars were written down first, and both were missed.** Baseline 7 measured conviction accuracy without proof at 61 of 103 = 0.5922 against 0.60, and wrongful ejections at 42 against fewer than 35. Its rule returned **FINDING**, but Daniel adopted that recording by explicit owner override on 2026-08-26; the bars did not pass. Baseline 8 registered no bars and measured 50 of 96 = 0.5208 and 46 innocent ejections. Baseline 9 registered none either and measured 43 of 85 = 0.5059 and 42 innocent ejections over its four recorded sets, a movement too small for these samples to call real. [The decision and its limitations](docs/ownership-case-study.md) preserve both judgments.
+
+**An experiment on baseline 8 met three of four fresh bars.** Innocent ejections fell from 46 to 20; 11 of those 20 were the meeting's own reporter, against 34 of 46. That share, 0.5500, missed 0.40, so the rule returns **a finding**, with no override and no adoption ([record](audits/audit-phase-21-adopting-record.md)).
 """,
     ),
     (
@@ -2481,11 +2483,12 @@ def test_partition_innocent_total_contradicting_its_own_accuracy_detected(
     )
     # ...and every wrongful-ejection sentence still naming 42 now names a count
     # neither this record nor the one before it carries — the record's own 42 on
-    # the README and the guide, and baseline 7's identical 42 in those two and
-    # the history. The ML page narrates only baseline 8's 46, which still holds.
+    # the history page and the guide, and baseline 7's identical 42 in those
+    # two. The README states no count since its missed-bar sentence moved its
+    # figures to the history; the ML page narrates only baseline 8's 46, which
+    # still holds.
     stale = [error for error in errors if "wrongful-ejection sentence" in error]
     assert {error.split(":")[0] for error in stale} == {
-        _README,
         _READING_GUIDE,
         _HISTORY,
     }
@@ -3191,11 +3194,13 @@ def test_verdict_rate_that_contradicts_its_own_fraction_detected(
 ) -> None:
     # The verdict passage states the same cell the results row states. Every
     # "k of n = rate" on the front door is its own arithmetic, so a moved
-    # denominator in the prose cannot survive a correct table.
-    _substitute(doc_tree, _README, "61 of 103 = 0.5922", "61 of 104 = 0.5922")
+    # denominator in the prose cannot survive a correct table. Planted on the
+    # history page, the passage's home since the README gave it one sentence.
+    _substitute(doc_tree, _HISTORY, "61/103 = 0.5922", "61/104 = 0.5922")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'61 of 104 = 0.5922' does not recompute" in errors[0]
+    assert errors[0].startswith(f"{_HISTORY}:")
+    assert "'61/104 = 0.5922' does not recompute" in errors[0]
     assert "61/104 is 0.5865" in errors[0]
 
 
@@ -3221,9 +3226,10 @@ def test_verdict_fraction_rewritten_consistently_detected(doc_tree: Path) -> Non
     # Self-consistent arithmetic is not enough: a fraction over a conviction
     # population the record measured has to BE the cell the record recorded, or
     # the prose argues past the finding while adding up.
-    _substitute(doc_tree, _README, "50 of 96 = 0.5208", "51 of 96 = 0.5312")
+    _substitute(doc_tree, _HISTORY, "50 of 96 = 0.5208", "51 of 96 = 0.5312")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
+    assert errors[0].startswith(f"{_HISTORY}:")
     assert "is over a conviction population" in errors[0]
     assert "whose cell is 50/96" in errors[0]
 
@@ -3243,7 +3249,7 @@ def test_wrongful_ejection_count_inside_a_longer_number_detected(
     assert "names none of the counts the records read (pooled 42" in errors[0]
 
 
-@pytest.mark.parametrize("document", [_README, _READING_GUIDE])
+@pytest.mark.parametrize("document", [_HISTORY, _READING_GUIDE])
 @pytest.mark.parametrize(
     ("fraction", "recorded", "moved"),
     [("50 of 96 = 0.5208", "46", "47"), ("43 of 85 = 0.5059", "42", "41")],
@@ -3378,7 +3384,9 @@ def test_verdict_word_follows_the_bars_in_both_directions(doc_tree: Path) -> Non
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "does not state 'the rule returns an adoption'" in error for error in errors
+        error.startswith(f"{_HISTORY}:")
+        and "does not state 'the rule returns an adoption'" in error
+        for error in errors
     )
 
 
@@ -3544,7 +3552,7 @@ def test_finding_count_wording_checked_on_every_claim_document(
     # The three pages hard-wrap at different columns, so each is perturbed on
     # the words it actually carries on one line.
     for document, wording in (
-        (_HISTORY, "innocent ejections fell from 46 to 20"),
+        (_HISTORY, "Innocent ejections fell from 46 to 20"),
         (_READING_GUIDE, "innocent ejections fell from 46 to 20"),
         (_ML_PAGE, "ejections fell from 46 to 20"),
     ):
@@ -3555,6 +3563,25 @@ def test_finding_count_wording_checked_on_every_claim_document(
         for error in errors
         if "innocent ejections fell from 46 to 20" in error
     } == {_HISTORY, _READING_GUIDE, _ML_PAGE}
+
+
+def test_the_readme_restating_the_fall_is_held_to_the_record(doc_tree: Path) -> None:
+    # The README gives the missed bars one sentence with no figure, so it is no
+    # longer the passage's home; a README that states the fall anyway is held
+    # to the record's numbers like every other page that states it.
+    _substitute(
+        doc_tree,
+        _README,
+        "**Targets written down before measuring were missed twice:**",
+        "Innocent ejections fell from 46 to 21. **Targets written down before "
+        "measuring were missed twice:**",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        error.startswith(f"{_README}:")
+        and "does not state 'innocent ejections fell from 46 to 20'" in error
+        for error in errors
+    )
 
 
 def test_a_claim_document_that_never_states_the_fall_is_not_required_to(
@@ -4125,7 +4152,7 @@ def test_published_pass_count_that_the_verdicts_refute_detected(
     # it is its own claim and is held to the recomputed verdict column.
     _substitute(
         doc_tree,
-        _README,
+        _READING_GUIDE,
         "met three of four fresh bars",
         "met two of four fresh bars",
     )
@@ -4143,7 +4170,7 @@ def test_published_registered_bar_count_that_the_table_refutes_detected(
     # all, which is the denominator every "three of four" claim rests on.
     _substitute(
         doc_tree,
-        _README,
+        _READING_GUIDE,
         "met three of four fresh bars",
         "met three of three fresh bars",
     )
@@ -4247,13 +4274,14 @@ def test_standalone_finding_count_sentence_is_refused(doc_tree: Path) -> None:
     # a sentence naming ONLY this record's own count lands red...
     _substitute(
         doc_tree,
-        _README,
-        "Innocent ejections fell from 46 to 20; 11 of those 20",
-        "The recording fell to 20 innocent ejections. 11 of those 20",
+        _HISTORY,
+        "Innocent ejections fell from 46 to 20 against a ceiling of fewer than 35; 11 of",
+        "The recording fell to 20 innocent ejections against a ceiling of fewer than "
+        "35. 11 of",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        error.startswith(f"{_README}:")
+        error.startswith(f"{_HISTORY}:")
         and "a wrongful-ejection sentence names none of the counts" in error
         for error in errors
     )
