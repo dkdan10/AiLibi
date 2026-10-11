@@ -588,11 +588,14 @@ describe("the browser's notes and names", () => {
   it("heads the featured strip Featured and names each game by its number", () => {
     const featured = [
       { set: "9p2i", seed: 19, label: "A hand-written line.", gameId: "headless-seed-19" },
+      { set: "9p2i", seed: 14, label: "Another line.", gameId: "headless-seed-14" },
     ];
     const html = strip(render({ view: "replays", featured }));
     expect(html).toContain(`>${PICKER_COPY.featuredHeading}</h3>`);
     expect(html).toContain(`title="${gameSeedTitle(19)}"`);
     expect(html).toMatch(/>Game 19<\/span>/);
+    expect(html).toContain(`title="${gameSeedTitle(14)}"`);
+    expect(html).toMatch(/>Game 14<\/span>/);
     expect(html).not.toMatch(/picked by hand|>seed 19</);
   });
 
@@ -618,6 +621,9 @@ describe("the browser's notes and names", () => {
   it("names the set while it loads, and says what failed to load", () => {
     expect(render({ status: "loading", set: "9p2i" })).toContain(
       "Loading 9 players, 2 impostors (9p2i)…",
+    );
+    expect(render({ status: "loading", set: "4p1i" })).toContain(
+      "Loading 4 players, 1 impostor (4p1i)…",
     );
     expect(render({ view: "replays", status: "loading", set: null })).toContain(
       PICKER_COPY.loadingReplays,

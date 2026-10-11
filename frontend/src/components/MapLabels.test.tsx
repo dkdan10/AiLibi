@@ -49,7 +49,7 @@ function body(killedBy: string | null, slotCount = 1): readonly string[] {
 describe("a body on the map", () => {
   it("says who killed a lone body", () => {
     expect(body("p-4")).toEqual(["p-2", killedByLabel("p-4")]);
-    expect(body("p-4")).toEqual(["p-2", "killed by p-4"]);
+    expect(body("p-7")).toEqual(["p-2", "killed by p-7"]);
   });
 
   it("names no killer in one player's view or in a cluster", () => {

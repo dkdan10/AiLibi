@@ -67,6 +67,19 @@ describe("the inspector's view button", () => {
     expect(html).not.toMatch(/Seeing what they saw/);
   });
 
+  it("names whichever player it inspects, and that player's private mind", () => {
+    const html = renderToStaticMarkup(
+      <MindInspectorPanel
+        {...mind}
+        selectedAgentId="p-2"
+        perspective={{ mode: "agent", agentId: "p-1" }}
+        noMeetingYet={false}
+      />,
+    );
+    expect(viewButton(html)).toEqual({ pressed: "false", text: "See as p-2" });
+    expect(html).toContain("Use “See as p-2” or switch to Omniscient to inspect them.");
+  });
+
   it("is not pressed in the all-roles view", () => {
     const html = renderToStaticMarkup(
       <MindInspectorPanel {...mind} perspective={{ mode: "omniscient" }} />,

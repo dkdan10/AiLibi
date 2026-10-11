@@ -243,6 +243,8 @@ describe("a card's shelves and facets", () => {
   it("keeps a game with no profile entry factual", () => {
     const html = card(base, false);
     expect(html).toContain("2 ticks");
+    expect(html).toContain(`<span title="${gameSeedTitle(42)}" class="font-mono text-xs font-semibold text-ink-900">Game 42</span>`);
+    expect(html).toContain('aria-label="Open game 42"');
     expect(html).not.toContain(PROFILE_COPY.facets.timeline);
   });
 });

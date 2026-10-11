@@ -319,6 +319,9 @@ describe("the mode banner", () => {
     expect(text).toContain("Watching as p-3");
     expect(buttonTexts(html)).toContain("Back to Omniscient");
     expect(text).not.toMatch(/\bfog\b|As p-3|seed 19|9p\b/);
+    expect(banner({ perspective: { mode: "agent", agentId: "p-7" } })).toContain(
+      'aria-label="Perspective: Watching as p-7"',
+    );
   });
 
   it("names the ending in the tag the cards use once revealed", () => {
@@ -330,9 +333,9 @@ describe("the mode banner", () => {
       metadata: { seed: 4, meeting_count: 0, winner: null, completion_status: "tick_limited" },
       players: NINE.slice(0, 4),
     };
-    expect(textOf(banner({ revealOutcome: true, currentReplay: stopped }))).toContain(
-      `Game 4 · 4 players · ${OUTCOME_COPY.tickLimited}`,
-    );
+    const html = banner({ revealOutcome: true, currentReplay: stopped });
+    expect(textOf(html)).toContain(`Game 4 · 4 players · ${OUTCOME_COPY.tickLimited}`);
+    expect(html).toContain('title="Recorded from random seed 4"');
   });
 
   it("counts the meetings in words beside the Belief × Truth launcher", () => {
@@ -453,6 +456,14 @@ describe("the roster's counts", () => {
     expect(text).toContain("crew 7 · impostors 2 · tasks 3/10");
     expect(text).toContain("crew 7impostors 2");
     expect(text).not.toMatch(/\bimp \d/);
+    playback.frame = {
+      agent_states: [],
+      advantage: { crew_alive: 5, impostors_alive: 1, tasks_completed: 3, tasks_required_total: 10 },
+      meeting_resolution: null,
+    };
+    const later = textOf(renderToStaticMarkup(<RosterRail />));
+    expect(later).toContain("crew 5 · impostors 1 · tasks 3/10");
+    expect(later).toContain("crew 5impostors 1");
   });
 });
 

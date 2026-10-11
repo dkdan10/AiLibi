@@ -102,6 +102,8 @@ describe("private reasoning perspective", () => {
     expect(html).toContain("p-2");
     expect(html).toContain("Private ballot reasoning");
     expect(html).toContain("Private ballot reasoning. See as p-1 to inspect it.");
+    const other = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, voter: "p-3" }} players={players} omniscient={false} revealOutcome={revealOutcome} />);
+    expect(other).toContain("Private ballot reasoning. See as p-3 to inspect it.");
     expect(html).not.toMatch(/perspective to inspect/);
     for (const secret of ["I killed them", "0.73", "private-statement-choice", "private-observation-choice", "private-alternative-choice"]) expect(html).not.toContain(secret);
     expect(html).not.toContain("no rationale recorded");

@@ -1163,9 +1163,11 @@ const RETIRED_IN_COPY: readonly Retired[] = [
   "canonical_1",
 ];
 
-/** The path and literal of every string leaf in `tree` that carries a retired word. */
-function retiredLeaves(tree: unknown, path: string): readonly string[] {
-  return stringLeaves(tree, path).flatMap((leaf) =>
+/** The path and literal of every leaf that carries a retired word. */
+function retiredLeaves(
+  leaves: readonly { readonly path: string; readonly text: string }[],
+): readonly string[] {
+  return leaves.flatMap((leaf) =>
     RETIRED_IN_COPY.filter((literal) => carries(leaf.text, literal)).map(
       (literal) => `${leaf.path}: ${String(literal)}`,
     ),
@@ -1203,8 +1205,9 @@ describe("the retired wording (the scan)", () => {
   });
 
   it("finds none of them anywhere in SPECTATOR_COPY", () => {
-    expect(stringLeaves(SPECTATOR_COPY, "SPECTATOR_COPY").length).toBeGreaterThan(20);
-    expect(retiredLeaves(SPECTATOR_COPY, "SPECTATOR_COPY")).toEqual([]);
+    const leaves = stringLeaves(SPECTATOR_COPY, "SPECTATOR_COPY");
+    expect(leaves.length).toBeGreaterThan(20);
+    expect(retiredLeaves(leaves)).toEqual([]);
   });
 
   it("names the leaf when a retired word returns to the copy (planted)", () => {
@@ -1212,10 +1215,12 @@ describe("the retired wording (the scan)", () => {
       ...SPECTATOR_COPY,
       picker: { ...PICKER_COPY, highlightsIntro: "Games grouped by moment, in seed order." },
     };
-    expect(retiredLeaves(planted, "SPECTATOR_COPY")).toEqual([
+    expect(retiredLeaves(stringLeaves(planted, "SPECTATOR_COPY"))).toEqual([
       "SPECTATOR_COPY.picker.highlightsIntro: in seed order",
     ]);
-    expect(retiredLeaves({ chip: "As p-3 · fog" }, "TREE")).toEqual([`TREE.chip: ${String(FOG)}`]);
+    expect(retiredLeaves(stringLeaves({ chip: "As p-3 · fog" }, "TREE"))).toEqual([
+      `TREE.chip: ${String(FOG)}`,
+    ]);
   });
 });
 
@@ -1263,6 +1268,8 @@ describe("the tab title and the link preview", () => {
   const html = readFileSync(INDEX_HTML, "utf8");
 
   it("carry the name and the tagline, and nothing else enters the head", () => {
+    // The same bytes the scan reads, so neither read can stand in for the file.
+    expect(html).toBe(sourceText("../index.html"));
     expect(SITE_COPY.title).toBe("AiLibi — Recorded AI social deduction");
     expect(SITE_COPY.title).toBe(`AiLibi — ${HEADER_COPY.tagline}`);
     expect(headProblems(html)).toEqual([]);
@@ -1380,6 +1387,7 @@ describe("the workspace's names", () => {
 
   it("says who killed a lone body", () => {
     expect(killedByLabel("p-4")).toBe("killed by p-4");
+    expect(killedByLabel("p-7")).toBe("killed by p-7");
     expect(MAP_COPY.chip).toBe("Map");
     expect(MAP_COPY.unseenRoom).toBe("Unseen");
   });

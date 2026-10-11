@@ -44,5 +44,8 @@ describe("search intentions", () => {
     );
     expect(html).not.toMatch(/\bfog\b|\blens\b/i);
     expect(render(true)).not.toContain("Raw rendered memory is hidden");
+    const other = renderToStaticMarkup(<MemoryPanel memory={{ ...memory, agent_id: "p-5" }}
+      revealSecrets={false} isImpostor={false} ownKills={[]} coverTasks={[]} fellowImpostors={[]} />);
+    expect(other).toContain("use “See as p-5”, to read it.");
   });
 });

@@ -50,6 +50,17 @@ describe("the evidence panel's way into a private observation", () => {
     expect(html).not.toMatch(/Switch to p-1|perspective<\/button>/);
   });
 
+  it("names whichever player holds the observation", () => {
+    const held = state.selectedEvidence;
+    state.selectedEvidence = { ...held, id: "p-3:12:0", observerId: "p-3" };
+    state.perspective = { mode: "agent", agentId: "p-2" };
+    try {
+      expect(buttons(renderToStaticMarkup(<EvidencePanel />))).toContain("See as p-3");
+    } finally {
+      state.selectedEvidence = held;
+    }
+  });
+
   it("gives way to the observer's memory once that is the view", () => {
     for (const perspective of [
       { mode: "agent", agentId: "p-1" },
