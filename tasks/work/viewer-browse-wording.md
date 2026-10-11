@@ -81,6 +81,25 @@ Each item names its mechanism and the planted or perturbed case that turns it re
 its code. "The scan" is a new `copy.test.ts` case: (source, retired literal) rows read through `stripComments`, plus
 a `stringLeaves` walk of `SPECTATOR_COPY` for the same literals.
 
+- [x] Review correction: the set-list and replay-load error lines are held. `ReplayPicker.test.tsx` "the connected
+  browser's error lines" renders the connected `ReplayPicker` over a reduced store (a `vi.mock` of
+  `../store/replayStore`, since a server render reads the store's initial state) and holds each line's text to
+  `PICKER_COPY.setListError` or `PICKER_COPY.replayLoadError` with two raw errors each, both lines together in page
+  order, no line when nothing failed, and the set selector kept once the sets loaded; `copy.test.ts` "say what the
+  browser shows" pins both strings. Proof: R01 to R03 (the review's A01 and A02, each raw error typed as a constant),
+  R04 (A03, the set-list line reading the replay-load copy) and R05 to R14 passed 1046 at `142db9aa`; at `3c6657c5`
+  each fails 1 to 5 of 1053.
+- [x] Review correction: the calibration readout is held to its own figure. `TournamentDashboard.test.tsx` "spells out
+  the calibration error, keeping its figure and its tooltip" holds the story's two readouts to `["0.248", "0.103"]`
+  (its `accusation_claim_ece` and `vote_ballot_ece`), and "shows each curve's own calibration error, to three places,
+  and n/a for none" renders `CalibrationCurve` with 0.248, 0.1 and no figure. Proof: J01 (the review's J02, the
+  figure typed as 0.123), J02 (typed as 0.248), J03 to J05 and J07 (the ballot curve fed the claim figure) passed 1046
+  at `142db9aa`; at `3c6657c5` each fails 1 or 2 of 1053.
+- [x] Review correction: the mode banner names every stop of a game with no winner. `App.test.tsx` "names each
+  recorded stop of a game with no winner in the tag the cards use" renders the revealed banner for `aborted`,
+  `tick_limited`, `unfinished` and no recorded stop, each held to its `OUTCOME_COPY` tag. Proof: H01, the banner's
+  stop read typed as `"tick_limited"` (the review's survivor), passed 1046 at `142db9aa` and fails 1 of 1053 at
+  `3c6657c5`. The Mutation pass's claim that every name-helper call site had a second value is corrected in place.
 - [x] **The scan bites.** Planted: a synthetic source carrying one retired literal in rendered code is caught, and
   the same literal in a comment is ignored; each item below adds its rows, and each row is seen red on the base.
 - [x] **1. The tab and the preview read the tagline.** A `site` copy group holds "AiLibi — Recorded AI social
@@ -261,9 +280,11 @@ diff -r <dir-base> <dir-head>                                 # file by file int
 Implemented on `work/viewer-browse-wording` from B = `7d781f8e`: `635f47ae` (the wording, its copy groups and helpers,
 the scan and the render cases, the followed unit and browser pins), `4d7149e0` (each name helper's call site held to a
 second value, the ticker chip's render case, the scan's two reads tied together, all asked for by the mutation pass)
-and the Results commit, which is H, the pull request's head. References: `docs/architecture.md` "Packages"
-(`frontend/` consumes the generated view types; nothing below the viewer moves, no view type, DTO or recorded byte
-changes, `VIEW_MODEL_VERSION` stays "6" at `api/schemas.py:77`) and "Enforced boundaries" (one player's view keeps
+and the Results commit `142db9aa`, round 1's head; review round 1 adds `3c6657c5` (three test repairs) and its
+card commit, which is H, the pull request's head (see "Review corrections, round 1"). References:
+`docs/architecture.md` "Packages" (`frontend/` consumes the generated view types; nothing below the viewer moves, no
+view type, DTO or recorded byte changes, `VIEW_MODEL_VERSION` stays "6" at `api/schemas.py:77`) and "Enforced
+boundaries" (one player's view keeps
 hiding what it hid: the copy changes words, never what a view shows); AGENTS.md craft rules 2 (each new check has a
 planted case seen red), 4 (user-facing copy in plain words, in `SPECTATOR_COPY`) and 5 (counts below with their
 commands); the decision `tasks/decision-2026-10-11-visitor-wording.md` §1 (answers 1, 4-9, 25), §2b rulings 2-4 and
@@ -385,7 +406,9 @@ exist yet, failed to load; the scan alone: 62 rows, each red by name).
 One pass, 38 mutants, exactly the listed classes, each one exact replacement run against the whole unit suite and
 restored with `git checkout` (a scratch script). It ran once at `4d7149e0`: 38 killed, 0 survivors. Designing it found
 call sites a single test value could not see (a seed, a killer, a player, a set or a count typed as a constant); each
-got a second value in `4d7149e0` before the run.
+got a second value in `4d7149e0` before the run. The banner's stop did not: its one no-winner case was
+tick-limited, so the stop typed as `"tick_limited"` passed; review round 1 found it, with the browser's two error
+lines and the calibration figure (see "Review corrections, round 1").
 
 - Dropped filter or wrapper (7): M01 the set map's raw-id fallback; M07 the impostor-win branch; M11 `Object.hasOwn`;
   M21 the recap chip's `adjusted &&`; M22 the one-player HUD return; M33 the scan's filter; M34 the scan's comment
@@ -438,3 +461,66 @@ Run from the branch's worktree with `.venv/bin/python` for `uv run python`, coun
   limit reached" tile and `momentsError` are the local dashboard's other words, outside item 25.
 - The Pixi labels are held by reading the components' element trees, not pixels; the wider HUD chip was not
   screenshot-checked at every map width.
+
+### Review corrections, round 1 (2026-10-11)
+
+The first review of pull request #511 read `142db9aa`, whose CI run 38171003224 was green (Project checks, Frontend
+checks, Frontend e2e). It filed three blocking findings, two from the correctness lens and one from the
+documentation lens, and this round repairs them. `main` is still `7d781f8e`, so nothing was merged in. Commits:
+`3c6657c5` (the three test repairs) and this commit (the three acceptance items above, this subsection and the
+in-place pointers in the opening paragraph and the Mutation pass). Each ends with the `Card:` trailer immediately
+followed by `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`, checked with `git log -1 --format=%B` before
+the push. No production file moved, so the strings that go live and the bundle diff are as round 1 left them; the
+four files this round writes (`App.test.tsx`, `ReplayPicker.test.tsx`, `TournamentDashboard.test.tsx`,
+`copy.test.ts`) were already in the diff, which stays 35 files, all in Expected scope.
+
+**1. The browser's two error lines (correctness).** No test rendered the connected `ReplayPicker`, so its set-list
+line and its replay-load line could print a constant, or each other's words, and the suite still passed 1046. A
+server render reads a zustand store's initial state, so the test mocks the store module with a reduced state, as
+`App.test.tsx` does, and reads every error banner's text in page order: the set list's line is "The set list could
+not be loaded: {error} Retry", the game's line "This game could not be loaded: {error}", each with two raw errors;
+both appear together in that order; neither appears when nothing failed; and the set selector stays once the sets
+have loaded, whatever a later fetch says. The mock touches only the connected component: every other case in the
+file renders the presentational view or calls a pure function. `copy.test.ts` pins both strings beside the others.
+
+**2. The calibration figure (correctness).** The readout case matched any three-place figure, so the figure typed as
+0.123 passed. The dashboard case now holds the story's two readouts to its two figures in page order, which also
+catches one curve fed the other's figure, and a direct `CalibrationCurve` case holds 0.248, 0.1 (as 0.100) and no
+figure (as n/a).
+
+**3. The banner's stop (documentation).** The Results said every name-helper call site got a second value in
+`4d7149e0`; the banner's stop had one no-winner case, tick-limited, so M08's `"aborted"` constant was killed and a
+`"tick_limited"` constant was not. The new banner case names all four stops; the Mutation pass now says so.
+
+**Mutation probe.** One bounded pass over the spans the findings name, 31 mutants of the listed classes, each one
+exact replacement run against the whole unit suite and restored from memory by a scratch script. Before is an
+archive of `142db9aa`'s `frontend/` with the worktree's `node_modules`, `docs/` and `replays/` linked in (none of
+them changed, and its unmutated run passes 1046); after is the worktree at `3c6657c5` (unmutated, 1053 passed).
+
+- The set-list and replay-load lines (14): R01 and R02 the set-list error typed as two constants, R03 the game's
+  error typed as a constant (message arguments); R04 and R05 each line reading the other's copy, R06 and R07 each
+  line reading the other's error, R13 the game's line reading the list error (swapped collections); R08 and R09
+  each line's null test inverted; R10 the "no sets loaded" filter dropped; R11 the banner and the selector swapped;
+  R12 and R14 each error read made null. Before: all 14 survived. After, in id order, killed (1, 2, 1, 2, 2, 2, 2, 2,
+  5, 1, 5, 2, 2, 2).
+- The calibration readout (8): J01 and J02 the figure typed as 0.123 and 0.248, J03 the figure formatted from null,
+  J06 three places made two (message arguments); J04 the null test inverted; J05 its branches swapped; J07 the
+  ballot curve fed the claim figure (swapped collection); J08 the tooltip dropped (wrapper). Before: J01 to J05 and
+  J07 survived, J06 and J08 killed (1 each). After, in id order, all killed (2, 2, 2, 2, 2, 2, 1, 2).
+- The banner's tag (9): H01 to H04 the stop typed as `tick_limited`, `aborted`, `unfinished` and null, H05 the
+  winner typed as null (kind reads made constants); H06 the aborted and tick-limit branches swapped, H09 the reveal
+  branches swapped; H07 the aborted test made a null test; H08 the tick-limit branch dropped. Before: H01 survived,
+  the rest killed (1, 1, 1, 1, 4, 2, 3, 2). After, in id order, all killed (1, 2, 2, 2, 1, 5, 3, 4, 3).
+
+Before, 21 of 31 survived; after, 31 of 31 are killed. No production line changed this round, so the earlier pass's
+38 mutants stand as they were.
+
+**Validation, this round.** Run from the branch's worktree with `uv run`, count-only; exit codes as they came back.
+`npx vitest run`: 1053 passed (33 files). `npm run tsc:check`: exit 0. `npm run lint`: exit 0.
+`validate_task_docs.py`: exit 0. `check_doc_facts.py`: exit 0. `pytest tests/api/test_game_profile_view.py
+tests/api/test_sets.py tests/scripts/test_build_demo_bundle.py -q`: 118 passed. The card's never-written diff from
+`7d781f8e` to H over `engine agents meetings observation orchestrator llm api eval training experiments replays
+scripts tests README.md docs` (the glob `'e?al'` standing for `eval`, as before): exit 0. `npm run e2e` was not
+rerun here: this round moves no production file and no e2e spec, other cards' sessions share this machine's ports
+8000 and 5173, and CI's e2e job runs the committed config at the exact head. The gate record is CI's green run at
+the exact head, cited by run id in the pull request body (memo 8.7 item 1); no local `check.sh` ran at H.
