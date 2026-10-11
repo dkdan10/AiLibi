@@ -216,12 +216,26 @@ def _front_door_jargon(root: Path) -> list[str]:
     ]
 
 
-def _readme_caption(readme: str) -> str:
-    """The italic caption under the README's picture."""
+#: The README's hero picture; its caption is the first line after it.
+_HERO_EMBED = "](docs/media/spectator-two-truths.png)"
 
-    lines = [line for line in readme.splitlines() if line.startswith("*9p2i seed ")]
-    assert len(lines) == 1, lines
-    return lines[0]
+
+def _readme_caption(readme: str) -> str:
+    """The italic caption under the README's picture.
+
+    The caption opens on its scene and names the set and seed after it, so it
+    is found by where it sits, the first non-blank line under the hero picture,
+    rather than by how it begins.
+    """
+
+    lines = readme.splitlines()
+    heroes = [index for index, line in enumerate(lines) if _HERO_EMBED in line]
+    assert len(heroes) == 1, heroes
+    following = [line for line in lines[heroes[0] + 1 :] if line.strip()]
+    assert following, "no caption under the hero picture"
+    caption = following[0]
+    assert caption.startswith("*"), caption
+    return caption
 
 
 def test_the_front_door_names_the_pictured_game_in_plain_words(
@@ -266,7 +280,7 @@ _HERO_GAME = "headless-seed-19"
 #: The caption's scene clause. Each claim in it is a named group, read back out
 #: of the caption and held to the served replay at the tick the caption names.
 _CAPTION_SCENE = re.compile(
-    r"at tick (?P<tick>\d+) (?P<dead>[a-z]+) players lie dead, one impostor "
+    r"\b[Aa]t tick (?P<tick>\d+) (?P<dead>[a-z]+) players lie dead, one impostor "
     r"stands in (?P<room>[A-Za-z ]+?) and the other is inside a vent, while "
     r"(?P<subject>p-\d+) can see only (?P<seen>p-\d+), whom "
     r"(?P<accuser>p-\d+) accuses at the meeting that follows\."
@@ -546,14 +560,33 @@ def test_the_captions_scene_is_the_recorded_one(
             id="another-count",
         ),
         pytest.param(
-            "at tick 9 ",
-            "at tick 12 ",
+            "At tick 9 ",
+            "At tick 12 ",
             [
                 "names tick 12, the picture shows tick 9",
                 "says one impostor stands in MedBay, the replay has ['ENGINEERING']",
                 "says p-5 accuses p-4 at the meeting that follows, the replay has []",
             ],
             id="another-tick",
+        ),
+        pytest.param(
+            "At tick 9 ",
+            "At tick 10 ",
+            [
+                "names tick 10, the picture shows tick 9",
+                "says one impostor is inside a vent, the replay has 2",
+                "says one impostor stands in MedBay, the replay has []",
+            ],
+            id="one-tick-later",
+        ),
+        pytest.param(
+            "At tick 9 ",
+            "At tick 8 ",
+            [
+                "names tick 8, the picture shows tick 9",
+                "says two players lie dead, the replay has 1",
+            ],
+            id="one-tick-earlier",
         ),
         pytest.param(
             "can see only p-4",
@@ -627,6 +660,27 @@ def test_the_caption_counts_its_dead_in_words(
     assert _caption_scene_problems(counted, more, tick) == [
         f"says {word} players lie dead, the replay has {dead + 1}"
     ]
+
+
+def test_the_caption_is_the_line_under_the_hero_picture() -> None:
+    # The caption opens on its scene, so it is found by where it sits: the first
+    # non-blank line under the hero picture, an italic line.
+    root = Path(__file__).resolve().parents[2]
+    readme = (root / "README.md").read_text()
+    caption = _readme_caption(readme)
+    assert caption.startswith("*At tick ")
+    assert "9p2i seed 19" in caption
+    # Planted: the GIF moved between the picture and its caption, so the line
+    # under the picture is no caption at all.
+    gif = next(line for line in readme.splitlines() if "spectator-journey.gif" in line)
+    moved = readme.replace(f"\n\n{gif}", "").replace(caption, f"{gif}\n\n{caption}")
+    assert moved.count(gif) == 1
+    with pytest.raises(AssertionError, match="spectator-journey.gif"):
+        _readme_caption(moved)
+    # Planted: a second hero picture, so which caption is meant is ambiguous.
+    hero = next(line for line in readme.splitlines() if _HERO_EMBED in line)
+    with pytest.raises(AssertionError):
+        _readme_caption(readme + f"\n{hero}\n")
 
 
 def test_the_59bbd1be_caption_names_no_scene(hero_replay: ReplayView) -> None:

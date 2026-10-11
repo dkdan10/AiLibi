@@ -30,10 +30,12 @@ together, so one run names every drifted fact rather than the first.
    refused. The paragraph's count claims are re-derived from the same rows —
    the per-set tournament size (``"<rows>-game"``) and the total
    (``"<sum> sample replays"``), with every count-shaped claim in the
-   paragraph held to the row totals — and the recording model plus the
-   prompt-set family, version and arm tokens the ``model`` /
-   ``prompt_versions`` columns record (a two-arm composite split on ``+``)
-   must be named in the paragraph as well. Both claim shapes are then scanned
+   paragraph held to the row totals — and the recording model the ``model``
+   column records must be named in the paragraph as well. The prompt stamps
+   are the manifests' to state: the paragraph links each set's MANIFEST.md, and
+   any version or arm token it does name (``v<N>``, ``<name>_v<N>``, backticked
+   or not) must be one the ``prompt_versions`` column records (a composite
+   split on ``+``). Both claim shapes are then scanned
    across every document allowed to repeat them — README.md,
    docs/history.md, docs/glossary.md, audits/README.md,
    docs/reading-guide.md and docs/ml-program.md — because a figure the front
@@ -116,8 +118,9 @@ together, so one run names every drifted fact rather than the first.
    the record read. The win rates are re-derived in check 1.
 10. **The real-report example matches that report.** README.md hands a reader a
     populated eval report because the default fake provider produces an empty
-    one; its ejection count and two rates come from that report's own
-    ``vote_correctness`` block, never from prose.
+    one; its three ejection counts (all ejections, those that removed an
+    impostor, and those with evidence on the meeting's record) come from that
+    report's own ``vote_correctness`` block, never from prose.
 11. **Volatile counts carry an as-of stamp.** A count that changes without any
     commit touching the prose (merged pull requests, commits, tests) must be
     stated with ``as of YYYY-MM-DD`` in its own sentence. The stamp's presence
@@ -380,6 +383,10 @@ _RECORD_DATE_CLAIM: Final = re.compile(r"the (\d{4}-\d{2}-\d{2}) record\b")
 # parentheses directly after it: "the 2026-10-01 record (9p2i)". A claim naming
 # no set, or a set recorded on another day, is drift.
 _CLAIM_SETS: Final = re.compile(r"\s*\(([^)]*)\)")
+# A prompt stamp the provenance paragraph names, backticked or not: an arm token
+# (``route_lines_v1``) or a bare version (``v6``). The paragraph leaves the
+# stamps to the manifests it links, so one it does name must be recorded.
+_STAMP_TOKEN: Final = re.compile(r"\b\w*_v\d+\b|\bv\d+\b")
 _SET_NAME: Final = re.compile(r"\b(4p1i|9p2i)\b")
 
 # The .env.example section whose AILIBI_*= assignments must all resolve to a
@@ -557,12 +564,10 @@ _TABLE_RULE_CELL: Final = re.compile(r"\A:?-{2,}:?\Z")
 # the two tables: agreement catches a one-sided edit, not the same wrong figure
 # written into both. Each claim string is the row's first cell.
 _SAMPLE_REPLAY_DIR: Final = "replays/samples/{name}"
-_REPLAY_COUNT_CLAIM: Final = (
-    "Committed sample replays that reconstruct byte-identically"
-)
+_REPLAY_COUNT_CLAIM: Final = "Sample games that replay byte for byte"
 _CITATION_INSTRUMENT: Final = "tests/eval/test_vj_instruments.py"
 _CITATION_CLAIM: Final = (
-    "Eject ballots carrying a valid citation, a turn or an observation id (9p2i)"
+    "Eject ballots with a valid citation of a statement or sighting (9p2i)"
 )
 # The instrument's pinned assertions, read as the committed source of the
 # citation figure: ``assert nine.<field> == <n>``.
@@ -573,7 +578,9 @@ _CITATION_PIN_NAMES: Final[tuple[str, ...]] = (
     "turn_citations_dangling",
     "observation_citations_dangling",
 )
-_VENT_CLAIM: Final = "Correct 9p ejections riding an ejectee-specific vent sighting"
+_VENT_CLAIM: Final = (
+    "Impostors ejected after a reported sighting of them venting (9p2i)"
+)
 _VENT_TABLE_HEADER: Final = "Meeting contains a vent flag"
 # The reading guide's §3 cross-tab, and the committed instrument whose pinned
 # assertions own its cells. The guide's table is where the README's vent
@@ -683,8 +690,7 @@ _REPLACED_ERAS: Final[Mapping[str, Era]] = MappingProxyType(
 )
 _WIN_SPLIT_ROW: Final = "samples/{name}"
 _PROOF_CLAIM: Final = (
-    "Ejection accuracy with engine-certified proof of the ejectee's role, "
-    "against without (9p2i)"
+    "Impostors among those ejected, with and without proof of their role (9p2i)"
 )
 # The set the proof row reads, alone: its after cells are its own era's record's
 # row for it, its before cells the row the recording it replaced published.
@@ -718,7 +724,7 @@ _INJUSTICE_CLAIM: Final = (
 # ``NO_CONSUMER_NOTE``). Each pair is the row's claim and the page's row label.
 _SCORECARD_PAGE: Final = "docs/process-scorecard.md"
 _GROUNDED_EJECT_CLAIM: Final = (
-    "Eject ballots citing a line the voter held about their target (9p2i)"
+    "Eject ballots citing what the voter saw or heard about the accused (9p2i)"
 )
 _DEVIATING_EJECT_CLAIM: Final = (
     "Crew eject ballots naming someone other than the voter's top suspect (9p2i)"
@@ -755,7 +761,7 @@ _SCORECARD_NO_REWRITES: Final = "none"
 # A results row whose history cell this checker RE-DERIVES from the audit that
 # owns it, rather than only comparing the two tables' copies; the process rows'
 # history cells are re-derived from the scorecard page's before column.
-_WIN_RATE_ROW_CLAIM: Final = "Impostor win rate, committed samples"
+_WIN_RATE_ROW_CLAIM: Final = "Impostor win rate, sample games"
 _DERIVED_BEFORE_CLAIMS: Final[frozenset[str]] = frozenset(
     {_WIN_RATE_ROW_CLAIM, _PROOF_CLAIM, *(claim for claim, _ in _PROCESS_ROWS)}
 )
@@ -1000,6 +1006,22 @@ _VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
 # fake-provider run produces, and the phrase that anchors its paragraph.
 _POPULATED_REPORT: Final = "replays/samples/9p2i/" + REPORT_FILENAME
 _EXAMPLE_ANCHOR: Final = "fake provider's report is empty on purpose"
+# What the example states, as ``(label, report key, wording)``: the three counts
+# the report's own ``vote_correctness`` block carries, each in what it counts.
+_REPORT_EXAMPLE_CLAIMS: Final[tuple[tuple[str, str, str], ...]] = (
+    ("ejections", "total_ejections", "{total_ejections:d} ejections"),
+    (
+        "impostor ejections",
+        "impostor_ejections",
+        "{impostor_ejections:d} removed an impostor",
+    ),
+    (
+        "evidence-backed impostor ejections",
+        "evidence_backed_impostor_ejections",
+        "{evidence_backed_impostor_ejections:d} of those {impostor_ejections:d} "
+        "with evidence against that player",
+    ),
+)
 
 # One word budget per front-door page, as ``(document, floor, ceiling)`` —
 # ``None`` where a page has no floor. Measured with ``wc -w`` semantics:
@@ -1514,7 +1536,6 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
 
     facts: dict[str, _SetFacts] = {}
     models: set[str] = set()
-    prompt_families: set[str] = set()
     prompt_versions: set[str] = set()
     prompt_arms: set[str] = set()
     for name in _SAMPLE_SETS:
@@ -1536,8 +1557,7 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
         )
         models.update(row.model.strip() for row in rows)
         for row in rows:
-            families, versions, arms = prompt_stamp_tokens(row.prompt_versions)
-            prompt_families |= families
+            _, versions, arms = prompt_stamp_tokens(row.prompt_versions)
             prompt_versions |= versions
             prompt_arms |= arms
 
@@ -1651,18 +1671,27 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                 f"the recording model {model!r} — the manifest `model` column "
                 "records it on every row."
             )
-    for kind, tokens in (
-        ("prompt-set family", prompt_families),
-        ("prompt-set version", prompt_versions),
-        ("prompt arm", prompt_arms),
-    ):
-        for token in sorted(tokens):
-            if token not in paragraph:
-                errors.append(
-                    f"{_README}: the sample-provenance paragraph does not "
-                    f"name the {kind} {token!r} — the manifest "
-                    "`prompt_versions` column records it."
-                )
+    for name in facts:
+        manifest = _MANIFEST_PATH.format(name=name)
+        if f"]({manifest})" not in paragraph:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph does not link "
+                f"{manifest} — the paragraph names the model and leaves each "
+                "set's prompt stamps to its manifest, so the manifest is linked."
+            )
+    for match in _STAMP_TOKEN.finditer(paragraph):
+        token = match.group(0)
+        kind, recorded = (
+            ("prompt arm", prompt_arms)
+            if "_v" in token
+            else ("prompt-set version", prompt_versions)
+        )
+        if token not in recorded:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph names the {kind} "
+                f"{token!r}, which no row's `prompt_versions` column records "
+                f"(recorded: {', '.join(sorted(recorded)) or 'none'})."
+            )
 
 
 def check_repeated_claims(
@@ -4033,10 +4062,12 @@ def check_populated_report_example(
     """The README's real-report example, held to that report's own numbers.
 
     The front door hands a reader a populated report precisely because the
-    default fake provider produces an empty one. Copying its headline scalars
+    default fake provider produces an empty one. Copying its headline counts
     into prose would put them one re-record away from being someone else's
     numbers, so each is re-derived from the report's own
-    ``vote_correctness`` block.
+    ``vote_correctness`` block: every ejection, those that removed an impostor,
+    and those whose meeting carried evidence naming the player ejected. The
+    paragraph states counts, not the two rates taken over them.
     """
 
     paragraph = next(
@@ -4057,23 +4088,24 @@ def check_populated_report_example(
     block = read_vote_correctness_block(repo_root, _POPULATED_REPORT, errors)
     if block is None:
         return
-    for label, key, expected in (
-        ("ejections", "total_ejections", "{value:d} ejections"),
-        ("vote correctness", "vote_correctness_rate", "vote correctness {value:.3f}"),
-        ("ejection accuracy", "ejection_accuracy", "ejection accuracy {value:.3f}"),
-    ):
+    counts: dict[str, int] = {}
+    for label, key, _ in _REPORT_EXAMPLE_CLAIMS:
         value = block.get(key)
-        if not isinstance(value, (int, float)) or isinstance(value, bool):
+        if not isinstance(value, int) or isinstance(value, bool):
             errors.append(
-                f"{_POPULATED_REPORT}: {key} is {value!r}, not a number — the "
+                f"{_POPULATED_REPORT}: {key} is {value!r}, not a count — the "
                 f"{_README} example's {label} claim cannot be re-derived."
             )
             continue
-        claim = expected.format(value=value)
+        counts[key] = value
+    if len(counts) != len(_REPORT_EXAMPLE_CLAIMS):
+        return  # a wording naming a count the report lacks cannot be filled in
+    for _, key, expected in _REPORT_EXAMPLE_CLAIMS:
+        claim = expected.format_map(counts)
         if claim not in paragraph:
             errors.append(
                 f"{_README}: the real-report example does not state "
-                f"{claim!r} — {_POPULATED_REPORT} records {key} as {value!r}."
+                f"{claim!r} — {_POPULATED_REPORT} records {key} as {counts[key]!r}."
             )
 
 
