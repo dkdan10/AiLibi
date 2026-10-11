@@ -3,9 +3,11 @@
 ## Scope: what this project is
 
 AiLibi is a local research testbed for multi-agent reasoning, not a deployed
-service. There is no hosted instance, no user accounts, and no production
-deployment to compromise. The supported version is whatever is on `main`; there
-are no releases and no backported fixes.
+service. Its one hosted copy is the static demo at
+<https://dkdan10.github.io/AiLibi/>: recorded games, with no backend, no
+accounts and no API. The API runs only on loopback, on the machine that starts
+it. The supported version is whatever is on `main`; there are no releases and
+no backported fixes.
 
 Read this before filing anything, because the single most security-relevant
 property of this repository is deliberate.

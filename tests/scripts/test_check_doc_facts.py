@@ -1806,6 +1806,26 @@ def test_previous_set_row_reaches_the_before_column(doc_tree: Path) -> None:
 # the whole round-2 front door inside the promoted tree.
 _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
     (
+        """# AiLibi — can agents reason from what they actually saw?
+
+*Recorded AI social deduction*
+""",
+        """# AiLibi — can agents reason from what they actually saw?
+""",
+    ),
+    (
+        """**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [See the results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read an ownership decision](docs/ownership-case-study.md)
+""",
+        """**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [Inspect results and decisions](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read an ownership decision](docs/ownership-case-study.md)
+""",
+    ),
+    (
+        """Daniel Keinan directed the project and decided what was accepted, without hand-writing the production code; AI agents wrote it, and the audits here are AI reviews, not independent human assurance.
+""",
+        """Daniel directed product scope, acceptance criteria, priorities, and adoption decisions. Claude Code implemented the initial project; Codex reviewed it and now also implements cleanup. Agents wrote production code and substantial supporting plans, cards, tests, documentation, and audits. Daniel did not hand-write the production code. “Independent” audits here mean separate AI reviewers, not independent human assurance.
+""",
+    ),
+    (
         """*At tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. This is 9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-09 record (9p2i); [media provenance](docs/media/README.md#provenance) records its source and asset identities.*
 
 [![The same game playing from its first tick to the meeting](docs/media/spectator-journey.gif)](https://dkdan10.github.io/AiLibi/)
@@ -1877,7 +1897,7 @@ default-off, not adopted. [Observation contract and limitations](docs/observatio
 """,
     ),
     (
-        """The [ownership case study](docs/ownership-case-study.md) traces one decision from its evidence to what remained unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. Phase closes do not claim every issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
+        """The [ownership case study](docs/ownership-case-study.md) traces two owner decisions from their evidence to what each leaves unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. Phase closes do not claim every issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
 """,
         """The [ownership case study](docs/ownership-case-study.md) traces one consequential decision through evidence, alternatives, implementation, review, and what remained unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. The cleanup branch merged into main on 2026-09-07; historical phase closes are not a claim that every current issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
 """,
@@ -6427,3 +6447,560 @@ def test_a_retired_form_in_the_source_column_is_refused_too(doc_tree: Path) -> N
         f"{_README}: the results row {_PROOF_CLAIM!r} writes '15/15' — both tables "
         "state a fraction as 'k of n (p%)' and print no decimal rate."
     ]
+
+
+# ── the front door's wording, pinned page by page ────────────────────────────
+#
+# The owner answered the visitor-wording survey on 2026-10-11
+# (tasks/decision-2026-10-11-visitor-wording.md): strings each page must carry,
+# and strings it no longer may. Each page is read as a visitor reads it, links
+# reduced to their text, emphasis and backticks dropped, whitespace collapsed;
+# a retired string is matched on word boundaries, the verdict word case-folded.
+
+_WORDING_PAGES = (
+    _README,
+    _READING_GUIDE,
+    _LESSONS,
+    _OWNERSHIP_CASE,
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+)
+_README_TITLE = "# AiLibi — can agents reason from what they actually saw?"
+_TAGLINE = "Recorded AI social deduction"
+# The byline, byte for byte: kept as it is and linked to nothing new.
+_BYLINE = (
+    "by **Daniel Keinan** · implemented by Claude Code and Codex agents · "
+    "AI-reviewed · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/"
+    "actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/"
+    "actions/workflows/ci.yml)"
+)
+_WHO_DID_WHAT = "## Who did what"
+# The section says who did what without dividing the work by agent product,
+# and keeps both honesty facts.
+_WHO_DID_WHAT_RETIRED = ("Claude Code", "Codex")
+_WHO_DID_WHAT_REQUIRED = (
+    "without hand-writing the production code",
+    "not independent human assurance",
+)
+# The prompt stamps the samples paragraph left to the manifests.
+_README_STAMPS = (
+    "qwen3_6_27b",
+    "v6",
+    "v8",
+    "impostor_ballot_v1",
+    "ballot_kill_row_v1",
+    "route_lines_v1",
+)
+# Terms the README retired; the guide's sentences carrying one follow it (2b.8).
+_RETIRED_TERMS = (
+    "in its own era",
+    "ML corpus",
+    "body identifier",
+    "temporal repair",
+    "default-off",
+)
+# The case study's opening, which stays as it is (ruling 2b.9).
+_CASE_STUDY_OPENING = (
+    "Daniel Keinan directed AiLibi; Claude Code and Codex agents implemented and "
+    "reviewed it. This case study was drafted by Codex from the preserved "
+    "decision records. It describes an owner ruling, not hand-written "
+    "implementation or an independent human audit."
+)
+_GUIDE_AUDITS = "## 4. Four audits, in this order"
+_LATEST_AUDIT = "../audits/audit-2026-10-10-finalized-state.md"
+_DEMO_ADDRESS = "https://dkdan10.github.io/AiLibi/"
+# Per page: (required, retired, retired case-folded).
+_WORDING: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
+    _README: (
+        ("See the results",),
+        (
+            "Inspect results and decisions",
+            *_README_STAMPS,
+            *_RETIRED_TERMS,
+            "vote correctness 0.783",
+            "0.5922 against 0.60",
+            "against 34 of 46",
+            "50 of 96 = 0.5208",
+            "43 of 85 = 0.5059",
+            "missed 0.40",
+        ),
+        ("finding",),
+    ),
+    _READING_GUIDE: (
+        (
+            "Results shows each set's figures",
+            "Deception: demonstrated in earlier recordings",
+            "Four audits",
+        ),
+        (
+            "Results & cases",
+            "strongest capability on display",
+            "hand-picked, not scored",
+            *_RETIRED_TERMS,
+        ),
+        (),
+    ),
+    _LESSONS: ((), ("OWNER: confirm", "OWNER: end"), ()),
+    _OWNERSHIP_CASE: (("Keep the comparison records", _CASE_STUDY_OPENING), (), ()),
+    "SECURITY.md": ((_DEMO_ADDRESS,), ("There is no hosted instance",), ()),
+    "CONTRIBUTING.md": ((), ("a human review as the gates",), ()),
+}
+_MARKS = re.compile(r"[*`]")
+_LINK_TARGET = re.compile(r"\]\(([^)\s]+)\)")
+_AUDIT_TOKEN = re.compile(r"\baudit-[\w.-]*\w")
+
+
+def _visible(markdown: str) -> str:
+    """``markdown`` as a visitor reads it: link text only, no marks, one space."""
+
+    return " ".join(_MARKS.sub("", check_doc_facts.strip_links(markdown)).split())
+
+
+def _names(text: str, term: str, *, folded: bool = False) -> bool:
+    """Whether ``text`` carries ``term`` as a whole phrase."""
+
+    pattern = rf"(?<!\w){re.escape(term)}(?!\w)"
+    return re.search(pattern, text, re.IGNORECASE if folded else 0) is not None
+
+
+def _section(markdown: str, heading: str) -> str | None:
+    """The lines under ``heading`` up to the next heading of the same level."""
+
+    lines = markdown.splitlines()
+    if heading not in lines:
+        return None
+    level = heading.split(" ", 1)[0]
+    body: list[str] = []
+    for line in lines[lines.index(heading) + 1 :]:
+        if line.startswith("#") and line.split(" ", 1)[0] == level:
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _page_wording_problems(page: str, markdown: str) -> list[str]:
+    """Why ``markdown``, the text of ``page``, breaks the wording answered."""
+
+    visible = _visible(markdown)
+    required, retired, folded = _WORDING[page]
+    problems = [f"{page}: missing {term!r}" for term in required if term not in visible]
+    problems += [
+        f"{page}: carries {term!r}" for term in retired if _names(visible, term)
+    ]
+    problems += [
+        f"{page}: carries {term!r}"
+        for term in folded
+        if _names(visible, term, folded=True)
+    ]
+    if page == _README:
+        problems += _readme_wording_problems(markdown)
+    if page == _READING_GUIDE:
+        problems += _guide_wording_problems(markdown, visible)
+    return problems
+
+
+def _readme_wording_problems(markdown: str) -> list[str]:
+    """The README's tagline, byline and "Who did what" section."""
+
+    problems: list[str] = []
+    lines = markdown.splitlines()
+    if not lines or lines[0] != _README_TITLE:
+        problems.append(f"{_README}: the title line is not {_README_TITLE!r}")
+    following = [line for line in lines[1:] if line.strip()]
+    if not following or _visible(following[0]) != _TAGLINE:
+        problems.append(f"{_README}: the line under the title is not {_TAGLINE!r}")
+    if _BYLINE not in lines:
+        problems.append(f"{_README}: the byline is not kept byte for byte")
+    section = _section(markdown, _WHO_DID_WHAT)
+    if section is None:
+        return [*problems, f"{_README}: no {_WHO_DID_WHAT!r} section"]
+    shown = _visible(section)
+    problems += [
+        f"{_README}: under {_WHO_DID_WHAT!r}, carries {term!r}"
+        for term in _WHO_DID_WHAT_RETIRED
+        if _names(shown, term)
+    ]
+    problems += [
+        f"{_README}: under {_WHO_DID_WHAT!r}, missing {term!r}"
+        for term in _WHO_DID_WHAT_REQUIRED
+        if term not in shown
+    ]
+    return problems
+
+
+def _guide_wording_problems(markdown: str, visible: str) -> list[str]:
+    """The guide's audit list: the latest audit first, no filename as link text."""
+
+    problems = [
+        f"{_READING_GUIDE}: link text names the file {token!r}"
+        for token in _AUDIT_TOKEN.findall(visible)
+    ]
+    section = _section(markdown, _GUIDE_AUDITS)
+    if section is None:
+        return [*problems, f"{_READING_GUIDE}: no {_GUIDE_AUDITS!r} section"]
+    targets = _LINK_TARGET.findall(section)
+    if not targets or targets[0] != _LATEST_AUDIT:
+        first = targets[0] if targets else None
+        problems.append(
+            f"{_READING_GUIDE}: the audit list opens on {first!r}, not {_LATEST_AUDIT!r}"
+        )
+    return problems
+
+
+def _wording_problems(root: Path) -> dict[str, list[str]]:
+    """Every wording problem of the six pages under ``root``, by page."""
+
+    problems: dict[str, list[str]] = {}
+    for page in _WORDING_PAGES:
+        found = _page_wording_problems(page, (root / page).read_text(encoding="utf-8"))
+        if found:
+            problems[page] = found
+    return problems
+
+
+def test_the_front_door_wording_pin_holds() -> None:
+    assert _wording_problems(_REPO_ROOT) == {}
+
+
+# The texts the answers of 2026-10-11 replaced, as they stood at 7d781f8e.
+_ERA_SENTENCE_AT_BASE = (
+    "The shown 9-player set was recorded 2026-10-09 under the adopted gameplay "
+    "changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-"
+    "recorded-identity); the 4-player set and the ML corpus stay at [baseline 9]"
+    "(docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22."
+)
+_WHO_DID_WHAT_AT_BASE = (
+    "Daniel directed product scope, acceptance criteria, priorities, and adoption "
+    "decisions. Claude Code implemented the initial project; Codex reviewed it and "
+    "now also implements cleanup. Agents wrote production code and substantial "
+    "supporting plans, cards, tests, documentation, and audits. Daniel did not "
+    "hand-write the production code. “Independent” audits here mean separate AI "
+    "reviewers, not independent human assurance."
+)
+_BARS_AT_BASE = (
+    "**Two bars were written down first, and both were missed.** Baseline 7 "
+    "measured conviction accuracy without proof at 61 of 103 = 0.5922 against "
+    "0.60, and wrongful ejections at 42 against fewer than 35; its rule returned "
+    "**FINDING**, and Daniel adopted it by explicit owner override on 2026-08-26. "
+    "Baseline 8 registered none: 50 of 96 = 0.5208 with 46 innocent ejections. "
+    "Nor did baseline 9: 43 of 85 = 0.5059 with 42 innocent ejections over four "
+    "sets, a movement these samples cannot call real. [The decision and its "
+    "limitations](docs/ownership-case-study.md)."
+)
+_EXPERIMENT_AT_BASE = (
+    "**An experiment on baseline 8 met three of four fresh bars.** Innocent "
+    "ejections fell from 46 to 20; 11 of those 20 were the meeting's own reporter, "
+    "against 34 of 46. That share, 0.5500, missed 0.40, so the rule returns **a "
+    "finding**, with no override and no adoption "
+    "([record](audits/audit-phase-21-adopting-record.md))."
+)
+_CONTRIBUTING_AT_BASE = (
+    "working against a task contract authorized by the owner, in a fresh "
+    "checkout, with\nCI and a human review as the gates."
+)
+_SECURITY_AT_BASE = (
+    "service. There is no hosted instance, no user accounts, and no production\n"
+    "deployment to compromise."
+)
+_DECEPTION_AT_BASE = (
+    "**Deception: demonstrated, and the strongest capability on display.**"
+)
+_MISSED_BARS = (
+    "**Targets written down before measuring were missed twice:** the owner "
+    "adopted the first recording anyway, in writing, and nothing from the second "
+    "([what each measured](docs/history.md#evidence-honesty-phase-20))."
+)
+_SECURITY_NOW = (
+    "service. Its one hosted copy is the static demo at\n"
+    "<https://dkdan10.github.io/AiLibi/>: recorded games, with no backend, no\n"
+    "accounts and no API."
+)
+_CONTRIBUTING_NOW = (
+    "working against a task contract authorized by the owner, in a fresh checkout. "
+    "CI\nis the gate, separate AI reviewers check each change, and the owner "
+    "decides what\nis accepted and published."
+)
+
+
+def _wording_tree(tmp_path: Path) -> Path:
+    """A scratch copy of the six pages the wording pin reads."""
+
+    for page in _WORDING_PAGES:
+        copied = tmp_path / page
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        copied.write_bytes((_REPO_ROOT / page).read_bytes())
+    return tmp_path
+
+
+def _planted(tmp_path: Path, page: str, old: str, new: str) -> dict[str, list[str]]:
+    """The pin's problems with ``old`` replaced by ``new`` on one scratch page."""
+
+    tree = _wording_tree(tmp_path)
+    assert _wording_problems(tree) == {}
+    text = (tree / page).read_text(encoding="utf-8")
+    assert text.count(old) == 1, (page, old)
+    (tree / page).write_text(text.replace(old, new), encoding="utf-8")
+    return _wording_problems(tree)
+
+
+_ERA_SENTENCE_NOW = (
+    "The shown 9-player set was recorded 2026-10-09 under the adopted gameplay "
+    "changes; the 4-player set and the ML training games were recorded 2026-09-22."
+)
+
+
+@pytest.mark.parametrize(
+    ("page", "old", "new", "expected"),
+    [
+        pytest.param(
+            _README,
+            _ERA_SENTENCE_NOW,
+            _ERA_SENTENCE_AT_BASE,
+            ["README.md: carries 'in its own era'", "README.md: carries 'ML corpus'"],
+            id="era-link-restored",
+        ),
+        pytest.param(
+            _README,
+            "\n*Recorded AI social deduction*\n",
+            "\n",
+            [
+                "README.md: the line under the title is not "
+                "'Recorded AI social deduction'"
+            ],
+            id="tagline-deleted",
+        ),
+        pytest.param(
+            _README,
+            f"*Recorded AI social deduction*\n\n{_BYLINE}\n",
+            f"{_BYLINE}\n\n*Recorded AI social deduction*\n",
+            [
+                "README.md: the line under the title is not "
+                "'Recorded AI social deduction'"
+            ],
+            id="tagline-below-the-byline",
+        ),
+        pytest.param(
+            _README,
+            "[See the results]",
+            "[Inspect results and decisions]",
+            [
+                "README.md: missing 'See the results'",
+                "README.md: carries 'Inspect results and decisions'",
+            ],
+            id="results-link-restored",
+        ),
+        pytest.param(
+            _README,
+            "by **Daniel Keinan**",
+            "by **[Daniel Keinan](docs/lessons.md)**",
+            ["README.md: the byline is not kept byte for byte"],
+            id="byline-linked",
+        ),
+        pytest.param(
+            _README,
+            "AI agents wrote it,",
+            "Claude Code implemented it,",
+            ["README.md: under '## Who did what', carries 'Claude Code'"],
+            id="agent-named-under-the-heading",
+        ),
+        pytest.param(
+            _README,
+            "Daniel Keinan directed the project and decided what was accepted, "
+            "without hand-writing the production code; AI agents wrote it, and the "
+            "audits here are AI reviews, not independent human assurance.",
+            _WHO_DID_WHAT_AT_BASE,
+            [
+                "README.md: under '## Who did what', carries 'Claude Code'",
+                "README.md: under '## Who did what', carries 'Codex'",
+                "README.md: under '## Who did what', missing 'without "
+                "hand-writing the production code'",
+            ],
+            id="per-agent-paragraph-restored",
+        ),
+        pytest.param(
+            _README,
+            _MISSED_BARS,
+            _BARS_AT_BASE,
+            [
+                "README.md: carries '0.5922 against 0.60'",
+                "README.md: carries '50 of 96 = 0.5208'",
+                "README.md: carries '43 of 85 = 0.5059'",
+                "README.md: carries 'finding'",
+            ],
+            id="missed-bar-paragraph-restored",
+        ),
+        pytest.param(
+            _README,
+            _MISSED_BARS,
+            _EXPERIMENT_AT_BASE,
+            [
+                "README.md: carries 'against 34 of 46'",
+                "README.md: carries 'missed 0.40'",
+                "README.md: carries 'finding'",
+            ],
+            id="experiment-paragraph-restored",
+        ),
+        pytest.param(
+            _README,
+            "records 61 ejections;",
+            "records 61 ejections, vote correctness 0.783;",
+            ["README.md: carries 'vote correctness 0.783'"],
+            id="report-rate-restored",
+        ),
+        pytest.param(
+            _README,
+            "played by the `Qwen/Qwen3.6-27B` model.",
+            "using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts.",
+            ["README.md: carries 'qwen3_6_27b'", "README.md: carries 'v6'"],
+            id="stamps-restored",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "**Results** shows",
+            "**Results & cases** shows",
+            [
+                'docs/reading-guide.md: missing "Results shows each set\'s figures"',
+                "docs/reading-guide.md: carries 'Results & cases'",
+            ],
+            id="tab-name-restored",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "**Deception: demonstrated in earlier recordings**, as",
+            _DECEPTION_AT_BASE + " As",
+            [
+                "docs/reading-guide.md: missing 'Deception: demonstrated in earlier "
+                "recordings'",
+                "docs/reading-guide.md: carries 'strongest capability on display'",
+            ],
+            id="deception-claim-restored",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "spoiler-free;",
+            "hand-picked, not scored, and spoiler-free;",
+            ["docs/reading-guide.md: carries 'hand-picked, not scored'"],
+            id="unscored-restored",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "the ML training games were recorded",
+            "the ML corpus were recorded",
+            ["docs/reading-guide.md: carries 'ML corpus'"],
+            id="ml-corpus-in-the-guide",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "[The fresh-clone audit](../audits/audit-phase-19-input-claude.md).",
+            "[audit-phase-19-input-claude.md](../audits/audit-phase-19-input-claude.md).",
+            [
+                "docs/reading-guide.md: link text names the file "
+                "'audit-phase-19-input-claude.md'"
+            ],
+            id="filename-as-link-text",
+        ),
+        pytest.param(
+            _LESSONS,
+            "# What I learned\n",
+            "<!-- OWNER: confirm wording -->\n# What I learned\n",
+            ["docs/lessons.md: carries 'OWNER: confirm'"],
+            id="lessons-marker-restored",
+        ),
+        pytest.param(
+            _OWNERSHIP_CASE,
+            'verbatim: "Keep the comparison\nrecords".',
+            'verbatim: "Keep the records".',
+            ["docs/ownership-case-study.md: missing 'Keep the comparison records'"],
+            id="ruling-not-quoted",
+        ),
+        pytest.param(
+            _OWNERSHIP_CASE,
+            "This case study was drafted by Codex",
+            "This case study was drafted by AI agents",
+            [f"docs/ownership-case-study.md: missing {_CASE_STUDY_OPENING!r}"],
+            id="opening-edited",
+        ),
+        pytest.param(
+            "SECURITY.md",
+            _SECURITY_NOW,
+            _SECURITY_AT_BASE,
+            [
+                "SECURITY.md: missing 'https://dkdan10.github.io/AiLibi/'",
+                "SECURITY.md: carries 'There is no hosted instance'",
+            ],
+            id="no-hosted-instance-restored",
+        ),
+        pytest.param(
+            "CONTRIBUTING.md",
+            _CONTRIBUTING_NOW,
+            _CONTRIBUTING_AT_BASE,
+            ["CONTRIBUTING.md: carries 'a human review as the gates'"],
+            id="human-review-restored",
+        ),
+    ],
+)
+def test_the_wording_pin_refuses_each_restored_text(
+    tmp_path: Path, page: str, old: str, new: str, expected: list[str]
+) -> None:
+    # Each planted case puts one replaced text back on one scratch page; the
+    # pin names that page alone, and every problem the case expects.
+    problems = _planted(tmp_path, page, old, new)
+    assert set(problems) == {page}
+    assert all(item in problems[page] for item in expected), problems[page]
+
+
+def test_the_wording_pin_reads_the_audit_list_in_order(tmp_path: Path) -> None:
+    # Planted: the 2026-10-10 entry moved second, below the fresh-clone audit.
+    tree = _wording_tree(tmp_path)
+    guide = (tree / _READING_GUIDE).read_text(encoding="utf-8")
+    lead = (
+        "1. [The finished-state audit of 2026-10-10]"
+        "(../audits/audit-2026-10-10-finalized-state.md).\n"
+        "   **What it proves:** what the finished project shows and does not, each\n"
+        "   figure with its command.\n"
+    )
+    fresh = (
+        "2. [The fresh-clone audit](../audits/audit-phase-19-input-claude.md). "
+        "**What it\n"
+        "   proves:** a stranger can reproduce every derived metric from the "
+        "committed\n"
+        "   bytes.\n"
+    )
+    assert guide.count(lead + fresh) == 1
+    moved = fresh.replace("2. ", "1. ", 1) + lead.replace("1. ", "2. ", 1)
+    (tree / _READING_GUIDE).write_text(guide.replace(lead + fresh, moved))
+    assert _wording_problems(tree) == {
+        _READING_GUIDE: [
+            f"{_READING_GUIDE}: the audit list opens on "
+            "'../audits/audit-phase-19-input-claude.md', not "
+            f"{_LATEST_AUDIT!r}"
+        ]
+    }
+
+
+def test_the_wording_pin_matches_whole_phrases() -> None:
+    # A retired word inside a longer one is not that word: "findings" is not
+    # "finding", and "v60" is not "v6"; the verdict word is read case-folded.
+    assert not _names("how findings become bounded changes", "finding", folded=True)
+    assert _names("its rule returned FINDING", "finding", folded=True)
+    assert not _names("a v60 stamp", "v6")
+    assert _names("`v6` prompts", "v6")
+    assert _visible("**[See the results](https://x.example/)** · `v8`") == (
+        "See the results · v8"
+    )
+
+
+def test_report_example_rates_are_not_its_claims(doc_tree: Path) -> None:
+    # Planted: a rate the counts are taken over, written back beside them. It is
+    # no longer one of the example's claims, so the doc-facts check passes it;
+    # the wording pin is what refuses it.
+    _substitute(
+        doc_tree,
+        _README,
+        "records 61 ejections;",
+        "records 61 ejections, vote correctness 0.783;",
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+    assert "README.md: carries 'vote correctness 0.783'" in _page_wording_problems(
+        _README, _read(doc_tree, _README)
+    )

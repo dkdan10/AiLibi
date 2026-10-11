@@ -1,8 +1,10 @@
 # AiLibi — can agents reason from what they actually saw?
 
+*Recorded AI social deduction*
+
 by **Daniel Keinan** · implemented by Claude Code and Codex agents · AI-reviewed · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml)
 
-**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [Inspect results and decisions](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read an ownership decision](docs/ownership-case-study.md)
+**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [See the results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read an ownership decision](docs/ownership-case-study.md)
 
 AiLibi is a reproducible social-deduction simulation and spectator. Seven crewmates complete tasks while two impostors kill, deceive, and sabotage. Players move along room edges and observe only their surroundings. Reporting a body or calling an emergency meeting starts structured discussion and voting. Crew win by finishing tasks or ejecting every impostor; impostors win through parity or unresolved sabotage.
 
@@ -50,9 +52,9 @@ Python 3.11 · FastAPI/Pydantic · React/Vite/PixiJS · strict mypy · Hypothesi
 
 ## Who did what
 
-Daniel directed product scope, acceptance criteria, priorities, and adoption decisions. Claude Code implemented the initial project; Codex reviewed it and now also implements cleanup. Agents wrote production code and substantial supporting plans, cards, tests, documentation, and audits. Daniel did not hand-write the production code. “Independent” audits here mean separate AI reviewers, not independent human assurance.
+Daniel Keinan directed the project and decided what was accepted, without hand-writing the production code; AI agents wrote it, and the audits here are AI reviews, not independent human assurance.
 
-The [ownership case study](docs/ownership-case-study.md) traces one decision from its evidence to what remained unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. Phase closes do not claim every issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
+The [ownership case study](docs/ownership-case-study.md) traces two owner decisions from their evidence to what each leaves unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. Phase closes do not claim every issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
 
 ## Install, then verify offline
 

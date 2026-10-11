@@ -124,3 +124,35 @@ material to challenge it. It is not an assertion that the judgment was inevitabl
 or that AI-written tests establish the right game design. Open the
 [published results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament)
 to inspect the figures behind these judgments, set by set.
+
+## A later ruling: keep the comparison records
+
+**The problem and the options.** Each candidate round's committed copy is the
+comparison record that isolates one change to the 9-player game: round 1's the
+kill cooldown, round 2's the route field. The question was whether to delete
+each superseded round's candidate recordings once a newer one lands, or keep
+them. The [decision memo](../tasks/decision-2026-09-24-stage-b-wave.md) had
+proposed deleting them: the card that lands round r+1 would remove round r's
+directory, its audit citing the commit that held the bytes.
+
+**What the evidence said.** Asked on 2026-10-09 whether a retirement list that
+included round 1's directory should go ahead, the orchestrator advised keeping
+that directory: each candidate copy is the comparison record for one change,
+and reproducing a claim from committed evidence is worth more than a tidier
+tree.
+
+**The owner judgment.** The owner ruled, verbatim: "Keep the comparison
+records". The earlier proposal was declined: round 1's recordings stay, and a
+promotion of round 3 keeps round 2's bytes as their own candidate round.
+
+**Implementation and review evidence.** Round 3's
+[promotion](../tasks/work/promote-round-3.md) moved round 2's 54 files to
+`replays/candidates/stage-b-r2` with none differing, by the per-file sha256
+table in [the round-3 record](../audits/audit-2026-10-09-stage-b-r3.md). Its
+tests read rounds 1 and 2 and fail on one changed byte of the moved config, a
+declaration naming the wrong seeds, or a stray file in round 2's directory.
+
+**What these records do not claim.** Keeping a round adopts nothing: the route
+field round 3 carries stays a recorded setting, not an adopted one, and a kept
+round is not the shown set. The ruling decides what stays in the tree, not what
+any round shows about play.
