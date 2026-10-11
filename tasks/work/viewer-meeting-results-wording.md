@@ -331,6 +331,21 @@ every one seen red: 27 of 27.
 | A16 | `copy.test.ts` badge pin; `BeliefPanel.test.tsx` the Error legend byte for byte | the badge edited → 1; an Error word edited → 1 |
 | A17 | `copy.test.ts` "the retired phrases stay retired" (nine files, every leaf), "the reworded spans take their words from the copy" (23 spans); the dialect scan gains five files | a phrase typed into `MeetingView.tsx` → 3 (names the file); restored as a value → 2 (names the key) |
 
+### Pins that follow, assertions kept
+
+- The readout's number pins and phrase negatives (`PrivateReasoning.test.tsx` `:69`-`:94` at B; `evidence-journey.ts`
+  `:181`, `:207`, `:217`-`:221`) became one `readoutProblems` / `expectPlainReadout` check per perspective, awaited after
+  the outcome words so it never reads an empty readout; the value negatives stay; the outcome pins read "was ejected" /
+  "no one was ejected".
+- The record's heading now says "really was", so the negative "no route lead" check (`MeetingView.test.tsx`, at B
+  `:310`) is narrowed to the route lead's own words ("accused player really was"), and `journey.spec.ts` gains one line
+  after `:954` holding the route lead by those words, so `:954` cannot pass on the heading alone; `:953`-`:956` and
+  `:965` are unchanged.
+- Every rewrite-chip pin follows to its new copy value, the fallback negative to `BALLOT_COPY.rewriteFallback`.
+- The citation links' secrets in `PrivateReasoning.test.tsx` (`private-statement-choice` and the rest) are now in each
+  link's `title`, so the hidden-lens negatives still have something to miss: the positive leg finds them in the
+  voter's own view.
+
 ### Mutation pass (A19)
 
 One pass, 39 mutants, exactly the listed classes: comparison to a None test or its inverse 6, swapped adjacent
