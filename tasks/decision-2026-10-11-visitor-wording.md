@@ -65,6 +65,46 @@ The letters are the survey's options for each numbered item; (a) is always "keep
   promotion card's Results, in the case study's existing form.
 - **Everything else** takes the survey's (b) text, or keeps as is where the answer is (a): 2, 3, 19.
 
+### 2b. Rulings at card review (2026-10-11, the orchestrator's, each reversible by the owner's word)
+
+The card drafts and their refuters raised nine points that the answers above do not settle. Each is ruled here so the
+cards carry no decision of their own.
+
+1. **Tour step 3 and the renamed truth toggle (item 11).** The belief panel's truth toggle becomes "Real roles"; the
+   tour's step 3 tells the visitor to "flip to Ground-Truth or Error". The one word "Ground-Truth" follows the
+   control it names, as necessary follow-through of item 11; "Error" and the rest of step 3 stay, held with the
+   Error-layer words (D8.1). `viewer-meeting-results-wording` writes that one word, after the header card and
+   `viewer-browse-wording`.
+2. **"In seed order" (item 6).** Once games are named "Game 19", the picker's "in seed order" reads "in game
+   order"; the number is the same, so nothing re-sorts. Follow-through of item 6, carried by `viewer-browse-wording`.
+3. **The sabotage display (survey row 127).** "One style in both views" is the reading: the one-player view keeps
+   hiding what it hides today; only the wording and look align.
+4. **The tick-limit tag (item 9).** The implementer chooses the short form and states it in the PR body, under the
+   plain-words rule.
+5. **The cost line (item 13).** The string "$0: a flat-rate service, so usage, not a bill" is true of both shown sets.
+   No provider-aware branch is added in this wave; the limit (a locally recorded set with another provider would read
+   the same) is recorded in the card's Results.
+6. **Two parts of item 18 that no card carries.** The process scorecard page's opening sentence is generated from
+   `eval/process_scorecard.py`, which this wave does not write; it stays, and a later card may reword the generated
+   preface. The survey's proposal to add a direction word per README row (whether a change is better or worse) is
+   declined: the sources state no direction, and the doctrine does not declare improvement from one recording.
+7. **Audit link text in the reading guide (item 23).** Every audit entry's link text reads in plain words, not a
+   filename, within the guide's ceiling; the older three entries are trimmed before any other sentence is.
+8. **The reading guide's retired terms (items 18 and 23).** Where the README retires a term, the guide's sentences
+   that carry the same term follow it, because the doc-facts check holds the guide to the README row by row; within
+   the guide's ceiling.
+9. **Reading 16, corrected.** The per-agent passage goes from the README only; other pages that mention who did
+   what are records and stay as they are. The byline is not linked to anything new.
+
+Shared-file order across the three cards and the header card, binding: `GuidedTour.tsx`: header card, then
+`viewer-browse-wording`, then `viewer-meeting-results-wording` (step 3's one word). `PublicResults.tsx` and its test:
+`viewer-meeting-results-wording` alone (it calls the set-name helper the browse card exports). `BeliefPanel.tsx`
+view names (item 8's words at its four lines): `viewer-meeting-results-wording`, which also carries item 11 there.
+`PrivateReasoning.test.tsx`, `journey.spec.ts`, `MindInspector.test.tsx`, `EvidencePanel.test.tsx`: the browse card,
+then the meeting card. `media.spec.ts`: the header card if it changed a selector, then the browse card (the banner pin),
+then `front-door-plain-words` (the clip removal). `copy.ts` and `copy.test.ts`: the header card, the browse card, the
+meeting card, in different groups. Items 2 and 19 are kept as is and are no card's work.
+
 ## 3. The cards
 
 Three cards carry the answers; each is a house card under `tasks/work/`, implemented on its own branch with one pull
