@@ -127,6 +127,14 @@ describe("the shell header", () => {
     expect(demoted).not.toBe(html);
     expect(titleProblems(demoted)).toEqual(["the heading reads undefined"]);
   });
+
+  it("names the link when only its address changes (planted)", () => {
+    const moved = html.replace(`href="${HEADER_COPY.sourceUrl}"`, 'href="https://example.test"');
+    expect(moved).not.toBe(html);
+    expect(titleProblems(moved)).toEqual([
+      `the links are ${JSON.stringify([{ href: "https://example.test", text: HEADER_COPY.sourceLinkText }])}`,
+    ]);
+  });
 });
 
 describe("the guided tour's welcome step", () => {
@@ -167,6 +175,25 @@ describe("the guided tour's welcome step", () => {
     expect(welcomeProblems(link)).toEqual([
       `the links are ${JSON.stringify([{ href: HEADER_COPY.sourceUrl, text: "Read the source and ownership case study." }])}`,
       "the step says ownership",
+    ]);
+  });
+
+  it("names the link when only its address changes (planted)", () => {
+    const moved = html.replace(`href="${HEADER_COPY.sourceUrl}"`, 'href="https://example.test"');
+    expect(moved).not.toBe(html);
+    expect(welcomeProblems(moved)).toEqual([
+      `the links are ${JSON.stringify([{ href: "https://example.test", text: HEADER_COPY.tourSourceLinkText }])}`,
+    ]);
+  });
+
+  it("names a second link beside the source link (planted)", () => {
+    const twoLinks = html.replace("</a>", '</a> <a href="https://example.test">More</a>');
+    expect(twoLinks).not.toBe(html);
+    expect(welcomeProblems(twoLinks)).toEqual([
+      `the links are ${JSON.stringify([
+        { href: HEADER_COPY.sourceUrl, text: HEADER_COPY.tourSourceLinkText },
+        { href: "https://example.test", text: "More" },
+      ])}`,
     ]);
   });
 });
