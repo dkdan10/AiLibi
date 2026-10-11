@@ -48,23 +48,43 @@ and the README stay as they are; the repository tells the story the header no lo
 Each item names its enforcing mechanism and the planted or perturbed case that turns its test red; each new test is
 seen red before the code it guards exists.
 
+- [x] Review correction (round 3): each link clause of the two render checkers has a planted proof. `App.test.tsx`
+  plants the header with only its `href` changed, the welcome step with only its `href` changed and the welcome step
+  with a second link, and each case asserts the one exact links problem ("names the link when only its address
+  changes (planted)" in both blocks, "names a second link beside the source link (planted)"). Proof: T01 and T02,
+  each checker's `href` comparison made `=== null`, and T03, the step's link count made `=== undefined`, passed 410
+  at `9cae0365`; at H each fails 1 of 414.
+- [x] Review correction (round 3): the span checks name a literal or a word in either span. In `copy.test.ts`,
+  `headerSpanProblems` and `welcomeSpanProblems` hold the real-span prose and word checks, and the real cases and the
+  planted cases both call them. Planted: the old strip, the attribution line alone and a plain prose paragraph typed
+  into the shell header beside `ShellTitle` ("catches the old strip typed into the shell header beside the title
+  block (planted)"), and the old sentence typed into the tour source outside the step's link, both spans re-read.
+  Each is named by its helper. Proof: C03 (the shell header's literals read from the title), C04 (the word check
+  over the title alone) and C05 (the step's word check over its link alone) passed 410 at `9cae0365`; at H they fail
+  2, 1 and 1 of 414.
+- [x] Review correction (round 3): the two-truths pixel split reproduces. 72 of 1,850,724 pixels differ: 51 in the
+  fog half (x 1035-2005, y 78-409) and 21 at the top-right corner of the omniscient half (x 1001-1005, y 78-90); the
+  20 px gap between the halves (x 1008-1027) is unchanged. Method: Pillow's RGB `ImageChops.difference` over the B
+  and H stills, split at x 1008 and x 1028, count-only. Item 3's evidence and Limitations now say so, and so does the
+  pull request's media table.
 - [x] Review correction: the header checker's heading message is pinned. `App.test.tsx` "names the heading when its
   name changes or another tag carries it (planted)" renames the heading `AiLibi Studio` and asserts both exact
   problems, "the heading reads AiLibi Studio" first; then it swaps the `<h1>` for an `<h2>` and asserts "the heading
   reads undefined" alone. Proof: R01, the message argument `String(heading)` made the constant `X` (the review's
-  V15), passed 406 at `231c4564` and fails 1 of 410 at H; R02, the name comparison made an undefined test, passed
-  409 under round 1's heading cases and fails 1 of 410 at H.
+  V15), passed 406 at `231c4564` and fails 1 of 410 at `9cae0365`; R02, the name comparison made an undefined
+  test, passed 409 under round 1's heading cases and fails 1 of 410 at `9cae0365`.
 - [x] Review correction: each of the header's copy reads has a planted proof. In `copy.test.ts`, `missingHeaderReads`
   returns the keys of `HEADER_READS` (`tagline`, `sourceLinkText`, `sourceUrl`) whose `HEADER_COPY.<key>` read is
   missing from the title block. The span case asserts it empty, and one planted case per key types that read as its
   literal (the tagline, "GitHub", the quoted repository URL) and asserts the helper names that key alone. Proof: the
   review's V20, V28 and V29 (each key dropped from the list) and D01 (`sourceUrl` dropped and the `href` typed as the
-  URL) passed 406 at `231c4564`; at H each fails 1 of 410.
-- [x] Review correction: the Validation grep count reproduces at H. The bullet said 10 lines in `copy.test.ts`, the
-  count at `2c7f9ef8`. `git grep -c -i -E 'directed by|AI-reviewed|Source & ownership|supporting material' --
-  frontend docs/media README.md` prints `App.test.tsx` 8 and `copy.test.ts` 13, 24 lines in all, at `231c4564` and at
-  H, and the bullet now says so. The two-truths box is now written inclusive, x 1001-2005, y 78-409 (Pillow's
-  `getbbox` gives `(1001, 78, 2006, 410)`, whose right and lower edges are exclusive).
+  URL) passed 406 at `231c4564`; at `9cae0365` each fails 1 of 410.
+- [x] Review correction: the Validation grep count reproduces. The bullet said 10 lines in `copy.test.ts`, the count
+  at `2c7f9ef8`. `git grep -c -i -E 'directed by|AI-reviewed|Source & ownership|supporting material' -- frontend
+  docs/media README.md` prints `App.test.tsx` 8 and `copy.test.ts` 13, 24 lines in all, at `231c4564` and at
+  `9cae0365`, and the bullet said so; round 3's cases raise `copy.test.ts` to 18, 29 lines in all at H. The
+  two-truths box is now written inclusive, x 1001-2005, y 78-409 (Pillow's `getbbox` gives `(1001, 78, 2006, 410)`,
+  whose right and lower edges are exclusive).
 - [x] **The header reads from the copy and carries no attribution.** `SPECTATOR_COPY.header` holds the tagline, the
   link text and the repository URL; `App.tsx` renders them and nothing else in the header's text. Mechanism: a
   render test of the header asserts the heading, the tagline and one link whose text and `href` equal the copy; a
@@ -173,12 +193,12 @@ the exact head, by run id, is the gate record.
 Implemented on `work/viewer-header-source-link` from B = `3793d6b5`: `33cad8ab` (the header, the welcome step, the
 `header` copy group and their tests), `2c7f9ef8` (two planted cases the mutation pass asked for), `d307de64` (the
 media re-captured at `2c7f9ef8`), `18e3f619` (the attribution pattern bounded at a word start) and `231c4564`, the
-Results commit and round 1's head; round 2's commits follow it (see "Review corrections, round 2"), and H is the pull
-request's head. References: `docs/architecture.md` "Packages" (`frontend/` consumes the generated view types; nothing
-below the viewer moves, and no view type, DTO or recorded byte changes), AGENTS.md craft rule 4 (user-facing copy in
-plain words, in `SPECTATOR_COPY`), craft rule 2 (each new check has a planted case seen red), and
-`docs/deployment.md` with `.github/workflows/pages.yml` for publication. The card's Status line is the
-orchestrator's, on `main`.
+Results commit and round 1's head; round 2's and round 3's commits follow it (see "Review corrections, round 2" and
+"Review corrections, round 3"), and H is the pull request's head. References: `docs/architecture.md` "Packages"
+(`frontend/` consumes the generated view types; nothing below the viewer moves, and no view type, DTO or recorded
+byte changes), AGENTS.md craft rule 4 (user-facing copy in plain words, in `SPECTATOR_COPY`), craft rule 2 (each new
+check has a planted case seen red), and `docs/deployment.md` with `.github/workflows/pages.yml` for publication. The
+card's Status line is the orchestrator's, on `main`.
 
 ### Decisions
 
@@ -256,8 +276,10 @@ orchestrator's, on `main`.
   (107,401 B); `spectator-meeting.png` `afa121fa...` (263,404 B), **unchanged byte for byte** (the header is hidden
   while a meeting is open); `spectator-journey.gif` `754e61b3...` (626,072 B) to `5d8fd110...` (599,731 B);
   `spectator-journey.webm` `83cbc683...` (620,047 B) to `1a85a8b8...` (653,820 B). The two-truths sheet differs in
-  72 of 1,850,724 pixels, all in its fog half (bounding box x 1001-2005, y 78-409 inclusive; a Pillow difference,
-  count-only).
+  72 of 1,850,724 pixels: 51 in its fog half (x 1035-2005, y 78-409) and 21 at the top-right corner of its
+  omniscient half (x 1001-1005, y 78-90), with the 20 px gap between the halves (x 1008-1027) unchanged; the box
+  around all 72 is x 1001-2005, y 78-409 inclusive (Pillow's RGB `ImageChops.difference`, split at x 1008 and
+  x 1028, count-only).
   A probe run at the same head reproduced both stills and the GIF byte for byte, so the capture is deterministic at
   H; its outputs were discarded, and the committed bytes are the first run's (the WebM differs run to run, as its
   README says). GIF first frame, count-only (Pillow, frame 0, the left third of the frame): ink bands below grey 230
@@ -333,15 +355,15 @@ Run from the branch's worktree with `.venv/bin/python` for the card's `uv run py
   work cards".
 - `pytest tests/scripts/test_public_recording_provenance.py -q`: 31 passed; `tests/scripts/test_check_doc_facts.py`:
   368 passed.
-- `cd frontend`: `npm test` 851 passed (28 files) at H, 847 at `231c4564` before round 2's four cases; `npm run
+- `cd frontend`: `npm test` 855 passed (28 files) at H, 851 at `9cae0365` and 847 at `231c4564`; `npm run
   tsc:check` exit 0; `npm run lint` exit 0; `npm run e2e` 15 passed, 3 skipped (the capture spec, inert without its
-  switch), 1.6 min at `2c7f9ef8` and 1.5 min at `40588e44`.
+  switch), 1.6 min at `2c7f9ef8`, 1.5 min at `40588e44` and 3.1 min at `cb80ad83`.
 - `git grep -n -i -E 'directed by|AI-reviewed|Source & ownership|supporting material' -- frontend docs/media
   README.md`: at B, 4 lines (`README.md:3`, the README's own attribution, which stays; `App.tsx:1201`, the strip;
   `BallotCard.tsx:26` and `PrivateReasoning.test.tsx:296`, the "redirected by" ballot label). At H, `App.tsx` is
   gone. `README.md:3`, `BallotCard.tsx:26` and `PrivateReasoning.test.tsx:296` remain, and the planted fixtures and
-  the pattern add 8 lines in `App.test.tsx` and 13 in `copy.test.ts`, 24 lines in all (count with `git grep -c`;
-  13 since `18e3f619`, 10 before it). Outside tests, `frontend/src` has 0 hits in
+  the pattern add 8 lines in `App.test.tsx` and 18 in `copy.test.ts`, 29 lines in all (count with `git grep -c`;
+  18 since `cb80ad83`, 13 from `18e3f619` to `9cae0365`, 10 before it). Outside tests, `frontend/src` has 0 hits in
   `SPECTATOR_COPY`, `App.tsx` and `GuidedTour.tsx`.
 - `git diff --exit-code 3793d6b5 -- replays/ training/ api/ README.md docs/reading-guide.md docs/glossary.md`:
   exit 0.
@@ -356,9 +378,10 @@ Run from the branch's worktree with `.venv/bin/python` for the card's `uv run py
   `frontend` prints test lines; outside tests the only hits are in files this card does not own: the ballot label
   "redirected by", and code comments that mention Claude Code, Codex or ownership in `glyphs.ts`,
   `BeliefMatrix.tsx`, `usePlayback.ts` and a story. None of them is rendered as attribution.
-- The two-truths sheet's 72-pixel change in its fog half is attributed to the header's change (the map sits one
-  text line higher on the page). The probe shows the capture is deterministic at H, but no capture at B was run to
-  isolate the cause.
+- The two-truths sheet's 72-pixel change (51 pixels in its fog half and 21 at the top-right corner of its omniscient
+  half, x 1001-1005, y 78-90; the gap between the halves is unchanged) is attributed to the header's change (the map
+  sits one text line higher on the page). The probe shows the capture is deterministic at H, but no capture at B was
+  run to isolate the cause.
 - The GIF check is a count of text bands and a row extent, not OCR (no OCR tool on this machine).
 
 ### Review corrections, round 2 (2026-10-11)
@@ -392,9 +415,9 @@ AI social deduction", `{HEADER_COPY.sourceLinkText}` as "GitHub", and `{HEADER_C
 repository URL. Each planted case asserts that the helper returns exactly that key.
 
 **3. The grep count (documentation).** The Validation bullet said 10 lines in `copy.test.ts`. `git grep -c -i -E
-'directed by|AI-reviewed|Source & ownership|supporting material' 2c7f9ef8 -- frontend/src/lib/copy.test.ts` prints
-10 and the same at `18e3f619` prints 13: that commit added the bounded-pattern comment and the two planted
-"redirected by" lines. At `231c4564` and at H the command over `frontend docs/media README.md` prints `README.md` 1,
+'directed by|AI-reviewed|Source & ownership|supporting material' 2c7f9ef8 -- frontend/src/lib/copy.test.ts` prints 10
+and the same at `18e3f619` prints 13: that commit added the bounded-pattern comment and the two planted "redirected
+by" lines. At `231c4564` and at `9cae0365` the command over `frontend docs/media README.md` prints `README.md` 1,
 `App.test.tsx` 8, `BallotCard.tsx` 1, `PrivateReasoning.test.tsx` 1 and `copy.test.ts` 13, 24 lines in all; this
 round's cases add no hit. The bullet now says 13 and 24. The optional part is taken too: the two-truths box is
 written inclusive, x 1001-2005, y 78-409. Pillow's `ImageChops.difference(...).getbbox()` over the B and H stills
@@ -433,7 +456,7 @@ are of 410.
 - Loaded source read as its literal (3): R14 the header's `href`, R15 the tagline and R16 the link text typed as
   literals in `App.tsx`. Killed (4, 5, 5).
 
-**Validation at H, count-only.** `check_doc_facts.py` exit 0; `validate_task_docs.py` exit 0 (107 work cards);
+**Validation at `9cae0365`, count-only.** `check_doc_facts.py` exit 0; `validate_task_docs.py` exit 0 (107 work cards);
 `test_public_recording_provenance.py` 31 passed; `test_check_doc_facts.py` 368 passed; `npm test` 851 passed (28
 files); `npm run tsc:check` exit 0; `npm run lint` exit 0; `npm run e2e` 15 passed, 3 skipped, at `40588e44`; the
 grep as above; `git diff --exit-code 3793d6b5 -- replays/ training/ api/ README.md docs/reading-guide.md
@@ -443,3 +466,91 @@ package is untouched. The bundle was rebuilt in this one checkout at B and at `4
 with the same new chunk names (`index-clC97fic.js` and the six renamed chunks), and `index.html`; no `data/` file
 differs. No local `check.sh` ran at the final head (memo 8.7 item 1); CI's run at this round's head, by run id, is
 in the pull request body.
+
+### Review corrections, round 3 (2026-10-11)
+
+The second review of pull request #510 read `9cae0365`, whose CI run 38154705710 was green (Project checks, Frontend
+checks, Frontend e2e). It filed three blocking findings, two from the correctness lens and one from the
+documentation lens, and this round repairs them. `main` is still `3793d6b5`, so nothing was merged in. Commits:
+`cb80ad83` (the test fixes for findings 1 and 2) and this commit (the three acceptance items above, this subsection
+and the in-place corrections to item 3, Limitations, Validation and round 2's head references). Each ends with the
+`Card:` trailer immediately followed by `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`, checked with
+`git log -1 --format=%B` before the push. No production file, media asset or provenance moved, so the copy that goes
+live, the media and the bundle are as round 1 left them. The Status line stays the orchestrator's on `main`. Round 2
+wrote H for its own head; where its counts no longer hold at this round's head, they now name `9cae0365`.
+
+**1. The render checkers' link clauses (correctness).** `titleProblems` and `welcomeProblems` in `App.test.tsx`
+compare each rendered link's text and `href` with the copy and require exactly one link, but no planted case changed
+only an `href` or gave the step a second link. So T01 and T02, each checker's `links[0]?.href !== HEADER_COPY.sourceUrl`
+made `=== null`, and T03, the step's `links.length !== 1` made `=== undefined`, passed 410. Three planted cases now
+cover them: the header with only its `href` moved to `https://example.test`, the welcome step with only its `href`
+moved, and the welcome step with a second link ("More") after its own. Each asserts the one exact links problem,
+built from `HEADER_COPY`, and nothing else.
+
+**2. The span checks (correctness).** The real span cases in `copy.test.ts` ran `proseLiterals` and the word pattern
+over the spans inline, and the planted cases called them on planted copies, so the real cases' span arguments had no
+planted proof. C03 (`proseLiterals(header)` made `proseLiterals(title)`), C04 (the word test over `title + header`
+made `title`) and C05 (the step's word test made the link's) each passed 410. The review's probe RA1, the old
+attribution line typed back into the shell header beside `ShellTitle` where it stood at B, failed only the span
+case, which C03 and C04 together let through. The checks are now two helpers that the real and the planted cases
+both call. `headerSpanProblems(title, header)` returns each prose literal named by its span ("the title block types
+...", "the shell header types ...") and then the first attribution word in either ("the header says ...").
+`welcomeSpanProblems(step, link)` returns each prose literal in the link ("the link types ...") and then the first
+attribution word anywhere in the step ("the step says ..."). The real cases assert both empty. Planted, each with
+its exact problems:
+
+- Title block: the old strip typed as the tagline gives its literal and "directed by"; "Source & ownership" typed
+  as the link text gives "the header says ownership".
+- Shell header, a new case: the old strip's two lines typed beside `<ShellTitle />` give the first line's literal
+  and "directed by". The attribution line alone gives only "the header says Claude Code", because its text runs into
+  its link, so no prose literal reaches the reader. A plain prose paragraph ("Watch saved games") gives only its
+  literal.
+- Welcome step: both plants now edit the tour source and re-read both spans with `welcomeSpans`. The old link text
+  gives the link's literal and "ownership". The old sentence, outside the link, gives "the step says Claude Code".
+
+**3. The two-truths pixel split (documentation).** Pillow from the uv cache (`uv run --offline --no-project --with
+pillow`), RGB `ImageChops.difference` over the B and H stills: 72 of 1,850,724 pixels differ and `getbbox` gives
+`(1001, 78, 2006, 410)`, as before. Split at x 1008 and x 1028: x below 1008, 21 pixels at x 1001-1005, y 78-90;
+x 1008-1027, 0, and both stills hold one colour there on rows 78-409; x from 1028, 51 pixels at x 1035-2005, y
+78-409. The sheet's layout (`frontend/e2e/media.spec.ts` `SHEET`: pad 28, half width 980, gap 20, so 2,036 px wide)
+puts the omniscient image at x 28-1007 and the fog image at x 1028-2007. So the 21 pixels sit at the top-right
+corner of the omniscient half, not in the fog half. Item 3, Limitations and the pull request's media table said
+"all in its fog half"; each now gives the split. The cause is still not isolated (Limitations).
+
+**Codex on pull request #510.** No new comment since round 2. The two inline comments listed against `40588e44` and
+`9cae0365` are the ones posted on `231c4564` and assessed in round 2.
+
+**Mutation probe, bounded.** 17 mutants, only over the spans this round changes and the spans the findings name,
+in the listed classes. Each was one exact replacement, run against `src/App.test.tsx` and `src/lib/copy.test.ts` and
+then restored (a scratch script). Before the fix, at `9cae0365`, T01, T02, T03, C03, C04 and C05 each passed 410,
+reproduced here. At `cb80ad83` all 17 are killed; failed counts are of 414.
+
+- Comparison made a None test or inverted (6): T01 and T02, the header's and the step's `href` comparison made
+  `=== null`; T03 and T04, the step's and the header's link count made `=== undefined`; N01 and N02, each helper's
+  `hit !== null` inverted, its message reading `String(hit)` so the inverted branch runs. Killed (1, 1, 1, 1, 3, 2).
+- Swapped collection (4): C03, the shell header's literals read from the title; C04, the header's word check over
+  the title alone; C05, the step's word check over its link; N05, the link's literals read from the whole step.
+  Killed (2, 1, 1, 2).
+- Dropped tuple member (2): N03, the title block's literals dropped from `headerSpanProblems`; N04, the shell
+  header's. Killed (1, 1).
+- Message argument made a constant (5): N06 to N10, each helper message's argument made `X`. Killed (1, 1, 2, 1, 1).
+
+Three real edits to production files, each run and restored the same way, are probes rather than mutants. RA1, the
+old attribution line typed into `App.tsx`'s shell header beside `<ShellTitle />`, fails 2. RA2, a plain prose
+paragraph there, fails 3. RA3, the words "Codex agents write the code." typed into the welcome step before its
+link, fails 6.
+
+**Validation at H, count-only.** `check_doc_facts.py` exit 0; `validate_task_docs.py` exit 0 (107 work cards);
+`test_public_recording_provenance.py` 31 passed; `test_check_doc_facts.py` 368 passed; `npm test` 855 passed (28
+files); `npm run tsc:check` exit 0; `npm run lint` exit 0; `npm run e2e` 15 passed, 3 skipped, at `cb80ad83`. The
+card's grep prints `README.md` 1, `App.test.tsx` 8, `BallotCard.tsx` 1, `PrivateReasoning.test.tsx` 1 and
+`copy.test.ts` 18, 29 lines in all; this round's planted strip and its expected problems add 5 lines in
+`copy.test.ts`. `git diff --quiet 3793d6b5 -- replays training api README.md docs/reading-guide.md
+docs/glossary.md` exit 0, and `git diff --name-only 3793d6b5` lists the same ten files as item 4, so the evaluation
+package is untouched. The bundle was rebuilt in this one checkout at B and at `cb80ad83` (`build_demo_bundle.py
+--out <dir>`; this commit changes only the card): 110 files each, 102 identical, all 72 `data/` files among them.
+`index.html` differs in place, and seven compiled chunks are renamed to the same names as in rounds 1 and 2
+(`index-clC97fic.js` and the six others). In the head's index chunk the five words and `\bdirected by` count 0,
+"Recorded AI social deduction" counts 1 and "Read the source on GitHub" counts 1. No local `check.sh` ran at the
+final head, per memo 8.7 item 1 and the card. This round's dispatch also asked for one local run; the memo rule was
+followed. CI's run at this round's head, by run id, is in the pull request body.
