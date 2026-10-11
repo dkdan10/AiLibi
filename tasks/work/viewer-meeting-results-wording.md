@@ -378,5 +378,7 @@ named test files and a restore, the same way as the planted cases. Gate record: 
   provider would read the same (ruling 5; no provider-aware branch).
 - The observation label reads its tick from the id (`{agent_id}:{tick}:{seq}`); the selection still resolves the exact
   id, never a nearby one.
+- The new tests were written beside the code, not before it; each was then seen red by the planted edits and the
+  mutants above (each an edit to the code under test, a run, a restore), which is the evidence given here.
 - The committed captures (the README still, the meeting still and the GIF's meeting frames) show this card's old words
   until `front-door-plain-words`, merging last, captures again; this card writes no media.
