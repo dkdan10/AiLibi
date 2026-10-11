@@ -101,6 +101,26 @@ describe("the belief tab's trail", () => {
     expect(html).not.toMatch(/Thought|Action|Observation</);
   });
 
+  it("reads an alibi and a corroboration as Claimed, with no confidence word", () => {
+    // Only an accusation records a confidence; the other two claim kinds carry
+    // none, so their Claimed steps show no confidence at all.
+    const claims: MeetingDTO["turns"][number]["claims"] = [
+      { type: "alibi", subject: "p-1", route: [{ room: "Cafeteria", from_tick: 1, to_tick: 4 }], evidence: [] },
+      // A claim recorded before routes carries one room and its ticks instead.
+      { type: "alibi", subject: "p-1", route: null, room: "Admin", from_tick: 5, to_tick: 6, evidence: [] },
+      { type: "alibi", subject: "p-1", route: null, evidence: [] },
+      { type: "corroboration", supports: "p-2", on_tick: 7, reason: "seen-together" },
+    ];
+    const told: MeetingDTO = { ...meeting, turns: meeting.turns.map((turn) => ({ ...turn, free_text: "", claims })) };
+    const steps = trailOf(renderToStaticMarkup(<MindInspectorPanel {...panel} meeting={told} />));
+    expect(steps.slice(0, 4)).toEqual([
+      ["Claimed", "alibi for p-1: Cafeteria, ticks 1–4"],
+      ["Claimed", "alibi for p-1: Admin, ticks 5–6"],
+      ["Claimed", "alibi for p-1: no route stated"],
+      ["Claimed", "corroborated p-2 on tick 7 — seen-together"],
+    ]);
+  });
+
   it("closes on the plain no-ejection form when no one was ejected", () => {
     const skipped: MeetingDTO = { ...meeting, outcome: "SKIPPED", ejected_player_id: null };
     const steps = trailOf(renderToStaticMarkup(<MindInspectorPanel {...panel} meeting={skipped} />));

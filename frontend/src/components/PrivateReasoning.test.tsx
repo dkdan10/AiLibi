@@ -356,6 +356,35 @@ describe("private reasoning perspective", () => {
     expect(stray).toContain(">Statement (turn 9), not found in this meeting</button>");
     state.currentReplay = null;
   });
+  it("names a statement's speaker from the selected meeting, not the replay's first", () => {
+    // A replay holds every meeting; the ballot belongs to the selected one, so
+    // its citation is looked up there even when an earlier meeting comes first.
+    state.perspective = { mode: "omniscient" };
+    state.selectedMeetingId = "meeting-1";
+    const turn = (turn_id: string, speaker: string): MeetingDTO["turns"][number] => ({ turn_id, turn_index: 3, speaker, turn_kind: "reply", reply_to: null, observations: [], claims: [], free_text: "", annotations: [], fabricated_opening: false });
+    state.currentReplay = {
+      players,
+      meetings: [
+        { ...meeting, turns: [turn("meeting-0:turn-3", "p-1")] },
+        { ...meeting, meeting_id: "meeting-1", tick: 30, turns: [turn("meeting-1:turn-3", "p-3")] },
+      ],
+      ticks: [],
+    };
+    try {
+      const cited: BallotView = { ...ballot, primary_reason_id: "meeting-1:turn-3", counter_reason_id: "meeting-1:turn-3" };
+      const html = renderToStaticMarkup(<BallotCard ballot={cited} players={players} omniscient revealOutcome={false} />);
+      expect(html).toContain(">Statement by p-3 (turn 3)</button>");
+      expect(textOf(html)).toContain(`${BALLOT_COPY.counterLabel} · Statement by p-3 (turn 3)`);
+      expect(html).not.toContain("not found in this meeting");
+      // With no replay loaded there is no turn to name, so the link says so.
+      state.currentReplay = null;
+      const unloaded = renderToStaticMarkup(<BallotCard ballot={cited} players={players} omniscient revealOutcome={false} />);
+      expect(unloaded).toContain(">Statement (turn 3), not found in this meeting</button>");
+    } finally {
+      state.selectedMeetingId = "meeting-0";
+      state.currentReplay = null;
+    }
+  });
   it("names an observation citation in words when no meeting is selected to link it to", () => {
     // With no meeting selected the citations cannot select anything, so they
     // render as plain spans; they still name what they point at, each with
