@@ -1,0 +1,261 @@
+# The replay browser, the workspace and the endings speak plain words
+
+**Status:** ready
+
+## Outcome
+
+On 2026-10-11 the owner answered the visitor-wording survey by number. This card carries, verbatim, "1. B", "4. B",
+"5. B", "6. B", "7. B", "8. B", "9. B" and "25. B" (`tasks/decision-2026-10-11-visitor-wording.md:17`, `:20-25`,
+`:43`), each the survey's option (b), whose text and Appendix A rows are the adopted wording
+(`tasks/decisions-2026-10-11-visitor-wording/survey.md:13`, `:21-33`, `:75`, `:115-130`). The orchestrator's rulings
+at card review (decision §2b, `:68-106`, each reversible by the owner's word) settle what those answers leave open;
+this card decides nothing beyond them. When this card is done:
+
+- **1.** The tab and the link preview read "AiLibi — Recorded AI social deduction" (`frontend/index.html` only).
+- **4.** The navigation reads "Moments" and "Results" (was "Highlights", "Results & cases"); page headings stay.
+- **5.** The featured strip is headed "Featured"; its five blurbs and the list stay byte for byte.
+- **6.** A game is "Game 19" (seed in a tooltip); a set "9 players, 2 impostors (9p2i)"; the repeat set chip goes;
+  the picker's "in seed order" reads "in game order" (§2b ruling 2, `:78-79`).
+- **7.** The gate button reads "Reveal outcomes"; notes, empty states and errors take Appendix A's lines.
+- **8.** Short forms spelled out; one name for one player's view ("Watching as p-3", "See as p-1"); "Next key
+  moment →"; a lone body reads "killed by p-4".
+- **9.** One wording per ending (the cards' words; "Crew win" / "Impostor win" tags); the right / wrong marks become
+  facts ("Meeting 2: an impostor was voted out"; "named an impostor").
+- **25.** The local dashboard drops "target ≈ $0.20/game" and spells out "ECE".
+
+Every string this card rewords or adds lives in `SPECTATOR_COPY`; strings it leaves alone stay where they are. A role
+read stays a report and never a gate, and every outcome word stays behind the reveal exactly as today.
+
+**Not in this card.** Items 3 and 10-15 (`viewer-meeting-results-wording`); item 1's README tagline, item 4's README
+link and the reading guide's tab name, items 16-18 and 20-24 (`front-door-plain-words`); items 2 and 19, kept as is
+and no card's work (§2b, `:106`); the three halves held for the owner (decision `:125-127`); the welcome step's
+legend (`GuidedTour.tsx:114-136`, held with that ruling, `survey.md:125`). In tour step 3 this card changes only
+"hero" to "panel" (row 125); its "Ground-Truth" follows the toggle renamed "Real roles", written by the meeting card
+after this card, and "Error" and the rest of step 3 stay, held with the Error-layer words (§2b ruling 1, `:73-77`).
+
+## Evidence
+
+Every `path:line` is at `f223b9fe` (`fa213381..f223b9fe` changes only `tasks/`, so the survey's citations hold). No
+rendered prompt, transcript text or seed-band prefix was printed. Bare `.tsx` names sit in `frontend/src/components/`.
+
+- **1.** `frontend/index.html:6` holds `<title>AiLibi — Replay Viewer</title>`; the 12-line file has no description
+  or Open Graph tag. The bundle's `index.html` is that file built (`scripts/build_demo_bundle.py:15`, `:628-641`).
+- **4.** `TABS` (`frontend/src/App.tsx:201-205`) types "Highlights" (`:203`), "Results & cases" (`:204`), as do the
+  welcome step (`GuidedTour.tsx:169`) and `docs/reading-guide.md:73`. Kept headings: `frontend/src/lib/copy.ts:544`;
+  `PublicResults.tsx:79`, the bundle's results marker (`scripts/build_demo_bundle.py:134`).
+- **5.** `ReplayPicker.tsx:312` types "Featured — picked by hand". `FEATURED_GAMES` (`:119-150`) is parsed by
+  `tests/api/test_sets.py:62-72`, `scripts/build_demo_bundle.py:92-102` and `scripts/check_doc_facts.py:618-620`.
+- **6.** "seed {n}": `HighlightCard.tsx:299,304`, `ReplayPicker.tsx:324`, `App.tsx:307-308`; `setOptionLabel`
+  (`copy.ts:122-125`) gives "9p2i — 9 players, 2 impostors"; chip `ReplayFilters.tsx:185-189`; "Loading {set}…"
+  `ReplayPicker.tsx:566`; the raw id at `PublicResults.tsx:80` shares a sentence with item 15's words (decision `:117`).
+  "in seed order": `copy.ts:458,547`, its sort held by `ReplayPicker.test.tsx:162,485`; `docs/glossary.md:327,351`.
+- **7.** Gate button and warning `ReplayFilters.tsx:141`, `:144`; intros `copy.ts:457-464`; All-games note `:546-547`;
+  pair note `:649`; loading, empty, error lines `ReplayPicker.tsx:569`, `:576-577`, `:608-609`, `:926`, `:945`.
+- **8.** Short forms: `App.tsx:307-308,366,456,471`. One-player view: `App.tsx:242,316-330`; `EventTicker.tsx:602-606`;
+  `MapToolbar.tsx:120,162,169-171`; `MindInspector.tsx:581,601,720-721`; `BallotCard.tsx:325`; `EvidencePanel.tsx:76`;
+  `GuidedTour.tsx:179-186`; `MemoryPanel.tsx:271-273` (no test reads it); the meeting card's `BeliefPanel.tsx:253`,
+  `:270`, `:512`, `:552`. "Next beat", Resume tooltip: `App.tsx:687,676`. Text no DOM test reads:
+  `MapToolbar.tsx:109-112` (DOM); Pixi: `BodyMarker.tsx:168`, `RoomRect.tsx:130`, `SabotageOverlay.tsx:100-104` (one player's
+  view names no room or countdown, `:98-99`; REACTOR is a room, `:3-4`). Step 3: `GuidedTour.tsx:191`, "hero" at
+  `:194`, `:196`; the legend (`:114-136`) renders in the welcome step (`:174`).
+- **9.** Raw winner `App.tsx:307`; `WINNER_REASON_LABEL` (`:703-708`) differs from the cards' `endings`
+  (`copy.ts:679-686`); tags `App.tsx:861-862`, `HighlightCard.tsx:75-84` ("Aborted", "Tick limit", "Unfinished" at
+  `:81-83`); marks `App.tsx:768-786`, `copy.ts:692-693` (by `right`: the ejected player's recorded role is impostor,
+  `eval/game_profile.py:1548`; null for no vote, a SKIP or a rewritten ballot, `api/schemas.py:1370-1371`, `:1387`);
+  rules `GuidedTour.tsx:163-166`; `tests/api/test_game_profile_view.py:429-448` parses `endings`, `:447` plants.
+- **25.** `copy.ts:358`, rendered at `TournamentDashboard.tsx:1007`; "ECE" at `CalibrationCurve.tsx:50-52`, `:64`;
+  the bundle does not render that detailed dashboard (`TournamentDashboard.tsx:1273`).
+- **Pins.** Follow: `copy.test.ts:582,599-602,648-649`; `HighlightCard.test.tsx:69,94-101,121,157-158`;
+  `ReplayPicker.test.tsx:268,360,449,509`; `PrivateReasoning.test.tsx:303`; `bundle.spec.ts:240,344`;
+  `journey.spec.ts:104,396,398-399,424,843,848,860,910-911,925,996` (exact text `:36-38`); `media.spec.ts:813-815`;
+  `evidence-journey.ts:65,76,210,212,223-224`. Hold: `copy.test.ts:575`; `HighlightCard.test.tsx:68,70`;
+  `ReplayPicker.test.tsx:162,485`; `journey.spec.ts:110,395`; `bundle.spec.ts:215`; `media.spec.ts:799`. Capture only:
+  `media.spec.ts:56`, `docs/media/README.md:56-58`; front-door's clip `media.spec.ts:1022-1028,1129`. Helpers:
+  `copy.test.ts:87,130`. New (absent): `MindInspector.test.tsx`, `EvidencePanel.test.tsx`; `MemoryPanel` renders at
+  `SearchIntention.test.tsx:18`. Nothing here is served (`VIEW_MODEL_VERSION` "6", `api/schemas.py:77`); the captures
+  (`docs/media/provenance.json`, `58c7cf03`) show reworded labels (`media.spec.ts:373,1155,1162`).
+
+## Acceptance
+
+Each item names its mechanism and the planted or perturbed case that turns it red; each new test is seen red before
+its code. "The scan" is a new `copy.test.ts` case: (source, retired literal) rows read through `stripComments`, plus
+a `stringLeaves` walk of `SPECTATOR_COPY` for the same literals.
+
+- [ ] **The scan bites.** Planted: a synthetic source carrying one retired literal in rendered code is caught, and
+  the same literal in a comment is ignored; each item below adds its rows, and each row is seen red on the base.
+- [ ] **1. The tab and the preview read the tagline.** A `site` copy group holds "AiLibi — Recorded AI social
+  deduction"; `index.html`'s `<title>`, `<meta name="description">` and `<meta property="og:title">` carry exactly
+  it, and nothing else enters the head (a preview image is not in the answer). Mechanism: a `copy.test.ts` case
+  reads `frontend/index.html` off disk against the copy. Planted: the old title restored, or one tag deleted, fails.
+- [ ] **4. The tabs are "Moments" and "Results".** `TABS` and the welcome step read the names from a `nav` group;
+  view ids and URL keys (`highlights`, `tournament`) do not change. Mechanism: a render test of the navigation holds
+  the button names to the copy; scan rows for both old names in `App.tsx` and `GuidedTour.tsx`; `journey.spec.ts:996`
+  and `bundle.spec.ts:344` follow. Planted: "Highlights" typed back into `TABS` fails the scan and the render test.
+- [ ] **5. The strip is headed "Featured".** The heading comes from `PICKER_COPY`; `FEATURED_GAMES` is identical at
+  base and head. Mechanism: a strip render case in `ReplayPicker.test.tsx`; a scan row; the block diff (Validation)
+  is empty and `tests/api/test_sets.py` passes unchanged. Perturbed: one blurb character changed shows in the diff.
+- [ ] **6. Games and sets have names.** Cards, featured pills and the banner read "Game {n}", the seed in a `title`
+  tooltip in plain words; the card's accessible name follows ("Open game 19"); `setOptionLabel` returns
+  "9 players, 2 impostors (9p2i)", an unknown id bare; the set chip goes, with its prop if nothing else reads it; the
+  loading cue names the set through the set-name helper this card exports, which `viewer-meeting-results-wording`
+  alone calls in `PublicResults.tsx` (`:80`). Both "in seed order" notes read "in game order" (§2b ruling 2): the
+  number is the same, so nothing re-sorts. Mechanism: `copy.test.ts:599-602` follows, the unknown-id case kept; a
+  HighlightCard case holds pill and tooltip; `HighlightCard.test.tsx:121`, `ReplayPicker.test.tsx:268,360,449` and
+  the banner's `journey.spec.ts:396`, `bundle.spec.ts:240` follow; `journey.spec.ts:104`
+  matches "Game {n}" exactly ("Game 2" prefixes "Game 23"); `evidence-journey.ts:65,76` follow to the exact accessible
+  name "Open game 19"; `ReplayPicker.test.tsx:162,485` pass unchanged; scan rows.
+  Planted: the old label form fails `copy.test.ts`, a dropped tooltip the card case, "in seed order" in a leaf the scan.
+- [ ] **7. The browser's notes in plain words.** The gate button reads "Reveal outcomes" (warning kept, still
+  `aria-describedby`); the replays intro "Recorded games for this set. Open one to watch it."; the highlights intro
+  drops "Nothing here ranks or scores a game."; the All-games note ends "including games kept off the shelves"; the
+  pair note keeps "always show together"; the empty set reads "No recorded games are available for this set.";
+  loading and error lines say plainly what could not load, the raw error after, "unknown error" made a sentence.
+  Mechanism: `copy.test.ts:648-649` follows as "claims no completeness" (no `every`, `all`; not-every kept); `:575`
+  holds; `:582` goes with its sentence, and that case's no-score loop (`:579-581`) also walks `PICKER_COPY`;
+  `ReplayPicker.test.tsx:509` follows; a ReplayFilters render case; scan rows. Planted: "Show outcome filters" back
+  fails; a picker leaf reading "ranked by" fails the loop.
+- [ ] **8. One name per thing in the workspace.**
+  - Short forms: "9 players", "3 meetings" ("1 meeting"), "crew 7 · impostors 2" in both roster layouts.
+  - One player's view: the banner reads "Watching as p-3" (its accessible name keeps the "Perspective:" prefix);
+    controls read "See as p-1" (toolbar toggle and picker, inspector button and pressed state, ballot and evidence
+    prompts, private-mind note); the ticker chip, tour step 2 and the hidden-memory note follow. In the files this
+    card writes, "fog", "fog of war", "As-agent", "lens" and "Show what they saw" leave text, tooltips and accessible
+    names; "Omniscient", the `perspective` URL key and the mode names stay. `BeliefPanel.tsx`'s four lines (`:253`,
+    `:270`, `:512`, `:552`, whose "error" is the held Error-layer word) take these names in the meeting card (§2b).
+  - "Next key moment →"; the tooltip "Resume playback past this meeting"; step 2's title "What one player could
+    see"; step 3's "Open the Belief × Truth panel"; the tour button's tooltip in plain words.
+  - The map: the chip reads "Map" (no "canonical_1" or counts); a lone body "killed by p-4"; the unseen-room label
+    and the HUD in plain words (e.g. "Reactor meltdown in 5 ticks" in the all-roles view); "† = impostor" stays.
+    The orchestrator's reading (§2b ruling 3, `:80-81`): one style in both views; the one-player view keeps hiding
+    what it hides today (`SabotageOverlay.tsx:98-99`), and only the wording and look align.
+  - Mechanism: pure label helpers over the copy, with unit cases for "killed by p-4", the all-roles HUD and a
+    one-player HUD with no digit and no room name, matched without regard to case ("Reactor" fails); render cases
+    for the banner, the inspector button and pressed state (new `MindInspector.test.tsx`), the evidence prompt (new
+    `EvidencePanel.test.tsx`), the ballot prompt and private-mind note (`PrivateReasoning.test.tsx`) and `MemoryPanel`
+    with `revealSecrets` false (`SearchIntention.test.tsx`); scan rows; `journey.spec.ts:424,843,848,860,910-911,925`,
+    `evidence-journey.ts:210,212,223-224` (`:223`'s lens negative follows the new prompt words, so it never passes
+    vacuously), `PrivateReasoning.test.tsx:303` follow, assertions kept; `media.spec.ts:813-815` follows
+    the banner text `journey.spec.ts:848` holds in CI, covered here only by `npm run tsc:check` until the front-door
+    card's capture run, merging last, first runs it. Planted: the all-roles HUD text in the one-player view fails the
+    HUD case; "As-agent" back in `MapToolbar.tsx`, or "fog" in `MemoryPanel.tsx`, fails the scan and the render pin.
+- [ ] **9. One ending, one wording; facts for marks.**
+  - The revealed banner, the finale heading and the card tag read one copy helper: "Crew win" / "Impostor win". The
+    tick-limit tag is a short form of the cards' ending words (`copy.ts:684`) that the implementer chooses under the
+    plain-words rule and states in the PR body (§2b ruling 4, `:82-83`); "Aborted", "Unfinished" stay byte for byte.
+  - The finale's reason reads the cards' `endings` (`WINNER_REASON_LABEL` retired), an unmapped reason verbatim; the
+    `endings` block (`copy.ts:679-686`) stays byte-identical, the line `test_game_profile_view.py:447` plants included.
+  - Card marks: "Meeting {meeting}: an impostor was voted out" / "Meeting {meeting}: a crewmate was voted out".
+  - Recap: "named an impostor" / "named no impostor", no ✓ or ✗; the "engine-adjusted" chip in plain words, matching
+    the ballot chips' "changed by the vote rule" that item 10 adopts (`survey.md:137`).
+  - The tour's rules sentence uses the ending words ("parity" and "unresolved sabotage" go).
+  - Mechanism: `journey.spec.ts:398-399` follow to "Crew win" / "Impostor win" (the retired "CREWMATES" would pass
+    vacuously); a finale and recap render case; scan rows; HighlightCard cases for both marks and every tag, held to
+    the copy (`HighlightCard.test.tsx:69` and `:157-158` follow, `:68`, `:70` hold); the reveal-leak list (`:94-101`)
+    follows to "was voted out". Planted: swapped mark branches fail; swapped tick-limit and aborted branches fail
+    `:68-69`; a hidden card leaking the new mark fails the followed list, and passes with it at "the vote was".
+- [ ] **25. The dashboard leftovers.** `costMeanHint` and its hint go; the readout reads "Expected calibration error
+  {value}" (tooltip "lower is better" and figure kept), the low-power note spells it out, both in `DASHBOARD_COPY`.
+  Mechanism: a `TournamentDashboard.test.tsx` case; scan rows for "0.20/game", "ECE". Planted: the hint restored fails.
+- [ ] **Nothing else moves.** `git diff --stat B H` lists only Expected scope's files; never-written paths and the
+  `FEATURED_GAMES` block are unchanged; `VIEW_MODEL_VERSION` is "6"; `scripts/check_doc_facts.py` exits 0 (no README
+  or guide write). Mechanism: the Validation diffs and the gate. Perturbed: a scratch `api/` edit fails the diff guard.
+- [ ] **The live strings, and the bundle diff.** The PR body lists every string that goes live, old against new, and
+  the demo bundle diff built at B and H in one checkout (expected: `index.html` and compiled assets, no `data/` file;
+  the measured diff governs), and names which reworded strings the committed captures show.
+- [ ] **One bounded mutation pass, and the gate record.** One pass over the listed classes (a dropped filter or
+  wrapper, a swapped collection, a comparison made a None test, a kind or key read made a constant, a dropped tuple
+  member, swapped branches, a loaded source read as its literal, message arguments) over the set-name, tag, ending,
+  mark, HUD and body helpers, the scan and the `index.html` case; survivors killed or reported; CI's run id is cited.
+
+## Constraints
+
+**Rules every change keeps.** User-facing copy lives in `SPECTATOR_COPY`, in plain words, with no task or audit id,
+no unexplained term and no threshold arithmetic. Role-correctness is reported, never a gate. No never-written path
+(Expected scope) moves and no recorded byte is edited; no new `AILIBI_*` lever, no prompt registry bump, no live
+provider call, and `.env` is never read. Every production line has a test that goes red when it is neutered; no test
+is weakened, and a pin that follows reworded text with its assertion kept is not a weakening. Memo 8.7: CI's green
+run at the exact head is the gate record, with no local `check.sh` at the final head; message-argument survivors are
+nonblocking after the first fix round. Never print a rendered prompt, transcript text or seed-band prefix.
+
+**The open wording.** A string the survey fixes is used as written. Where option (b) leaves it open (the tick-limit
+tag among them), the rule is plain words, readability first, brevity over completeness, every term defined in place
+or avoided, one copy key per wording (`copy.test.ts:201-212` holds the long ones), each choice in the PR body.
+
+**One writer per file, across the cards.** Merge order: `viewer-header-source-link`, this card,
+`viewer-meeting-results-wording`, `front-door-plain-words` last (decision `:120-123`); each later card merges `main`
+before its final review, both cards' hunks kept. The shared-file order, binding (decision §2b, `:99-106`), word for
+word: "`GuidedTour.tsx`: header card, then `viewer-browse-wording`, then `viewer-meeting-results-wording` (step 3's
+one word). `PublicResults.tsx` and its test: `viewer-meeting-results-wording` alone (it calls the set-name helper the
+browse card exports). `BeliefPanel.tsx` view names (item 8's words at its four lines): `viewer-meeting-results-wording`,
+which also carries item 11 there. `PrivateReasoning.test.tsx`, `journey.spec.ts`, `MindInspector.test.tsx`,
+`EvidencePanel.test.tsx`: the browse card, then the meeting card. `media.spec.ts`: the header card if it changed a
+selector, then the browse card (the banner pin), then `front-door-plain-words` (the clip removal). `copy.ts` and
+`copy.test.ts`: the header card, the browse card, the meeting card, in different groups. Items 2 and 19 are kept as
+is and are no card's work." Within it: this card creates `MindInspector.test.tsx` and `EvidencePanel.test.tsx`, which
+the meeting card extends; in `journey.spec.ts` the meeting card takes `:949`'s region name, `:953-956` and `:965`. By
+the merge order: `App.tsx` and any App, header or tour test the header card creates, header card then this card;
+`BallotCard.tsx`, `EvidencePanel.tsx`, `MindInspector.tsx`, `e2e/evidence-journey.ts`, this card then the meeting card.
+`README.md` and `docs/` are never this card's; the rest of Expected scope is this card's alone while it is open;
+`tasks/README.md` and this card's Status line are the orchestrator's, on `main`.
+
+**Delivery and publication.** Branch `work/viewer-browse-wording`; one pull request into `main`, merged or
+fast-forwarded, never squashed or amended after push; each commit body has `Card: tasks/work/viewer-browse-wording.md`
+immediately followed by the exact line `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. The merge publishes
+the bundle through `.github/workflows/pages.yml`; the owner's answers of 2026-10-11 are the publication decision; the
+PR body states every string that goes live, old against new, and the bundle diff file by file.
+
+**Stop and ask** rather than guess when: a string would need a decision neither the owner nor decision §2b gave (the
+held halves; step 3 beyond "hero" and the meeting card's one word; the welcome step's legend; a blurb or the featured
+list; a "seed" beyond the pill, card, banner and accessible-name labels and the two "in seed order" notes); a
+one-player wording would show what that view hides today; a served label would change (`VIEW_MODEL_VERSION`); a pin
+cannot follow its text without weakening; or the captures would keep retired wording with no card left to refresh them.
+
+## Expected scope
+
+- `frontend/index.html`; `frontend/src/lib/copy.ts` and `copy.test.ts` (new `site` and `nav` groups, workspace and map
+  strings, the helpers, the scan), or a new `frontend/src/lib/` helper module with its test.
+- `frontend/src/App.tsx` (navigation, banner, roster counts, pause bar, finale, recap, tour button).
+- `frontend/src/components/`: `ReplayPicker.tsx`, `ReplayFilters.tsx`, `HighlightCard.tsx`, `GuidedTour.tsx`,
+  `MapToolbar.tsx`, `EventTicker.tsx`, `BodyMarker.tsx`, `RoomRect.tsx`, `SabotageOverlay.tsx`, `MindInspector.tsx`,
+  `BallotCard.tsx`, `EvidencePanel.tsx` (item 8's strings only), `MemoryPanel.tsx` (`:271-273` only),
+  `TournamentDashboard.tsx` (`:1007` only), `CalibrationCurve.tsx`; the tests beside them that follow, among them
+  `PrivateReasoning.test.tsx`, `SearchIntention.test.tsx`; the new `MindInspector.test.tsx`, `EvidencePanel.test.tsx`.
+- `frontend/e2e/journey.spec.ts`, `bundle.spec.ts`, `evidence-journey.ts` (pins), `media.spec.ts` (`:813-815`); Results.
+
+Never written: `engine/`, `agents/`, `meetings/`, `observation/`, `orchestrator/`, `llm/`, `api/`, `eval/`, `training/`,
+`experiments/`, `replays/`, `scripts/`, `tests/` (Python, `tests/fixtures/` included), `README.md`, `docs/` (with
+`docs/media/`, `docs/glossary.md`), the `FEATURED_GAMES` block, `PublicResults.tsx`, `PublicResults.test.tsx`,
+`MeetingView.tsx`, `BeliefPanel.tsx`, `BeliefPanel.test.tsx`, `BeliefCell.tsx`, `TurnCard.tsx`, the audits and
+`tasks/README.md`.
+
+## Record impact
+
+**What moves:** the visitor wording of the tab title and preview, navigation, replay browser, workspace, map labels
+and endings, plus two local-dashboard labels, now in `SPECTATOR_COPY`; the tests and pins that follow, the capture
+banner pin among them. **Future behaviour:** none. **Evaluation:** none. **Publication:** as Constraints states. **What
+stays unchanged:** every recording, MANIFEST, roster, experiment config and committed report; the corpus, ML
+artifacts, scorecard, census and profile pages and JSON; the public payload and every `data/` file of the bundle;
+`FEATURED_GAMES` and the shelf order; the committed media; `VIEW_MODEL_VERSION` (a served label to change is a
+stop-and-ask); URL keys and view ids; the prompts, levers, defaults, ladder tip and era registry; every verdict.
+
+## Validation
+
+Run from the branch's worktree; quote each exit code as it came back. The grep leaves only comments, test titles,
+planted cases, `BeliefPanel.tsx` (the meeting card's) and the clip the front-door card deletes.
+
+```sh
+uv run python scripts/validate_task_docs.py
+uv run python scripts/check_doc_facts.py
+uv run pytest tests/api/test_game_profile_view.py tests/api/test_sets.py tests/scripts/test_build_demo_bundle.py -q
+(cd frontend && npm test && npm run tsc:check && npm run lint && npm run e2e)
+git grep -n -E "Replay Viewer|picked by hand|Show outcome filters|As-agent|fog of war|Show what they saw|agent.s fog|own lens|Next beat|reached parity|sabotage unresolved|the vote was (right|wrong)|engine-adjusted|0\.20/game|in seed order" -- frontend/index.html frontend/src frontend/e2e
+diff <(git show <base>:frontend/src/components/ReplayPicker.tsx | sed -n '/^export const FEATURED_GAMES/,/^];/p') \
+     <(git show <head>:frontend/src/components/ReplayPicker.tsx | sed -n '/^export const FEATURED_GAMES/,/^];/p')
+git diff --exit-code <base> <head> -- engine agents meetings observation orchestrator llm api eval training experiments replays scripts tests README.md docs
+uv run python scripts/build_demo_bundle.py --out <dir-base>   # at base, then at head into <dir-head>, one checkout
+diff -r <dir-base> <dir-head>                                 # file by file into the PR body
+```
+
+## Results
+
+Filled by the implementation.
