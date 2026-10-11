@@ -71,6 +71,26 @@ rule" or "weak signal" in `:158-392`; front-door page `scripts/check_doc_facts.p
 
 Each item names its enforcing mechanism and a planted or perturbed case that turns it red; new tests are seen red first.
 
+- [x] Review correction (round 1): a custom factory's absent policy stamp reads "unknown". `PublicResults.tsx`
+  `absentPolicy(factory)` gives "the built-in scripted policy" for a scripted, experimental or unrecorded factory and
+  "unknown" for a custom one; a stamp that is present stays. Mechanism: `PublicResults.test.tsx` "keeps a custom
+  factory's absent stamp unknown, never the built-in policy" (both stamps absent, each stamp alone, and the three other
+  factory kinds). Proof: the new case failed against `5dd68cd9`'s component, then R13-R17 below each turned it red.
+- [x] Review correction (round 1): the ballot's citation spans with no meeting selected are held. Mechanism:
+  `PrivateReasoning.test.tsx` "names an observation citation in words when no meeting is selected to link it to"
+  renders a ballot citing `p-1:12:0` as its observation and as its counter with `selectedMeetingId` null, asserts the
+  spans "What p-1 saw at tick 12" and "Weighed against it · What p-1 saw at tick 12" with the id as `title`, then the
+  counter at `p-3:7:1` with its own words and `title`. Proof: R1 (the review's P18) and R2 (P40) each turn it red.
+- [x] Review correction (round 1): the source panel's public line reads the turn's own kind. Mechanism:
+  `EvidencePanel.test.tsx` "reads the kind of turn … by its own name, at the meeting's own tick" renders an opening and
+  a reply ("p-1 · public · first statement · meeting tick 37", "p-3 · public · reply · meeting tick 37"). Proof: R8, the
+  kind read made `TURN_COPY.kinds["opt_in"]`, turns both red.
+- [x] Review correction (round 1): the tick and count arguments are held at values other than the fixtures'.
+  Mechanism: `MeetingView.test.tsx` "reads the meeting's own tick, not the planted meeting's" (tick 37),
+  `EvidencePanel.test.tsx` above (meeting tick 37), `PublicResults.test.tsx` "counts the games the set holds, whatever
+  their number" (37 games). Proof: R11 (`String(meetingTick)` made "5"), R9 (`String(meeting?.tick)` made "12") and
+  R12 (`String(results.games)` made "50") each turn their case red.
+
 - [x] **A1. The role line (item 3).** Omniscient only, after an ejection, the Resolution card reads "p-4 was an
   impostor" or "p-4 was a crewmate", no "post-hoc"; the all-roles start and the gate are unchanged. Mechanism:
   `MeetingView.test.tsx` renders both roles, omniscient and under a lens. Planted: the gate made `true` fails.
@@ -382,3 +402,73 @@ named test files and a restore, the same way as the planted cases. Gate record: 
   mutants above (each an edit to the code under test, a run, a restore), which is the evidence given here.
 - The committed captures (the README still, the meeting still and the GIF's meeting frames) show this card's old words
   until `front-door-plain-words`, merging last, captures again; this card writes no media.
+
+### Review corrections, round 1 (2026-10-11)
+
+The three lenses' four blocking findings at `5dd68cd9`, repaired at `50fd2f4e` (the code and tests); this subsection
+and the four Review correction items at the head of Acceptance follow it. `main` has not moved (`7d781f8e`) and
+`viewer-browse-wording` (#511) has not merged, so the merge of `main` and the boxes it opens stay pending as above.
+
+- **A custom factory's absent stamp (the docs lens; the Codex P2 comment on `PublicResults.tsx:63`, valid).** The
+  policy line read "the built-in scripted policy" for every absent stamp, a custom factory's included, whose agents are
+  not the built-in ones (`orchestrator/game.py:3232-3237`) and whose unstamped policy the loader refuses to read as the
+  default (`api/replay_loader.py:644-663`). `absentPolicy(factory)` now gives "unknown" for a custom factory and the
+  default otherwise; a present stamp stays. A15's reading, as corrected: "the built-in scripted policy" for an absent
+  stamp under a scripted, experimental or unrecorded factory. The unrecorded factory (an older payload) keeps the
+  default, read from the replay schema's absent-stamp rule (`orchestrator/replay.py:695-700`) and the loader's rule
+  for a completed older recording (`api/replay_loader.py:672-676`); the limit: an unfinished older recording, which the
+  loader leaves unknown, would read the default too. No shown set is custom: each serves one group, 9p2i
+  `experimental` and 4p1i `scripted`, both with no stamp (count-only read of the bundle's
+  `data/<set>/eval/summary.json`), so no live string moves. Reversible by the owner's word.
+- **The second Codex P2 comment (`BeliefPanel.tsx:36`, tour step 3 still says "Ground-Truth"), valid and scheduled.**
+  Ruling 1 and the binding order (decision §2b, `:73-77`, `:99-106`) have this card write that one word after
+  `viewer-browse-wording` lands, at the merge of `main`; until then A9 and A16 stay open. Not a skip.
+- **The ballot's citation spans with no meeting selected (the correctness lens: P18, P40).** No test rendered them.
+  `PrivateReasoning.test.tsx` now does, with `selectedMeetingId` null, for one id in both slots and for two ids.
+- **The source panel's kind read (the integrity lens).** Its one pin rendered a speak-up turn; `EvidencePanel.test.tsx`
+  now renders an opening and a reply.
+- **The tick and count arguments (the integrity lens).** Each fixture held one value (tick 5, tick 12, 50 games); one
+  case each now renders another (tick 37, meeting tick 37, 37 games).
+
+**Mutation probe, round 1.** Only the spans changed here and the spans the findings name, exactly the listed classes:
+19 mutants, each an edit, a full `npx vitest run` (1124 tests) and a restore (`mutate.py` in the run's scratch
+directory, `python3 mutate.py <frontend>`). Killed 19, survived 0. By class: message argument to a constant 7, kind
+read to a constant 4, swapped related collection 4, swapped adjacent branches 2, comparison to a None test or its
+inverse 2. The first pass's 39 did not reach these spans; its tally stands for the spans it names.
+
+| Mutant | Class | Edit | Red tests |
+| --- | --- | --- | --- |
+| R1 (P18) | kind read | counter span's `counterKind(…)` made `"statement"` | the no-meeting citation case |
+| R2 (P40) | kind read | observation span's `"observation"` made `"statement"` | the no-meeting citation case |
+| R3 | swapped collection | counter span's `title` read the observation id | the no-meeting citation case |
+| R4 | swapped collection | counter span's words read the observation id | the no-meeting citation case |
+| R5 | message argument | counter span's "Weighed against it · " dropped | the no-meeting citation case |
+| R6 | swapped branches | counter link and span swapped | the no-meeting citation case |
+| R7 | None test inverse | observation slot's `meetingId !== null` made `=== null` | the no-meeting case; "names each citation by what it points at" |
+| R8 | kind read | source line's kind made `TURN_COPY.kinds["opt_in"]` | both new source-line cases |
+| R9 | message argument | source line's tick made "12" | both new source-line cases |
+| R10 | message argument | source line's speaker made "p-4" | both new source-line cases |
+| R11 | message argument | turn tag's tick made "5" | "reads the meeting's own tick" |
+| R12 | message argument | Results intro's games made "50" | "counts the games the set holds" |
+| R13 | swapped branches | `absentPolicy`'s two words swapped | 5, the custom case among them |
+| R14 | None test | `factory === "custom"` made `factory === null` | the custom case |
+| R15 | kind read | `absentPolicy(group.agent_factory_kind)` read `"scripted"` | the custom case |
+| R16 | message argument | impostor fallback made the default | the custom case |
+| R17 | message argument | crew fallback made the default | the custom case |
+| R18 | swapped collection | crew line read the impostor stamp | 3, the custom case among them |
+| R19 | swapped collection | impostor line read the crew stamp | 3, the custom case among them |
+
+Seen red first: the custom case failed against `5dd68cd9`'s `PublicResults.tsx` (1 failed, 23 passed in its file),
+then passed at `50fd2f4e`; each other new case is seen red by the mutants named on it above.
+
+**Validation, count-only, at `50fd2f4e`** (this subsection changes only the card). `validate_task_docs.py` exit 0;
+`check_doc_facts.py` exit 0; `pytest tests/api/test_public_results.py tests/api/test_view_model.py -q` 126 passed,
+1 skipped; `npm test` 1124 passed (31 files); `tsc:check` exit 0; `lint` exit 0; `npm run e2e` 15 passed, 3 skipped,
+run locally through a scratch copy of the config on the cached headless shell (build 1234) and UI port 5712, because
+another worktree's dev server holds 5173 (CI's `frontend-e2e` job on the pinned browser is the record). The card's
+retired-phrase grep: 18 lines, as before; the `As-agent` / `fog` grep: 4 comment lines; the `Ground-Truth` grep: 1
+line (step 3, pending the merge). `git diff --quiet 7d781f8e 50fd2f4e` over the never-written paths: exit 0;
+`git diff --stat 7d781f8e 50fd2f4e`: the same 23 files, none under `eval/`. The bundle at `7d781f8e` and `50fd2f4e`
+(one checkout): 110 files each side, 35 under `assets/`; all 72 `data/` files byte-identical; `index.html`, the index
+chunk (`index-clC97fic.js` to `index-BkjKJRyy.js`), the stylesheet (`index-D7ay7349.css` to `index-B6Y7MwOb.css`)
+and six renamed chunks differ. Gate record: CI's green run at the exact head, cited in the PR by run id.
