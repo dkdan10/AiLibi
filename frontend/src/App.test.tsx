@@ -338,6 +338,24 @@ describe("the mode banner", () => {
     expect(html).toContain('title="Recorded from random seed 4"');
   });
 
+  it("names each recorded stop of a game with no winner in the tag the cards use", () => {
+    const stops = [
+      ["aborted", OUTCOME_COPY.aborted],
+      ["tick_limited", OUTCOME_COPY.tickLimited],
+      ["unfinished", OUTCOME_COPY.unfinished],
+      [null, OUTCOME_COPY.unfinished],
+    ] as const;
+    for (const [completion_status, tag] of stops) {
+      const stopped = {
+        metadata: { seed: 4, meeting_count: 0, winner: null, completion_status },
+        players: NINE.slice(0, 4),
+      };
+      expect(textOf(banner({ revealOutcome: true, currentReplay: stopped }))).toContain(
+        `Game 4 · 4 players · ${tag}`,
+      );
+    }
+  });
+
   it("counts the meetings in words beside the Belief × Truth launcher", () => {
     expect(textOf(banner({}))).toContain("Belief × Truth3 meetings");
     expect(textOf(banner({}, 1))).toContain("Belief × Truth1 meeting");

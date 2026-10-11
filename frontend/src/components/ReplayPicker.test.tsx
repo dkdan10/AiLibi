@@ -1,9 +1,10 @@
 import { isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   ReplayBrowserView,
+  ReplayPicker,
   activeProfile,
   browserState,
   buildCards,
@@ -25,6 +26,30 @@ import { shelfTitle } from "./HighlightCard";
 import { ApiError } from "../api/client";
 import { DASHBOARD_COPY, PICKER_COPY, PROFILE_COPY, gameSeedTitle, setOptionLabel } from "../lib/copy";
 import type { GameFacetsView, GameProfileView, ReplayMetadataView } from "../types/api";
+
+// The store, reduced to what the connected browser reads, so its two error lines
+// render from the fields that hold them. Only `ReplayPicker` reads the store here;
+// every other case renders the presentational view or calls a pure function.
+const store = vi.hoisted(() => ({
+  view: "replays",
+  replayList: [] as unknown,
+  replayListError: null as string | null,
+  replayLoadError: null as string | null,
+  clearReplayLoadError: () => {},
+  seedSet: "9p2i" as string | null,
+  setSeedSet: () => {},
+  availableSets: [] as readonly string[],
+  loadSets: () => Promise.resolve(),
+  availableSetsError: null as string | null,
+  loadReplayList: () => Promise.resolve(),
+  setView: () => {},
+  selectReplay: () => Promise.resolve(),
+  revealOutcome: false,
+  setRevealOutcome: () => {},
+}));
+vi.mock("../store/replayStore", () => ({
+  useReplayStore: (selector: (s: typeof store) => unknown) => selector(store),
+}));
 
 function facets(seed: number, tripped = false): GameFacetsView {
   return {
@@ -649,5 +674,53 @@ describe("the browser's notes and names", () => {
     );
     const absent = render({ set: "4p1i", profile: null, profileMissing: true });
     expect(absent).toContain(`${setOptionLabel("4p1i")}: the served set ships no game-shape profile`);
+  });
+});
+
+describe("the connected browser's error lines", () => {
+  /** The text of each error line the connected browser shows, in page order. */
+  function errorLines(over: Partial<typeof store>): readonly string[] {
+    Object.assign(store, {
+      seedSet: "9p2i",
+      replayList: [],
+      availableSets: ["9p2i"],
+      availableSetsError: null,
+      replayLoadError: null,
+      ...over,
+    });
+    const html = renderToStaticMarkup(<ReplayPicker />);
+    return [
+      ...html.matchAll(/<div role="status"[^>]*\bbg-kill\b[^>]*><div class="min-w-0 flex-1">([\s\S]*?)<\/div>/g),
+    ].map((match) => (match[1] ?? "").replace(/<[^>]*>/g, "").trim());
+  }
+
+  it("shows no error line when the sets and the game loaded", () => {
+    expect(errorLines({})).toEqual([]);
+  });
+
+  it("says the set list could not load, the raw error after", () => {
+    for (const error of ["network down", "the server answered 503"]) {
+      expect(errorLines({ availableSets: [], availableSetsError: error })).toEqual([
+        `${PICKER_COPY.setListError} ${error} Retry`,
+      ]);
+    }
+  });
+
+  it("keeps the set selector once the sets loaded, whatever a later fetch says", () => {
+    expect(errorLines({ availableSets: ["9p2i"], availableSetsError: "network down" })).toEqual([]);
+  });
+
+  it("says the game could not load, the raw error after", () => {
+    for (const error of ["not found", "the request timed out"]) {
+      expect(errorLines({ replayLoadError: error })).toEqual([
+        `${PICKER_COPY.replayLoadError} ${error}`,
+      ]);
+    }
+  });
+
+  it("keeps each failure in its own words when both happen", () => {
+    expect(
+      errorLines({ availableSets: [], availableSetsError: "network down", replayLoadError: "not found" }),
+    ).toEqual([`${PICKER_COPY.setListError} network down Retry`, `${PICKER_COPY.replayLoadError} not found`]);
   });
 });

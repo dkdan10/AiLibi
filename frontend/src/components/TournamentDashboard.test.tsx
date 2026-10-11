@@ -8,6 +8,7 @@ import {
   momentsState,
   type ProfileState,
 } from "./TournamentDashboard";
+import { CalibrationCurve } from "./CalibrationCurve";
 import { Loaded, UnderPowered } from "../stories/TournamentDashboard.stories";
 import { ApiError } from "../api/client";
 import { shelfTitle } from "./HighlightCard";
@@ -188,6 +189,13 @@ describe("the panel's request", () => {
 });
 
 describe("the dashboard's leftovers", () => {
+  /** The figure in each calibration readout, in page order. */
+  function readouts(html: string): readonly string[] {
+    return [
+      ...html.matchAll(/title="lower is better"[^>]*>Expected calibration error ([^<]*)</g),
+    ].map((match) => match[1] ?? "");
+  }
+
   /** The whole dashboard over a story's report, before the reveal. */
   function dashboard(args: typeof Loaded.args): string {
     const report = args?.report ?? null;
@@ -214,9 +222,30 @@ describe("the dashboard's leftovers", () => {
   it("spells out the calibration error, keeping its figure and its tooltip", () => {
     const html = dashboard(Loaded.args);
     expect(html).toMatch(/title="lower is better"[^>]*>Expected calibration error (\d\.\d{3}|n\/a)</);
+    // The story's two curves carry 0.248 (claims) and 0.103 (ballots): each readout
+    // shows its own curve's figure, not a figure of the right shape.
+    expect(readouts(html)).toEqual(["0.248", "0.103"]);
     expect(html).not.toMatch(/\bECE\b/);
     const low = dashboard(UnderPowered.args);
     expect(low).toContain(DASHBOARD_COPY.calibrationLowPower);
     expect(low).not.toMatch(/\bECE\b/);
+  });
+
+  it("shows each curve's own calibration error, to three places, and n/a for none", () => {
+    const curve = (ece: number | null) =>
+      renderToStaticMarkup(
+        <CalibrationCurve
+          title="A curve"
+          bins={[]}
+          total={0}
+          ece={ece}
+          populatedBins={0}
+          lowPower={false}
+          nBins={10}
+        />,
+      );
+    expect(readouts(curve(0.248))).toEqual(["0.248"]);
+    expect(readouts(curve(0.1))).toEqual(["0.100"]);
+    expect(readouts(curve(null))).toEqual(["n/a"]);
   });
 });

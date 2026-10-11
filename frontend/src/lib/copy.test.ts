@@ -1448,6 +1448,8 @@ describe("the replay browser's notes", () => {
     );
     expect(PICKER_COPY.loadingReplays).toBe("Loading recorded games…");
     expect(PICKER_COPY.replaysLoadError).toBe("The recorded games could not be loaded:");
+    expect(PICKER_COPY.setListError).toBe("The set list could not be loaded:");
+    expect(PICKER_COPY.replayLoadError).toBe("This game could not be loaded:");
     expect(PICKER_COPY.unknownError).toBe("No reason was given.");
   });
 });
