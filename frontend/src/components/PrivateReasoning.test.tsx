@@ -356,6 +356,31 @@ describe("private reasoning perspective", () => {
     expect(stray).toContain(">Statement (turn 9), not found in this meeting</button>");
     state.currentReplay = null;
   });
+  it("names an observation citation in words when no meeting is selected to link it to", () => {
+    // With no meeting selected the citations cannot select anything, so they
+    // render as plain spans; they still name what they point at, each with
+    // its exact id on hover, and the counter slot still reads its id's kind.
+    state.perspective = { mode: "omniscient" };
+    state.selectedMeetingId = null as unknown as string;
+    try {
+      const cited: BallotView = { ...ballot, primary_reason_observation_id: "p-1:12:0", counter_reason_id: "p-1:12:0" };
+      const html = renderToStaticMarkup(<BallotCard ballot={cited} players={players} omniscient revealOutcome={false} />);
+      const spans = [...html.matchAll(/<span class="text-xs" title="([^"]*)">([\s\S]*?)<\/span>/g)].map((match) => [match[1], textOf(match[2] ?? "")]);
+      expect(spans).toEqual([
+        ["p-1:12:0", "What p-1 saw at tick 12"],
+        ["p-1:12:0", `${BALLOT_COPY.counterLabel} · What p-1 saw at tick 12`],
+      ]);
+      expect(html).not.toContain("<button");
+      // Two different ids, so each span's words and hover read its own slot.
+      const apart = renderToStaticMarkup(<BallotCard ballot={{ ...cited, counter_reason_id: "p-3:7:1" }} players={players} omniscient revealOutcome={false} />);
+      expect([...apart.matchAll(/<span class="text-xs" title="([^"]*)">([\s\S]*?)<\/span>/g)].map((match) => [match[1], textOf(match[2] ?? "")])).toEqual([
+        ["p-1:12:0", "What p-1 saw at tick 12"],
+        ["p-3:7:1", `${BALLOT_COPY.counterLabel} · What p-3 saw at tick 7`],
+      ]);
+    } finally {
+      state.selectedMeetingId = "meeting-0";
+    }
+  });
   it("leads the grounding chip with its label, in view", () => {
     state.perspective = { mode: "omniscient" };
     const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, grounding_label: "uncited" }} players={players} omniscient revealOutcome={false} />);

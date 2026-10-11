@@ -415,6 +415,11 @@ describe("the turn tag", () => {
     const tags = [...render({ mode: "omniscient" }).matchAll(/text-ink-500">(tick \d+ · [^<]+)<\/span>/g)].map((match) => match[1]);
     expect(tags).toEqual(["tick 5 · first statement", "tick 5 · reply", "tick 5 · spoke up"]);
   });
+  it("reads the meeting's own tick, not the planted meeting's", () => {
+    // An emergency meeting, so the record asks no report of the later frame.
+    const tags = [...render({ mode: "omniscient" }, { ...MEETING, tick: 37, trigger_kind: "emergency" }).matchAll(/text-ink-500">(tick \d+ · [^<]+)<\/span>/g)].map((match) => match[1]);
+    expect(tags).toEqual(["tick 37 · first statement", "tick 37 · reply", "tick 37 · spoke up"]);
+  });
 });
 
 describe("the evidence list", () => {

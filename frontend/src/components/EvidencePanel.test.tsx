@@ -54,10 +54,10 @@ describe("citationLabel", () => {
   });
 });
 
-function render(target: EvidenceSelection, perspective: Perspective = { mode: "omniscient" }): string {
+function render(target: EvidenceSelection, perspective: Perspective = { mode: "omniscient" }, shown: MeetingDTO = meeting): string {
   state.selectedEvidence = target;
   state.perspective = perspective;
-  state.currentReplay = { players: [], meetings: [meeting], ticks: [] };
+  state.currentReplay = { players: [], meetings: [shown], ticks: [] };
   return renderToStaticMarkup(<EvidencePanel inMeeting />);
 }
 
@@ -70,6 +70,18 @@ describe("the source panel", () => {
     expect(html).toContain("p-4 · public · spoke up · meeting tick 12");
     expect(html).toContain(NOTE);
     expect(html).not.toContain("A resolved citation identifies a source");
+  });
+
+  it.each([
+    ["meeting-0:turn-0", "p-1 · public · first statement · meeting tick 37"],
+    ["meeting-0:turn-3", "p-3 · public · reply · meeting tick 37"],
+  ])("reads the kind of turn %s by its own name, at the meeting's own tick", (id, line) => {
+    // A meeting at another tick than the fixture's, so the line must read both
+    // the turn's kind and the meeting's tick rather than any one value.
+    const html = render({ kind: "statement", id, meetingId: "meeting-0", observerId: null }, { mode: "omniscient" }, { ...meeting, tick: 37 });
+    expect(html).toContain(line);
+    expect(html).not.toContain("spoke up");
+    expect(html).not.toContain("meeting tick 12");
   });
 
   it("drops the caveat from a statement this meeting does not hold, and says so", () => {

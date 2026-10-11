@@ -48,19 +48,28 @@ export function observationClock(group: ReportProvenanceGroupView): string {
   return group.substrate_flags?.temporal_observations === false ? COPY.clockStandard : COPY.unknown;
 }
 
+/**
+ * What a group's absent policy stamp means: the built-in scripted policy
+ * (`orchestrator/replay.py`), except under a custom factory, whose agents are
+ * not the built-in ones and whose unstamped policy the record cannot name.
+ */
+export function absentPolicy(factory: ReportProvenanceGroupView["agent_factory_kind"]): string {
+  return factory === "custom" ? COPY.unknown : COPY.defaultPolicy;
+}
+
 function BehaviorIdentity({ group }: { group: ReportProvenanceGroupView }) {
   const settings = recordedSettings(group.experiment_config);
   const factory = FACTORY_LABELS[group.agent_factory_kind ?? "unrecorded"];
   const count = group.game_ids.length;
   const nothingRecorded = settings.adopted.length === 0 && settings.setForRecordings.length === 0 && settings.experiments.length === 0;
+  const unstamped = absentPolicy(group.agent_factory_kind);
   return <li className="rounded border border-ink-300 p-3">
     <p><strong>{factory}</strong> · {fmt(count === 1 ? COPY.recordingCountOne : COPY.recordingCountMany, { count: String(count) })}.</p>
     {settings.adopted.length > 0 && <p>{fmt(COPY.adoptedLead, { rules: settings.adopted.join(COPY.sentenceSeparator) })}</p>}
     {settings.setForRecordings.length > 0 && <p>{fmt(COPY.setForRecordingsLead, { settings: settings.setForRecordings.join(COPY.ruleSeparator) })}</p>}
     {settings.experiments.length > 0 && <p>{fmt(COPY.experimentsLead, { experiments: settings.experiments.join(COPY.experimentSeparator) })}</p>}
     {nothingRecorded && <p>{COPY.noRecordedSettings}</p>}
-    {/* An absent policy stamp is the default scripted mover (`orchestrator/replay.py`). */}
-    <p>{fmt(COPY.policyLine, { impostor: group.tactical_policy?.method ?? COPY.defaultPolicy, crew: group.crew_tactical_policy?.method ?? COPY.defaultPolicy, rules: group.substrate_flags ? COPY.recorded : COPY.unknown })}</p>
+    <p>{fmt(COPY.policyLine, { impostor: group.tactical_policy?.method ?? unstamped, crew: group.crew_tactical_policy?.method ?? unstamped, rules: group.substrate_flags ? COPY.recorded : COPY.unknown })}</p>
     {/* Two groups can differ by the observation clock alone; without this line the
         mixed-configuration banner fires above cards that read identically. */}
     <p>{fmt(COPY.clockLine, { clock: observationClock(group) })}</p>

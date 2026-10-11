@@ -339,6 +339,12 @@ describe("the Results tab's case links and prose", () => {
     expect(text).toContain("Each recording was replayed and checked before counting.");
     expect(text).not.toContain("The engine reconstructed");
   });
+
+  it("counts the games the set holds, whatever their number", () => {
+    const text = textOf(renderToStaticMarkup(<PublicResultsView results={{ ...summary, games: 37 }} />));
+    expect(text).toContain(`Results cover all 37 games with ${setOptionLabel("9p2i")};`);
+    expect(text).not.toContain("all 50 games");
+  });
 });
 
 describe("the Results tab's provenance defaults", () => {
@@ -364,6 +370,28 @@ describe("the Results tab's provenance defaults", () => {
     expect(lines({ ...scripted, substrate_flags: null, temporal_observation_version: null, tactical_policy: { ...policy, method: "learned impostor" } })).toContain(
       "Impostor policy: learned impostor. Crew policy: the built-in scripted policy. Rule settings: unknown.",
     );
+  });
+
+  it("keeps a custom factory's absent stamp unknown, never the built-in policy", () => {
+    // A custom factory's agents are not the built-in ones, so an unstamped
+    // policy there is one the record cannot name; a stamp it does carry stays.
+    const custom = { ...scripted, agent_factory_kind: "custom" as const, substrate_flags: { temporal_observations: false }, temporal_observation_version: null };
+    const unstamped = lines(custom);
+    expect(unstamped).toContain("Impostor policy: unknown. Crew policy: unknown. Rule settings: recorded.");
+    expect(unstamped.join("\n")).not.toContain(PUBLIC_RESULTS_COPY.defaultPolicy);
+    const policy = { policy_id: "id", encoder_version: "e1", weights_sha256: "sha", anchor_policy: "anchor" };
+    expect(lines({ ...custom, tactical_policy: { ...policy, method: "learned impostor" } })).toContain(
+      "Impostor policy: learned impostor. Crew policy: unknown. Rule settings: recorded.",
+    );
+    expect(lines({ ...custom, crew_tactical_policy: { ...policy, method: "learned crew" } })).toContain(
+      "Impostor policy: unknown. Crew policy: learned crew. Rule settings: recorded.",
+    );
+    // The built-in factories, and an older payload with no factory recorded, keep the default.
+    for (const kind of ["scripted", "experimental", null] as const) {
+      expect(lines({ ...custom, agent_factory_kind: kind })).toContain(
+        "Impostor policy: the built-in scripted policy. Crew policy: the built-in scripted policy. Rule settings: recorded.",
+      );
+    }
   });
 
   it("puts the prompt versions and the fingerprint under the technical identifiers", () => {
