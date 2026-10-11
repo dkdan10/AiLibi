@@ -613,11 +613,14 @@ function headerSpanProblems(title: string, header: string): readonly string[] {
 }
 
 /**
- * What the welcome step carries beyond copy reads: each prose literal its link
- * types, then the first attribution word anywhere in the step, inside the link
- * or outside it. Empty when the step says none.
+ * What the welcome step of a tour source carries beyond copy reads: each prose
+ * literal its link types, then the first attribution word anywhere in the step,
+ * inside the link or outside it. Empty when the step says none. The helper cuts
+ * both spans from the source itself, so no caller can hand it one span in the
+ * other's place.
  */
-function welcomeSpanProblems(step: string, link: string): readonly string[] {
+function welcomeSpanProblems(source: string): readonly string[] {
+  const [step, link] = welcomeSpans(source);
   const problems = proseLiterals(link).map((text) => `the link types ${text}`);
   const hit = ATTRIBUTION_WORDS.exec(step);
   if (hit !== null) problems.push(`the step says ${hit[0]}`);
@@ -749,7 +752,7 @@ describe("the header's and the tour's source link", () => {
     expect(step.split("<a ")).toHaveLength(2);
     expect(link).toContain("HEADER_COPY.sourceUrl");
     expect(link).toContain("HEADER_COPY.tourSourceLinkText");
-    expect(welcomeSpanProblems(step, link)).toEqual([]);
+    expect(welcomeSpanProblems(tour)).toEqual([]);
   });
 
   it("catches the old link text, or the old sentence, typed back into the step (planted)", () => {
@@ -758,8 +761,7 @@ describe("the header's and the tour's source link", () => {
       "Read the source and ownership case study.",
     );
     expect(literal).not.toBe(tour);
-    const [literalStep, literalLink] = welcomeSpans(literal);
-    expect(welcomeSpanProblems(literalStep, literalLink)).toEqual([
+    expect(welcomeSpanProblems(literal)).toEqual([
       "the link types Read the source and ownership case study.",
       "the step says ownership",
     ]);
@@ -769,8 +771,7 @@ describe("the header's and the tour's source link", () => {
       "not making live model calls. Daniel Keinan directs the project; Claude Code and Codex agents write code and supporting material, with separate AI review.",
     );
     expect(sentence).not.toBe(tour);
-    const [sentenceStep, sentenceLink] = welcomeSpans(sentence);
-    expect(welcomeSpanProblems(sentenceStep, sentenceLink)).toEqual(["the step says Claude Code"]);
+    expect(welcomeSpanProblems(sentence)).toEqual(["the step says Claude Code"]);
   });
 });
 
