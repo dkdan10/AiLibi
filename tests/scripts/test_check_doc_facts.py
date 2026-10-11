@@ -6354,8 +6354,11 @@ def test_a_scorecard_cell_is_restated_in_the_tables_form(
     "cell", ["394 / 397 = 0.9924", "394/397", "0.9924", "394 of 397 (99%)", ""]
 )
 def test_a_scorecard_cell_of_another_shape_is_refused(cell: str) -> None:
-    with pytest.raises(check_doc_facts.ScorecardPageError, match="is not a 'k/n"):
+    with pytest.raises(check_doc_facts.ScorecardPageError) as refused:
         check_doc_facts.scorecard_fraction(cell)
+    assert refused.value.args[0] == (
+        f"the cell {cell!r} is not a 'k/n = rate' fraction"
+    )
 
 
 def test_a_partition_cell_is_two_fractions_in_the_tables_form() -> None:
@@ -7004,3 +7007,63 @@ def test_report_example_rates_are_not_its_claims(doc_tree: Path) -> None:
     assert "README.md: carries 'vote correctness 0.783'" in _page_wording_problems(
         _README, _read(doc_tree, _README)
     )
+
+
+def test_a_removed_replay_moves_the_count_figure(doc_tree: Path) -> None:
+    # The replay count is read off the files on disk: one replay fewer, and the
+    # figure the row must state is 99 of 99, not the 100 it says.
+    replay = next(
+        (doc_tree / "replays" / "samples" / "4p1i").glob("replay-seed-*.jsonl")
+    )
+    replay.unlink()
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        error.startswith(f"{_README}: the results row 'Sample games that replay")
+        and "recomputes to '99 of 99 (100%)'" in error
+        for error in errors
+    )
+
+
+def test_the_cited_count_pin_moves_the_citation_figure(doc_tree: Path) -> None:
+    # Both counts of the citation row are the instrument's pins: the cited
+    # count moved there moves the figure the row must state.
+    _substitute(
+        doc_tree,
+        _CITATION_INSTRUMENT,
+        "assert nine.cited_eject_ballots == 397",
+        "assert nine.cited_eject_ballots == 396",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "recomputes to '396 of 397 (100%), zero dangling'" in error for error in errors
+    )
+
+
+def test_the_partner_ballot_pin_moves_the_row(doc_tree: Path) -> None:
+    # The partner row's total is the instrument's pinned impostor-ballot count.
+    _substitute(
+        doc_tree,
+        _DEDUCTION_INSTRUMENT,
+        "samples.impostor_ballots) == (10, 198)",
+        "samples.impostor_ballots) == (10, 197)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{_READING_GUIDE}: the row 'Impostor ballots cast against a partner (9p2i)' "
+        f"reads '0 of 198 (0%)', but {_DEDUCTION_INSTRUMENT} pins '0 of 197 (0%)'."
+    ]
+
+
+def test_a_fraction_over_no_population_in_a_table_fails(doc_tree: Path) -> None:
+    # Planted: a guide-only before cell over zero, which has no percentage.
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 0 of 14 (0%) | 0 of 14 (0%) |",
+        "| 0 of 14 (0%) | 0 of 0 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{_READING_GUIDE}: the results row 'Learned behaviours the ML program set "
+        "out to show' states '0 of 0', a fraction over no population."
+    ]
