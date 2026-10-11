@@ -171,6 +171,23 @@ def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
     changed = tmp_path / names[0]
     changed.write_bytes(changed.read_bytes() + b"changed")
     assert _asset_mismatches(tmp_path) == [names[0]]
+    # A digest one hex digit off, over unchanged bytes, must fail too.
+    changed.write_bytes((media / names[0]).read_bytes())
+    assert _asset_mismatches(tmp_path) == []
+    digest = provenance["assets_sha256"][names[-1]]
+    off_by_one = f"{digest[:-1]}{(int(digest[-1], 16) + 1) % 16:x}"
+    (tmp_path / "provenance.json").write_text(
+        json.dumps(
+            {
+                **provenance,
+                "assets_sha256": {
+                    **provenance["assets_sha256"],
+                    names[-1]: off_by_one,
+                },
+            }
+        )
+    )
+    assert _asset_mismatches(tmp_path) == [names[-1]]
 
 
 #: The two pages that describe the pictured game to a first reader.
@@ -741,7 +758,24 @@ def test_media_placement_claims_follow_actual_frontdoor_links(tmp_path: Path) ->
         )
     )
     assert _media_placement_mismatches(tmp_path) == ["spectator-two-truths.png"]
+    # Planted: the GIF's embed taken out of the README its row places it in.
+    gif_embed = (
+        "[![The same game playing from its first tick to the meeting]"
+        "(docs/media/spectator-journey.gif)](https://dkdan10.github.io/AiLibi/)\n"
+    )
+    assert original.count(gif_embed) == 1
+    readme.write_text(original.replace(gif_embed, ""))
+    assert _media_placement_mismatches(tmp_path) == ["spectator-journey.gif"]
     readme.write_text(original)
+    assert _media_placement_mismatches(tmp_path) == []
+
+    # Planted: an empty clip back in the directory, which no row places.
+    clip = tmp_path / "docs/media/spectator-journey.webm"
+    clip.touch()
+    assert _media_placement_mismatches(tmp_path) == [
+        "media placement table does not match the visual inventory"
+    ]
+    clip.unlink()
 
     inventory = tmp_path / "docs/media/README.md"
     inventory.write_text(
