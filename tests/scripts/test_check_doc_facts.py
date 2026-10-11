@@ -2889,8 +2889,8 @@ def test_older_recording_date_is_left_alone(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| Pre-registered emergence rulings demonstrated, phase 18 | 0 of 14 | 0 of 14 |",
-        "| Pre-registered emergence rulings demonstrated, phase 18 | 0 of 14 | 0 of 14 "
+        "| Learned behaviours the ML program set out to show | 0 of 14 | 0 of 14 |",
+        "| Learned behaviours the ML program set out to show | 0 of 14 | 0 of 14 "
         "(reference recording 6, 2026-07-20) |",
     )
     assert check_doc_facts.check_facts(doc_tree) == []

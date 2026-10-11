@@ -26,7 +26,7 @@ Before is what each set's previously shown recording read.
 | Ejection accuracy with engine-certified proof of the ejectee's role, against without (9p2i) | 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | the 2026-10-09 record (9p2i) — [the record](../audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](../audits/audit-2026-10-01-stage-b-r2.md) §9.6 |
 | Correct 9p ejections riding an ejectee-specific vent sighting | 24 / 46 = 52% | 24 / 44 = 55% | the 2026-10-09 record (9p2i) — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
 | Impostor ballots cast against a partner (9p2i) | 0 of 198 | 0 of 200 | enforced by the meeting layer, not shown by the model — §3 |
-| Pre-registered emergence rulings demonstrated, phase 18 | 0 of 14 | 0 of 14 | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
+| Learned behaviours the ML program set out to show | 0 of 14 | 0 of 14 | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
 | Learned tactical policies that became the default | none, ruled twice | none, ruled twice | [phase 17](../audits/audit-phase-17-close.md), [18](../audits/audit-phase-18-close.md) |
 
 Two of baseline 7's pre-registered bars missed: conviction accuracy without
@@ -67,10 +67,10 @@ bash scripts/run_spectator.sh  # API + UI, opens http://localhost:5173
 
 The served default is the 9-player, 2-impostor set; the 4-player set is a
 fast fixture of short games. The games the guided tour can open are
-hand-picked, not scored, and spoiler-free; the tour opens on a first meeting
+spoiler-free; the tour opens on a first meeting
 that ejects a player a reported vent sighting names.
 
-**Results & cases** shows each set's figures, and source-bound cases from the
+**Results** shows each set's figures, and source-bound cases from the
 first 9-player featured game. Start from the featured games: **9p2i seed 19**
 has three meetings, nineteen spoken turns and a reported vent sighting;
 **9p2i seed 14** has one meeting, eight turns and no flags; **4p1i seed 11** is
@@ -90,7 +90,9 @@ a fact the engine *certified*, and the ballot says which is which.
 all 397 eject ballots in the 9p2i samples, every one cites a line the voter
 could really see.
 
-**Deception: demonstrated, and the strongest capability on display.**
+**Deception: demonstrated in earlier recordings**, as
+[the fresh-clone audit](../audits/audit-phase-19-input-claude.md#53-what-is-genuinely-good)
+verified.
 Coordinated fabricated alibis built by reading the transcript, strategic
 truth-telling at parity, verbal betrayal of a caught partner while the ballot
 skips. One guard belongs with the partner row above: a ballot naming a fellow
@@ -117,19 +119,20 @@ convicted four again on baseline 8
 ([its record](../audits/audit-phase-21-rerecord.md) §5.1.1); later records do
 not re-read it.
 
-## 4. Three audits, in this order
+## 4. Four audits, in this order
 
-1. [audit-phase-19-input-claude.md](../audits/audit-phase-19-input-claude.md) —
-   an independent audit from a fresh clone. **What it proves:** a stranger can
-   reproduce every derived metric from the committed raw bytes.
-2. [audit-phase-19-triage.md](../audits/audit-phase-19-triage.md) — its
-   reconciliation against a second, independent audit by a different model.
-   **What it proves:** disagreements are ruled on evidence, and one of its own
-   sources' headline terms is refuted rather than absorbed.
-3. [audit-phase-18-close.md](../audits/audit-phase-18-close.md) — the close of
-   the ML program. **What it proves:** the machinery holds under a result nobody
-   wanted. Every learned arm beat the scripted comparator on wins and failed the
-   pre-registered selection gate, so none became the default.
+1. [The finished-state audit of 2026-10-10](../audits/audit-2026-10-10-finalized-state.md).
+   **What it proves:** what the finished project shows and does not, each
+   figure with its command.
+2. [The fresh-clone audit](../audits/audit-phase-19-input-claude.md). **What it
+   proves:** a stranger can reproduce every derived metric from the committed
+   bytes.
+3. [Its reconciliation with a second model's audit](../audits/audit-phase-19-triage.md).
+   **What it proves:** disagreements are ruled on evidence; a source's headline
+   term is refuted rather than absorbed.
+4. [The ML program's close](../audits/audit-phase-18-close.md). **What it
+   proves:** the machinery holds under a result nobody wanted: every learned arm
+   beat the scripted comparator on wins and failed the selection gate.
 
 The commissioned audits are AI auditors, not third parties, and every gameplay
 and ML number here comes from one model on one prompt set at 50 games per set.
