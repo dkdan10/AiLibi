@@ -64,6 +64,20 @@ states them; no rendered prompt, transcript text or seed-band prefix was printed
 
 Each item names its mechanism and the planted case that turns it red; each new test is seen red first.
 
+- [x] Review correction: the report example's evidence denominator and total are held to the report. Planted:
+  the report's `impostor_ejections` moved to 47 fails naming "36 of those 47 with evidence against that player"
+  (`test_eval_report_count_drift_reaches_the_report_example`); its `total_ejections` moved to 62 fails naming "62
+  ejections" (`test_a_moved_ejection_total_reaches_the_report_example`). Red first under R6 and R7.
+- [x] Review correction: the style rule reads each cell as its link text. Planted in the vent before cell: "24 / 44"
+  with its numbers linked fails the retired-form scan, and "24 of 44 (54%)" behind a linked count fails the
+  percentage scan (`test_the_style_rule_reads_a_cell_as_its_link_text`). Red first under S8 and S9.
+- [x] Review correction: the stamp rule reads the samples paragraph only. Pass case: "v5" in another README
+  paragraph leaves `check_doc_facts.py` silent
+  (`test_a_stamp_like_token_outside_the_samples_paragraph_is_not_read`). Red first under T6.
+- [x] Review correction: item 20's README sentence is held by the wording pin's README row, byte for byte with its
+  link (`_readme_wording_problems`). Planted: the sentence deleted, "and nothing from the second" made "and the
+  second as well", the link moved to another page; each fails naming README.md
+  (`test_the_wording_pin_refuses_each_restored_text`), each red before the pin line was added.
 - [x] **The wording pin.** A new helper in `tests/scripts/test_check_doc_facts.py` reads each page through `strip_links`
   (`scripts/check_doc_facts.py:1878`), drops `*` and backticks, collapses whitespace and returns, by page, required
   strings missing, retired ones present and order cases broken (word boundaries; (f) case-folded); empty on the
@@ -375,7 +389,8 @@ the check's own lines, cut).
   '0.5922 against 0.60'", "'50 of 96 = 0.5208'", "'43 of 85 = 0.5059'", "'finding'"); "Innocent ejections fell from
   46 to 21." on the README fails `check_verdict_passage` naming README.md; history's "against 34 of 46" made "33"
   fails naming docs/history.md; the 46 beside "50 of 96 = 0.5208" made 47 fails `check_verdict_figures` at
-  `docs/history.md:206`; history without "the rule returns" fails naming the page, which is the verdict home.
+  `docs/history.md:206`; history without "the rule returns" fails naming the page, which is the verdict home. The
+  README's one sentence itself is held by the pin's README row, byte for byte with its link (round 1, below).
 - **22.** `git diff --numstat B -- docs/ownership-case-study.md` prints `32 0`. Planted: a link misspelled
   (`promote-round3.md`) fails `check_relative_links`; the opening edited fails the pin. The exhibit tests pass.
 - **23.** The pin's guide row and order case, with `check_results_agreement` and `check_guide_line_citations` green.
@@ -429,6 +444,10 @@ on re-run N3, N6, N7, N8 and W7 are killed. Final: 39 of 39 killed.
 | stamp rule | T1 branch: `test_samples_paragraph_naming_an_unrecorded_stamp_detected`; T2 swap sets: `test_samples_paragraph_naming_recorded_stamps_passes`; T3 drop filter: the same; T4 message: `test_samples_paragraph_without_a_manifest_link_detected`; T5 literal sets: the same |
 | caption anchor | C1 drop the blank-line filter: `test_the_front_door_names_the_pictured_game_in_plain_words`; C2 literal README: `test_a_caption_naming_another_scene_fails_by_name`; C3 tick constant: the same (`one-tick-later`) |
 | wording pin | W1 drop the marks wrapper and W2 drop `strip_links`: `test_the_wording_pin_refuses_each_restored_text`; W3 None inverse: the same; W4 swap folded for retired: the same; W5 drop "Codex": the same; W6 key constant: `test_the_front_door_wording_pin_holds`; W7 message: `test_the_wording_pin_refuses_each_restored_text`; W8 branch: `test_the_front_door_wording_pin_holds`; W9 literal root: `test_the_wording_pin_refuses_each_restored_text` |
+| round 1: report templates | R6 the evidence clause's denominator read as the literal 46: `test_eval_report_count_drift_reaches_the_report_example`; R7 the total read as the literal 61: `test_a_moved_ejection_total_reaches_the_report_example` |
+| round 1: style rule | S8 drop `strip_links` on the retired-form scan: `test_the_style_rule_reads_a_cell_as_its_link_text[old-form-with-its-numbers-linked]`; S9 drop it on the fraction scan: the same, `[wrong-percentage-behind-a-linked-count]` |
+| round 1: stamp rule | T6 the paragraph swapped for the whole README (collection): `test_a_stamp_like_token_outside_the_samples_paragraph_is_not_read` |
+| round 1: wording pin | W10 the sentence's test inverted: `test_the_front_door_wording_pin_holds`; W11 its message made a constant: `test_the_wording_pin_refuses_each_restored_text[missed-targets-sentence-deleted]`; W12 the README's lines read as the literal sentence: the same |
 
 "committed" is `test_committed_front_door_passes`.
 
@@ -449,3 +468,48 @@ on re-run N3, N6, N7, N8 and W7 are killed. Final: 39 of 39 killed.
   policies" paragraph; the media README's provenance paragraph naming v6 prompts and a v8 ballot.
 - The labels and the case study's added section are written by an AI agent from the sources named above; no source
   states them word for word.
+
+### Review corrections, round 1 (2026-10-11)
+
+The first review, at `3f116d60`, found four blocking problems; this round repairs them with tests only. No page,
+asset, production line of `scripts/check_doc_facts.py` or viewer file moves, so the word counts, the media and the
+bundle stated above hold; `main` had not moved (merge base `7d781f8e`).
+
+1. **The report example's template reads** (correctness lens). The evidence clause's denominator read as the literal
+   46 (R6) and the total read as the literal 61 (R7) survived, since no test moved those two report counts.
+   `test_eval_report_count_drift_reaches_the_report_example` now also asserts the README error naming "36 of those 47
+   with evidence against that player"; the new `test_a_moved_ejection_total_reaches_the_report_example` moves the
+   report's `total_ejections` to 62 and asserts the README's one error, naming "62 ejections". Each red under its
+   mutant.
+2. **The style rule reads link text** (docs lens). Dropping `strip_links` on the retired-form scan (S8) or on the
+   fraction scan (S9) survived. The new `test_the_style_rule_reads_a_cell_as_its_link_text` runs
+   `check_number_style` on the committed README with the vent before cell replaced: "[24](docs/history.md) /
+   [44](docs/history.md)" gives exactly the retired-form error naming "24 / 44", and "[24](docs/history.md) of 44
+   (54%)" exactly the percentage error naming "24 of 44 (55%)". Each red under its mutant.
+3. **The stamp rule's scope** (docs lens). Reading the whole README instead of the samples paragraph (T6) survived.
+   The new pass case `test_a_stamp_like_token_outside_the_samples_paragraph_is_not_read` adds "The viewer reads
+   replay format v5." as its own paragraph above the stack line, and `check_facts` returns no error. Red under T6.
+4. **Item 20's README sentence** (docs lens). At `3f116d60` deleting it, or making its last clause say the second
+   recording was adopted too, left every check silent. The wording pin's README row (`_readme_wording_problems`)
+   now holds the sentence as one line, byte for byte, its link to `docs/history.md#evidence-honesty-phase-20`
+   included, as it holds the byline. Planted, each failing naming README.md
+   (`test_the_wording_pin_refuses_each_restored_text`): `missed-targets-sentence-deleted`,
+   `second-recording-said-adopted` ("and nothing from the second" made "and the second as well") and
+   `missed-targets-link-moved` (the link sent to the case study); all three failed before the pin line was added (3
+   failed, 10 passed). The two cases restoring the old paragraphs now expect it too. The pin was chosen over
+   anchoring `check_owner_action` on the sentence: that check refuses an undated positive adoption, and the sentence
+   states the first recording's real adoption without its date, so the anchor would need a date and more words on
+   the README. Item 20's mechanism, "the pin's README row", is now true of the sentence.
+
+**Mutation probe of this round.** Eight mutants over the spans the findings name and the one line added, each one
+exact replacement run against the named tests and restored (a scratch script): loaded source read as its literal 3
+(R6, R7, W12), dropped wrapper 2 (S8, S9), swapped collection 1 (T6), comparison inverted 1 (W10), message argument
+made a constant 1 (W11). Eight of eight killed; the rows are in the mutation table above, marked round 1.
+
+**Validation at this commit, count-only.** `check_doc_facts.py` exit 0; `validate_task_docs.py` exit 0; the two
+test files 471 passed (464 at `3f116d60`); `ruff check`, `ruff format --check` (scripts, tests/scripts) and `mypy`
+on the changed test file and the checker exit 0. `grep -c 'assert '`: `test_check_doc_facts.py` 862 (857 at
+`3f116d60`, 813 at B), `test_public_recording_provenance.py` 63. `wc -w` unchanged: README 1,474, guide 1,340,
+lessons 1,420. `git diff --stat 3f116d60` lists this card and `tests/scripts/test_check_doc_facts.py` only. The
+gate record is CI's run at the exact head of #513, cited there by run id (memo 8.7 item 1). Item 17's box stays
+open: the capture runs after the viewer cards merge, as the Limitations say.

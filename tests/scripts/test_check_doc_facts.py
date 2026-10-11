@@ -630,6 +630,20 @@ def test_samples_paragraph_naming_recorded_stamps_passes(doc_tree: Path) -> None
     assert check_doc_facts.check_facts(doc_tree) == []
 
 
+def test_a_stamp_like_token_outside_the_samples_paragraph_is_not_read(
+    doc_tree: Path,
+) -> None:
+    # The stamp rule reads the samples paragraph only: a version-like word in
+    # another paragraph is not a claim about the recorded prompts.
+    _substitute(
+        doc_tree,
+        _README,
+        "\nPython 3.11 · FastAPI/Pydantic",
+        "\nThe viewer reads replay format v5.\n\nPython 3.11 · FastAPI/Pydantic",
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
 @pytest.mark.parametrize("name", ["4p1i", "9p2i"])
 def test_samples_paragraph_without_a_manifest_link_detected(
     doc_tree: Path, name: str
@@ -1110,6 +1124,30 @@ def test_eval_report_count_drift_reaches_the_report_example(doc_tree: Path) -> N
         and "impostor_ejections as 47" in error
         for error in errors
     )
+    # ...and the evidence clause's denominator, which is the same count read
+    # again, so the example cannot keep "36 of those 46" once the report says 47.
+    assert any(
+        error.startswith(f"{_README}:")
+        and "'36 of those 47 with evidence against that player'" in error
+        for error in errors
+    )
+
+
+def test_a_moved_ejection_total_reaches_the_report_example(doc_tree: Path) -> None:
+    # Planted: the report's own total of ejections moved by one. The README's
+    # example states that total, so it no longer matches the report it cites.
+    _substitute(
+        doc_tree,
+        _EVAL_REPORT_9P2I,
+        '"total_ejections": 61,',
+        '"total_ejections": 62,',
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    readme = [error for error in errors if error.startswith(f"{_README}:")]
+    assert readme == [
+        f"{_README}: the real-report example does not state '62 ejections' — "
+        f"{_EVAL_REPORT_9P2I} records total_ejections as 62."
+    ]
 
 
 def test_vote_correctness_provenance_drift_detected(doc_tree: Path) -> None:
@@ -6452,6 +6490,39 @@ def test_a_retired_form_in_the_source_column_is_refused_too(doc_tree: Path) -> N
     ]
 
 
+_VENT_CLAIM = "Impostors ejected after a reported sighting of them venting (9p2i)"
+
+
+@pytest.mark.parametrize(
+    ("cell", "expected"),
+    [
+        pytest.param(
+            "[24](docs/history.md) / [44](docs/history.md)",
+            f"{_README}: the results row {_VENT_CLAIM!r} writes '24 / 44' — both "
+            "tables state a fraction as 'k of n (p%)' and print no decimal rate.",
+            id="old-form-with-its-numbers-linked",
+        ),
+        pytest.param(
+            "[24](docs/history.md) of 44 (54%)",
+            f"{_README}: the results row {_VENT_CLAIM!r} states '24 of 44 (54%)', "
+            "but that fraction reads '24 of 44 (55%)' — both tables carry each "
+            "fraction's percentage, rounded as the win rates are.",
+            id="wrong-percentage-behind-a-linked-count",
+        ),
+    ],
+)
+def test_the_style_rule_reads_a_cell_as_its_link_text(cell: str, expected: str) -> None:
+    # Planted in the README's vent before cell: a link around a count hides it
+    # from neither scan, because a reader sees the link's text, not its markup.
+    readme = (_REPO_ROOT / _README).read_text(encoding="utf-8")
+    assert readme.count("| 24 of 44 (55%) |") == 1
+    errors: list[str] = []
+    check_doc_facts.check_number_style(
+        _README, readme.replace("| 24 of 44 (55%) |", f"| {cell} |"), errors
+    )
+    assert errors == [expected]
+
+
 # ── the front door's wording, pinned page by page ────────────────────────────
 #
 # The owner answered the visitor-wording survey on 2026-10-11
@@ -6476,6 +6547,12 @@ _BYLINE = (
     "AI-reviewed · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/"
     "actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/"
     "actions/workflows/ci.yml)"
+)
+# The missed targets' one sentence (answer 20), byte for byte, its link kept.
+_MISSED_BARS = (
+    "**Targets written down before measuring were missed twice:** the owner "
+    "adopted the first recording anyway, in writing, and nothing from the second "
+    "([what each measured](docs/history.md#evidence-honesty-phase-20))."
 )
 _WHO_DID_WHAT = "## Who did what"
 # The section says who did what without dividing the work by agent product,
@@ -6614,6 +6691,12 @@ def _readme_wording_problems(markdown: str) -> list[str]:
         problems.append(f"{_README}: the line under the title is not {_TAGLINE!r}")
     if _BYLINE not in lines:
         problems.append(f"{_README}: the byline is not kept byte for byte")
+    # The missed targets' one sentence, link included: what the owner did with
+    # each recording is a claim no figure check reaches once the figures moved.
+    if _MISSED_BARS not in lines:
+        problems.append(
+            f"{_README}: the missed-targets sentence is not kept as answered"
+        )
     section = _section(markdown, _WHO_DID_WHAT)
     if section is None:
         return [*problems, f"{_README}: no {_WHO_DID_WHAT!r} section"]
@@ -6707,11 +6790,6 @@ _SECURITY_AT_BASE = (
 )
 _DECEPTION_AT_BASE = (
     "**Deception: demonstrated, and the strongest capability on display.**"
-)
-_MISSED_BARS = (
-    "**Targets written down before measuring were missed twice:** the owner "
-    "adopted the first recording anyway, in writing, and nothing from the second "
-    "([what each measured](docs/history.md#evidence-honesty-phase-20))."
 )
 _SECURITY_NOW = (
     "service. Its one hosted copy is the static demo at\n"
@@ -6829,6 +6907,7 @@ _ERA_SENTENCE_NOW = (
                 "README.md: carries '50 of 96 = 0.5208'",
                 "README.md: carries '43 of 85 = 0.5059'",
                 "README.md: carries 'finding'",
+                "README.md: the missed-targets sentence is not kept as answered",
             ],
             id="missed-bar-paragraph-restored",
         ),
@@ -6840,8 +6919,30 @@ _ERA_SENTENCE_NOW = (
                 "README.md: carries 'against 34 of 46'",
                 "README.md: carries 'missed 0.40'",
                 "README.md: carries 'finding'",
+                "README.md: the missed-targets sentence is not kept as answered",
             ],
             id="experiment-paragraph-restored",
+        ),
+        pytest.param(
+            _README,
+            f"\n{_MISSED_BARS}\n",
+            "\n",
+            ["README.md: the missed-targets sentence is not kept as answered"],
+            id="missed-targets-sentence-deleted",
+        ),
+        pytest.param(
+            _README,
+            "and nothing from the second",
+            "and the second as well",
+            ["README.md: the missed-targets sentence is not kept as answered"],
+            id="second-recording-said-adopted",
+        ),
+        pytest.param(
+            _README,
+            "(docs/history.md#evidence-honesty-phase-20)",
+            "(docs/ownership-case-study.md)",
+            ["README.md: the missed-targets sentence is not kept as answered"],
+            id="missed-targets-link-moved",
         ),
         pytest.param(
             _README,
