@@ -6,7 +6,7 @@
 // `onOpen(gameId)` — the connected `<ReplayPicker/>` turns that into "load this
 // replay + open the workspace".
 //
-// It shows the seed, a role-neutral outcome tag, the shelves the game sits on as
+// It shows the game's number, a role-neutral outcome tag, the shelves the game sits on as
 // chips, the eyewitness chip on the meeting it marks, a tripwire's plain label,
 // a facet line and a small timeline of kills and meetings. There is no score and
 // no rank: a card describes its game and orders nothing.
@@ -25,7 +25,15 @@
 // structure the viewer already shows elsewhere (the length, the meetings, the
 // kills).
 
-import { PROFILE_COPY, fmt } from "../lib/copy";
+import {
+  PROFILE_COPY,
+  endingPhrase,
+  fmt,
+  gameName,
+  gameSeedTitle,
+  openGameLabel,
+  outcomeTag,
+} from "../lib/copy";
 import type {
   GameFacetsView,
   ReplayMetadataView,
@@ -72,17 +80,6 @@ export function shelfTitle(name: string): string {
   return entry.title;
 }
 
-function winnerLabel(
-  winner: Winner | null,
-  completionStatus: ReplayMetadataView["completion_status"],
-): string {
-  if (winner === "CREWMATES") return "Crew win";
-  if (winner === "IMPOSTORS") return "Impostor win";
-  if (completionStatus === "aborted") return "Aborted";
-  if (completionStatus === "tick_limited") return "Tick limit";
-  return "Unfinished";
-}
-
 // The reveal control withholds both winning teams and recorded stop reasons.
 // Older bundles omit stop classification, so a missing winner stays unfinished.
 function WinnerTag({
@@ -107,7 +104,7 @@ function WinnerTag({
       className="inline-flex items-center gap-1 rounded-pill border border-ink-300 px-2 py-0.5 font-mono text-3xs text-ink-600"
     >
       <span aria-hidden>{glyph}</span>
-      {hidden ? "Outcome hidden" : winnerLabel(winner, completionStatus)}
+      {hidden ? "Outcome hidden" : outcomeTag(winner, completionStatus)}
     </span>
   );
 }
@@ -220,8 +217,8 @@ function Timeline({ facets }: { facets: GameFacetsView }) {
 }
 
 function endingWords(ending: string): string {
-  const words = (PROFILE_COPY.revealFacets.endings as Readonly<Record<string, string>>)[ending];
-  if (words === undefined) {
+  const words = endingPhrase(ending);
+  if (words === null) {
     throw new Error(`the game-shape profile names an ending this build has no words for: ${ending}`);
   }
   return words;
@@ -265,8 +262,8 @@ function RevealFacetLines({ facets }: { facets: RevealFacetsView }) {
     ...facets.ejections.map((ejection) =>
       fmt(
         ejection.right
-          ? PROFILE_COPY.revealFacets.ejectionRight
-          : PROFILE_COPY.revealFacets.ejectionWrong,
+          ? PROFILE_COPY.revealFacets.ejectedImpostor
+          : PROFILE_COPY.revealFacets.ejectedCrewmate,
         { meeting: String(ejection.meeting + 1) },
       ),
     ),
@@ -296,12 +293,12 @@ export function HighlightCard({ data, onOpen, reveal }: HighlightCardProps) {
       onClick={() => {
         onOpen(data.gameId);
       }}
-      aria-label={`Open replay seed ${data.seed}`}
+      aria-label={openGameLabel(data.seed)}
       className="flex w-full flex-col gap-3 rounded-lg border-2 border-ink-900 bg-paper-0 p-4 text-left shadow-chrome-1 transition-transform hover:-translate-y-0.5 hover:shadow-chrome-2 focus-visible:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-900"
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs font-semibold text-ink-900">
-          seed {data.seed}
+        <span title={gameSeedTitle(data.seed)} className="font-mono text-xs font-semibold text-ink-900">
+          {gameName(data.seed)}
         </span>
         <WinnerTag
           winner={data.winner}

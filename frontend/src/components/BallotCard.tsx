@@ -5,7 +5,7 @@ import { useId } from "react";
 
 import { EvidenceLink } from "./EvidencePanel";
 import { useReplayStore } from "../store/replayStore";
-import { BALLOT_COPY, showsBallotCorrectness } from "../lib/copy";
+import { BALLOT_COPY, PERSPECTIVE_COPY, fmt, showsBallotCorrectness } from "../lib/copy";
 import { tokens } from "../tokens";
 import type { BallotView, PlayerView } from "../types/api";
 
@@ -322,7 +322,7 @@ export function BallotCard({
         <p className="mb-1 text-xs text-ink-500">The recorded explanation describes the original choice, before the vote was redirected.</p>
       )}
       {!privateVisible ? (
-        <p className="text-xs text-ink-500">Private ballot reasoning. View {ballot.voter}’s perspective to inspect it.</p>
+        <p className="text-xs text-ink-500">{fmt(PERSPECTIVE_COPY.privateBallot, { voter: ballot.voter })}</p>
       ) : rationale !== "" ? (
         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-900">
           {rationale}

@@ -23,7 +23,7 @@ import {
 } from "./ReplayFilters";
 import { shelfTitle } from "./HighlightCard";
 import { ApiError } from "../api/client";
-import { DASHBOARD_COPY, PICKER_COPY, PROFILE_COPY } from "../lib/copy";
+import { DASHBOARD_COPY, PICKER_COPY, PROFILE_COPY, gameSeedTitle, setOptionLabel } from "../lib/copy";
 import type { GameFacetsView, GameProfileView, ReplayMetadataView } from "../types/api";
 
 function facets(seed: number, tripped = false): GameFacetsView {
@@ -265,7 +265,7 @@ describe("Browse by moment", () => {
     const wrongHalf = html.slice(wrongAt, rightAt);
     const rightHalf = html.slice(rightAt, allAt);
     const opens = (region: string, seed: number) =>
-      region.split(`aria-label="Open replay seed ${seed}"`).length - 1;
+      region.split(`aria-label="Open game ${seed}"`).length - 1;
     expect([opens(wrongHalf, 8), opens(wrongHalf, 7)]).toEqual([1, 0]);
     expect([opens(rightHalf, 7), opens(rightHalf, 8)]).toEqual([1, 0]);
     expect(html).not.toContain(PROFILE_COPY.pair.emptyHalf);
@@ -357,7 +357,7 @@ describe("the no-profile and stale states", () => {
   it("keeps a replay card factual without a profile", () => {
     const html = render({ view: "replays", profile: null, profileMissing: true, cards: buildCards(null, LIST) });
     expect(html).toContain("33 ticks");
-    expect(html).toContain("Open replay seed 3");
+    expect(html).toContain("Open game 3");
   });
 });
 
@@ -418,7 +418,6 @@ describe("the ejection filter", () => {
   const bar = (filters: ReplayFilterState, onChange: (next: ReplayFilterState) => void) => ({
     filters,
     onChange,
-    set: "9p2i",
     resultCount: 2,
     totalCount: 3,
     reveal: true,
@@ -446,7 +445,7 @@ describe("the ejection filter", () => {
 
 describe("what each list renders", () => {
   const opens = (html: string, seed: number) =>
-    html.split(`aria-label="Open replay seed ${seed}"`).length - 1;
+    html.split(`aria-label="Open game ${seed}"`).length - 1;
 
   it("describes each shelf and lists its games as cards", () => {
     const html = render();
@@ -506,7 +505,7 @@ describe("what each list renders", () => {
       `>${PROFILE_COPY.browseReplays}</button>`,
     );
     expect(render({ view: "replays", cards: [], totalCount: 0 })).toContain(
-      "No replays in the configured replay directory.",
+      PICKER_COPY.emptySet,
     );
   });
 });
@@ -577,5 +576,72 @@ describe("the profile request and the browser's status", () => {
     });
     expect(replays({ replayList: null })).toEqual({ status: "loading", error: null });
     expect(replays({ replayListError: "list down" })).toEqual({ status: "error", error: "list down" });
+  });
+});
+
+describe("the browser's notes and names", () => {
+  /** The featured strip's markup, so a claim about it cannot be met elsewhere on the page. */
+  function strip(html: string): string {
+    return /<section aria-label="Featured games"[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
+  }
+
+  it("heads the featured strip Featured and names each game by its number", () => {
+    const featured = [
+      { set: "9p2i", seed: 19, label: "A hand-written line.", gameId: "headless-seed-19" },
+    ];
+    const html = strip(render({ view: "replays", featured }));
+    expect(html).toContain(`>${PICKER_COPY.featuredHeading}</h3>`);
+    expect(html).toContain(`title="${gameSeedTitle(19)}"`);
+    expect(html).toMatch(/>Game 19<\/span>/);
+    expect(html).not.toMatch(/picked by hand|>seed 19</);
+  });
+
+  it("reveals outcomes from one warned button, and shows no set chip", () => {
+    const html = renderToStaticMarkup(
+      <ReplayFilters
+        filters={EMPTY_FILTERS}
+        onChange={() => {}}
+        resultCount={3}
+        totalCount={3}
+        reveal={false}
+        onReveal={() => {}}
+      />,
+    );
+    const button = /<button[^>]*aria-describedby="([^"]+)"[^>]*>([^<]*)<\/button>/.exec(html);
+    expect(button?.[2]).toBe(PICKER_COPY.revealOutcomes);
+    expect(html).toContain(
+      `id="${button?.[1] ?? ""}" class="font-mono text-2xs text-ink-500"><span aria-hidden="true">⚠</span> reveals winners and endings across the whole set</span>`,
+    );
+    expect(html).not.toMatch(/Show outcome filters|>Set</);
+  });
+
+  it("names the set while it loads, and says what failed to load", () => {
+    expect(render({ status: "loading", set: "9p2i" })).toContain(
+      "Loading 9 players, 2 impostors (9p2i)…",
+    );
+    expect(render({ view: "replays", status: "loading", set: null })).toContain(
+      PICKER_COPY.loadingReplays,
+    );
+    expect(render({ view: "replays", status: "error", error: "boom" })).toContain(
+      `${PICKER_COPY.replaysLoadError} boom`,
+    );
+    expect(render({ view: "replays", status: "error", error: null })).toContain(
+      `${PICKER_COPY.replaysLoadError} ${PICKER_COPY.unknownError}`,
+    );
+  });
+
+  it("names a set with no profile in words, with its id after", () => {
+    const html = render({
+      view: "replays",
+      set: "4p1i",
+      profile: null,
+      profileMissing: true,
+      cards: buildCards(null, LIST),
+    });
+    expect(html).toContain(
+      `${setOptionLabel("4p1i")}: this set ships no game-shape profile, so its cards show no shelves.`,
+    );
+    const absent = render({ set: "4p1i", profile: null, profileMissing: true });
+    expect(absent).toContain(`${setOptionLabel("4p1i")}: the served set ships no game-shape profile`);
   });
 });

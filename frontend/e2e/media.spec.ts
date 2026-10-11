@@ -811,7 +811,7 @@ test.describe("README media capture", () => {
       momentUrl(bundle.origin, { perspective: HERO.fogSubject }),
     );
     await expect(foggedPage.locator('[aria-label^="Perspective:"]')).toHaveText(
-      `As ${HERO.fogSubject} · fog`,
+      `Watching as ${HERO.fogSubject}`,
     );
     const right = await shootMap(foggedPage);
     const rightUrl = new URL(foggedPage.url());

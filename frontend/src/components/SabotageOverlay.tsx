@@ -15,6 +15,7 @@
 import type { Graphics } from "pixi.js";
 
 import { paintGlyph } from "../assets/map/glyphs";
+import { sabotageHud } from "../lib/copy";
 import { pixiHex, tokens } from "../tokens";
 import type { RoomView, SabotageDetailView } from "../types/api";
 
@@ -95,14 +96,12 @@ export function SabotageOverlay({
 
   const isLights = sabotage.kind === "lights";
   const glyph = isLights ? lightsGlyph : reactorGlyph;
-  // Omniscient names the room + countdown; fog shows only what the agent perceives
-  // — the darkness (lights) or a non-located alarm (reactor) — never the location.
-  const hudText = omniscient
-    ? `${isLights ? "LIGHTS" : "REACTOR"} · t-${sabotage.remaining_ticks}`
-    : isLights
-      ? "LIGHTS · DARK"
-      : "SABOTAGE · ALARM";
-  const chipW = 156;
+  // Omniscient names the sabotage + countdown; one player's view shows only what
+  // that player perceives — the darkness (lights) or a non-located alarm
+  // (reactor) — never the location or the countdown. One wording style for both.
+  const hudText = sabotageHud(sabotage.kind, sabotage.remaining_ticks, omniscient);
+  // Wide enough for the longest readout ("Reactor meltdown in 90 ticks").
+  const chipW = 232;
   const chipH = 30;
   const chipX = width - HUD_PAD - chipW;
   const chipY = HUD_PAD;

@@ -36,4 +36,13 @@ describe("search intentions", () => {
     expect(html).not.toContain("last-seen-room");
     expect(html).not.toContain("private-source");
   });
+
+  it("names the hidden memory's way in as the controls do", () => {
+    const html = render(false);
+    expect(html).toContain(
+      "Raw rendered memory is hidden in another player&#x27;s view: it holds this player&#x27;s role and private memory. Switch to Omniscient, or use “See as p-2”, to read it.",
+    );
+    expect(html).not.toMatch(/\bfog\b|\blens\b/i);
+    expect(render(true)).not.toContain("Raw rendered memory is hidden");
+  });
 });

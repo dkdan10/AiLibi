@@ -1,7 +1,7 @@
 // The spectator surface's user-facing copy, plus the pure helpers that keep it
 // honest.
 //
-// Five things live here, and they live here together on purpose:
+// These things live here, and they live here together on purpose:
 //
 //   • `dialectHits` — the matcher for internal dialect (design-doc citations,
 //     bare section numbers, task ids, audit paths, and the project words that
@@ -17,6 +17,10 @@
 //   • `expandSetName` / `setOptionLabel` — set ids ("9p2i") expanded into words
 //     once per surface, with the raw id as the fallback for ids `/sets` grows
 //     later.
+//   • the workspace's name helpers — a game's number, its counts, its ending
+//     tag, a lone body's killer and the sabotage readout — each a fill of one
+//     template below, so a surface that renders them (the map's canvas among
+//     them, which no DOM test reads) keeps its words here.
 //   • `PROFILE_COPY` — the game-shape profile's shelf, chip, facet and
 //     tripwire words, keyed by the names the served profile carries.
 //
@@ -25,6 +29,8 @@
 // four perspective × reveal combinations are assertable with no DOM.
 //
 // AGENTS.md craft rule 4 ("no internal dialect on user-facing surfaces").
+
+import type { ReplayMetadataView, SabotageDetailView, Winner } from "../types/api";
 
 // ── the dialect matcher ──────────────────────────────────────────────────────
 
@@ -112,16 +118,16 @@ export function expandSetName(setId: string): string {
 }
 
 /**
- * A set id as it reads in a control or a sentence.
+ * A set's name as it reads in a control or a sentence.
  *
- * Keeps the raw id — it is what the `set` URL key and the manifests use — and
- * appends the expansion when there is one, so a known set reads
- * "9p2i — 9 players, 2 impostors" and an unknown one reads as its bare id
+ * The words first, then the raw id in parentheses — the id is what the `set`
+ * URL key and the manifests use — so a known set reads
+ * "9 players, 2 impostors (9p2i)" and an unknown one reads as its bare id
  * rather than as the id twice.
  */
 export function setOptionLabel(setId: string): string {
   const expanded = expandSetName(setId);
-  return expanded === setId ? setId : `${setId} — ${expanded}`;
+  return expanded === setId ? setId : `${expanded} (${setId})`;
 }
 
 // ── the ballot correctness badge ─────────────────────────────────────────────
@@ -159,6 +165,90 @@ export function showsBallotCorrectness(
  * time.
  */
 export const SPECTATOR_COPY = Object.freeze({
+  /**
+   * The page's tab title, which is also its link preview: `frontend/index.html`
+   * types it into its `<title>`, its description and its `og:title`, and the
+   * copy test holds the three to this value.
+   */
+  site: Object.freeze({
+    title: "AiLibi — Recorded AI social deduction",
+  }),
+  /** The shell's tabs, named after the pages they open, and the tour button. */
+  nav: Object.freeze({
+    replays: "Replays",
+    highlights: "Moments",
+    tournament: "Results",
+    tourTitle: "A short tour of how to watch a recorded game",
+  }),
+  /** The guided tour's words this copy owns. */
+  tour: Object.freeze({
+    // The game's rules in the cards' ending words.
+    rules:
+      "Players move one room edge per tick. The crew wins by finishing its tasks or voting out every impostor; impostors kill, deceive, and sabotage, and win when they match the crew in number or a sabotage runs out. Body reports and emergency calls begin discussion and voting. Movement is rule-based; models deliberate at meetings.",
+    perspectiveTitle: "What one player could see",
+    perspectiveBody:
+      "The map toolbar, at the top right of the stage, switches between Omniscient and “See as” one player. Seen as one player, the map dims to only what that player could see: role badges and the impostor reveal disappear, because that player never knew them. Identity colour is identity only; it never encodes guilt.",
+  }),
+  /**
+   * A game's name and counts. A game is named by its number, which is the
+   * random seed it was recorded from, so the tooltip says so.
+   */
+  game: Object.freeze({
+    name: "Game {n}",
+    seedTitle: "Recorded from random seed {seed}",
+    open: "Open game {n}",
+    playersOne: "{count} player",
+    playersMany: "{count} players",
+    meetingsOne: "{count} meeting",
+    meetingsMany: "{count} meetings",
+    rosterCrew: "crew {count}",
+    rosterImpostors: "impostors {count}",
+  }),
+  /**
+   * How a game ended, one wording wherever it shows (the card tag, the
+   * workspace banner and the finale), and what each final ballot named.
+   */
+  outcome: Object.freeze({
+    crewWin: "Crew win",
+    impostorWin: "Impostor win",
+    aborted: "Aborted",
+    // A short form of the cards' "the run stopped at its tick limit".
+    tickLimited: "Stopped at the tick limit",
+    unfinished: "Unfinished",
+    // Facts about the target's recorded role, never a right or wrong mark.
+    namedImpostor: "named an impostor",
+    namedNoImpostor: "named no impostor",
+    voteRuleChanged: "changed by the vote rule",
+    voteRuleChangedTitle:
+      "The vote rule changed this ballot's target, so the counted vote is not the one the voter chose, and nothing is said about what it named.",
+  }),
+  /**
+   * One player's view, named one way everywhere: the banner says whose view is
+   * on screen ("Watching as p-3"), and every control that opens one says
+   * "See as p-1". "Omniscient" stays the all-roles view's name.
+   */
+  perspective: Object.freeze({
+    bannerLabel: "Perspective: {view}",
+    watchingAs: "Watching as {agent}",
+    seeAs: "See as {agent}",
+    // Only when the recording has no player to see as.
+    seeAsNobody: "See as one player",
+    backToOmniscient: "Back to Omniscient",
+    backTitle:
+      "Return to the Omniscient view, which shows every role. Choose a player in the map toolbar to see as them.",
+    pickerLabel: "See as",
+    pickerTitle: "Choose which player's view to see",
+    tickerChip: "watching as {agent}",
+    tickerTitle:
+      "Only what this player could see: an unwitnessed kill shows as a body discovery, and unwitnessed vents not at all",
+    roleHiddenTitle: "This player's role is hidden in another player's view.",
+    privateMind:
+      "This player’s memory and reasoning are private. Use “See as {agent}” or switch to Omniscient to inspect them. Public statements remain in the meeting transcript.",
+    privateBallot: "Private ballot reasoning. See as {voter} to inspect it.",
+    hiddenMemory:
+      "Raw rendered memory is hidden in another player's view: it holds this player's role and private memory. Switch to Omniscient, or use “See as {agent}”, to read it.",
+    daggerTitle: "A dagger badge marks a real impostor. It shows only in the Omniscient view.",
+  }),
   /**
    * The shell header and its one link to the source; the guided tour's welcome
    * step links to the same repository in a sentence of its own.
@@ -329,6 +419,10 @@ export const SPECTATOR_COPY = Object.freeze({
       "Per-confidence-bin actual-impostor rate. A well-calibrated population tracks the dashed y=x diagonal. Mid-meeting accusation claims and final vote ballots are shown separately (they are different acts).",
     calibrationClaims: "Accusation claims",
     calibrationBallots: "Vote ballots",
+    calibrationError: "Expected calibration error {value}",
+    calibrationErrorTitle: "lower is better",
+    calibrationLowPower:
+      "Too few to trust the calibration — read the expected calibration error with care.",
 
     alibiTitle: "Alibi fabrication",
     alibiDescription:
@@ -365,7 +459,6 @@ export const SPECTATOR_COPY = Object.freeze({
       "Tournament LLM spend roll-up. Per-(template, version) totals OVERLAP — the full game cost is attributed once per template a game ran — so they do not sum to the tournament total.",
     costTotal: "Total cost",
     costMean: "Mean / game",
-    costMeanHint: "target ≈ $0.20/game",
     costGames: "Games",
     costTokens: "Tokens (in / out)",
     costPerModel: "Per model",
@@ -414,6 +507,19 @@ export const SPECTATOR_COPY = Object.freeze({
     // the note speaks only of the meetings play resumes from.
     regroupNote:
       "On this recording, whenever play resumes after a meeting, the survivors start from the meeting room with the bodies cleared, so the map jumps to where they stand on the next tick.",
+    chip: "Map",
+    // A room one player's view does not see.
+    unseenRoom: "Unseen",
+    // Under a lone body, in the all-roles view only.
+    killedBy: "killed by {killer}",
+    // The sabotage readout. The all-roles view counts it down; one player's
+    // view names neither the room nor the countdown, which it hides.
+    reactorCountdownOne: "Reactor meltdown in {ticks} tick",
+    reactorCountdownMany: "Reactor meltdown in {ticks} ticks",
+    lightsCountdownOne: "Lights out, {ticks} tick left",
+    lightsCountdownMany: "Lights out, {ticks} ticks left",
+    reactorAlarm: "Sabotage alarm",
+    lightsOut: "Lights out",
   }),
 
   /** One ballot card's private-reasoning block. */
@@ -464,14 +570,21 @@ export const SPECTATOR_COPY = Object.freeze({
 
   /** The Replays browser and the Highlights reel. */
   picker: Object.freeze({
-    highlightsIntro:
-      "Games grouped by the moments they hold, each list in seed order. Nothing here ranks or scores a game.",
+    // Game order is seed order: a game is named by its seed.
+    highlightsIntro: "Games grouped by the moments they hold, each list in game order.",
     // True in both the live build and the static demo bundle, which serves a
-    // SUBSET of the recorded set — the old "Every recorded replay in the served
-    // set" was false there, and the flag that would tell them apart is private
-    // to the API client.
-    replaysIntro:
-      "The replays this build serves for the selected set. Click a card to open it.",
+    // SUBSET of the recorded set, so it claims no completeness.
+    replaysIntro: "Recorded games for this set. Open one to watch it.",
+    featuredHeading: "Featured",
+    revealOutcomes: "Reveal outcomes",
+    loadingSet: "Loading {set}…",
+    loadingReplays: "Loading recorded games…",
+    emptySet: "No recorded games are available for this set.",
+    // Each failure says what could not load; the raw error follows it.
+    replaysLoadError: "The recorded games could not be loaded:",
+    setListError: "The set list could not be loaded:",
+    replayLoadError: "This game could not be loaded:",
+    unknownError: "No reason was given.",
   }),
 
   /** The playback transport. */
@@ -479,6 +592,9 @@ export const SPECTATOR_COPY = Object.freeze({
     agentClockNote: "engine clock · agent notes read one tick ahead",
     agentClockTitle:
       "This scrubber shows the engine's own tick. A memory line stamped tick N describes the map as it stood at N−1, while the meeting header's tick matches this readout exactly.",
+    // The meeting pause bar's two ways forward.
+    nextKeyMoment: "Next key moment",
+    resumeTitle: "Resume playback past this meeting",
   }),
 
   /** One meeting turn. */
@@ -554,7 +670,7 @@ export const SPECTATOR_COPY = Object.freeze({
     heading: "Browse by moment",
     allGames: "All games",
     allGamesNote:
-      "Every game listed here, in seed order, including any a tripwire keeps off the shelves.",
+      "Every game listed here, in game order, including games kept off the shelves.",
     revealHeading: "After the reveal",
     revealNote:
       "These shelves read how the game ended, whether a meeting voted someone out, or a player's role, so they stay hidden until you reveal outcomes.",
@@ -564,17 +680,17 @@ export const SPECTATOR_COPY = Object.freeze({
     loading: "Loading moments…",
     filterVotedOut: "someone was voted out",
     absentTitle: "No game-shape profile for this set",
+    // The set's name leads, since it carries its own parentheses.
     absentBody:
-      "The served set ({set}) ships no game-shape profile, so its games sit on no shelf. Browse Replays to inspect this set without one.",
+      "{set}: the served set ships no game-shape profile, so its games sit on no shelf. Browse Replays to inspect this set without one.",
     absentBodyUnnamed:
       "The served set ships no game-shape profile, so its games sit on no shelf. Browse Replays to inspect this set without one.",
     staleTitle: "No current game-shape profile",
     staleBody:
       "The profile was computed from recordings that no longer match the served ones, so its shelves are hidden. The recordings remain available through Featured and Replays.",
-    replaysNoProfile:
-      "This set ({set}) ships no game-shape profile, so its cards show no shelves.",
+    replaysNoProfile: "{set}: this set ships no game-shape profile, so its cards show no shelves.",
     browseReplays: "Browse all replays",
-    loadError: "Failed to load the game-shape profile:",
+    loadError: "The game-shape profile could not be loaded:",
     // Each shelf by the name the served profile gives it. No description
     // carries a number: the definitions, with their constants, are on the
     // generated page.
@@ -699,19 +815,115 @@ export const SPECTATOR_COPY = Object.freeze({
         "The impostors were {steps} kills from matching the crew; they started {start} away.",
       tasks: "{done} of {assigned} tasks done",
       sabotage: "A sabotage was in play from tick {tick}.",
-      ejectionRight: "Meeting {meeting}: the vote was right",
-      ejectionWrong: "Meeting {meeting}: the vote was wrong",
+      // Facts about the ejected player's recorded role, never a verdict on the vote.
+      ejectedImpostor: "Meeting {meeting}: an impostor was voted out",
+      ejectedCrewmate: "Meeting {meeting}: a crewmate was voted out",
     }),
   }),
 } as const);
 
 export const BALLOT_COPY = SPECTATOR_COPY.ballot;
 export const DASHBOARD_COPY = SPECTATOR_COPY.dashboard;
+export const GAME_COPY = SPECTATOR_COPY.game;
 export const HEADER_COPY = SPECTATOR_COPY.header;
 export const MAP_COPY = SPECTATOR_COPY.map;
 export const MEETING_COPY = SPECTATOR_COPY.meeting;
+export const NAV_COPY = SPECTATOR_COPY.nav;
+export const OUTCOME_COPY = SPECTATOR_COPY.outcome;
+export const PERSPECTIVE_COPY = SPECTATOR_COPY.perspective;
 export const PICKER_COPY = SPECTATOR_COPY.picker;
 export const PROFILE_COPY = SPECTATOR_COPY.profile;
 export const PUBLIC_RESULTS_COPY = SPECTATOR_COPY.publicResults;
+export const SITE_COPY = SPECTATOR_COPY.site;
+export const TOUR_COPY = SPECTATOR_COPY.tour;
 export const TRANSPORT_COPY = SPECTATOR_COPY.transport;
 export const TURN_COPY = SPECTATOR_COPY.turn;
+
+// ── the workspace's names ────────────────────────────────────────────────────
+
+/** A game by its number, which is its seed: "Game 19". */
+export function gameName(seed: number): string {
+  return fmt(GAME_COPY.name, { n: String(seed) });
+}
+
+/** The tooltip beside a game's name, which says where the number comes from. */
+export function gameSeedTitle(seed: number): string {
+  return fmt(GAME_COPY.seedTitle, { seed: String(seed) });
+}
+
+/** A game card's accessible name: "Open game 19". */
+export function openGameLabel(seed: number): string {
+  return fmt(GAME_COPY.open, { n: String(seed) });
+}
+
+/** "1 player" / "9 players". */
+export function playerCount(count: number): string {
+  return fmt(count === 1 ? GAME_COPY.playersOne : GAME_COPY.playersMany, {
+    count: String(count),
+  });
+}
+
+/** "1 meeting" / "3 meetings". */
+export function meetingCount(count: number): string {
+  return fmt(count === 1 ? GAME_COPY.meetingsOne : GAME_COPY.meetingsMany, {
+    count: String(count),
+  });
+}
+
+/**
+ * How a recording ended, as its tag reads on the card, in the workspace banner
+ * and on the finale: the recorded winner, or else the recorded stop. A
+ * recording older than the stop classification carries none and reads as
+ * unfinished, never as a winner it did not record.
+ */
+export function outcomeTag(
+  winner: Winner | null,
+  completionStatus: ReplayMetadataView["completion_status"] | null,
+): string {
+  if (winner === "CREWMATES") return OUTCOME_COPY.crewWin;
+  if (winner === "IMPOSTORS") return OUTCOME_COPY.impostorWin;
+  if (completionStatus === "aborted") return OUTCOME_COPY.aborted;
+  if (completionStatus === "tick_limited") return OUTCOME_COPY.tickLimited;
+  return OUTCOME_COPY.unfinished;
+}
+
+/**
+ * A recorded ending in the cards' words, or `null` for an ending this build has
+ * no words for. Own keys only: a recorded reason such as `constructor` must not
+ * be answered from `Object.prototype`.
+ */
+export function endingPhrase(ending: string): string | null {
+  const endings: Readonly<Record<string, string>> = PROFILE_COPY.revealFacets.endings;
+  return Object.hasOwn(endings, ending) ? (endings[ending] ?? null) : null;
+}
+
+/** The line under a lone body in the all-roles view: "killed by p-4". */
+export function killedByLabel(killer: string): string {
+  return fmt(MAP_COPY.killedBy, { killer });
+}
+
+/**
+ * The sabotage readout, one style in both views. The all-roles view names the
+ * sabotage and counts it down; one player's view keeps hiding the room and the
+ * countdown it has always hidden, naming only the darkness or the alarm that
+ * player perceives.
+ */
+export function sabotageHud(
+  kind: SabotageDetailView["kind"],
+  remainingTicks: number,
+  omniscient: boolean,
+): string {
+  if (!omniscient) {
+    return kind === "lights" ? MAP_COPY.lightsOut : MAP_COPY.reactorAlarm;
+  }
+  const one = remainingTicks === 1;
+  const template =
+    kind === "lights"
+      ? one
+        ? MAP_COPY.lightsCountdownOne
+        : MAP_COPY.lightsCountdownMany
+      : one
+        ? MAP_COPY.reactorCountdownOne
+        : MAP_COPY.reactorCountdownMany;
+  return fmt(template, { ticks: String(remainingTicks) });
+}

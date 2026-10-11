@@ -8,9 +8,9 @@
 // filtered list is shareable + reload-stable).
 //
 // Shared query keys: set · winner · hasEjection. `set` is the served set (one
-// per loader dir), so it is CONTEXT here — displayed + round-tripped via the
-// store, never a toggle; the two interactive filters are winner / hasEjection.
-// Nothing here filters by a score: the game-shape profile has none.
+// per loader dir), round-tripped via the store and named by the set selector
+// above this bar, never a toggle here; the two interactive filters are winner /
+// hasEjection. Nothing here filters by a score: the game-shape profile has none.
 //
 // Firewall: outcomes are role-neutral. The winner is a plain text option, never
 // a guilt hue, and nothing here colours by who won. The ejection filter reads
@@ -28,7 +28,7 @@
 
 import type { ReactNode } from "react";
 
-import { PROFILE_COPY } from "../lib/copy";
+import { PICKER_COPY, PROFILE_COPY } from "../lib/copy";
 import type { Winner } from "../types/api";
 
 export interface ReplayFilterState {
@@ -138,7 +138,7 @@ function OutcomeFilterGate({
         onClick={onReveal}
         className="self-start rounded-md border-2 border-ink-900 bg-paper-0 px-2.5 py-1 font-mono text-xs font-medium text-ink-900 hover:bg-paper-2 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Show outcome filters
+        {PICKER_COPY.revealOutcomes}
       </button>
       <span id={GATE_WARNING_ID} className="font-mono text-2xs text-ink-500">
         <span aria-hidden>⚠</span> reveals winners and endings across the whole set
@@ -150,8 +150,6 @@ function OutcomeFilterGate({
 interface ReplayFiltersProps {
   filters: ReplayFilterState;
   onChange: (next: ReplayFilterState) => void;
-  /** The served set id (e.g. "9p2i"); context, not a toggle. */
-  set: string | null;
   /** Cards after filtering / total before filtering, for the live count. */
   resultCount: number;
   totalCount: number;
@@ -166,7 +164,6 @@ interface ReplayFiltersProps {
 export function ReplayFilters({
   filters,
   onChange,
-  set,
   resultCount,
   totalCount,
   disabled = false,
@@ -181,14 +178,6 @@ export function ReplayFilters({
       role="group"
       aria-label="Replay filters"
     >
-      {set !== null && (
-        <FilterField label="Set">
-          <span className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 font-mono text-xs font-semibold text-ink-900">
-            {set}
-          </span>
-        </FilterField>
-      )}
-
       {/* Winner + ejection: outcome controls, so they are replaced wholesale by
           one affordance while hidden (Task 19.10). Not disabled-in-place — a
           greyed <select> still carries its option list into the DOM, which is

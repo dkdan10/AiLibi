@@ -1,5 +1,5 @@
-// The map stage chrome: the floorplan legend + the PERSPECTIVE SWITCHER
-// (Omniscient ↔ As-agent [agent picker]) (Task 12.5; the Claude-Design map-chrome
+// The map stage chrome: the map chip and legend + the PERSPECTIVE SWITCHER
+// (Omniscient ↔ See as [player picker]) (Task 12.5; the Claude-Design map-chrome
 // prompt in tasks/phase-12.md, design/phase-12/stage-1-design.md §2.2, §3.2).
 //
 // This is the one piece of the map stage that is presentational chrome (the
@@ -11,15 +11,15 @@
 // shell).
 //
 // Perspective is the dominant, persistent two-truth mode cue: Omniscient reads
-// SOLID / authoritative (open eye); As-agent reads GHOSTED / fogged (eye-off +
-// a dashed "FOG OF WAR" treatment). States: no-replay / omniscient / agent.
+// SOLID / authoritative (open eye); one player's view reads GHOSTED (eye-off + a
+// dashed picker naming whose view it is). States: no-replay / omniscient / agent.
 
 import { useMemo } from "react";
 
 import { usePlayback } from "../hooks/usePlayback";
+import { MAP_COPY, PERSPECTIVE_COPY, fmt } from "../lib/copy";
 import { OMNISCIENT } from "../lib/playback";
 import { useReplayStore } from "../store/replayStore";
-import type { MapLayoutView } from "../types/api";
 
 // Inline chrome icons (DOM SVG — distinct from the Pixi map asset set). Open eye
 // = omniscient (sees all); eye-off = the fog of war.
@@ -38,20 +38,6 @@ function EyeOffIcon() {
       <path d="M17.94 17.94A10 10 0 0 1 12 20C5 20 1 13 1 13a18 18 0 0 1 5.06-5.94M9.9 4.24A9 9 0 0 1 12 4c7 0 11 7 11 7a18 18 0 0 1-2.16 3.19M1 1l22 22" />
     </svg>
   );
-}
-
-// One de-duplicated edge per unordered room pair → the vent-ring count for the
-// legend (matches buildVentEdges in MapView).
-function ventRingCount(map: MapLayoutView): number {
-  const seen = new Set<string>();
-  for (const vent of map.vents) {
-    for (const other of vent.connected_room_ids) {
-      if (other === vent.room_id) continue;
-      const key = vent.room_id < other ? `${vent.room_id}|${other}` : `${other}|${vent.room_id}`;
-      seen.add(key);
-    }
-  }
-  return seen.size;
 }
 
 export function MapToolbar() {
@@ -88,7 +74,11 @@ export function MapToolbar() {
 
   const inFog = perspective.mode === "agent";
   const fogAgentId = inFog ? perspective.agentId : null;
-  const ring = ventRingCount(replay.map);
+  // The toggle names the player it shows: the one on screen, or the first living
+  // player it would open on.
+  const seeAsAgent = fogAgentId ?? defaultAgentId;
+  const seeAsLabel =
+    seeAsAgent === null ? PERSPECTIVE_COPY.seeAsNobody : fmt(PERSPECTIVE_COPY.seeAs, { agent: seeAsAgent });
 
   const enterFog = () => {
     if (defaultAgentId !== null) {
@@ -106,10 +96,7 @@ export function MapToolbar() {
       {/* Legend (left) */}
       <div className="flex items-center gap-2.5">
         <span className="rounded-md border-2 border-ink-900 bg-ink-900 px-2 py-1 font-mono text-2xs font-bold uppercase tracking-wider text-paper-0">
-          canonical_1
-        </span>
-        <span className="font-mono text-2xs text-ink-500">
-          {replay.map.rooms.length} rooms · {replay.map.edges.length} corridors · {ring}-vent ring
+          {MAP_COPY.chip}
         </span>
         {/* Impostor-badge legend (Task 12.13) — Omniscient only (firewall: the
             ground-truth reveal is hidden under fog). Mirrors the token's ink badge
@@ -117,7 +104,7 @@ export function MapToolbar() {
         {!inFog && (
           <span
             className="flex items-center gap-1 font-mono text-2xs text-ink-500"
-            title="An ink dagger badge marks a known impostor — shown in Omniscient only (hidden under fog)."
+            title={PERSPECTIVE_COPY.daggerTitle}
           >
             <span
               aria-hidden
@@ -159,16 +146,18 @@ export function MapToolbar() {
             }
           >
             <EyeOffIcon />
-            As-agent
+            {seeAsLabel}
           </button>
         </div>
 
         {inFog && (
           <label
             className="flex items-center gap-2 rounded-lg border-2 border-dashed border-ink-700 bg-paper-0 px-2 py-1"
-            title="Choose whose field of view to simulate (fog of war)"
+            title={PERSPECTIVE_COPY.pickerTitle}
           >
-            <span className="font-mono text-4xs uppercase tracking-wide text-ink-500">fog of war · as</span>
+            <span className="font-mono text-4xs uppercase tracking-wide text-ink-500">
+              {PERSPECTIVE_COPY.pickerLabel}
+            </span>
             <select
               aria-label="Perspective agent"
               value={fogAgentId ?? ""}
