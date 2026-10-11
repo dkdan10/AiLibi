@@ -48,6 +48,13 @@ and the README stay as they are; the repository tells the story the header no lo
 Each item names its enforcing mechanism and the planted or perturbed case that turns its test red; each new test is
 seen red before the code it guards exists.
 
+- [x] Review correction (round 4): the welcome span checker cuts its own spans. In `copy.test.ts`,
+  `welcomeSpanProblems(source)` takes the tour source and cuts the step and its link with `welcomeSpans` itself; the
+  real case "renders the welcome step's one link from the copy" passes `tour`, and each planted case passes its
+  planted source, so no call site can pass the link where the step belongs. Proof: at `31b55c0a`, X3 (the real
+  call's step argument given the link) passed 414 and so did X3 with probe D5 (an attribution word in a `title`
+  attribute on the step's third paragraph); D5 alone failed 1. At H, D5, X3 at the new call and X3 with D5 each
+  fail 1 of 414, and so does the helper's step read given the link, with or without D5.
 - [x] Review correction (round 3): each link clause of the two render checkers has a planted proof. `App.test.tsx`
   plants the header with only its `href` changed, the welcome step with only its `href` changed and the welcome step
   with a second link, and each case asserts the one exact links problem ("names the link when only its address
@@ -193,8 +200,8 @@ the exact head, by run id, is the gate record.
 Implemented on `work/viewer-header-source-link` from B = `3793d6b5`: `33cad8ab` (the header, the welcome step, the
 `header` copy group and their tests), `2c7f9ef8` (two planted cases the mutation pass asked for), `d307de64` (the
 media re-captured at `2c7f9ef8`), `18e3f619` (the attribution pattern bounded at a word start) and `231c4564`, the
-Results commit and round 1's head; round 2's and round 3's commits follow it (see "Review corrections, round 2" and
-"Review corrections, round 3"), and H is the pull request's head. References: `docs/architecture.md` "Packages"
+Results commit and round 1's head; the commits of rounds 2, 3 and 4 follow it (see "Review corrections, round 2",
+"Review corrections, round 3" and "Review corrections, round 4"), and H is the pull request's head. References: `docs/architecture.md` "Packages"
 (`frontend/` consumes the generated view types; nothing below the viewer moves, and no view type, DTO or recorded
 byte changes), AGENTS.md craft rule 4 (user-facing copy in plain words, in `SPECTATOR_COPY`), craft rule 2 (each new
 check has a planted case seen red), and `docs/deployment.md` with `.github/workflows/pages.yml` for publication. The
@@ -496,7 +503,8 @@ case, which C03 and C04 together let through. The checks are now two helpers tha
 both call. `headerSpanProblems(title, header)` returns each prose literal named by its span ("the title block types
 ...", "the shell header types ...") and then the first attribution word in either ("the header says ...").
 `welcomeSpanProblems(step, link)` returns each prose literal in the link ("the link types ...") and then the first
-attribution word anywhere in the step ("the step says ..."). The real cases assert both empty. Planted, each with
+attribution word anywhere in the step ("the step says ..."); round 4 makes it take the tour source and cut both spans
+itself. The real cases assert both empty. Planted, each with
 its exact problems:
 
 - Title block: the old strip typed as the tagline gives its literal and "directed by"; "Source & ownership" typed
@@ -554,3 +562,69 @@ package is untouched. The bundle was rebuilt in this one checkout at B and at `c
 "Recorded AI social deduction" counts 1 and "Read the source on GitHub" counts 1. No local `check.sh` ran at the
 final head, per memo 8.7 item 1 and the card. This round's dispatch also asked for one local run; the memo rule was
 followed. CI's run at this round's head, by run id, is in the pull request body.
+
+### Review corrections, round 4 (2026-10-11)
+
+The third review of pull request #510 read `31b55c0a`, whose CI run 38161214794 was green (Project checks, Frontend
+checks, Frontend e2e). The integrity and documentation lenses passed; the correctness lens filed one blocking
+finding, X3, and this round repairs it. `main` has moved to `2d7ccc18`, adding three cards under `tasks/work` and
+editing `tasks/README.md`; this branch touches none of them, so nothing was merged in. Commits: `831a18e0` (the test
+fix) and this commit (the acceptance item above, this subsection and two in-place notes, in the Results opening and
+in round 3's finding 2). Each ends with the `Card:` trailer immediately followed by `Co-Authored-By: Claude Fable
+5.1 <noreply@anthropic.com>`, checked with `git log -1 --format=%B` before the push. `git diff --stat 31b55c0a`
+lists only `frontend/src/lib/copy.test.ts` and this card: no production file, copy string, media asset, provenance
+or recorded byte moved, so the copy that goes live, the media and the bundle are as round 1 left them. The Status
+line stays the orchestrator's on `main`.
+
+**1. The welcome call's spans (correctness).** Round 3 routed the welcome step's checks through
+`welcomeSpanProblems(step, link)`, and the real case cut both spans with `welcomeSpans(tour)` and passed them. No
+case pinned that call's arguments: the real step carries no problem, so the call returns empty whichever span it
+gets. X3, the real call made `welcomeSpanProblems(link, link)`, passed 414. The review's probe D5, the attribute
+`title="Built by Codex agents"` on the step's third paragraph (after the link, so outside it, and not in the
+rendered text), shows X3 is not equivalent: D5 alone fails 1, the real case, and X3 with D5 passed 414. The
+welcome plants could not catch it: each plant carries an attribution word before D5's, and the word check reports
+only the first. The fix is the review's option 1. `welcomeSpanProblems(source)` takes a tour source and cuts the
+step and its link with `welcomeSpans(source)` itself. The real case passes `tour`, and its other assertions still
+read `welcomeSpans(tour)` (one `<a `, both copy reads). The two planted cases pass their planted sources, `literal`
+and `sentence`, and assert the same exact problems as before. No case was removed and no expected list changed; the
+two suites hold 414 tests before and after.
+
+**Before and after, count-only.** Each run is `npx vitest run src/App.test.tsx src/lib/copy.test.ts` from
+`frontend`, one exact replacement per edit, restored after (a scratch script). At H, X3's text no longer exists, so
+it is applied to the new real call: `welcomeSpanProblems(tour)` made `welcomeSpanProblems(link, link)`.
+
+- D5: 1 failed at `31b55c0a`; 1 failed at H, the real case "renders the welcome step's one link from the copy".
+- X3: 414 passed at `31b55c0a`; 1 failed at H, the same case, which throws "the welcome step moved" because a link
+  alone holds no step.
+- X3 with D5: 414 passed at `31b55c0a`; 1 failed at H, the same case.
+
+**Mutation probe, bounded.** 14 mutants over the changed helper, its three call sites and the header's real call
+that the finding contrasts with it, in the listed classes, plus the probes D5 and DH, run as above at `831a18e0`.
+Failed counts are of 414; all 14 are killed.
+
+- Swapped collection (10): X3d, the X3 form above (1; with D5, 1); X3c, the real call given only the link (1; with
+  D5, 1); X3a, the helper's word check over the link in the step's place, round 3's C05 at the helper's new site
+  (1, the old-sentence plant; with D5, 1); X3b, the real call given the App source (1); S1, the helper's two spans
+  cut in swapped order (2); S2, the link's literals read from the whole step (2); S3 and S4, each planted call given
+  the real tour (1, 1); S5, the old-sentence plant's call given the link-text plant's source (1); X1, the header's
+  real call made `headerSpanProblems(title, title)` (414 passed alone; killed with probe DH, below).
+- Comparison inverted (1): S6, the helper's `hit !== null` made `=== null`, its message reading `String(hit)` so the
+  inverted branch runs (2).
+- Dropped tuple member (1): S7, the link's literal problems dropped from the helper's list (1).
+- Message argument made a constant (2): S8 and S9, the link's and the step's message argument made `X` (1, 1).
+
+DH, the same attribute on `<TopNav />` inside the shell header, fails 3 alone and 2 with X1: the header's two
+planted cases built over the real spans ("catches the old strip typed back into the title block (planted)" and
+"catches the old strip typed into the shell header beside the title block (planted)") assert exact problem lists,
+and DH's attribute adds problems to both. So the header's real call is held by its planted cases, and the welcome
+call, which had no such hold, now takes no spans at all.
+
+**Codex on pull request #510.** No new comment. The pull request still holds one Codex review, on `231c4564`, and
+its two inline comments, assessed in round 2.
+
+**Validation at H, count-only.** `npx vitest run src/App.test.tsx src/lib/copy.test.ts` 414 passed (2 files);
+`npm test` 855 passed (28 files); `npm run tsc:check` exit 0; `npm run lint` exit 0; `validate_task_docs.py` exit 0
+(107 work cards) and `check_doc_facts.py` exit 0. The card's grep prints `README.md` 1, `App.test.tsx` 8,
+`BallotCard.tsx` 1, `PrivateReasoning.test.tsx` 1 and `copy.test.ts` 18, 29 lines in all, as at `31b55c0a`; `git
+diff --name-only 3793d6b5` still lists the ten files of item 4. No local `check.sh` ran at the final head (memo 8.7
+item 1); CI's run at this round's head, by run id, is in the pull request body.
