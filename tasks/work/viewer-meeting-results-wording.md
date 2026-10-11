@@ -71,10 +71,10 @@ rule" or "weak signal" in `:158-392`; front-door page `scripts/check_doc_facts.p
 
 Each item names its enforcing mechanism and a planted or perturbed case that turns it red; new tests are seen red first.
 
-- [ ] **A1. The role line (item 3).** Omniscient only, after an ejection, the Resolution card reads "p-4 was an
+- [x] **A1. The role line (item 3).** Omniscient only, after an ejection, the Resolution card reads "p-4 was an
   impostor" or "p-4 was a crewmate", no "post-hoc"; the all-roles start and the gate are unchanged. Mechanism:
   `MeetingView.test.tsx` renders both roles, omniscient and under a lens. Planted: the gate made `true` fails.
-- [ ] **A2. The readout is a plain sentence with no number (item 10).** A passed vote reads "Most votes went to p-4 and
+- [x] **A2. The readout is a plain sentence with no number (item 10).** A passed vote reads "Most votes went to p-4 and
   a voter was sure enough, so p-4 was ejected" (survey `:131`); a failed vote and a tie or skip lead say, in that shape,
   why no one was ejected; under every perspective, omniscient included, it has no digit outside a player id (`p-\d+`), and no "plurality", "threshold",
   "EJECTED", "SKIPPED" or comparison sign. Mechanism: the number pins (`PrivateReasoning.test.tsx:75`, `:83`;
@@ -82,28 +82,28 @@ Each item names its enforcing mechanism and a planted or perturbed case that tur
   check per perspective that the readout, with each `p-\d+` id removed, has no digit (no weakening); the value negatives ("0.73", "0.42", "0.53") stay; outcome pins
   (`:94`; e2e `:208`) follow to "was ejected" / "no one was ejected"; a case per branch; `thresholdHits` on the
   templates. Planted: "0.73" left in the sentence fails while "p-4" passes; the old template fails each perspective; swapped branches fail.
-- [ ] **A3. The design notes go (item 10).** `MeetingView.tsx:346` is deleted; the caption reads "Arrows point from
+- [x] **A3. The design notes go (item 10).** `MeetingView.tsx:346` is deleted; the caption reads "Arrows point from
   accuser to accused", every verb "accuses" (survey `:133`); the record heading reads "Where everyone really was"
   (`:136`); `MeetingView.test.tsx:185-187`, `:309` and the region name at `journey.spec.ts:949` follow, `:953-956`, `:965` kept.
   Mechanism: renders of an opening and a reply; the e2e lens case. Planted: "redirects" or the old name back fails.
-- [ ] **A4. Evidence captions say what each group holds (item 10).** Captions drop "grounded", "detector", "stamped" and
+- [x] **A4. Evidence captions say what each group holds (item 10).** Captions drop "grounded", "detector", "stamped" and
   "endpoint tick"; a kept heading's term (`journey.spec.ts:483`) that is not plain English gets one glossary entry under
   "How a meeting works", with no figure; the proof term joins "hard evidence" (`glossary.md:174`) or points at it.
   Mechanism: a `copy.test.ts` case reads the glossary for each listed term. Planted: an entry deleted fails, naming it.
-- [ ] **A5. Turn kinds read "first statement", "reply", "spoke up" (item 10, `:135`).** One `SPECTATOR_COPY.turn` map
+- [x] **A5. Turn kinds read "first statement", "reply", "spoke up" (item 10, `:135`).** One `SPECTATOR_COPY.turn` map
   serves the tag (its tick in words), the evidence endpoints and links, and `EvidencePanel.tsx:71`. Mechanism: a copy
   case keys the three kinds; renders of an opt-in tag and a source line. Planted: a leftover hand-typed map fails.
-- [ ] **A6. The eleven adjustment chips (item 10).** They move to `BALLOT_COPY` in plain words; the redirect chip says
+- [x] **A6. The eleven adjustment chips (item 10).** They move to `BALLOT_COPY` in plain words; the redirect chip says
   the vote was "changed by the vote rule" (`:137`), `BallotCard.tsx:322` follows, and "vote rule" gets a glossary entry
   true to `meetings/schemas.py:950-970`. Mechanism: a copy case holds a value per reason `rewriteLabel` names and the
   fallback; a render per reason. Planted: one reason dropped renders the fallback and fails.
-- [ ] **A7. Citations name what they point at; the basis shows (item 10).** Ballot links read "Statement by p-3 (turn
+- [x] **A7. Citations name what they point at; the basis shows (item 10).** Ballot links read "Statement by p-3 (turn
   3)" and "What p-1 saw at tick 12" (`:138`): the speaker from the public turn with that id, the rest from the id; the
   counter link (`counterKind`) and the panel's id line likewise; an unmatched or unreadable id says so plainly; "A
   citation shows where a claim came from, not that it is right." shows only if resolved (`:140`); the chip leads "Basis
   on the record:" (`:139`). Mechanism: renders of each shape, the chip, an unmatched, malformed and unresolved id;
   `evidence-journey.ts:211`, `:222` follow. Planted: the resolved test made `true` fails.
-- [ ] **A8. The trail reads Said / Claimed / Voted / Result (item 11, `:141`).** Spoken text is Said, claims Claimed,
+- [x] **A8. The trail reads Said / Claimed / Voted / Result (item 11, `:141`).** Spoken text is Said, claims Claimed,
   the ballot (its written reason and vote) Voted, the outcome Result, "Meeting: p-4 was ejected" or the plain
   no-ejection form. Mechanism: `MindInspector.test.tsx` renders the belief tab over a turn, a claim and a ballot,
   asserting the labels in order. Planted: the ballot reason labelled Said fails.
@@ -113,29 +113,29 @@ Each item names its enforcing mechanism and a planted or perturbed case that tur
   ("Dagger: a real impostor, all-roles view only", `:143`), no "hue", "mono", "file" or "role-neutral"; step 3's
   "Ground-Truth" reads "Real roles", its one `GuidedTour.tsx` edit. Mechanism: new `BeliefPanel.test.tsx` layer and fog
   cases; A17's walk. Planted: "Ground-truth" in toggle, heading or fog note fails; "Ground-Truth" back in step 3 fails.
-- [ ] **A10. The panel's view names take item 8's words (item 8, §2b order).** At `BeliefPanel.tsx:253`, `:270`, `:512`
+- [x] **A10. The panel's view names take item 8's words (item 8, §2b order).** At `BeliefPanel.tsx:253`, `:270`, `:512`
   and `:552`, "fog" and "As-agent" leave text, tooltips and accessible names for the words `viewer-browse-wording` gives
   item 8 ("perspective" throughout, survey `:123`); the Error word stays. Mechanism: `BeliefPanel.test.tsx` under a
   lens; A17's walk of `BeliefPanel.tsx`. Planted: "fog" back in the chip fails.
-- [ ] **A11. Low / Med / High, the number on hover (item 12).** Ballot confidence, belief cells, the inspector's three
+- [x] **A11. Low / Med / High, the number on hover (item 12).** Ballot confidence, belief cells, the inspector's three
   readouts, the claim line and the cell detail show the word, the number in a `title` and the accessible name; the
   "confidence" label stays; the detail's change reads as the bucket move; one bucketing (`suspicionBucketOf`), one word
   map, no new cut point, the paint unchanged; no hover shows a number its lens hides today. Mechanism: a render per
   surface, lens cases kept. Planted: a constant bucket read fails 0.72 → Med, 0.73 → High; "+5" on a face fails.
-- [ ] **A12. The proof row (item 13).** The proof box becomes a plain body-style row after the cases, not the bold box,
+- [x] **A12. The proof row (item 13).** The proof box becomes a plain body-style row after the cases, not the bold box,
   headed "Ejected players who were impostors, with and without a vent sighting" (`:145`); its caption says plainly that
   only impostors can vent (that half measures no deduction), a sighting does not show it caused the vote, and the counts
   describe this set; no "by construction" or "ejectee"; one ejection reads singular. Mechanism: `PublicResults.test.tsx`
   holds order and copy (`:65-66` follow); `evidence-journey.ts:96` follows. Planted: the row above the cases fails; "1 ejections" fails.
-- [ ] **A13. The case links (item 14).** The links read "Inspect the meeting (shows roles)" and "Raw recording file";
+- [x] **A13. The case links (item 14).** The links read "Inspect the meeting (shows roles)" and "Raw recording file";
   hrefs, the reveal button and the served titles stay. Mechanism: `PublicResults.test.tsx` holds labels and hrefs;
   `evidence-journey.ts:106`, `:110`, `:145` follow. Planted: "Pinned recording source" restored fails.
-- [ ] **A14. The Results prose (item 15).** The intro says each recording was replayed and checked before counting
+- [x] **A14. The Results prose (item 15).** The intro says each recording was replayed and checked before counting
   (`:147`), its set name through the helper `viewer-browse-wording` exports; the empty state reads "No worked examples
   for this set yet; the 9-player set has two." (`:148`); each adopted rule is its own plain sentence, true to its field.
   Mechanism: `PublicResults.test.tsx` (`:116-139`, `:277`, `evidence-journey.ts:99`, `:130` follow);
   `tests/api/test_public_results.py` holds the count word to the curated cases (`:72`). Planted: a third case fails.
-- [ ] **A15. Defaults are named (item 15).** "the built-in scripted policy" for an absent impostor or crew stamp
+- [x] **A15. Defaults are named (item 15).** "the built-in scripted policy" for an absent impostor or crew stamp
   (`:150`); the standard timing where recorded settings show timed observations off; "unknown" only where the record
   cannot say; stamps stay; prompt versions and the fingerprint under "Technical identifiers, for reproduction". A zero
   cost reads "$0: a flat-rate service, so usage, not a bill" (`:151`), no provider-aware branch (§2b ruling 5); a
@@ -258,4 +258,110 @@ diff -r <dir-base> <dir-head>                                 # file by file int
 
 ## Results
 
-Filled by the implementation.
+Implemented at `5de3f20b` on `work/viewer-meeting-results-wording` from `7d781f8e` (B), pull request #512. Sources:
+`docs/architecture.md` "Packages" (only `frontend/` and one `tests/api/` case move; no DTO, view type, served byte or
+recorded byte); the decision `tasks/decision-2026-10-11-visitor-wording.md` §1 (answers 3, 8, 10-15), §2 (readings),
+§2b rulings 1 and 5 and the binding file order, §3 (merge order); the survey's Appendix A rows `:131`-`:151`; AGENTS
+craft rules 2, 4 and 5. Every reworded string is in `SPECTATOR_COPY` (`meeting`, `turn`, `ballot`, `publicResults`,
+and the new `evidenceSource`, `inspector`, `beliefPanel`, `buckets`); the PR body lists every live string, old against
+new.
+
+### Pending: the merge of `main` (decision §3)
+
+`viewer-browse-wording` (#511) had not merged when this was written. Before the final review this branch merges `main`
+(never a rebase), keeps both cards' groups in `copy.ts`, `copy.test.ts` and the shared test files, calls the set-name
+helper as the browse card leaves it (`setOptionLabel`, already called here), writes tour step 3's one word
+("Ground-Truth" to "Real roles", ruling 1) with its walk row, re-runs the Validation, rebuilds the bundle at the
+merge-base and the merged head, and cites CI at the merged head. A9's step-3 word, A16's step-3 diff, A17's
+`GuidedTour.tsx` row and A18's final stat and bundle diff are open until then.
+
+### Decisions (the card's readings, each reversible by the owner's word)
+
+- The readout's passed sentence is the survey's (`:131`) with a full stop; the failed vote says "none of those voters
+  was sure enough" (the leader's voters: a voter for someone else can be sure); the tie-or-skip sentence keeps the old
+  readout's own "(a tie, or skip led)". The lead joins with a colon.
+- Number on hover covers the ballot, the cells, the inspector's three readouts, the claim line and the cell detail:
+  the number in a `title` and in the accessible name (the ballot meter's `aria-valuetext`, the cell button's name, a
+  visually hidden span elsewhere). One bucketing, `bucketWord` over `suspicionBucketOf`; confidence takes the
+  suspicion cut points; no cut point is added; the paint is unchanged; no lens shows a number it hid before (the
+  ballot's private gate and the panel's layer gate are untouched).
+- The cell detail's change reads as the bucket move ("rose from Med to High"), within one bucket "rose but stayed
+  Med"; the points are the hover title.
+- The proof row takes the body style (no border, fill or bold fraction), after the cases or the empty state.
+- A private ballot reason is Voted; an accusation's confidence rides its Claimed step.
+- Citations: the speaker from the meeting's public turn with that id, the turn number, observer and tick from the id
+  (`derive_observation_id`'s tick, the panel's "observation tick" clock); each link carries its exact id as `title`;
+  the contradiction links read "Part of the statement by p-3 (turn 3)". The event-id parser moved from
+  `MeetingView.tsx` to `EvidencePanel.tsx` (`eventTurnId`), still built from `OBSERVATION_EVENT_SEGMENTS`.
+- Item 8's words in the panel: "One player's perspective" in the chip, the disabled tooltip and the note; "error"
+  kept. The dagger row keeps the survey's "all-roles view only".
+- Defaults: "the built-in scripted policy" for an absent stamp (`orchestrator/replay.py:698-713`); "the standard
+  timing" where recorded settings show `temporal_observations` false; "unknown" where the record cannot say (no
+  settings recorded, or timed observations on with no version); stamps stay. Both shown sets serve one group each with
+  no policy stamp and `temporal_observations` false, so both read the defaults (count-only read of
+  `build_public_results`).
+- The prompt-versions fallback "not recorded" and the trail's claim words moved into the copy, bytes kept, because
+  they share a reworded span; the inspector's empty state stays inline (not surveyed).
+- "vote rule" and "weak signal" get entries under "How a meeting works" (no figure); "Role proof" is pointed at "hard
+  evidence" by one sentence in that entry.
+
+### Acceptance evidence
+
+Each mechanism is a test that fails on the named defect; each planted case below was an edit to the source, a run,
+and a restore (`run_cases.py` in the run's scratch directory, `npx vitest run <files>` per case, pytest for A14),
+every one seen red: 27 of 27.
+
+| Item | Mechanism | Planted edit → red tests |
+| --- | --- | --- |
+| A1 | `MeetingView.test.tsx` "the ejected player's role line" (both roles, all-roles view and four lenses) | the gate made `true` → 2 |
+| A2 | `PrivateReasoning.test.tsx` `readoutProblems` per perspective (4 views × 3 endings), value negatives 0.73/0.42/0.53 kept; `MeetingView.test.tsx` a case per branch; `copy.test.ts` `thresholdHits` on the templates | swapped branches → 6; "0.73" in the sentence → 12; the old no-leader template → 10; in-suite plants: "0.73" fails while "p-4" passes, the three old templates fail |
+| A3 | `MeetingView.test.tsx` "the accusation chain"; the record pins (`:185-187`, `:309`) and `journey.spec.ts:949` follow | "redirects" on a reply → 3; the old record name → 5 |
+| A4 | `copy.test.ts` "the glossary defines the meeting's kept terms"; `MeetingView.test.tsx` "the evidence list" | the vote rule entry deleted → 5 (names "vote rule"); the weak signal entry deleted → 5 |
+| A5 | `copy.test.ts` "names each kind of turn once" and "the turn kinds have one map"; tag and source renders | a hand-typed map in the tag → 3 |
+| A6 | `copy.test.ts` holds the chip keys to the reasons `api/replay_loader.py` serves (10) and the fallback; `PrivateReasoning.test.tsx` a render per reason, unknown and `constructor` read the fallback | `parse_default` dropped → 1 |
+| A7 | `EvidencePanel.test.tsx` (10 id shapes; resolved, unmatched, malformed, foreign-view and resolved observation); `PrivateReasoning.test.tsx` link words and chip | the resolved test made `true` → 4 |
+| A8 | `MindInspector.test.tsx` labels in order: Said, Claimed, Voted, Voted, Result | the ballot reason labelled Said → 1 |
+| A9 | `BeliefPanel.test.tsx` heading, toggle, group label, chip, tooltip, legend, note | "Ground-truth" in the toggle → 6; in the note → 4 |
+| A10 | `BeliefPanel.test.tsx` `retiredViewWords` over text, titles and names under a lens | "fog" in the chip → 2 |
+| A11 | renders per surface (ballot, cell, cell detail, inspector, claim line); `copy.test.ts` `bucketWord` cases and a 0..1 sweep against `suspicionBucketOf` | a constant bucket read → 15 (0.72 Med, 0.73 High); "+5" on the change's face → 3 |
+| A12 | `PublicResults.test.tsx` "the Results tab's proof row" (order, style, words, singular); `:65-66`, `evidence-journey.ts:96` follow | the row above the cases → 2; "1 ejections" → 1 |
+| A13 | `PublicResults.test.tsx` labels and hrefs; `evidence-journey.ts:106`, `:110`, `:145` follow (exact names) | "Pinned recording source" restored → 3 |
+| A14 | `PublicResults.test.tsx` intro and empty state; `test_public_results.py::test_the_empty_state_counts_the_curated_cases` | the count word made "three" → 1 failed |
+| A15 | `PublicResults.test.tsx` "the Results tab's provenance defaults" (per branch) | flags-off read as unknown → 1; a cost of 1.5 shown as "$0" → 1 |
+| A16 | `copy.test.ts` badge pin; `BeliefPanel.test.tsx` the Error legend byte for byte | the badge edited → 1; an Error word edited → 1 |
+| A17 | `copy.test.ts` "the retired phrases stay retired" (nine files, every leaf), "the reworded spans take their words from the copy" (23 spans); the dialect scan gains five files | a phrase typed into `MeetingView.tsx` → 3 (names the file); restored as a value → 2 (names the key) |
+
+### Mutation pass (A19)
+
+One pass, 39 mutants, exactly the listed classes: comparison to a None test or its inverse 6, swapped adjacent
+branches 6, message argument to a constant 8, kind or key read to a constant 6, dropped filter or wrapper 5, swapped
+related collection 5, loaded source read to its literal 2, dropped tuple member 1. Over the readout and role line
+(M1-M7), the bucket read (M8-M12), the kind map (M13-M15), the id labels and the chip map (M16-M25), the cost branch
+(M26-M27), the proof row (M28-M33) and the defaults (M34-M39). Killed 39, survived 0; each was an edit, a run of the
+named test files and a restore, the same way as the planted cases. Gate record: CI's green run at the exact head, cited in the PR by run id.
+
+### Validation (count-only, at `5de3f20b` unless stated)
+
+- `uv run python scripts/validate_task_docs.py`: exit 0 (110 work cards).
+- `uv run python scripts/check_doc_facts.py`: exit 0.
+- `uv run pytest tests/api/test_public_results.py tests/api/test_view_model.py -q`: 126 passed, 1 skipped.
+- `npm test`: 1118 passed (31 files); `npm run tsc:check`: exit 0; `npm run lint`: exit 0.
+- `npm run e2e`: 15 passed, 3 skipped, run locally with the cached headless shell (build 1234) through a scratch
+  config, because the pinned build 1194 is not installed here; CI's `frontend-e2e` job on the pinned browser is the
+  record.
+- The card's retired-phrase grep: 18 lines, all comments, the e2e readout check's own pattern
+  (`evidence-journey.ts:57`) or the inspector's empty state (`MindInspector.tsx:479`). The `As-agent` / `fog` grep in
+  `BeliefPanel.tsx`: 4 comment lines. The `Ground-Truth` grep in `GuidedTour.tsx`: 1 line (step 3, pending the merge).
+- `build_sample_report.py --check` on `samples/4p1i`, `samples/9p2i`, `ml_corpus/4p1i`, `ml_corpus/9p2i`: exit 0
+  each; `UV_OFFLINE=1 bash scripts/verify_samples.sh`: exit 0, every set "All 50 samples verified clean".
+- The bundle at B and at `5de3f20b` (one checkout): `index.html` (two asset names), the index chunk, the stylesheet
+  and six renamed chunks differ; all 72 `data/` files are byte-identical.
+
+### Limitations
+
+- "$0: a flat-rate service, so usage, not a bill" is true of both shown sets; a locally recorded set with another
+  provider would read the same (ruling 5; no provider-aware branch).
+- The observation label reads its tick from the id (`{agent_id}:{tick}:{seq}`); the selection still resolves the exact
+  id, never a nearby one.
+- The committed captures (the README still, the meeting still and the GIF's meeting frames) show this card's old words
+  until `front-door-plain-words`, merging last, captures again; this card writes no media.
