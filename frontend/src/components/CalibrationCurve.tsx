@@ -13,6 +13,7 @@
 // (the binding "no false precision" rule): a curve over too few populated bins is
 // flagged in place, never shown as if it were a trustworthy calibration.
 
+import { DASHBOARD_COPY, fmt } from "../lib/copy";
 import { tokens } from "../tokens";
 import type { CalibrationBin } from "../types/api";
 import { MetricCaveat } from "./MetricCaveat";
@@ -45,11 +46,8 @@ export function CalibrationCurve({
     <div className="rounded-lg border border-ink-200 bg-paper-0 p-3 shadow-data">
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <h4 className="text-ink-900">{title}</h4>
-        <span
-          className="font-mono text-xs text-ink-500"
-          title="Expected Calibration Error (lower is better)"
-        >
-          ECE {formatEce(ece)}
+        <span className="font-mono text-xs text-ink-500" title={DASHBOARD_COPY.calibrationErrorTitle}>
+          {fmt(DASHBOARD_COPY.calibrationError, { value: formatEce(ece) })}
         </span>
       </div>
 
@@ -60,9 +58,7 @@ export function CalibrationCurve({
           tone={lowPower ? "warn" : "note"}
           title={
             `${populatedBins} of ${nBins} confidence bins held a sample.` +
-            (lowPower
-              ? " Too few to trust the calibration — read the ECE with care."
-              : "")
+            (lowPower ? ` ${DASHBOARD_COPY.calibrationLowPower}` : "")
           }
         >
           {populatedBins}/{nBins} bins populated{lowPower ? " · low power" : ""}

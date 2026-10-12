@@ -8,7 +8,7 @@ import {
   type CardProfile,
   type HighlightCardData,
 } from "./HighlightCard";
-import { PROFILE_COPY } from "../lib/copy";
+import { OUTCOME_COPY, PROFILE_COPY, gameSeedTitle, outcomeTag } from "../lib/copy";
 
 const base: HighlightCardData = {
   key: "partial",
@@ -66,7 +66,7 @@ function card(data: HighlightCardData, reveal: boolean): string {
 describe("recording endings on replay cards", () => {
   it.each([
     ["aborted", "Aborted"],
-    ["tick_limited", "Tick limit"],
+    ["tick_limited", "Stopped at the tick limit"],
     ["unfinished", "Unfinished"],
     [undefined, "Unfinished"],
   ] as const)("labels %s without inventing a winner", (completionStatus, label) => {
@@ -88,6 +88,21 @@ describe("recording endings on replay cards", () => {
     expect(html).toContain(label);
     expect(html).not.toContain("Unfinished");
   });
+
+  it.each([
+    [null, "aborted"],
+    [null, "tick_limited"],
+    [null, "unfinished"],
+    [null, undefined],
+    ["CREWMATES", "completed"],
+    ["IMPOSTORS", "completed"],
+  ] as const)("tags winner %s, stop %s with the copy's one wording", (winner, completionStatus) => {
+    const html = card({ ...base, winner, completionStatus }, true);
+    const tag = outcomeTag(winner, completionStatus);
+    expect(Object.values(OUTCOME_COPY)).toContain(tag);
+    const glyph = winner === "IMPOSTORS" ? "◆" : winner === "CREWMATES" ? "▲" : "·";
+    expect(html).toContain(`<span aria-hidden="true">${glyph}</span>${tag}</span>`);
+  });
 });
 
 /** Every reveal-only word a card can carry, for one game's profile entry. */
@@ -96,7 +111,7 @@ function revealOnlyWords(profile: CardProfile): readonly string[] {
     ...profile.revealShelves.map(shelfTitle),
     "Ended:",
     "tasks done",
-    "the vote was",
+    "was voted out",
     "A sabotage was in play",
   ];
 }
@@ -118,7 +133,9 @@ describe("a card's shelves and facets", () => {
     expect(html).toContain("1 bodies never found");
     expect(html).toContain("Meeting 1: the body was found 3 ticks after the kill");
     expect(html).toContain(`title="${PROFILE_COPY.chip.description}"`);
-    expect(html).toContain('aria-label="Open replay seed 19"');
+    expect(html).toContain('aria-label="Open game 19"');
+    expect(html).toContain(`<span title="${gameSeedTitle(19)}" class="font-mono text-xs font-semibold text-ink-900">Game 19</span>`);
+    expect(html).not.toMatch(/>seed \d+</);
     expect(html).not.toMatch(/score|\/100|rank/i);
   });
 
@@ -154,8 +171,41 @@ describe("a card's shelves and facets", () => {
     expect(html).toContain("The impostors were 2 kills from matching the crew; they started 5 away.");
     expect(html).toContain("12 of 14 tasks done");
     expect(html).toContain("A sabotage was in play from tick 42.");
-    expect(html).toContain("Meeting 1: the vote was right");
-    expect(html).toContain("Meeting 3: the vote was right");
+    expect(html).toContain("Meeting 1: an impostor was voted out");
+    expect(html).toContain("Meeting 3: an impostor was voted out");
+    expect(html).not.toContain("a crewmate was voted out");
+  });
+
+  it("states a crewmate's ejection as a fact, beside an impostor's", () => {
+    const mixed: HighlightCardData = {
+      ...profiled,
+      profile: {
+        ...PROFILE,
+        revealFacets: {
+          ...PROFILE.revealFacets!,
+          ejections: [
+            { meeting: 0, right: false },
+            { meeting: 2, right: true },
+          ],
+        },
+      },
+    };
+    const html = card(mixed, true);
+    expect(html).toContain("Meeting 1: a crewmate was voted out");
+    expect(html).toContain("Meeting 3: an impostor was voted out");
+    expect(html).not.toContain("the vote was");
+  });
+
+  it("catches the new mark on a hidden card, which the old word list misses (planted)", () => {
+    const leaked = card(profiled, false).replace(
+      "</button>",
+      "<p>Meeting 1: an impostor was voted out</p></button>",
+    );
+    expect(leakedRevealWords(leaked, PROFILE)).toEqual(["was voted out"]);
+    const oldWords = revealOnlyWords(PROFILE).map((word) =>
+      word === "was voted out" ? "the vote was" : word,
+    );
+    expect(oldWords.filter((word) => leaked.includes(word))).toEqual([]);
   });
 
   it("labels a game a tripwire keeps off the shelves, in plain words", () => {
@@ -193,6 +243,8 @@ describe("a card's shelves and facets", () => {
   it("keeps a game with no profile entry factual", () => {
     const html = card(base, false);
     expect(html).toContain("2 ticks");
+    expect(html).toContain(`<span title="${gameSeedTitle(42)}" class="font-mono text-xs font-semibold text-ink-900">Game 42</span>`);
+    expect(html).toContain('aria-label="Open game 42"');
     expect(html).not.toContain(PROFILE_COPY.facets.timeline);
   });
 });

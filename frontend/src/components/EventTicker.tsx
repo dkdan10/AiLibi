@@ -67,6 +67,7 @@ import { useMemo } from "react";
 
 import { usePlayback } from "../hooks/usePlayback";
 import type { Perspective } from "../lib/playback";
+import { PERSPECTIVE_COPY, fmt } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import type {
   AgentVisibilityView,
@@ -599,11 +600,11 @@ export function EventTicker() {
           className="rounded-pill bg-paper-2 px-1.5 font-mono text-3xs uppercase tracking-wide text-ink-500"
           title={
             inFog
-              ? "Only what this agent's fog admits — an unwitnessed kill shows as a body discovery, unwitnessed vents not at all"
+              ? PERSPECTIVE_COPY.tickerTitle
               : "Every recorded beat up to this frame, including privileged attribution"
           }
         >
-          {inFog ? `as ${perspective.agentId} · fog` : "omniscient"} · to t{tickNumber}
+          {inFog ? fmt(PERSPECTIVE_COPY.tickerChip, { agent: perspective.agentId }) : "omniscient"} · to t{tickNumber}
         </span>
       </div>
       {/* The beats arrive on their own during autoplay and keyboard stepping,

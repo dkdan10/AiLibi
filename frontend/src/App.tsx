@@ -48,10 +48,24 @@ import {
 } from "./components/ReplayControls";
 import { ThoughtStream } from "./components/ThoughtStream";
 import { usePlayback, usePlaybackEngine } from "./hooks/usePlayback";
-import { HEADER_COPY } from "./lib/copy";
+import {
+  GAME_COPY,
+  HEADER_COPY,
+  NAV_COPY,
+  OUTCOME_COPY,
+  PERSPECTIVE_COPY,
+  TRANSPORT_COPY,
+  endingPhrase,
+  fmt,
+  gameName,
+  gameSeedTitle,
+  meetingCount,
+  outcomeTag,
+  playerCount,
+} from "./lib/copy";
 import { OMNISCIENT, type ViewId } from "./lib/playback";
 import { useReplayStore } from "./store/replayStore";
-import type { FinaleAgentRecapView, FinaleEventView } from "./types/api";
+import type { FinaleAgentRecapView, FinaleEventView, GameFinale, Winner } from "./types/api";
 import { PlayerSwatch } from "./ui/PlayerSwatch";
 import { SectionLabel } from "./ui/SectionLabel";
 
@@ -215,13 +229,15 @@ export function ShellTitle() {
   );
 }
 
+// Each tab is named after the page it opens; the view ids and the URL keys
+// they write are unchanged.
 const TABS: ReadonlyArray<{ id: Exclude<ViewId, "workspace">; label: string }> = [
-  { id: "replays", label: "Replays" },
-  { id: "highlights", label: "Highlights" },
-  { id: "tournament", label: "Results & cases" },
+  { id: "replays", label: NAV_COPY.replays },
+  { id: "highlights", label: NAV_COPY.highlights },
+  { id: "tournament", label: NAV_COPY.tournament },
 ];
 
-function TopNav() {
+export function TopNav() {
   const view = useReplayStore((s) => s.view);
   const setView = useReplayStore((s) => s.setView);
   // The workspace is reached by selecting a replay, so it keeps the Replays tab
@@ -256,7 +272,7 @@ function TopNav() {
         onClick={() => {
           openGuidedTour();
         }}
-        title="Guided tour — perspective switcher + the two-truth grammar"
+        title={NAV_COPY.tourTitle}
         aria-label="Open the guided tour"
         className="rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-2 text-sm font-semibold text-ink-900 transition-colors hover:bg-paper-2"
       >
@@ -266,11 +282,10 @@ function TopNav() {
   );
 }
 
-// Dominant mode banner (§2.3): seed/roster context + the persistent perspective
-// indicator. The basic Omniscient/As-agent picker here keeps `perspective`
-// exercisable and URL-round-trippable now; 12.5 lands the richer switcher inside
-// the stage's map toolbar (this banner is the shell-level mode indicator).
-function PerspectiveBanner() {
+// Dominant mode banner (§2.3): the game's name and players, and the persistent
+// perspective indicator. The interactive switcher lives in the stage's map
+// toolbar; this banner is the shell-level mode indicator.
+export function PerspectiveBanner() {
   const replay = useReplayStore((s) => s.currentReplay);
   const perspective = useReplayStore((s) => s.perspective);
   const setPerspective = useReplayStore((s) => s.setPerspective);
@@ -285,15 +300,18 @@ function PerspectiveBanner() {
   const revealOutcome = useReplayStore((s) => s.revealOutcome);
 
   const meta = replay?.metadata ?? null;
-  const meetingCount = meta?.meeting_count ?? 0;
+  const meetings = meta?.meeting_count ?? 0;
   // This shell banner is the read-only PERSPECTIVE INDICATOR; the interactive
   // As-agent switcher lives in the stage's map toolbar (MapToolbar, 12.5). The
   // panels now gate every secret to Omniscient-or-self
   // (MindInspector / MeetingView / BeliefMatrix), so fog is safe to enter — the
   // earlier "entering here would leak" rationale is obsolete. We keep a one-way
-  // "Exit fog" as a convenience so the shell always offers a quick return to
+  // "Back to Omniscient" as a convenience so the shell always offers a quick return to
   // Omniscient.
   const inFog = perspective.mode === "agent";
+  const view = inFog
+    ? fmt(PERSPECTIVE_COPY.watchingAs, { agent: perspective.agentId })
+    : "Omniscient";
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-ink-900 bg-paper-0 px-4 py-3 shadow-chrome-1">
@@ -318,11 +336,17 @@ function PerspectiveBanner() {
             replay, and on the browser's filter bar. Two toggles for one state
             would just make it ambiguous which one is authoritative. */}
         <span className="font-mono text-sm text-ink-700">
-          {meta === null
-            ? "No replay selected"
-            : revealOutcome
-              ? `seed ${meta.seed} · ${replay?.players.length ?? 0}p · ${meta.winner ?? "—"}`
-              : `seed ${meta.seed} · ${replay?.players.length ?? 0}p · outcome hidden`}
+          {meta === null ? (
+            "No replay selected"
+          ) : (
+            <>
+              <span title={gameSeedTitle(meta.seed)}>{gameName(meta.seed)}</span>
+              {" · "}
+              {playerCount(replay?.players.length ?? 0)}
+              {" · "}
+              {revealOutcome ? outcomeTag(meta.winner, meta.completion_status) : "outcome hidden"}
+            </>
+          )}
         </span>
       </div>
       <div className="flex items-center gap-2">
@@ -330,10 +354,10 @@ function PerspectiveBanner() {
           Perspective
         </span>
         <span
-          aria-label={`Perspective: ${inFog ? `As ${perspective.agentId}` : "Omniscient"}`}
+          aria-label={fmt(PERSPECTIVE_COPY.bannerLabel, { view })}
           className="rounded-md border-2 border-ink-900 bg-paper-0 px-2 py-1 font-mono text-sm text-ink-900"
         >
-          {inFog ? `As ${perspective.agentId} · fog` : "Omniscient"}
+          {view}
         </span>
         {inFog && (
           <button
@@ -341,10 +365,10 @@ function PerspectiveBanner() {
             onClick={() => {
               setPerspective(OMNISCIENT);
             }}
-            title="Return to the Omniscient view (enter As-agent from the map toolbar)"
+            title={PERSPECTIVE_COPY.backTitle}
             className="rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1 text-sm font-medium text-ink-900 hover:bg-paper-2"
           >
-            Exit fog
+            {PERSPECTIVE_COPY.backToOmniscient}
           </button>
         )}
         {/* Belief × Truth launcher — re-anchored into chrome (Task 12.13): a tab
@@ -358,19 +382,19 @@ function PerspectiveBanner() {
             <span aria-hidden className="mx-1 h-5 w-px bg-ink-200" />
             <button
               type="button"
-              disabled={meetingCount === 0}
+              disabled={meetings === 0}
               onClick={() => {
                 setBeliefOpen(true);
               }}
               aria-label="Open the Belief × Truth matrix"
               title={
-                meetingCount === 0
+                meetings === 0
                   ? "No meetings in this game — no beliefs to compare against ground truth"
                   : "Belief × Truth — who suspects whom, vs ground truth"
               }
               className={
                 "flex items-center gap-2 rounded-md border-2 border-ink-900 px-3 py-1 text-sm font-semibold shadow-chrome-1 transition-colors " +
-                (meetingCount === 0
+                (meetings === 0
                   ? "cursor-not-allowed bg-paper-2 text-ink-500 opacity-60"
                   : "bg-paper-0 text-ink-900 hover:bg-paper-2")
               }
@@ -380,7 +404,7 @@ function PerspectiveBanner() {
               </span>
               Belief × Truth
               <span className="rounded-pill bg-paper-2 px-1.5 font-mono text-3xs text-ink-500">
-                {meetingCount} mtg
+                {meetingCount(meetings)}
               </span>
             </button>
           </>
@@ -398,7 +422,7 @@ function PerspectiveBanner() {
 // collapses to a disclosure drawer below it, so the map + transport stay the
 // irreducible core on narrow screens. The role / liveness / alive-count facts
 // stay Omniscient-gated in both layouts.
-function RosterRail() {
+export function RosterRail() {
   const replay = useReplayStore((s) => s.currentReplay);
   const perspective = useReplayStore((s) => s.perspective);
   const selectAgent = useReplayStore((s) => s.selectAgent);
@@ -470,7 +494,7 @@ function RosterRail() {
               collapsed bar shows the same two counts, so it must carry the same
               caveat or the narrow layout is the one that lies (Task 19.10). */}
           {omniscient &&
-            `crew ${adv.crew_alive} · imp ${adv.impostors_alive}${labeled ? " after vote" : ""} · `}
+            `${fmt(GAME_COPY.rosterCrew, { count: String(adv.crew_alive) })} · ${fmt(GAME_COPY.rosterImpostors, { count: String(adv.impostors_alive) })}${labeled ? " after vote" : ""} · `}
           tasks {adv.tasks_completed}/{adv.tasks_required_total}
         </div>
       )}
@@ -479,13 +503,13 @@ function RosterRail() {
           <div className="mb-3 rounded-md border border-ink-200 p-2 font-mono text-2xs text-ink-700">
             {omniscient && (
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span>crew {adv.crew_alive}</span>
+                <span>{fmt(GAME_COPY.rosterCrew, { count: String(adv.crew_alive) })}</span>
                 {labeled && (
                   <span className="rounded-pill border border-ink-300 px-1.5 font-mono text-3xs uppercase tracking-wide text-ink-500">
                     after vote
                   </span>
                 )}
-                <span>imp {adv.impostors_alive}</span>
+                <span>{fmt(GAME_COPY.rosterImpostors, { count: String(adv.impostors_alive) })}</span>
               </div>
             )}
             {/* One line of prose, only on a labeled frame: the chip says WHICH
@@ -579,7 +603,7 @@ function RosterRail() {
 }
 
 // The shared secondary-button chrome for the two Task 19.10 surfaces below —
-// the same variant PerspectiveBanner's "‹ Replays" / "Exit fog" use, so the new
+// the same variant PerspectiveBanner's "‹ Replays" / "Back to Omniscient" use, so the new
 // controls read as the shell's own chrome rather than a bolted-on widget.
 const ACTION_BUTTON =
   "rounded-md border-2 border-ink-900 bg-paper-0 px-3 py-1 text-sm font-medium " +
@@ -616,7 +640,7 @@ const ACTION_BUTTON =
 //
 // `role="status"` because the pause is otherwise silent: the transport's single
 // Play/Pause toggle just flips its own label, which announces nothing.
-function MeetingPauseBar() {
+export function MeetingPauseBar() {
   const {
     hasReplay,
     meetingAtTick,
@@ -690,7 +714,7 @@ function MeetingPauseBar() {
             <button
               type="button"
               onClick={play}
-              title="Resume playback (the pause is edge-triggered, so this advances past the meeting)"
+              title={TRANSPORT_COPY.resumeTitle}
               className={ACTION_BUTTON}
             >
               <span aria-hidden>▶</span> Resume
@@ -701,7 +725,7 @@ function MeetingPauseBar() {
               title="Skip to the next key moment (kill / meeting / ejection / sabotage)"
               className={ACTION_BUTTON}
             >
-              Next beat <span aria-hidden>→</span>
+              {TRANSPORT_COPY.nextKeyMoment} <span aria-hidden>→</span>
             </button>
           </>
         )}
@@ -712,17 +736,38 @@ function MeetingPauseBar() {
 
 // ── the finale card (Task 19.10) ─────────────────────────────────────────────
 
-// `winner_reason` is a RAW recorded string, not a closed enum on the wire, so the
-// humanising map is a best-effort lookup with a mandatory fallback: an unmapped
-// reason (the fidelity fixture records `all_tasks_complete`, and older recordings
-// may carry anything) renders verbatim in mono rather than being swallowed or
-// mislabelled. Never invent a reason we did not record.
-const WINNER_REASON_LABEL: Record<string, string> = {
-  CREWMATE_TASKS: "all tasks completed",
-  CREWMATE_EJECT: "every impostor ejected",
-  IMPOSTOR_PARITY: "impostors reached parity",
-  IMPOSTOR_SABOTAGE: "sabotage unresolved",
-};
+// The finale's heading: the same tag the card and the banner carry.
+export function FinaleHeadline({ winner }: { winner: Winner }) {
+  return (
+    <span className="font-display text-xl leading-tight text-ink-900">
+      <span aria-hidden className="mr-1.5 font-mono">
+        {winner === "IMPOSTORS" ? "◆" : "▲"}
+      </span>
+      {outcomeTag(winner, null)}
+    </span>
+  );
+}
+
+// `winner_reason` is a RAW recorded string, not a closed enum on the wire, so it
+// is read in the cards' ending words where they have some, with a mandatory
+// fallback: an unmapped reason (the fidelity fixture records
+// `all_tasks_complete`, and older recordings may carry anything) renders verbatim
+// in mono rather than being swallowed or mislabelled. Never invent a reason we
+// did not record.
+export function FinaleReason({ finale }: { finale: GameFinale }) {
+  const reason = endingPhrase(finale.winner_reason);
+  return (
+    <p className="font-mono text-xs text-ink-700">
+      {reason === null ? (
+        <span className="text-ink-900">{finale.winner_reason}</span>
+      ) : (
+        reason
+      )}
+      <span className="text-ink-300"> · </span>
+      final tick {finale.final_tick}
+    </p>
+  );
+}
 
 // Role-neutral copy per decisive beat. No hue, no blame: "ejected" says the table
 // voted, not that the table was right — the recap rows below are where ground
@@ -741,7 +786,7 @@ function decisiveEventText(event: FinaleEventView): string {
 }
 
 /** One "what they knew vs the truth" row: ground truth solid, ballot ghosted. */
-function RecapRow({
+export function RecapRow({
   recap,
   color,
 }: {
@@ -757,9 +802,9 @@ function RecapRow({
   // A REWRITTEN ballot's target is the engine's tally, not the voter's authored
   // choice (redirect / coercion / parse default — the recorded rationale can
   // explicitly oppose it), so it must not read as "what they knew". The row
-  // says so in words and the backend already withholds the ✓/✗ judgment
+  // says so in words and the backend already withholds what it named
   // (`final_vote_named_impostor` is null for a rewritten ballot). The label is
-  // deliberately generic — WHY the engine adjusted it is reason-level detail
+  // deliberately generic — WHY the vote rule changed it is reason-level detail
   // (the ballot chips' territory), and one of those reasons discloses the
   // impostor pairing, which reveal must never do.
   const adjusted = recap.final_vote_rewritten;
@@ -784,23 +829,18 @@ function RecapRow({
         {vote}
         {adjusted && (
           <span
-            title="The meeting layer rewrote this ballot's target, so the tallied vote is not the voter's authored choice — no belief judgment is shown for it"
+            title={OUTCOME_COPY.voteRuleChangedTitle}
             className="rounded-sm border border-ink-300 px-1 text-4xs uppercase tracking-wide text-ink-500"
           >
-            engine-adjusted
+            {OUTCOME_COPY.voteRuleChanged}
           </span>
         )}
+        {/* A fact about the target's recorded role, never a right or wrong mark. */}
         {recap.final_vote_named_impostor !== null && (
           <span className="text-ink-900">
-            {recap.final_vote_named_impostor ? (
-              <>
-                <span aria-hidden>✓</span> named an impostor
-              </>
-            ) : (
-              <>
-                <span aria-hidden>✗</span> missed
-              </>
-            )}
+            {recap.final_vote_named_impostor
+              ? OUTCOME_COPY.namedImpostor
+              : OUTCOME_COPY.namedNoImpostor}
           </span>
         )}
       </span>
@@ -829,7 +869,7 @@ function RecapRow({
 // the modal's focus trap, so Tab cannot reach it while the meeting is open), and
 // the meeting's own Escape/Close for the keyboard — either way the meeting
 // closes, `selectedMeetingId` clears, and this card takes the frame.
-function FinaleCard() {
+export function FinaleCard() {
   const { finale, seekToIndex } = usePlayback();
   const replay = useReplayStore((s) => s.currentReplay);
   const selectedMeetingId = useReplayStore((s) => s.selectedMeetingId);
@@ -875,9 +915,6 @@ function FinaleCard() {
   const colorById = new Map<string, string>(
     (replay?.players ?? []).map((p) => [p.agent_id, p.color]),
   );
-  const winnerGlyph = finale.winner === "IMPOSTORS" ? "◆" : "▲";
-  const winnerLabel = finale.winner === "IMPOSTORS" ? "Impostor win" : "Crew win";
-  const reason = WINNER_REASON_LABEL[finale.winner_reason];
 
   return (
     // `pointer-events-none` on the frame, `auto` on the card: this is an
@@ -899,12 +936,7 @@ function FinaleCard() {
           <div className="flex flex-col gap-0.5">
             <SectionLabel as="h2">End of replay</SectionLabel>
             {revealOutcome ? (
-              <span className="font-display text-xl leading-tight text-ink-900">
-                <span aria-hidden className="mr-1.5 font-mono">
-                  {winnerGlyph}
-                </span>
-                {winnerLabel}
-              </span>
+              <FinaleHeadline winner={finale.winner} />
             ) : (
               <span className="font-display text-xl leading-tight text-ink-900">
                 The game is over
@@ -925,17 +957,7 @@ function FinaleCard() {
 
         {revealOutcome ? (
           <>
-            <p className="font-mono text-xs text-ink-700">
-              {reason === undefined ? (
-                // Unmapped recorded reason: show the bytes, verbatim, rather
-                // than a guess (AGENTS.md — no silent fallbacks).
-                <span className="text-ink-900">{finale.winner_reason}</span>
-              ) : (
-                reason
-              )}
-              <span className="text-ink-300"> · </span>
-              final tick {finale.final_tick}
-            </p>
+            <FinaleReason finale={finale} />
 
             <section className="flex flex-col gap-1">
               <SectionLabel as="h3">Decisive events</SectionLabel>

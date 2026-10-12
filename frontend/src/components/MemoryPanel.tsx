@@ -4,6 +4,7 @@
 
 import type { ReactElement, ReactNode } from "react";
 
+import { PERSPECTIVE_COPY, fmt } from "../lib/copy";
 import { tokens } from "../tokens";
 import type {
   AgentMemoryView,
@@ -268,9 +269,7 @@ export function MemoryPanel({
           className="rounded-md border-2 border-dashed border-ink-300 px-3 py-3 text-xs text-ink-500"
           style={{ background: tokens.paper[2] }}
         >
-          Raw rendered memory is hidden through another agent's fog — it embeds
-          this agent's role and private memory. Switch to Omniscient, or view this
-          agent through its own lens, to read it.
+          {fmt(PERSPECTIVE_COPY.hiddenMemory, { agent: memory.agent_id })}
         </p>
       ) : (
         <details className="rounded-md border-2 border-ink-900 bg-paper-0">
