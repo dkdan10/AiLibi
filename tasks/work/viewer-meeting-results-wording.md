@@ -71,6 +71,17 @@ rule" or "weak signal" in `:158-392`; front-door page `scripts/check_doc_facts.p
 
 Each item names its enforcing mechanism and a planted or perturbed case that turns it red; new tests are seen red first.
 
+- [x] Review correction (round 5): the built-chunk count is restated. Round 4 said every retired phrase of the card's
+  grep appears 0 times in the built chunks at the head, bar "suspicion matrix" once; the pattern matches 6 times there,
+  all in the index chunk: "suspicion matrix" once (step 3, held) and the spaced "ground truth" 5 times, in strings this
+  card does not write. Mechanism: `build_demo_bundle.py --out <dir>` at the head, then the card's grep pattern over
+  `<dir>/assets/*.js` with `grep -o -E` counted by `wc -l` (6), and per alternative (every other one 0); `git blame`
+  dates the five lines before the card's base. Perturbed: the same count over the bundle built at `<base>` gives 33.
+  Docs only.
+- [x] Review correction (round 5): round 4's mutation tally agrees with its table: dropped tuple member 10, dropped
+  wrapper 2 (T10, T16), message argument to a constant 3, loaded source 1. Mechanism: the T rows of the table counted
+  by class (`grep -E '^\| T[0-9]+ \|'` over the card, the class column cut, `sort | uniq -c`). Perturbed: round 4's
+  published tally (11 and 1) differs from that count, which is how the finding was seen. Docs only.
 - [x] Review correction (round 4): `main` is merged and the deferred pieces are done. The merge commit `c5746909` has
   parents `2c4477a0` and `9732623d` (`origin/main`, the browse card merged at `09fa779e`); every conflict keeps both
   cards' content, and tour step 3's one word reads "Real roles" at `a5fdce2a`. Mechanism: the full suites at the merged
@@ -608,9 +619,10 @@ legend rows (896) and "READING: ERROR" are byte-identical at `9732623d` and `a5f
 
 **Mutation probe, round 4.** Only the spans the merge changed (the combined imports, the two exports, the chip) and
 step 3's word, exactly the listed classes: 16 mutants, each an exact edit, a full `npx vitest run` and a restore
-(`mutate.py` in the run's scratch directory). Killed 16, survived 0. By class: dropped tuple member 11, message
-argument to a constant 3, dropped wrapper 1, loaded source read to its literal 1. A dropped import that a module reads
-when it loads fails its test files rather than single tests; those are counted as files.
+(`mutate.py` in the run's scratch directory). Killed 16, survived 0. By class, as the table's column gives it
+(corrected in round 5): dropped tuple member 10, message argument to a constant 3, dropped wrapper 2 (T10 and T16, each
+a whole one-name import line), loaded source read to its literal 1. A dropped import that a module reads when it loads
+fails its test files rather than single tests; those are counted as files.
 
 | Mutant | Class | Edit | Red |
 | --- | --- | --- | --- |
@@ -647,9 +659,45 @@ files, all in Expected scope (the glossary, the two e2e pin files, nine componen
 `a5fdce2a`): 110 files each side, 35 under `assets/`; all 72 `data/` files byte-identical. What differs is compiled
 assets only: `index.html` (its asset names), the index chunk (`index-_fqOlNVg.js` to `index-DyDDt47w.js`), the
 stylesheet (`index-D7ay7349.css` to `index-B6Y7MwOb.css`) and six renamed chunks (`MapView`, `ReplayPicker`,
-`TournamentDashboard`, `CanvasRenderer`, `WebGLRenderer`, `WebGPURenderer`). In the built chunks, count-only: every
-retired phrase of the grep above, "the vote was", "Vote redirected" and "Recorded vote adjustment" appear 0 times at
-the head; "suspicion matrix" appears once, in step 3, which is held; "flip to Real roles or Error" once.
+`TournamentDashboard`, `CanvasRenderer`, `WebGLRenderer`, `WebGPURenderer`). In the built chunks, count-only
+(corrected in round 5): the grep's pattern matches 6 times at the head, all in the index chunk, against 33 at `<base>`.
+"suspicion matrix" matches once, in step 3, which is held; the spaced "ground truth" matches 5 times (3 lower case, 2
+"Ground truth"), all in strings this card does not write: two titles in `App.tsx` (lines 392-393), two lines of the
+tour (`GuidedTour.tsx` lines 119 and 167, where the walk holds "Ground-Truth" only) and the inspector's empty state
+(`MindInspector.tsx` line 479), which the card sets aside. Every other alternative of the pattern, "the vote was",
+"Vote redirected" and "Recorded vote adjustment" match 0 times; "flip to Real roles or Error" matches once.
 
 Gate record: CI's green run at the exact head, cited in the PR by run id. The Status line and `tasks/README.md` are
 kept as `main` has them (the orchestrator's).
+
+### Review corrections, round 5 (2026-10-11)
+
+Two blocking findings at `9d67d505`, both in round 4's evidence text. Docs only: no production line, test, compiled
+byte or `data/` file moves, so no span is changed and no mutant is due. Round 4's two sentences are corrected in place,
+each marked "corrected in round 5"; the PR body's matching sentences read the same.
+
+**The built-chunk count.** Round 4 said every retired phrase of the grep appears 0 times in the built chunks at the
+head, bar "suspicion matrix" once. Rebuilt here (`build_demo_bundle.py --out`, one checkout, `9732623d` then
+`9d67d505`; 110 files each side, the same `index.html`, index chunk, stylesheet and six renamed chunks as round 4's
+diff, all 72 `data/` files byte-identical), the card's pattern over `assets/*.js` (`grep -o -E` counted by `wc -l`)
+matches 6 times at the head, all in `index-DyDDt47w.js`, and 33 times at `<base>`. By alternative at the head:
+"suspicion matrix" 1 (step 3, held); `[Gg]round[- ][Tt]ruth` 5, all spaced (3 "ground truth", 2 "Ground truth"), none
+hyphenated; every other alternative 0; "the vote was", "Vote redirected" and "Recorded vote adjustment" 0 each (1 each
+at `<base>`). The five sit in `App.tsx:392-393` (two titles of the belief view's button), `GuidedTour.tsx:119` and
+`:167` (the tour's swatch label and its legend line) and `MindInspector.tsx:479` (the inspector's empty state, the one
+the Validation sets aside, named there at its older line 441). `git blame` at the head dates all five to commits before
+the card's base `7d781f8e` (`89c602de`, `b5a5e5b6`, `3a1e64ac`): `App.tsx` is never written here, the walk holds
+`GuidedTour.tsx` to "Ground-Truth" only, and the empty state is unsurveyed, so none is this card's to word. The finding
+is valid; nothing but the sentence changes.
+
+**The round-4 tally.** Round 4 gave dropped tuple member 11 and dropped wrapper 1; its table's class column gives 10
+(T5-T9, T11-T15) and 2 (T10 and T16). The table is the per-mutant record and stays as written, so the tally is brought
+to it: T10 and T16 each drop a whole one-name import line (`OBSERVATION_EVENT_SEGMENTS` in `EvidencePanel.tsx`,
+`suspicionBucketOf` in `copy.ts`), the declaration around the binding, and the table names that a dropped wrapper. The
+tally now reads dropped tuple member 10, message argument to a constant 3, dropped wrapper 2, loaded source read to its
+literal 1 (16 in all). The finding is valid.
+
+**Validation, count-only, at the round-5 head** (this commit changes only the card): `validate_task_docs.py` exit 0;
+`check_doc_facts.py` exit 0; the tally command above gives 10, 2, 1 and 3 by class; the bundle counts as above. The
+suites are not re-run (no source byte moves since `a5fdce2a`, whose counts round 4 gives). Gate record: CI's green run
+at the exact head, cited in the PR by run id. The Status line and `tasks/README.md` stay as `main` has them.
