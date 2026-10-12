@@ -1,6 +1,6 @@
 # The front door in plain words, with the GIF in place of the clip
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
