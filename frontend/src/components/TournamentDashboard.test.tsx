@@ -1,7 +1,15 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { MomentsPanel, activeMoments, momentsState, type ProfileState } from "./TournamentDashboard";
+import {
+  MomentsPanel,
+  TournamentDashboardView,
+  activeMoments,
+  momentsState,
+  type ProfileState,
+} from "./TournamentDashboard";
+import { CalibrationCurve } from "./CalibrationCurve";
+import { Loaded, UnderPowered } from "../stories/TournamentDashboard.stories";
 import { ApiError } from "../api/client";
 import { shelfTitle } from "./HighlightCard";
 import { DASHBOARD_COPY } from "../lib/copy";
@@ -177,5 +185,67 @@ describe("the panel's request", () => {
     expect(activeMoments({ request: "9p2i#0", state: ready }, "9p2i#0")).toBe(ready);
     expect(activeMoments({ request: "9p2i#0", state: ready }, "4p1i#0")).toEqual({ status: "loading" });
     expect(activeMoments({ request: "9p2i#0", state: ready }, "9p2i#1")).toEqual({ status: "loading" });
+  });
+});
+
+describe("the dashboard's leftovers", () => {
+  /** The figure in each calibration readout, in page order. */
+  function readouts(html: string): readonly string[] {
+    return [
+      ...html.matchAll(/title="lower is better"[^>]*>Expected calibration error ([^<]*)</g),
+    ].map((match) => match[1] ?? "");
+  }
+
+  /** The whole dashboard over a story's report, before the reveal. */
+  function dashboard(args: typeof Loaded.args): string {
+    const report = args?.report ?? null;
+    const profile = args?.profile;
+    if (report === null || profile === undefined) throw new Error("the story carries no report");
+    return renderToStaticMarkup(
+      <TournamentDashboardView
+        report={report}
+        isLoading={false}
+        error={null}
+        onRefresh={() => {}}
+        profile={profile}
+        reveal={false}
+      />,
+    );
+  }
+
+  it("shows the mean cost per game with no target beside it", () => {
+    const html = dashboard(Loaded.args);
+    expect(html).toContain(DASHBOARD_COPY.costMean);
+    expect(html).not.toMatch(/target ≈|0\.20\/game/);
+  });
+
+  it("spells out the calibration error, keeping its figure and its tooltip", () => {
+    const html = dashboard(Loaded.args);
+    expect(html).toMatch(/title="lower is better"[^>]*>Expected calibration error (\d\.\d{3}|n\/a)</);
+    // The story's two curves carry 0.248 (claims) and 0.103 (ballots): each readout
+    // shows its own curve's figure, not a figure of the right shape.
+    expect(readouts(html)).toEqual(["0.248", "0.103"]);
+    expect(html).not.toMatch(/\bECE\b/);
+    const low = dashboard(UnderPowered.args);
+    expect(low).toContain(DASHBOARD_COPY.calibrationLowPower);
+    expect(low).not.toMatch(/\bECE\b/);
+  });
+
+  it("shows each curve's own calibration error, to three places, and n/a for none", () => {
+    const curve = (ece: number | null) =>
+      renderToStaticMarkup(
+        <CalibrationCurve
+          title="A curve"
+          bins={[]}
+          total={0}
+          ece={ece}
+          populatedBins={0}
+          lowPower={false}
+          nBins={10}
+        />,
+      );
+    expect(readouts(curve(0.248))).toEqual(["0.248"]);
+    expect(readouts(curve(0.1))).toEqual(["0.100"]);
+    expect(readouts(curve(null))).toEqual(["n/a"]);
   });
 });

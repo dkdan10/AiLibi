@@ -1004,7 +1004,6 @@ function CostDashboardView({ dashboard }: { dashboard: CostDashboard }) {
         <StatTile
           label={DASHBOARD_COPY.costMean}
           value={formatUsd(dashboard.mean_cost_per_game)}
-          hint={DASHBOARD_COPY.costMeanHint}
         />
         <StatTile
           label={DASHBOARD_COPY.costGames}

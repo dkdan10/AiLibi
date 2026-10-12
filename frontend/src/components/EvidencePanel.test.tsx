@@ -1,29 +1,51 @@
-// The source panel and the citation words it shares with the ballot links: a
-// citation names what it points at, says so plainly when it points at nothing
-// it can read, and carries the "not proof" caveat only once it has found its
-// source.
+// The evidence panel. In the meeting, the source panel and the citation words it
+// shares with the ballot links: a citation names what it points at, says so
+// plainly when it points at nothing it can read, and carries the "not proof"
+// caveat only once it has found its source. Off the meeting, a cited observation
+// held by another player offers "See as p-1", the name the map toolbar and the
+// inspector give one player's view; once that is the view, the offer gives way
+// to the observer's memory.
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EvidencePanel, citationLabel } from "./EvidencePanel";
-import { EVIDENCE_SOURCE_COPY } from "../lib/copy";
+import { EVIDENCE_SOURCE_COPY, PERSPECTIVE_COPY, fmt } from "../lib/copy";
 import type { EvidenceSelection } from "../lib/evidence";
 import type { Perspective } from "../lib/playback";
 import type { AgentMemoryView, MeetingView as MeetingDTO, ReplayView, TurnView } from "../types/api";
 
-const state = vi.hoisted(() => ({
-  selectedEvidence: null as EvidenceSelection | null,
-  currentReplay: null as Pick<ReplayView, "players" | "meetings" | "ticks"> | null,
-  selectedMeetingId: "meeting-0" as string | null,
-  perspective: { mode: "omniscient" } as Perspective,
-  memoryCache: {} as Record<string, AgentMemoryView>,
-  memoryErrors: {} as Record<string, string>,
-  fetchMemoryView: () => Promise.resolve(),
-}));
+// Every case starts from one fixture: an observation p-1 holds, cited in
+// meeting-0 and opened off the meeting through p-2's view. Its replay holds only
+// what the panel reads of that meeting. The source-panel cases set the
+// selection, the view, the replay and the open meeting they render.
+const { state, fixture } = vi.hoisted(() => {
+  const fixture = () => ({
+    selectedEvidence: {
+      kind: "observation",
+      id: "p-1:12:0",
+      meetingId: "meeting-0",
+      observerId: "p-1",
+    } as EvidenceSelection,
+    currentReplay: {
+      meetings: [{ meeting_id: "meeting-0", tick: 14, turns: [] }],
+      ticks: [],
+    } as unknown as Pick<ReplayView, "players" | "meetings" | "ticks">,
+    selectedMeetingId: null as string | null,
+    perspective: { mode: "agent", agentId: "p-2" } as Perspective,
+    memoryCache: {} as Record<string, AgentMemoryView>,
+    memoryErrors: {} as Record<string, string>,
+    fetchMemoryView: () => Promise.resolve(),
+  });
+  return { state: fixture(), fixture };
+});
 vi.mock("../store/replayStore", () => ({
   useReplayStore: Object.assign((selector: (s: typeof state) => unknown) => selector(state), { getState: () => state }),
 }));
+
+beforeEach(() => {
+  Object.assign(state, fixture());
+});
 
 function turn(index: number, speaker: string, kind: TurnView["turn_kind"]): TurnView {
   return { turn_id: `meeting-0:turn-${String(index)}`, turn_index: index, speaker, turn_kind: kind, reply_to: null, observations: [], claims: [], free_text: "said aloud", annotations: [], fabricated_opening: false };
@@ -57,6 +79,7 @@ describe("citationLabel", () => {
 function render(target: EvidenceSelection, perspective: Perspective = { mode: "omniscient" }, shown: MeetingDTO = meeting): string {
   state.selectedEvidence = target;
   state.perspective = perspective;
+  state.selectedMeetingId = "meeting-0";
   state.currentReplay = { players: [], meetings: [shown], ticks: [] };
   return renderToStaticMarkup(<EvidencePanel inMeeting />);
 }
@@ -117,5 +140,45 @@ describe("the source panel", () => {
     // The same cached memory, read through another player's view, stays unresolved.
     expect(render({ kind: "observation", id: "p-1:12:0", meetingId: "meeting-0", observerId: "p-1" }, { mode: "agent", agentId: "p-3" })).not.toContain(NOTE);
     state.memoryCache = {};
+  });
+});
+
+/** The text of every button the panel offers. */
+function buttons(html: string): readonly string[] {
+  return [...html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)].map((match) =>
+    (match[1] ?? "").replace(/<[^>]*>/g, "").replace(/&#x27;/g, "'"),
+  );
+}
+
+describe("the evidence panel's way into a private observation", () => {
+  it("offers to see as the observer through another player's view", () => {
+    state.perspective = { mode: "agent", agentId: "p-2" };
+    const html = renderToStaticMarkup(<EvidencePanel />);
+    expect(buttons(html)).toContain(fmt(PERSPECTIVE_COPY.seeAs, { agent: "p-1" }));
+    expect(buttons(html)).not.toContain("Open p-1's meeting memory");
+    expect(html).not.toMatch(/Switch to p-1|perspective<\/button>/);
+  });
+
+  it("names whichever player holds the observation", () => {
+    const held = state.selectedEvidence;
+    state.selectedEvidence = { ...held, id: "p-3:12:0", observerId: "p-3" };
+    state.perspective = { mode: "agent", agentId: "p-2" };
+    try {
+      expect(buttons(renderToStaticMarkup(<EvidencePanel />))).toContain("See as p-3");
+    } finally {
+      state.selectedEvidence = held;
+    }
+  });
+
+  it("gives way to the observer's memory once that is the view", () => {
+    for (const perspective of [
+      { mode: "agent", agentId: "p-1" },
+      { mode: "omniscient" },
+    ] as const) {
+      state.perspective = perspective;
+      const html = renderToStaticMarkup(<EvidencePanel />);
+      expect(buttons(html)).toContain("Open p-1's meeting memory");
+      expect(buttons(html)).not.toContain(fmt(PERSPECTIVE_COPY.seeAs, { agent: "p-1" }));
+    }
   });
 });

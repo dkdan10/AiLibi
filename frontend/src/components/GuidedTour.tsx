@@ -6,8 +6,8 @@
 // On the first visit it auto-opens, loads the head of the hand-curated FEATURED
 // list for 9p2i (Task 19.9 — so the walkthrough has real drama to point at),
 // and steps through the viewer's load-bearing ideas: the two-truth grammar, the
-// perspective switcher + fog firewall, the Belief × Truth hero, and the
-// keyboard-operable transport. It is dismissible and remembers that via
+// perspective switcher and what one player could see, the Belief × Truth panel,
+// and the keyboard-operable transport. It is dismissible and remembers that via
 // localStorage; the header "Tour" button re-opens it on demand without yanking
 // the replay you are already watching.
 //
@@ -21,7 +21,7 @@ import type { ReactNode } from "react";
 
 import { getSets, listReplays } from "../api/client";
 import { OVERLAY_RANK, useFocusTrap } from "../hooks/useFocusTrap";
-import { HEADER_COPY } from "../lib/copy";
+import { HEADER_COPY, NAV_COPY, TOUR_COPY } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { tokens } from "../tokens";
 
@@ -159,14 +159,9 @@ export const STEPS: readonly Step[] = [
           AiLibi asks whether AI agents can reason from what they actually saw.
           You are watching saved games, not making live model calls. <a className="underline" href={HEADER_COPY.sourceUrl} target="_blank" rel="noreferrer">{HEADER_COPY.tourSourceLinkText}</a>
         </p>
+        <p className="mb-2 text-sm text-ink-700">{TOUR_COPY.rules}</p>
         <p className="mb-2 text-sm text-ink-700">
-          Players move one room edge per tick. Crew complete tasks or eject every
-          impostor; impostors kill, deceive, and sabotage, winning at parity or an
-          unresolved sabotage. Body reports and emergency calls begin discussion
-          and voting. Movement is rule-based; models deliberate at meetings.
-        </p>
-        <p className="mb-2 text-sm text-ink-700">
-          Start at <strong>Results &amp; cases</strong> for each set's figures and any decisions to investigate.
+          Start at <strong>{NAV_COPY.tournament}</strong> for each set's figures and any decisions to investigate.
           A ballot citation opens its exact source, scene, and meeting memory.
           Missing evidence is labelled; a real citation can still be irrelevant.
           Ground truth is solid; attributed belief is ghosted.
@@ -176,22 +171,14 @@ export const STEPS: readonly Step[] = [
     ),
   },
   {
-    title: "Perspective switcher + the fog firewall",
-    body: (
-      <p className="text-sm text-ink-700">
-        The map toolbar (top-right of the stage) flips between{" "}
-        <strong>Omniscient</strong> and <strong>As-agent</strong>. In As-agent
-        fog the map dims to <em>only</em> what that one agent could see — role
-        badges and the impostor reveal disappear, because that agent never knew
-        them. Identity colour is identity only; it never encodes guilt.
-      </p>
-    ),
+    title: TOUR_COPY.perspectiveTitle,
+    body: <p className="text-sm text-ink-700">{TOUR_COPY.perspectiveBody}</p>,
   },
   {
     title: "Belief × Truth — who suspected whom",
     body: (
       <p className="text-sm text-ink-700">
-        Open the <strong>Belief × Truth</strong> hero from the perspective banner
+        Open the <strong>Belief × Truth</strong> panel from the perspective banner
         (top, beside the perspective toggle) for the suspicion matrix — a bucketed
         heat ramp (Low / Med / High) you can flip to Ground-Truth or Error.
         Confidently-wrong cells are drawn loud (fill + border + ✗), and “no belief

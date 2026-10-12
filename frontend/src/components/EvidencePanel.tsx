@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { OBSERVATION_EVENT_SEGMENTS } from "../lib/contradictions";
-import { EVIDENCE_SOURCE_COPY, TURN_COPY, fmt } from "../lib/copy";
+import { EVIDENCE_SOURCE_COPY, PERSPECTIVE_COPY, TURN_COPY, fmt } from "../lib/copy";
 import { evidenceDomId, observationSource, statementSource, type EvidenceSelection } from "../lib/evidence";
 import { useReplayStore } from "../store/replayStore";
 import { ClaimLine } from "../ui/ClaimLine";
@@ -134,7 +134,7 @@ export function EvidencePanel({ inMeeting = false }: { inMeeting?: boolean }) {
       {sceneIndex >= 0 && (target.kind !== "observation" || canInspect) && <button type="button" className="rounded border border-ink-900 px-3 py-1 text-sm" onClick={() => { store.setCurrentTick(sceneIndex); store.selectMeeting(null); }}>View scene frame {sceneTick}</button>}
       {meeting && <button type="button" className="rounded border border-ink-900 px-3 py-1 text-sm" onClick={goToMeeting}>Return to meeting and ballots</button>}
       {source && inMeeting && <button type="button" className="rounded border border-ink-900 px-3 py-1 text-sm" onClick={() => { const element = document.getElementById(evidenceDomId(target.id)); if (!element) return; let parent: HTMLElement | null = element.parentElement; while (parent) { if (parent instanceof HTMLDetailsElement) parent.open = true; parent = parent.parentElement; } element.scrollIntoView({ block: "center", behavior: "smooth" }); element.focus(); }}>Locate in transcript</button>}
-      {observer && meeting && !canInspect && <button type="button" className="rounded border border-ink-900 px-3 py-1 text-sm" onClick={() => { store.setPerspective({ mode: "agent", agentId: observer }); store.selectAgent(observer); }}>Switch to {observer}'s perspective</button>}
+      {observer && meeting && !canInspect && <button type="button" className="rounded border border-ink-900 px-3 py-1 text-sm" onClick={() => { store.setPerspective({ mode: "agent", agentId: observer }); store.selectAgent(observer); }}>{fmt(PERSPECTIVE_COPY.seeAs, { agent: observer })}</button>}
       {observer && meeting && canInspect && <button type="button" aria-expanded={showMemory} className="rounded border border-ink-900 px-3 py-1 text-sm" onClick={() => setShowMemory(!showMemory)}>{showMemory ? "Hide" : "Open"} {observer}'s meeting memory</button>}
     </div>
     {showMemory && canInspect && observer && <div className="mt-3">

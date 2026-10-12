@@ -237,7 +237,7 @@ test.describe("static demo bundle", () => {
     const banner = page
       .locator("header")
       .filter({ has: page.locator('[aria-label^="Perspective:"]') });
-    await expect(banner).toContainText(`seed ${seed}`);
+    await expect(banner).toContainText(`Game ${seed}`);
     await expect(banner).toContainText("outcome hidden");
 
     // ── play → the meeting pause ─────────────────────────────────────────────
@@ -341,7 +341,7 @@ test.describe("static demo bundle", () => {
     }, TOUR_SEEN_KEY);
     await page.goto(`${bundle.origin}/`);
 
-    await page.getByRole("button", { name: "Results & cases" }).click();
+    await page.getByRole("button", { name: "Results", exact: true }).click();
     await expect(page.getByRole("heading", { name: "What the recordings show" })).toBeVisible();
 
     expect(apiAttempts).toEqual([]);

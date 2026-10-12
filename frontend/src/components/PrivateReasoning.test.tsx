@@ -161,6 +161,10 @@ describe("private reasoning perspective", () => {
     expect(html).toContain("p-1");
     expect(html).toContain("p-2");
     expect(html).toContain("Private ballot reasoning");
+    expect(html).toContain("Private ballot reasoning. See as p-1 to inspect it.");
+    const other = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, voter: "p-3" }} players={players} omniscient={false} revealOutcome={revealOutcome} />);
+    expect(other).toContain("Private ballot reasoning. See as p-3 to inspect it.");
+    expect(html).not.toMatch(/perspective to inspect/);
     for (const secret of ["I killed them", "0.73", "private-statement-choice", "private-observation-choice", "private-alternative-choice"]) expect(html).not.toContain(secret);
     expect(html).not.toContain("no rationale recorded");
     // The whole weighing block, heading included — not just its entries. An
@@ -454,7 +458,7 @@ describe("private reasoning perspective", () => {
     // The layer nulls a counter it cannot resolve and chips the ballot; the
     // chip must say WHICH slot, or a reader reads it as a lost basis.
     const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: ["invalid_counter_reason_id"] }} players={players} omniscient revealOutcome={false} />);
-    expect(html).toContain("The evidence it weighed against the vote was not found, so it was removed");
+    expect(html).toContain("The evidence it weighed against its vote was not found, so it was removed");
     expect(html).not.toContain(BALLOT_COPY.rewriteFallback);
     expect(html).not.toContain("invalid_counter_reason_id");
   });
@@ -467,7 +471,7 @@ describe("private reasoning perspective", () => {
   it.each(["belief", "memory", "flags", "prompt", "response"] as const)("hides cached private %s through another lens", (tab) => {
     const html = renderToStaticMarkup(<MindInspectorPanel {...mind} tab={tab} />);
     expect(html).toContain("memory and reasoning are private");
-    expect(html).toContain("Show what they saw");
+    expect(html).toContain("Use “See as p-1” or switch to Omniscient to inspect them.");
     for (const secret of ["private-room", "private-belief", "private flag description", "private rendered memory"]) expect(html).not.toContain(secret);
   });
   it.each(["belief", "memory", "flags"] as const)("keeps real %s available to the observer", (tab) => {
