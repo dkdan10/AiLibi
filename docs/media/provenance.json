@@ -1,6 +1,6 @@
 {
   "status": "current",
-  "capture_revision": "2c7f9ef8f6afb015cb3561749025720eea5c6b44",
+  "capture_revision": "07c3e1384bb48ef1fb11de9ad36401e805cacefd",
   "recording": {
     "path": "replays/samples/9p2i/replay-seed-19.jsonl",
     "sha256": "01bbbd8b31c6aee0703bffc1fb8943682b825a181a2b8391bdbb71b89c11f31c",
@@ -15,8 +15,8 @@
     "landed_in": "5095a1c210d890d289405564d2af2607d2fbd4e9"
   },
   "assets_sha256": {
-    "spectator-two-truths.png": "3e5e1c31eebe5d37fc12458e30b2e51cf80510bcf7c3c3f4e039c860b278be67",
-    "spectator-meeting.png": "afa121fa4decd497b75b3d0cacbf47efdc1991f3e9d09cd226d514d455878566",
-    "spectator-journey.gif": "5d8fd110144d9292ede5e80bed7bc0353907c57f948ece86d491862f406ea387"
+    "spectator-two-truths.png": "6092d2ebd68239aab262edb75513d7d8a0c590f3eaa47403ef02f902ff897d30",
+    "spectator-meeting.png": "861994c1db4bd501275ee8dec4d8bda589292fc6271ebfec83a0fea8a73ef9d6",
+    "spectator-journey.gif": "e6c269a6cb05771e005cf7e7ec1fc4fea305cb00d0d84d2435269e03785aca53"
   }
 }
