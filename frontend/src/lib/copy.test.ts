@@ -1065,6 +1065,15 @@ const BELIEF_PANEL_VIEW_WORDS: readonly RetiredPhrase[] = [
 ];
 
 /**
+ * Tour step 3's one word: the truth layer's old name. Only this word is this
+ * card's in the tour; the rest of step 3 is held as it stands.
+ */
+const TOUR_STEP_THREE_WORD: readonly RetiredPhrase[] = [{ name: "Ground-Truth", pattern: /Ground-Truth/ }];
+
+/** Step 3's sentence naming the belief panel's layers, in the panel's own words. */
+const TOUR_LAYER_SENTENCE = `flip to ${BELIEF_PANEL_COPY.layers.truth} or ${BELIEF_PANEL_COPY.layers.error}.`;
+
+/**
  * The files this card writes, each with the phrases its rendered code may not
  * carry. The inspector's "Open a mind" empty state is not surveyed and keeps
  * its "Ground truth renders solid" sentence, so that one sentence is set aside,
@@ -1084,6 +1093,7 @@ const WALKED_SOURCES: readonly {
   { path: "components/BeliefCell.tsx", phrases: RETIRED_PHRASES },
   { path: "components/PublicResults.tsx", phrases: RETIRED_PHRASES },
   { path: "ui/ClaimLine.tsx", phrases: RETIRED_PHRASES },
+  { path: "components/GuidedTour.tsx", phrases: TOUR_STEP_THREE_WORD },
 ];
 
 /** Each retired phrase a source's rendered code carries, named by the file. */
@@ -1127,6 +1137,20 @@ describe("the retired phrases stay retired", () => {
       "BeliefPanel.tsx: ground truth",
       "BeliefPanel.tsx: fog",
     ]);
+  });
+
+  it("names the truth layer in tour step 3 as the panel's toggle does", () => {
+    const tour = strippedSource("components/GuidedTour.tsx");
+    expect(BELIEF_PANEL_COPY.layers.truth).toBe("Real roles");
+    expect(tour.split(TOUR_LAYER_SENTENCE).length - 1).toBe(1);
+  });
+
+  it("names the tour when step 3's old word returns (planted)", () => {
+    const tour = strippedSource("components/GuidedTour.tsx");
+    const restored = tour.replace(TOUR_LAYER_SENTENCE, "flip to Ground-Truth or Error.");
+    expect(restored).not.toBe(tour);
+    expect(retiredInSource("GuidedTour.tsx", restored, TOUR_STEP_THREE_WORD)).toEqual(["GuidedTour.tsx: Ground-Truth"]);
+    expect(restored.split(TOUR_LAYER_SENTENCE).length - 1).toBe(0);
   });
 
   it("names the key of a phrase restored as a copy value (planted)", () => {
