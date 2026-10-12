@@ -21,7 +21,7 @@ import {
   turnClaimEventId,
 } from "../lib/contradictions";
 import { evidenceDomId } from "../lib/evidence";
-import { TURN_COPY } from "../lib/copy";
+import { TURN_COPY, fmt } from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import { tokens } from "../tokens";
 import type {
@@ -43,12 +43,6 @@ interface TurnCardProps {
   // The meeting tick, shown in the per-turn tag (the turn carries no own tick).
   meetingTick: number;
 }
-
-const TURN_KIND_LABELS: Record<TurnView["turn_kind"], string> = {
-  opening: "opening",
-  reply: "reply",
-  opt_in: "opt-in",
-};
 
 const INDENT_PX = 22;
 const MAX_DEPTH = 6;
@@ -337,7 +331,7 @@ export function TurnCard({
       <header className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         <SpeakerChip agentId={turn.speaker} players={players} />
         <span className="font-mono text-3xs text-ink-500">
-          t{meetingTick} · {TURN_KIND_LABELS[turn.turn_kind]}
+          {fmt(TURN_COPY.tag, { tick: String(meetingTick), kind: TURN_COPY.kinds[turn.turn_kind] })}
         </span>
         {turn.fabricated_opening && <AnnotationChip label="fabricated_opening" />}
         {annotationChips(turn).map((label, index) => (

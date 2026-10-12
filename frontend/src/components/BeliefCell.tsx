@@ -5,8 +5,9 @@
 // observer → subject cell whose look swaps with the active layer but whose
 // position is stable, so the eye compares belief ↔ truth ↔ error cell-for-cell:
 //
-//   • Belief       — suspicion heat (0–100, mono), bucketed off `tokens` (Low ≤
-//                    .35 < Med ≤ .72 < High); confident-high cells read bold.
+//   • Belief       — suspicion heat, its face the Low / Med / High word cut off
+//                    `tokens` (Low ≤ .35 < Med ≤ .72 < High), the 0–100 number
+//                    on hover and in the accessible name; high cells read bold.
 //   • Ground-Truth — role-neutral: the impostor reveal is a header dagger (an
 //                    icon, never a hue — see BeliefPanel), so NOTHING in the cell
 //                    encodes guilt; impostor columns get a faint hatch only.
@@ -24,6 +25,7 @@
 import type { CSSProperties } from "react";
 
 import { tokens } from "../tokens";
+import { BELIEF_PANEL_COPY, bucketWord, fmt } from "../lib/copy";
 import type { BeliefViewMode } from "../lib/playback";
 
 // Stable per-cell facts the matrix resolves once per frame (see BeliefPanel).
@@ -85,6 +87,7 @@ interface CellLook {
   color: string;
   bold: boolean;
   ring: boolean; // the LOUD confidently-wrong inset ring (Error layer)
+  title?: string; // the number behind a word face, on hover
 }
 
 // The diagonal self cell — an agent holds no suspicion file on itself.
@@ -105,10 +108,11 @@ function noBeliefLook(): CellLook {
 function beliefValueLook(s: number): CellLook {
   return {
     background: heatColor(s),
-    content: String(Math.round(s * 100)),
+    content: bucketWord(s),
     color: heatTextColor(s),
     bold: s >= tokens.suspicionBucket.high,
     ring: false,
+    title: fmt(BELIEF_PANEL_COPY.cellTitle, { value: String(Math.round(s * 100)) }),
   };
 }
 
@@ -205,6 +209,7 @@ export function BeliefCell({ model, layer, omniscient, size, selected, onSelect 
           onClick={onSelect}
           aria-label={label}
           aria-pressed={selected}
+          title={look.title}
           className="flex cursor-pointer items-center justify-center font-mono text-[10px] leading-none focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink-900"
           style={inner}
         >
@@ -247,7 +252,13 @@ function ariaLabel(model: BeliefCellModel, layer: BeliefViewMode, omniscient: bo
         const kind = model.subjectIsImpostor ? "missed impostor" : "false accusation";
         return `${pair}: error ${signed} (${kind})`;
       }
-      return `${pair}: suspicion ${Math.round(model.suspicion * 100)} of 100, confidence ${model.confidence.toFixed(2)}`;
+      return fmt(BELIEF_PANEL_COPY.cellLabel, {
+        pair,
+        bucket: bucketWord(model.suspicion),
+        value: String(Math.round(model.suspicion * 100)),
+        confidenceBucket: bucketWord(model.confidence),
+        confidence: model.confidence.toFixed(2),
+      });
     }
   }
 }

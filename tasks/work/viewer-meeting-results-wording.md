@@ -71,10 +71,71 @@ rule" or "weak signal" in `:158-392`; front-door page `scripts/check_doc_facts.p
 
 Each item names its enforcing mechanism and a planted or perturbed case that turns it red; new tests are seen red first.
 
-- [ ] **A1. The role line (item 3).** Omniscient only, after an ejection, the Resolution card reads "p-4 was an
+- [x] Review correction (round 6): the held spans are stated by their bounds and unit. Round 4 gave the ballot badge
+  as 1678 bytes from a scratch-only script; 1678 is the character count of `BallotCard.tsx` lines 191-225 at the head
+  (the correctness comment through the correct / incorrect line), 1686 bytes. Each held span now names its lines at
+  `<base>` and at the head with characters and bytes, the final newline excluded: that span 1678 / 1686, the badge
+  element (lines 215-227) 549 / 553, the gate (`copy.ts` 149-154) 141 / 141, the "vote gate" line (`copy.ts` 494)
+  37 / 37, the Error legend rows (`BeliefPanel.tsx` 523-546) 896 / 902; "READING: ERROR" once each side. Mechanism:
+  the two commands in Results, round 6 (`git show <rev>:<path> | sed -n` counted by Python; `diff` of the two ranges,
+  exit 0 for each). Perturbed: the head's ballot range shifted by one line gives exit 1. Docs only.
+- [x] Review correction (round 5): the built-chunk count is restated. Round 4 said every retired phrase of the card's
+  grep appears 0 times in the built chunks at the head, bar "suspicion matrix" once; the pattern matches 6 times there,
+  all in the index chunk: "suspicion matrix" once (step 3, held) and the spaced "ground truth" 5 times, in strings this
+  card does not write. Mechanism: `build_demo_bundle.py --out <dir>` at the head, then the card's grep pattern over
+  `<dir>/assets/*.js` with `grep -o -E` counted by `wc -l` (6), and per alternative (every other one 0); `git blame`
+  dates the five lines before the card's base. Perturbed: the same count over the bundle built at `<base>` gives 33.
+  Docs only.
+- [x] Review correction (round 5): round 4's mutation tally agrees with its table: dropped tuple member 10, dropped
+  wrapper 2 (T10, T16), message argument to a constant 3, loaded source 1. Mechanism: the T rows of the table counted
+  by class (`grep -E '^\| T[0-9]+ \|'` over the card, the class column cut, `sort | uniq -c`). Perturbed: round 4's
+  published tally (11 and 1) differs from that count, which is how the finding was seen. Docs only.
+- [x] Review correction (round 4): `main` is merged and the deferred pieces are done. The merge commit `c5746909` has
+  parents `2c4477a0` and `9732623d` (`origin/main`, the browse card merged at `09fa779e`); every conflict keeps both
+  cards' content, and tour step 3's one word reads "Real roles" at `a5fdce2a`. Mechanism: the full suites at the merged
+  head (`npm test` 1327 passed, 34 files; `npm run e2e` 15 passed, 3 skipped); every `describe` and `it` title of both
+  parents present in `copy.test.ts`, `EvidencePanel.test.tsx` and `MindInspector.test.tsx` save the ones a parent
+  itself replaced; `copy.test.ts` "components/GuidedTour.tsx renders none of them", "names the truth layer in tour step
+  3 as the panel's toggle does" and its planted case; `git diff --word-diff origin/main HEAD` over `GuidedTour.tsx`
+  shows that one word. Proof: T1, "Ground-Truth" back in step 3, turns three cases red; T3, the counter chip's old
+  "the vote was", turns the browse card's scan red.
+- [x] Review correction (round 2): the trail's other claim kinds carry no confidence. `MindInspector.tsx` reads a
+  claim's confidence only for an accusation. Mechanism: `MindInspector.test.tsx` "reads an alibi and a corroboration
+  as Claimed, with no confidence word" renders a route alibi, a one-room alibi recorded before routes, an alibi with no
+  route and a corroboration, each a Claimed step in words with no confidence. Proof: S1, the kind read made the
+  constant "accusation", turns it red (the inspector crashes reading a missing number), as do S2, S3 and S10-S14.
+- [x] Review correction (round 2): the ballot looks a statement up in the selected meeting, not the first.
+  `BallotCard.tsx` reads the turns of the meeting whose id is selected. Mechanism: `PrivateReasoning.test.tsx` "names
+  a statement's speaker from the selected meeting, not the replay's first" selects the second of two meetings, cites a
+  statement only it holds, and reads "Statement by p-3 (turn 3)" in the link and the counter. Proof: S4, the filter
+  dropped (`meetings[0]`), turns it red, as do S6-S8.
+- [x] Review correction (round 2): the same lookup with its comparison made a None test. Mechanism: the case above,
+  which also reads the not-found label with no replay loaded. Proof: S5 (`m.meeting_id !== null`) turns it red, and
+  S9 (the empty-list fallback dropped) turns its no-replay leg red.
+- [x] Review correction (round 1): a custom factory's absent policy stamp reads "unknown". `PublicResults.tsx`
+  `absentPolicy(factory)` gives "the built-in scripted policy" for a scripted, experimental or unrecorded factory and
+  "unknown" for a custom one; a stamp that is present stays. Mechanism: `PublicResults.test.tsx` "keeps a custom
+  factory's absent stamp unknown, never the built-in policy" (both stamps absent, each stamp alone, and the three other
+  factory kinds). Proof: the new case failed against `5dd68cd9`'s component, then R13-R17 below each turned it red.
+- [x] Review correction (round 1): the ballot's citation spans with no meeting selected are held. Mechanism:
+  `PrivateReasoning.test.tsx` "names an observation citation in words when no meeting is selected to link it to"
+  renders a ballot citing `p-1:12:0` as its observation and as its counter with `selectedMeetingId` null, asserts the
+  spans "What p-1 saw at tick 12" and "Weighed against it · What p-1 saw at tick 12" with the id as `title`, then the
+  counter at `p-3:7:1` with its own words and `title`. Proof: R1 (the review's P18) and R2 (P40) each turn it red.
+- [x] Review correction (round 1): the source panel's public line reads the turn's own kind. Mechanism:
+  `EvidencePanel.test.tsx` "reads the kind of turn … by its own name, at the meeting's own tick" renders an opening and
+  a reply ("p-1 · public · first statement · meeting tick 37", "p-3 · public · reply · meeting tick 37"). Proof: R8, the
+  kind read made `TURN_COPY.kinds["opt_in"]`, turns both red.
+- [x] Review correction (round 1): the tick and count arguments are held at values other than the fixtures'.
+  Mechanism: `MeetingView.test.tsx` "reads the meeting's own tick, not the planted meeting's" (tick 37),
+  `EvidencePanel.test.tsx` above (meeting tick 37), `PublicResults.test.tsx` "counts the games the set holds, whatever
+  their number" (37 games). Proof: R11 (`String(meetingTick)` made "5"), R9 (`String(meeting?.tick)` made "12") and
+  R12 (`String(results.games)` made "50") each turn their case red.
+
+- [x] **A1. The role line (item 3).** Omniscient only, after an ejection, the Resolution card reads "p-4 was an
   impostor" or "p-4 was a crewmate", no "post-hoc"; the all-roles start and the gate are unchanged. Mechanism:
   `MeetingView.test.tsx` renders both roles, omniscient and under a lens. Planted: the gate made `true` fails.
-- [ ] **A2. The readout is a plain sentence with no number (item 10).** A passed vote reads "Most votes went to p-4 and
+- [x] **A2. The readout is a plain sentence with no number (item 10).** A passed vote reads "Most votes went to p-4 and
   a voter was sure enough, so p-4 was ejected" (survey `:131`); a failed vote and a tie or skip lead say, in that shape,
   why no one was ejected; under every perspective, omniscient included, it has no digit outside a player id (`p-\d+`), and no "plurality", "threshold",
   "EJECTED", "SKIPPED" or comparison sign. Mechanism: the number pins (`PrivateReasoning.test.tsx:75`, `:83`;
@@ -82,81 +143,81 @@ Each item names its enforcing mechanism and a planted or perturbed case that tur
   check per perspective that the readout, with each `p-\d+` id removed, has no digit (no weakening); the value negatives ("0.73", "0.42", "0.53") stay; outcome pins
   (`:94`; e2e `:208`) follow to "was ejected" / "no one was ejected"; a case per branch; `thresholdHits` on the
   templates. Planted: "0.73" left in the sentence fails while "p-4" passes; the old template fails each perspective; swapped branches fail.
-- [ ] **A3. The design notes go (item 10).** `MeetingView.tsx:346` is deleted; the caption reads "Arrows point from
+- [x] **A3. The design notes go (item 10).** `MeetingView.tsx:346` is deleted; the caption reads "Arrows point from
   accuser to accused", every verb "accuses" (survey `:133`); the record heading reads "Where everyone really was"
   (`:136`); `MeetingView.test.tsx:185-187`, `:309` and the region name at `journey.spec.ts:949` follow, `:953-956`, `:965` kept.
   Mechanism: renders of an opening and a reply; the e2e lens case. Planted: "redirects" or the old name back fails.
-- [ ] **A4. Evidence captions say what each group holds (item 10).** Captions drop "grounded", "detector", "stamped" and
+- [x] **A4. Evidence captions say what each group holds (item 10).** Captions drop "grounded", "detector", "stamped" and
   "endpoint tick"; a kept heading's term (`journey.spec.ts:483`) that is not plain English gets one glossary entry under
   "How a meeting works", with no figure; the proof term joins "hard evidence" (`glossary.md:174`) or points at it.
   Mechanism: a `copy.test.ts` case reads the glossary for each listed term. Planted: an entry deleted fails, naming it.
-- [ ] **A5. Turn kinds read "first statement", "reply", "spoke up" (item 10, `:135`).** One `SPECTATOR_COPY.turn` map
+- [x] **A5. Turn kinds read "first statement", "reply", "spoke up" (item 10, `:135`).** One `SPECTATOR_COPY.turn` map
   serves the tag (its tick in words), the evidence endpoints and links, and `EvidencePanel.tsx:71`. Mechanism: a copy
   case keys the three kinds; renders of an opt-in tag and a source line. Planted: a leftover hand-typed map fails.
-- [ ] **A6. The eleven adjustment chips (item 10).** They move to `BALLOT_COPY` in plain words; the redirect chip says
+- [x] **A6. The eleven adjustment chips (item 10).** They move to `BALLOT_COPY` in plain words; the redirect chip says
   the vote was "changed by the vote rule" (`:137`), `BallotCard.tsx:322` follows, and "vote rule" gets a glossary entry
   true to `meetings/schemas.py:950-970`. Mechanism: a copy case holds a value per reason `rewriteLabel` names and the
   fallback; a render per reason. Planted: one reason dropped renders the fallback and fails.
-- [ ] **A7. Citations name what they point at; the basis shows (item 10).** Ballot links read "Statement by p-3 (turn
+- [x] **A7. Citations name what they point at; the basis shows (item 10).** Ballot links read "Statement by p-3 (turn
   3)" and "What p-1 saw at tick 12" (`:138`): the speaker from the public turn with that id, the rest from the id; the
   counter link (`counterKind`) and the panel's id line likewise; an unmatched or unreadable id says so plainly; "A
   citation shows where a claim came from, not that it is right." shows only if resolved (`:140`); the chip leads "Basis
   on the record:" (`:139`). Mechanism: renders of each shape, the chip, an unmatched, malformed and unresolved id;
   `evidence-journey.ts:211`, `:222` follow. Planted: the resolved test made `true` fails.
-- [ ] **A8. The trail reads Said / Claimed / Voted / Result (item 11, `:141`).** Spoken text is Said, claims Claimed,
+- [x] **A8. The trail reads Said / Claimed / Voted / Result (item 11, `:141`).** Spoken text is Said, claims Claimed,
   the ballot (its written reason and vote) Voted, the outcome Result, "Meeting: p-4 was ejected" or the plain
   no-ejection form. Mechanism: `MindInspector.test.tsx` renders the belief tab over a turn, a claim and a ballot,
   asserting the labels in order. Planted: the ballot reason labelled Said fails.
-- [ ] **A9. The panel and step 3 read by meaning (item 11, §2b ruling 1).** Heading "Who suspects whom", a plain
+- [x] **A9. The panel and step 3 read by meaning (item 11, §2b ruling 1).** Heading "Who suspects whom", a plain
   rows-and-columns line; "Real roles" in the truth toggle, group label, fog chip, disabled title (`:142`), legend
   heading (`:478`; "READING: ERROR" held) and fog note (`:552`, "error" kept); legend rows say what each mark means
   ("Dagger: a real impostor, all-roles view only", `:143`), no "hue", "mono", "file" or "role-neutral"; step 3's
   "Ground-Truth" reads "Real roles", its one `GuidedTour.tsx` edit. Mechanism: new `BeliefPanel.test.tsx` layer and fog
   cases; A17's walk. Planted: "Ground-truth" in toggle, heading or fog note fails; "Ground-Truth" back in step 3 fails.
-- [ ] **A10. The panel's view names take item 8's words (item 8, §2b order).** At `BeliefPanel.tsx:253`, `:270`, `:512`
+- [x] **A10. The panel's view names take item 8's words (item 8, §2b order).** At `BeliefPanel.tsx:253`, `:270`, `:512`
   and `:552`, "fog" and "As-agent" leave text, tooltips and accessible names for the words `viewer-browse-wording` gives
   item 8 ("perspective" throughout, survey `:123`); the Error word stays. Mechanism: `BeliefPanel.test.tsx` under a
   lens; A17's walk of `BeliefPanel.tsx`. Planted: "fog" back in the chip fails.
-- [ ] **A11. Low / Med / High, the number on hover (item 12).** Ballot confidence, belief cells, the inspector's three
+- [x] **A11. Low / Med / High, the number on hover (item 12).** Ballot confidence, belief cells, the inspector's three
   readouts, the claim line and the cell detail show the word, the number in a `title` and the accessible name; the
   "confidence" label stays; the detail's change reads as the bucket move; one bucketing (`suspicionBucketOf`), one word
   map, no new cut point, the paint unchanged; no hover shows a number its lens hides today. Mechanism: a render per
   surface, lens cases kept. Planted: a constant bucket read fails 0.72 → Med, 0.73 → High; "+5" on a face fails.
-- [ ] **A12. The proof row (item 13).** The proof box becomes a plain body-style row after the cases, not the bold box,
+- [x] **A12. The proof row (item 13).** The proof box becomes a plain body-style row after the cases, not the bold box,
   headed "Ejected players who were impostors, with and without a vent sighting" (`:145`); its caption says plainly that
   only impostors can vent (that half measures no deduction), a sighting does not show it caused the vote, and the counts
   describe this set; no "by construction" or "ejectee"; one ejection reads singular. Mechanism: `PublicResults.test.tsx`
   holds order and copy (`:65-66` follow); `evidence-journey.ts:96` follows. Planted: the row above the cases fails; "1 ejections" fails.
-- [ ] **A13. The case links (item 14).** The links read "Inspect the meeting (shows roles)" and "Raw recording file";
+- [x] **A13. The case links (item 14).** The links read "Inspect the meeting (shows roles)" and "Raw recording file";
   hrefs, the reveal button and the served titles stay. Mechanism: `PublicResults.test.tsx` holds labels and hrefs;
   `evidence-journey.ts:106`, `:110`, `:145` follow. Planted: "Pinned recording source" restored fails.
-- [ ] **A14. The Results prose (item 15).** The intro says each recording was replayed and checked before counting
+- [x] **A14. The Results prose (item 15).** The intro says each recording was replayed and checked before counting
   (`:147`), its set name through the helper `viewer-browse-wording` exports; the empty state reads "No worked examples
   for this set yet; the 9-player set has two." (`:148`); each adopted rule is its own plain sentence, true to its field.
   Mechanism: `PublicResults.test.tsx` (`:116-139`, `:277`, `evidence-journey.ts:99`, `:130` follow);
   `tests/api/test_public_results.py` holds the count word to the curated cases (`:72`). Planted: a third case fails.
-- [ ] **A15. Defaults are named (item 15).** "the built-in scripted policy" for an absent impostor or crew stamp
+- [x] **A15. Defaults are named (item 15).** "the built-in scripted policy" for an absent impostor or crew stamp
   (`:150`); the standard timing where recorded settings show timed observations off; "unknown" only where the record
   cannot say; stamps stay; prompt versions and the fingerprint under "Technical identifiers, for reproduction". A zero
   cost reads "$0: a flat-rate service, so usage, not a bill" (`:151`), no provider-aware branch (§2b ruling 5); a
   non-zero cost keeps its value with "usage, not a bill". Mechanism: `PublicResults.test.tsx` per branch (`:101-114`,
   `:180-209` follow). Planted: flags-off read as unknown fails; a cost of 1.5 shown as "$0" fails.
-- [ ] **A16. Nothing held moves.** The badge, the Error layer's label, rows, look and accessible words, the ballot badge
+- [x] **A16. Nothing held moves.** The badge, the Error layer's label, rows, look and accessible words, the ballot badge
   with its gate, and every word of tour step 3 but "Ground-Truth" keep their bytes (measured from `<base>`, after that
   "panel"). Mechanism: a copy case pins the
   badge, `BeliefPanel.test.tsx` the Error words; `git diff <base> <head>` over those lines and `GuidedTour.tsx` is
   quoted in the PR. Perturbed: either edited fails; a second step-3 word edited shows in the diff.
-- [ ] **A17. Copy ownership and the walk.** Every reworded string sits in `SPECTATOR_COPY` (keys under `meeting`,
+- [x] **A17. Copy ownership and the walk.** Every reworded string sits in `SPECTATOR_COPY` (keys under `meeting`,
   `turn`, `ballot`, `publicResults` and the new `inspector`, `beliefPanel`, `evidenceSource`, `buckets`); strings not
   reworded may stay inline (survey `:175`). The walk reads every leaf and the comment-stripped source of each file
   written here for the retired phrases, plus `As-agent` and `fog` in `BeliefPanel.tsx`, and only "Ground-Truth" in
   `GuidedTour.tsx` (the rest of step 3 is held); `proseLiterals` runs over each reworded span; the dialect scan gains
   these files. Planted: a phrase restored as a literal fails naming the file, as a value naming the key.
-- [ ] **A18. Nothing else moves; the live strings.** `git diff --stat <base> <head>` lists only Expected scope;
+- [x] **A18. Nothing else moves; the live strings.** `git diff --stat <base> <head>` lists only Expected scope;
   `check_doc_facts.py` exits 0. The PR body lists every live string, old against new, the bundle diff file by file
   (expected: compiled assets only, no `data/` file; the measured diff governs) and, count-only, each committed capture
   showing a changed string. Perturbed: a scratch edit under `api/` shows in the `git diff --exit-code` guard (exit 1).
-- [ ] **A19. One bounded mutation pass.** The listed classes (a dropped filter or wrapper, a swapped collection, a
+- [x] **A19. One bounded mutation pass.** The listed classes (a dropped filter or wrapper, a swapped collection, a
   comparison made a None test, a kind or key read made a constant, a dropped tuple member, swapped branches, a loaded
   source read as its literal, message arguments) run once over the readout, bucket read, kind map, id labels, cost
   branch, proof row and defaults; survivors killed or reported. Gate record: CI's green run at the exact head (run id).
@@ -258,4 +319,456 @@ diff -r <dir-base> <dir-head>                                 # file by file int
 
 ## Results
 
-Filled by the implementation.
+Implemented at `5de3f20b` on `work/viewer-meeting-results-wording` from `7d781f8e` (B), pull request #512. Sources:
+`docs/architecture.md` "Packages" (only `frontend/` and one `tests/api/` case move; no DTO, view type, served byte or
+recorded byte); the decision `tasks/decision-2026-10-11-visitor-wording.md` §1 (answers 3, 8, 10-15), §2 (readings),
+§2b rulings 1 and 5 and the binding file order, §3 (merge order); the survey's Appendix A rows `:131`-`:151`; AGENTS
+craft rules 2, 4 and 5. Every reworded string is in `SPECTATOR_COPY` (`meeting`, `turn`, `ballot`, `publicResults`,
+and the new `evidenceSource`, `inspector`, `beliefPanel`, `buckets`); the PR body lists every live string, old against
+new.
+
+### Pending: the merge of `main` (decision §3)
+
+Done in round 4, at the merged head (Review corrections, round 4, below); kept as written.
+
+`viewer-browse-wording` (#511) had not merged when this was written. Before the final review this branch merges `main`
+(never a rebase), keeps both cards' groups in `copy.ts`, `copy.test.ts` and the shared test files, calls the set-name
+helper as the browse card leaves it (`setOptionLabel`, already called here), writes tour step 3's one word
+("Ground-Truth" to "Real roles", ruling 1) with its walk row, re-runs the Validation, rebuilds the bundle at the
+merge-base and the merged head, and cites CI at the merged head. A9's step-3 word, A16's step-3 diff, A17's
+`GuidedTour.tsx` row and A18's final stat and bundle diff are open until then.
+
+### Decisions (the card's readings, each reversible by the owner's word)
+
+- The readout's passed sentence is the survey's (`:131`) with a full stop; the failed vote says "none of those voters
+  was sure enough" (the leader's voters: a voter for someone else can be sure); the tie-or-skip sentence keeps the old
+  readout's own "(a tie, or skip led)". The lead joins with a colon.
+- Number on hover covers the ballot, the cells, the inspector's three readouts, the claim line and the cell detail:
+  the number in a `title` and in the accessible name (the ballot meter's `aria-valuetext`, the cell button's name, a
+  visually hidden span elsewhere). One bucketing, `bucketWord` over `suspicionBucketOf`; confidence takes the
+  suspicion cut points; no cut point is added; the paint is unchanged; no lens shows a number it hid before (the
+  ballot's private gate and the panel's layer gate are untouched).
+- The cell detail's change reads as the bucket move ("rose from Med to High"), within one bucket "rose but stayed
+  Med"; the points are the hover title.
+- The proof row takes the body style (no border, fill or bold fraction), after the cases or the empty state.
+- A private ballot reason is Voted; an accusation's confidence rides its Claimed step.
+- Citations: the speaker from the meeting's public turn with that id, the turn number, observer and tick from the id
+  (`derive_observation_id`'s tick, the panel's "observation tick" clock); each link carries its exact id as `title`;
+  the contradiction links read "Part of the statement by p-3 (turn 3)". The event-id parser moved from
+  `MeetingView.tsx` to `EvidencePanel.tsx` (`eventTurnId`), still built from `OBSERVATION_EVENT_SEGMENTS`.
+- Item 8's words in the panel: "One player's perspective" in the chip, the disabled tooltip and the note; "error"
+  kept. The dagger row keeps the survey's "all-roles view only".
+- Defaults: "the built-in scripted policy" for an absent stamp (`orchestrator/replay.py:698-713`); "the standard
+  timing" where recorded settings show `temporal_observations` false; "unknown" where the record cannot say (no
+  settings recorded, or timed observations on with no version); stamps stay. Both shown sets serve one group each with
+  no policy stamp and `temporal_observations` false, so both read the defaults (count-only read of
+  `build_public_results`).
+- The prompt-versions fallback "not recorded" and the trail's claim words moved into the copy, bytes kept, because
+  they share a reworded span; the inspector's empty state stays inline (not surveyed).
+- "vote rule" and "weak signal" get entries under "How a meeting works" (no figure); "Role proof" is pointed at "hard
+  evidence" by one sentence in that entry.
+
+### Acceptance evidence
+
+Each mechanism is a test that fails on the named defect; each planted case below was an edit to the source, a run,
+and a restore (`run_cases.py` in the run's scratch directory, `npx vitest run <files>` per case, pytest for A14),
+every one seen red: 27 of 27.
+
+| Item | Mechanism | Planted edit → red tests |
+| --- | --- | --- |
+| A1 | `MeetingView.test.tsx` "the ejected player's role line" (both roles, all-roles view and four lenses) | the gate made `true` → 2 |
+| A2 | `PrivateReasoning.test.tsx` `readoutProblems` per perspective (4 views × 3 endings), value negatives 0.73/0.42/0.53 kept; `MeetingView.test.tsx` a case per branch; `copy.test.ts` `thresholdHits` on the templates | swapped branches → 6; "0.73" in the sentence → 12; the old no-leader template → 10; in-suite plants: "0.73" fails while "p-4" passes, the three old templates fail |
+| A3 | `MeetingView.test.tsx` "the accusation chain"; the record pins (`:185-187`, `:309`) and `journey.spec.ts:949` follow | "redirects" on a reply → 3; the old record name → 5 |
+| A4 | `copy.test.ts` "the glossary defines the meeting's kept terms"; `MeetingView.test.tsx` "the evidence list" | the vote rule entry deleted → 5 (names "vote rule"); the weak signal entry deleted → 5 |
+| A5 | `copy.test.ts` "names each kind of turn once" and "the turn kinds have one map"; tag and source renders | a hand-typed map in the tag → 3 |
+| A6 | `copy.test.ts` holds the chip keys to the reasons `api/replay_loader.py` serves (10) and the fallback; `PrivateReasoning.test.tsx` a render per reason, unknown and `constructor` read the fallback | `parse_default` dropped → 1 |
+| A7 | `EvidencePanel.test.tsx` (10 id shapes; resolved, unmatched, malformed, foreign-view and resolved observation); `PrivateReasoning.test.tsx` link words and chip | the resolved test made `true` → 4 |
+| A8 | `MindInspector.test.tsx` labels in order: Said, Claimed, Voted, Voted, Result | the ballot reason labelled Said → 1 |
+| A9 | `BeliefPanel.test.tsx` heading, toggle, group label, chip, tooltip, legend, note | "Ground-truth" in the toggle → 6; in the note → 4 |
+| A10 | `BeliefPanel.test.tsx` `retiredViewWords` over text, titles and names under a lens | "fog" in the chip → 2 |
+| A11 | renders per surface (ballot, cell, cell detail, inspector, claim line); `copy.test.ts` `bucketWord` cases and a 0..1 sweep against `suspicionBucketOf` | a constant bucket read → 15 (0.72 Med, 0.73 High); "+5" on the change's face → 3 |
+| A12 | `PublicResults.test.tsx` "the Results tab's proof row" (order, style, words, singular); `:65-66`, `evidence-journey.ts:96` follow | the row above the cases → 2; "1 ejections" → 1 |
+| A13 | `PublicResults.test.tsx` labels and hrefs; `evidence-journey.ts:106`, `:110`, `:145` follow (exact names) | "Pinned recording source" restored → 3 |
+| A14 | `PublicResults.test.tsx` intro and empty state; `test_public_results.py::test_the_empty_state_counts_the_curated_cases` | the count word made "three" → 1 failed |
+| A15 | `PublicResults.test.tsx` "the Results tab's provenance defaults" (per branch) | flags-off read as unknown → 1; a cost of 1.5 shown as "$0" → 1 |
+| A16 | `copy.test.ts` badge pin; `BeliefPanel.test.tsx` the Error legend byte for byte | the badge edited → 1; an Error word edited → 1 |
+| A17 | `copy.test.ts` "the retired phrases stay retired" (nine files, every leaf), "the reworded spans take their words from the copy" (23 spans); the dialect scan gains five files | a phrase typed into `MeetingView.tsx` → 3 (names the file); restored as a value → 2 (names the key) |
+
+### Pins that follow, assertions kept
+
+- The readout's number pins and phrase negatives (`PrivateReasoning.test.tsx` `:69`-`:94` at B; `evidence-journey.ts`
+  `:181`, `:207`, `:217`-`:221`) became one `readoutProblems` / `expectPlainReadout` check per perspective, awaited after
+  the outcome words so it never reads an empty readout; the value negatives stay; the outcome pins read "was ejected" /
+  "no one was ejected".
+- The record's heading now says "really was", so the negative "no route lead" check (`MeetingView.test.tsx`, at B
+  `:310`) is narrowed to the route lead's own words ("accused player really was"), and `journey.spec.ts` gains one line
+  after `:954` holding the route lead by those words, so `:954` cannot pass on the heading alone; `:953`-`:956` and
+  `:965` are unchanged.
+- Every rewrite-chip pin follows to its new copy value, the fallback negative to `BALLOT_COPY.rewriteFallback`.
+- The citation links' secrets in `PrivateReasoning.test.tsx` (`private-statement-choice` and the rest) are now in each
+  link's `title`, so the hidden-lens negatives still have something to miss: the positive leg finds them in the
+  voter's own view.
+
+### Mutation pass (A19)
+
+One pass, 39 mutants, exactly the listed classes: comparison to a None test or its inverse 6, swapped adjacent
+branches 6, message argument to a constant 8, kind or key read to a constant 6, dropped filter or wrapper 5, swapped
+related collection 5, loaded source read to its literal 2, dropped tuple member 1. Over the readout and role line
+(M1-M7), the bucket read (M8-M12), the kind map (M13-M15), the id labels and the chip map (M16-M25), the cost branch
+(M26-M27), the proof row (M28-M33) and the defaults (M34-M39). Killed 39, survived 0; each was an edit, a run of the
+named test files and a restore, the same way as the planted cases. Gate record: CI's green run at the exact head, cited in the PR by run id.
+
+### Validation (count-only, at `5de3f20b` unless stated)
+
+- `uv run python scripts/validate_task_docs.py`: exit 0 (110 work cards).
+- `uv run python scripts/check_doc_facts.py`: exit 0.
+- `uv run pytest tests/api/test_public_results.py tests/api/test_view_model.py -q`: 126 passed, 1 skipped.
+- `npm test`: 1118 passed (31 files); `npm run tsc:check`: exit 0; `npm run lint`: exit 0.
+- `npm run e2e`: 15 passed, 3 skipped, run locally with the cached headless shell (build 1234) through a scratch
+  config, because the pinned build 1194 is not installed here; CI's `frontend-e2e` job on the pinned browser is the
+  record.
+- The card's retired-phrase grep: 18 lines, all comments, the e2e readout check's own pattern
+  (`evidence-journey.ts:57`) or the inspector's empty state (`MindInspector.tsx:479`). The `As-agent` / `fog` grep in
+  `BeliefPanel.tsx`: 4 comment lines. The `Ground-Truth` grep in `GuidedTour.tsx`: 1 line (step 3, pending the merge).
+- `build_sample_report.py --check` on `samples/4p1i`, `samples/9p2i`, `ml_corpus/4p1i`, `ml_corpus/9p2i`: exit 0
+  each; `UV_OFFLINE=1 bash scripts/verify_samples.sh`: exit 0, every set "All 50 samples verified clean".
+- The bundle at B and at `5de3f20b` (one checkout): `index.html` (two asset names), the index chunk, the stylesheet
+  and six renamed chunks differ; all 72 `data/` files are byte-identical.
+
+### Limitations
+
+- "$0: a flat-rate service, so usage, not a bill" is true of both shown sets; a locally recorded set with another
+  provider would read the same (ruling 5; no provider-aware branch).
+- The observation label reads its tick from the id (`{agent_id}:{tick}:{seq}`); the selection still resolves the exact
+  id, never a nearby one.
+- The new tests were written beside the code, not before it; each was then seen red by the planted edits and the
+  mutants above (each an edit to the code under test, a run, a restore), which is the evidence given here.
+- The committed captures (the README still, the meeting still and the GIF's meeting frames) show this card's old words
+  until `front-door-plain-words`, merging last, captures again; this card writes no media.
+
+### Review corrections, round 1 (2026-10-11)
+
+The three lenses' four blocking findings at `5dd68cd9`, repaired at `50fd2f4e` (the code and tests); this subsection
+and the four Review correction items at the head of Acceptance follow it. `main` has not moved (`7d781f8e`) and
+`viewer-browse-wording` (#511) has not merged, so the merge of `main` and the boxes it opens stay pending as above.
+
+- **A custom factory's absent stamp (the docs lens; the Codex P2 comment on `PublicResults.tsx:63`, valid).** The
+  policy line read "the built-in scripted policy" for every absent stamp, a custom factory's included, whose agents are
+  not the built-in ones (`orchestrator/game.py:3232-3237`) and whose unstamped policy the loader refuses to read as the
+  default (`api/replay_loader.py:644-663`). `absentPolicy(factory)` now gives "unknown" for a custom factory and the
+  default otherwise; a present stamp stays. A15's reading, as corrected: "the built-in scripted policy" for an absent
+  stamp under a scripted, experimental or unrecorded factory. The unrecorded factory (an older payload) keeps the
+  default, read from the replay schema's absent-stamp rule (`orchestrator/replay.py:695-700`) and the loader's rule
+  for a completed older recording (`api/replay_loader.py:672-676`); the limit: an unfinished older recording, which the
+  loader leaves unknown, would read the default too. No shown set is custom: each serves one group, 9p2i
+  `experimental` and 4p1i `scripted`, both with no stamp (count-only read of the bundle's
+  `data/<set>/eval/summary.json`), so no live string moves. Reversible by the owner's word.
+- **The second Codex P2 comment (`BeliefPanel.tsx:36`, tour step 3 still says "Ground-Truth"), valid and scheduled.**
+  Ruling 1 and the binding order (decision §2b, `:73-77`, `:99-106`) have this card write that one word after
+  `viewer-browse-wording` lands, at the merge of `main`; until then A9 and A16 stay open. Not a skip.
+- **The ballot's citation spans with no meeting selected (the correctness lens: P18, P40).** No test rendered them.
+  `PrivateReasoning.test.tsx` now does, with `selectedMeetingId` null, for one id in both slots and for two ids.
+- **The source panel's kind read (the integrity lens).** Its one pin rendered a speak-up turn; `EvidencePanel.test.tsx`
+  now renders an opening and a reply.
+- **The tick and count arguments (the integrity lens).** Each fixture held one value (tick 5, tick 12, 50 games); one
+  case each now renders another (tick 37, meeting tick 37, 37 games).
+
+**Mutation probe, round 1.** Only the spans changed here and the spans the findings name, exactly the listed classes:
+19 mutants, each an edit, a full `npx vitest run` (1124 tests) and a restore (`mutate.py` in the run's scratch
+directory, `python3 mutate.py <frontend>`). Killed 19, survived 0. By class: message argument to a constant 7, kind
+read to a constant 4, swapped related collection 4, swapped adjacent branches 2, comparison to a None test or its
+inverse 2. The first pass's 39 did not reach these spans; its tally stands for the spans it names.
+
+| Mutant | Class | Edit | Red tests |
+| --- | --- | --- | --- |
+| R1 (P18) | kind read | counter span's `counterKind(…)` made `"statement"` | the no-meeting citation case |
+| R2 (P40) | kind read | observation span's `"observation"` made `"statement"` | the no-meeting citation case |
+| R3 | swapped collection | counter span's `title` read the observation id | the no-meeting citation case |
+| R4 | swapped collection | counter span's words read the observation id | the no-meeting citation case |
+| R5 | message argument | counter span's "Weighed against it · " dropped | the no-meeting citation case |
+| R6 | swapped branches | counter link and span swapped | the no-meeting citation case |
+| R7 | None test inverse | observation slot's `meetingId !== null` made `=== null` | the no-meeting case; "names each citation by what it points at" |
+| R8 | kind read | source line's kind made `TURN_COPY.kinds["opt_in"]` | both new source-line cases |
+| R9 | message argument | source line's tick made "12" | both new source-line cases |
+| R10 | message argument | source line's speaker made "p-4" | both new source-line cases |
+| R11 | message argument | turn tag's tick made "5" | "reads the meeting's own tick" |
+| R12 | message argument | Results intro's games made "50" | "counts the games the set holds" |
+| R13 | swapped branches | `absentPolicy`'s two words swapped | 5, the custom case among them |
+| R14 | None test | `factory === "custom"` made `factory === null` | the custom case |
+| R15 | kind read | `absentPolicy(group.agent_factory_kind)` read `"scripted"` | the custom case |
+| R16 | message argument | impostor fallback made the default | the custom case |
+| R17 | message argument | crew fallback made the default | the custom case |
+| R18 | swapped collection | crew line read the impostor stamp | 3, the custom case among them |
+| R19 | swapped collection | impostor line read the crew stamp | 3, the custom case among them |
+
+Seen red first: the custom case failed against `5dd68cd9`'s `PublicResults.tsx` (1 failed, 23 passed in its file),
+then passed at `50fd2f4e`; each other new case is seen red by the mutants named on it above.
+
+**Validation, count-only, at `50fd2f4e`** (this subsection changes only the card). `validate_task_docs.py` exit 0;
+`check_doc_facts.py` exit 0; `pytest tests/api/test_public_results.py tests/api/test_view_model.py -q` 126 passed,
+1 skipped; `npm test` 1124 passed (31 files); `tsc:check` exit 0; `lint` exit 0; `npm run e2e` 15 passed, 3 skipped,
+run locally through a scratch copy of the config on the cached headless shell (build 1234) and UI port 5712, because
+another worktree's dev server holds 5173 (CI's `frontend-e2e` job on the pinned browser is the record). The card's
+retired-phrase grep: 18 lines, as before; the `As-agent` / `fog` grep: 4 comment lines; the `Ground-Truth` grep: 1
+line (step 3, pending the merge). `git diff --quiet 7d781f8e 50fd2f4e` over the never-written paths: exit 0;
+`git diff --stat 7d781f8e 50fd2f4e`: the same 23 files, none under `eval/`. The bundle at `7d781f8e` and `50fd2f4e`
+(one checkout): 110 files each side, 35 under `assets/`; all 72 `data/` files byte-identical; `index.html`, the index
+chunk (`index-clC97fic.js` to `index-BkjKJRyy.js`), the stylesheet (`index-D7ay7349.css` to `index-B6Y7MwOb.css`)
+and six renamed chunks differ. Gate record: CI's green run at the exact head, cited in the PR by run id.
+
+### Review corrections, round 2 (2026-10-11)
+
+The three lenses' three blocking findings at `da41645e`, each a listed-class mutant that survived on a production line
+this card wrote, repaired at `07217a70` (tests only; no production line moves); this subsection and the three Review
+correction items at the head of Acceptance follow it. `main` has not moved (`7d781f8e`) and `viewer-browse-wording`
+(#511) has not merged, so the merge of `main` and the boxes it opens stay pending as above.
+
+- **The trail's claim-kind read made a constant (the correctness lens, `MindInspector.tsx:124`).** No test put an
+  alibi or a corroboration in the trail, so `claim.type === "accusation"` read as a constant survived; on a real
+  alibi the inspector would crash reading a confidence the claim does not carry. The new `MindInspector.test.tsx`
+  case renders all four non-accusation shapes; the copy's own en dash is kept in "ticks 1–4".
+- **The ballot's turn lookup with its filter dropped (the correctness lens, `BallotCard.tsx:170-171`) and with its
+  comparison made a None test (the integrity lens, N8).** Every fixture held one meeting, so `meetings[0]` and
+  `m.meeting_id !== null` both read the right turns. The new `PrivateReasoning.test.tsx` case holds two meetings with
+  the second selected; in a real replay every ballot after the first meeting would otherwise call its cited statement
+  not found.
+
+**Mutation probe, round 2.** Only the spans the findings name (`MindInspector.tsx:124`, `BallotCard.tsx:170-171`) and
+the claim words the new trail case now reads (`MindInspector.tsx` `claimText`), exactly the listed classes: 14
+mutants, each an exact edit, a full `npx vitest run` (1126 tests) and a restore (`mutate.py` in the run's scratch
+directory, `python3 mutate.py <frontend>`). Killed 14, survived 0. By class: comparison to a None test or its inverse
+4, dropped filter or wrapper 3, message argument to a constant 3, kind or key read to a constant 2, swapped related
+collection 1, swapped adjacent branches 1. The first probe of this round found S9 and S13 alive (the trail case then
+held one alibi shape and the ballot case no unloaded replay); the cases gained the one-room and no-route alibis and the
+no-replay leg, and the 14 were run again at `07217a70`, each red.
+
+| Mutant | Class | Edit | Red tests |
+| --- | --- | --- | --- |
+| S1 | kind read | the claim's `claim.type` made `"accusation"` | the new trail case (a crash on a missing number) |
+| S2 | None test inverse | `claim.type === "accusation"` made `!==` | 3: the new trail case, the earlier trail case, the numbers case |
+| S3 | swapped branches | the claim's confidence and `null` swapped | 3, as S2 |
+| S4 | dropped filter | the ballot's meeting `find(…)` made `meetings[0]` | the new two-meeting case |
+| S5 | None test | `m.meeting_id === meetingId` made `m.meeting_id !== null` | the new two-meeting case |
+| S6 | None test inverse | `m.meeting_id === meetingId` made `!==` | 2: the new case and "names each citation by what it points at" |
+| S7 | key read | the selected `meetingId` in the lookup made `"meeting-0"` | the new two-meeting case |
+| S8 | swapped collection | the meeting's `turns` read its `ballots` | 2, as S6 |
+| S9 | dropped wrapper | the lookup's `?? []` dropped | the new case's no-replay leg |
+| S10 | message argument | the corroboration's tick made "0" | the new trail case |
+| S11 | message argument | an alibi leg's first tick made "0" | the new trail case |
+| S12 | message argument | the alibi's path made "x" | the new trail case |
+| S13 | dropped wrapper | the one-room fallback behind `claim.route ??` dropped | the new trail case |
+| S14 | None test inverse | `legs.length === 0` made `!==` | the new trail case |
+
+Seen red first: each new case is seen red by the mutants named on it above (S1, the finding's own mutant, on the
+trail case; S4 and S5, the findings' own, on the two-meeting case), each an edit to the code under test, a run and a
+restore; both cases pass at `07217a70`.
+
+**Validation, count-only, at `07217a70`** (this subsection changes only the card). `validate_task_docs.py` exit 0;
+`check_doc_facts.py` exit 0; `pytest tests/api/test_public_results.py tests/api/test_view_model.py -q` 126 passed,
+1 skipped; `npm test` 1126 passed (31 files); `tsc:check` exit 0; `lint` exit 0; `npm run e2e` 15 passed, 3 skipped,
+run locally through a scratch copy of the config on the cached headless shell (build 1234) and UI port 5712, because
+another worktree's dev server holds 5173 (CI's `frontend-e2e` job on the pinned browser is the record). The card's
+retired-phrase grep: 18 lines, as before; the `As-agent` / `fog` grep: 4 comment lines; the `Ground-Truth` grep: 1
+line (step 3, pending the merge). `git diff --quiet 7d781f8e 07217a70` over the never-written paths: exit 0;
+`git diff --name-only 7d781f8e 07217a70`: the same 23 files, none under `eval/`; `git diff --stat 50fd2f4e 07217a70`:
+the two test files and this card only, so no compiled byte moves. The bundle at `7d781f8e` and `07217a70` (one
+checkout): 110 files each side, 35 under `assets/`; all 72 `data/` files byte-identical; `index.html`, the index chunk
+(`index-clC97fic.js` to `index-BkjKJRyy.js`), the stylesheet (`index-D7ay7349.css` to `index-B6Y7MwOb.css`) and six
+renamed chunks differ, the same names as at `50fd2f4e`. Gate record: CI's green run at the exact head, cited in the PR
+by run id.
+
+### Review corrections, round 4 (2026-10-11)
+
+The integration round's one blocking finding at `2c4477a0`: `viewer-browse-wording` (#511) merged at `09fa779e` and
+`main` moved to `9732623d`, so this branch merges `main` and finishes the pieces held for it (decision §3; §2b ruling
+1). Done at `c5746909` (the merge) and `a5fdce2a` (step 3's word with its walk row); this subsection and the round-4
+Review correction item at the head of Acceptance follow them. `<base>` is `9732623d` (`git merge-base HEAD
+origin/main`); no branch commit was rewritten.
+
+**The merge.** `git merge --no-ff --no-commit origin/main`, never a rebase; parents `2c4477a0` and `9732623d`. Eight
+files conflicted; each keeps both cards' content:
+
+- `copy.ts`: the module imports (this card's `suspicionBucketOf`, the browse card's view types) and the group exports
+  (`EVIDENCE_SOURCE_COPY`, `GAME_COPY`), both kept. Every group of both cards merged without conflict and is kept as
+  written; the browse card's set-name helper `setOptionLabel` is the one `PublicResults.tsx` calls, so the Results
+  intro now names the set "9 players, 2 impostors (9p2i)".
+- `copy.test.ts`: the two import lists, both cards' names kept; the two sections each card appended after the file's
+  last block, kept whole one after the other (no top-level name is shared).
+- `BallotCard.tsx`, `EvidencePanel.tsx`, `MindInspector.tsx`: import lines only, combined (this card's copy groups and
+  `bucketWord` beside the browse card's `PERSPECTIVE_COPY` and `fmt`); every other hunk of both merged cleanly.
+- `EvidencePanel.test.tsx` and `MindInspector.test.tsx`, which both cards created: one file each holding every case of
+  both. The evidence panel's cases share one store fixture (the browse card's), reset before each case, and this
+  card's render helper opens its meeting itself; the inspector keeps both fixtures, this card's players renamed
+  `trailPlayers` because the two fixtures give the players different roles, and the browse card's store mock serves
+  both.
+- `evidence-journey.ts`: the browse card's private-ballot line and "See as" button with this card's plain-readout
+  check and citation words.
+
+Every `describe` and `it` title of each parent is in the merged `copy.test.ts`, `EvidencePanel.test.tsx`,
+`MindInspector.test.tsx`, `PrivateReasoning.test.tsx` and `journey.spec.ts`, save five that a parent itself replaced
+since `7d781f8e`: three the browse card rewrote (in `copy.test.ts`) and two this card replaced with the per-perspective
+readout (A2, in `PrivateReasoning.test.tsx`); count-only, a title scan over the merged file against each parent.
+
+One string moves so both cards' tests hold together: the browse card's scan refuses "the vote was" in every copy
+value (its item 9), and this card's counter-evidence chip read "The evidence it weighed against the vote was not
+found, so it was removed". It now reads "The evidence it weighed against its vote was not found, so it was removed";
+its pin in `PrivateReasoning.test.tsx` follows, and no test is weakened. Reversible by the owner's word.
+
+**Step 3's one word (ruling 1).** "flip to Ground-Truth or Error" reads "flip to Real roles or Error";
+`git diff --word-diff=porcelain origin/main HEAD -- frontend/src/components/GuidedTour.tsx` shows exactly
+`-Ground-Truth` / `+Real roles`, and "Error" and the rest of step 3 keep their bytes. The walk gains
+`components/GuidedTour.tsx` with that one word only; "names the truth layer in tour step 3 as the panel's toggle does"
+holds the sentence to `BELIEF_PANEL_COPY.layers` ("Real roles", "Error"); the planted case puts the old word back and is
+named by file. Seen red first: at `c5746909` the source still read "Ground-Truth" (T1 below is that state).
+
+**Held, measured against `<base>`** (corrected in round 6: each size is in characters, the final newline excluded, and
+round 6 gives every span's bounds at both sides and the committed command): the ballot's correctness span,
+`BallotCard.tsx` lines 191-225 at the head (the correctness comment through the correct / incorrect line), 1678
+characters (1686 bytes); its gate `showsBallotCorrectness` (`copy.ts` lines 149-154, 141 characters, 141 bytes); the
+"vote gate" line (`copy.ts` line 494, 37 characters, 37 bytes); the Error legend rows (`BeliefPanel.tsx` lines 523-546,
+896 characters, 902 bytes); and "READING: ERROR" are byte-identical at `9732623d` and `a5fdce2a`.
+
+**Mutation probe, round 4.** Only the spans the merge changed (the combined imports, the two exports, the chip) and
+step 3's word, exactly the listed classes: 16 mutants, each an exact edit, a full `npx vitest run` and a restore
+(`mutate.py` in the run's scratch directory). Killed 16, survived 0. By class, as the table's column gives it
+(corrected in round 5): dropped tuple member 10, message argument to a constant 3, dropped wrapper 2 (T10 and T16, each
+a whole one-name import line), loaded source read to its literal 1. A dropped import that a module reads when it loads
+fails its test files rather than single tests; those are counted as files.
+
+| Mutant | Class | Edit | Red |
+| --- | --- | --- | --- |
+| T1 | loaded source | step 3 back to "Ground-Truth" | 3 tests (the walk row, the sentence case, the planted case) |
+| T2 | message argument | step 3's "Real roles" made "real roles" | 2 tests |
+| T3 | message argument | the chip back to "against the vote was" | 3 tests (the browse card's scan and its planted case, the chip pin) |
+| T4 | message argument | the chip made "x" | 1 test |
+| T5 | dropped tuple member | `PERSPECTIVE_COPY` dropped from the ballot's import | 13 tests |
+| T6 | dropped tuple member | `bucketWord` dropped from the ballot's import | 57 tests |
+| T7 | dropped tuple member | `PERSPECTIVE_COPY` dropped from the source panel's import | 4 tests |
+| T8 | dropped tuple member | `EVIDENCE_SOURCE_COPY` dropped from the source panel's import | 73 tests |
+| T9 | dropped tuple member | `TURN_COPY` dropped from the source panel's import | 3 tests |
+| T10 | dropped wrapper | the source panel's `OBSERVATION_EVENT_SEGMENTS` import dropped | 5 test files |
+| T11 | dropped tuple member | `PERSPECTIVE_COPY` dropped from the inspector's import | 16 tests |
+| T12 | dropped tuple member | `INSPECTOR_COPY` dropped from the inspector's import | 3 test files |
+| T13 | dropped tuple member | `bucketWord` dropped from the inspector's import | 5 tests |
+| T14 | dropped tuple member | the `EVIDENCE_SOURCE_COPY` export dropped | 54 tests |
+| T15 | dropped tuple member | the `GAME_COPY` export dropped | 44 tests |
+| T16 | dropped wrapper | the copy module's `suspicionBucketOf` import dropped | 109 tests |
+
+**Validation, count-only, at `a5fdce2a`** (this subsection changes only the card). `validate_task_docs.py` exit 0;
+`check_doc_facts.py` exit 0; `pytest tests/api/test_public_results.py tests/api/test_view_model.py -q` 126 passed,
+1 skipped; `npm test` 1327 passed (34 files; 1324 at `c5746909`); `tsc:check` exit 0; `lint` exit 0; `npm run e2e` 15
+passed, 3 skipped, run locally through a scratch copy of the config on the cached headless shell (build 1234), because
+the pinned build 1194 is not installed here (CI's `frontend-e2e` job on the pinned browser is the record). The card's
+retired-phrase grep: 18 lines, all comments, the e2e readout check's own pattern or the inspector's empty state, as
+before; the `As-agent` / `fog` grep in `BeliefPanel.tsx`: 4 comment lines; the `Ground-Truth` grep in
+`GuidedTour.tsx`: no line (exit 1). `git diff --exit-code 9732623d a5fdce2a` over the never-written paths: exit 0
+(perturbed: a scratch line in `api/__init__.py` gives exit 1, then restored). `git diff --stat 9732623d a5fdce2a`: 24
+files, all in Expected scope (the glossary, the two e2e pin files, nine components and `ui/ClaimLine.tsx`, the tests,
+`copy.ts`, `copy.test.ts`, `tests/api/test_public_results.py`, this card), none under `eval/`.
+
+**The bundle at `<base>` and the merged head** (`build_demo_bundle.py --out`, one checkout, `9732623d` then
+`a5fdce2a`): 110 files each side, 35 under `assets/`; all 72 `data/` files byte-identical. What differs is compiled
+assets only: `index.html` (its asset names), the index chunk (`index-_fqOlNVg.js` to `index-DyDDt47w.js`), the
+stylesheet (`index-D7ay7349.css` to `index-B6Y7MwOb.css`) and six renamed chunks (`MapView`, `ReplayPicker`,
+`TournamentDashboard`, `CanvasRenderer`, `WebGLRenderer`, `WebGPURenderer`). In the built chunks, count-only
+(corrected in round 5): the grep's pattern matches 6 times at the head, all in the index chunk, against 33 at `<base>`.
+"suspicion matrix" matches once, in step 3, which is held; the spaced "ground truth" matches 5 times (3 lower case, 2
+"Ground truth"), all in strings this card does not write: two titles in `App.tsx` (lines 392-393), two lines of the
+tour (`GuidedTour.tsx` lines 119 and 167, where the walk holds "Ground-Truth" only) and the inspector's empty state
+(`MindInspector.tsx` line 479), which the card sets aside. Every other alternative of the pattern, "the vote was",
+"Vote redirected" and "Recorded vote adjustment" match 0 times; "flip to Real roles or Error" matches once.
+
+Gate record: CI's green run at the exact head, cited in the PR by run id. The Status line and `tasks/README.md` are
+kept as `main` has them (the orchestrator's).
+
+### Review corrections, round 5 (2026-10-11)
+
+Two blocking findings at `9d67d505`, both in round 4's evidence text. Docs only: no production line, test, compiled
+byte or `data/` file moves, so no span is changed and no mutant is due. Round 4's two sentences are corrected in place,
+each marked "corrected in round 5"; the PR body's matching sentences read the same.
+
+**The built-chunk count.** Round 4 said every retired phrase of the grep appears 0 times in the built chunks at the
+head, bar "suspicion matrix" once. Rebuilt here (`build_demo_bundle.py --out`, one checkout, `9732623d` then
+`9d67d505`; 110 files each side, the same `index.html`, index chunk, stylesheet and six renamed chunks as round 4's
+diff, all 72 `data/` files byte-identical), the card's pattern over `assets/*.js` (`grep -o -E` counted by `wc -l`)
+matches 6 times at the head, all in `index-DyDDt47w.js`, and 33 times at `<base>`. By alternative at the head:
+"suspicion matrix" 1 (step 3, held); `[Gg]round[- ][Tt]ruth` 5, all spaced (3 "ground truth", 2 "Ground truth"), none
+hyphenated; every other alternative 0; "the vote was", "Vote redirected" and "Recorded vote adjustment" 0 each (1 each
+at `<base>`). The five sit in `App.tsx:392-393` (two titles of the belief view's button), `GuidedTour.tsx:119` and
+`:167` (the tour's swatch label and its legend line) and `MindInspector.tsx:479` (the inspector's empty state, the one
+the Validation sets aside, named there at its older line 441). `git blame` at the head dates all five to commits before
+the card's base `7d781f8e` (`89c602de`, `b5a5e5b6`, `3a1e64ac`): `App.tsx` is never written here, the walk holds
+`GuidedTour.tsx` to "Ground-Truth" only, and the empty state is unsurveyed, so none is this card's to word. The finding
+is valid; nothing but the sentence changes.
+
+**The round-4 tally.** Round 4 gave dropped tuple member 11 and dropped wrapper 1; its table's class column gives 10
+(T5-T9, T11-T15) and 2 (T10 and T16). The table is the per-mutant record and stays as written, so the tally is brought
+to it: T10 and T16 each drop a whole one-name import line (`OBSERVATION_EVENT_SEGMENTS` in `EvidencePanel.tsx`,
+`suspicionBucketOf` in `copy.ts`), the declaration around the binding, and the table names that a dropped wrapper. The
+tally now reads dropped tuple member 10, message argument to a constant 3, dropped wrapper 2, loaded source read to its
+literal 1 (16 in all). The finding is valid.
+
+**Validation, count-only, at the round-5 head** (this commit changes only the card): `validate_task_docs.py` exit 0;
+`check_doc_facts.py` exit 0; the tally command above gives 10, 2, 1 and 3 by class; the bundle counts as above. The
+suites are not re-run (no source byte moves since `a5fdce2a`, whose counts round 4 gives). Gate record: CI's green run
+at the exact head, cited in the PR by run id. The Status line and `tasks/README.md` stay as `main` has them.
+
+### Review corrections, round 6 (2026-10-11)
+
+One blocking finding at `466330f0`, in round 4's evidence text: the ballot badge was published as 1678 bytes from a
+scratch-only `held_spans.py`, and no held-span size had a committed command. Valid: 1678 is the character count of
+`BallotCard.tsx` lines 191-225 at the head (the correctness comment through the correct / incorrect line), 1686 bytes;
+the badge element alone is smaller. Docs only: no production line, test, compiled byte or `data/` file moves. Round 4's
+Held sentence is corrected in place, marked "corrected in round 6"; the PR body's A16 reads the same.
+
+**The held spans, by bounds and unit.** Each is measured at `<base>` (`9732623d`) and at the head in characters and
+UTF-8 bytes, the final newline excluded, then compared with `diff` (exit 0 = byte-identical). The source has not moved
+since `a5fdce2a`, so the head's bounds are those at `a5fdce2a` too.
+
+```bash
+# characters and bytes of one span, the final newline excluded
+git show <rev>:<path> | sed -n '<first>,<last>p' | uv run python -c 'import sys; s = sys.stdin.read()[:-1]; print(len(s), len(s.encode()))'
+# the span at <base> against the span at the head: exit 0
+diff <(git show 9732623d:<path> | sed -n '<base first>,<base last>p') <(git show HEAD:<path> | sed -n '<first>,<last>p')
+# the Error heading's literal, once each side
+git show <rev>:frontend/src/components/BeliefPanel.tsx | grep -c 'READING: ERROR'
+```
+
+| Held span | File (`frontend/src/`) | Lines at `9732623d` | Lines at the head | Characters | Bytes | `diff` exit |
+| --- | --- | --- | --- | --- | --- | --- |
+| Round 4's ballot span: the correctness comment through the correct / incorrect line | `components/BallotCard.tsx` | 189-223 | 191-225 | 1678 | 1686 | 0 |
+| The badge element, `{showCorrectness && correct !== null && (` to its `)}` | `components/BallotCard.tsx` | 213-225 | 215-227 | 549 | 553 | 0 |
+| The gate `showsBallotCorrectness` | `lib/copy.ts` | 146-151 | 149-154 | 141 | 141 | 0 |
+| The "vote gate" line, `resolutionGateBadge: "vote gate",` | `lib/copy.ts` | 477 | 494 | 37 | 37 | 0 |
+| The Error legend rows, `{layer === "error" && (` to its `)}` | `components/BeliefPanel.tsx` | 526-549 | 523-546 | 896 | 902 | 0 |
+
+"READING: ERROR" appears once at each side (line 478 at `9732623d`, 475 at the head); the line around it moves (the
+truth heading became `COPY.legendTruthHeading`), so the literal is held, not the line. The badge element measures 545
+bytes with its leading indentation stripped, the figure the finding gives. Perturbed: the head's ballot range shifted
+by one line (192-226) gives `diff` exit 1.
+
+**Mutation probe, round 6.** No span changes, so no mutant is due on this card's lines. The spans the finding names
+were probed in exactly the listed classes: 14 mutants, each an exact edit, a full `npx vitest run` and a restore
+(`mutate.py` in the run's scratch directory; the tree clean after): message argument to a constant 8 (H1, H2, H6,
+H9-H13), swapped branches 2 (H3, H4), comparison to its inverse 1 (H5), dropped filter 2 (H7, H8), kind read to a
+constant 1 (H14). Killed 8: the gate's two conjuncts each dropped
+(H7, H8: 1 and 3 tests), the "vote gate" word made a constant (H9: 1), three Error row words and "READING: ERROR" made
+a constant (H10-H13: 1 each), and the Error branch's layer read made a constant (H14: 3). Alive 6, all on the ballot
+badge: its "correct" and "incorrect" words and its title each made a constant (H1, H2, H6), its two ternaries swapped
+(H3, H4) and its `correct !== null` made the inverse (H5). No unit test renders a ballot with the outcome revealed in
+the all-roles view; the badge's bytes are held by the `diff` above, which is A16's mechanism for it, not by a test.
+Those lines are `main`'s, byte-identical here, and the bounded standard covers lines the merge changes, so the six are
+recorded, not repaired here (a pin would be new scope); the PR's Questions name them for the owner.
+
+**Validation, count-only, at the round-6 head** (this commit changes only the card; the suites run on the same source):
+`validate_task_docs.py` exit 0; `check_doc_facts.py` exit 0; `pytest tests/api/test_public_results.py
+tests/api/test_view_model.py -q` 126 passed, 1 skipped; `npm test` 1327 passed (34 files); `tsc:check` exit 0; `lint`
+exit 0; `npm run e2e` 15 passed, 3 skipped, on the pinned build 1194 (now installed here; CI's job is the record). The
+card's retired-phrase grep: 18 lines; the `As-agent` / `fog` grep: 4 comment lines; the `Ground-Truth` grep: no line
+(exit 1). `git diff --exit-code 9732623d HEAD` over the never-written paths: exit 0; `git diff --stat 9732623d HEAD`:
+24 files, none under `eval/`. The bundle at `<base>` and at `2191bfa4` (`build_demo_bundle.py --out`, one checkout,
+`9732623d` then `2191bfa4`): 110 files each side, 35 under `assets/`, all 72 `data/` files byte-identical; the same
+`index.html`, index chunk (`index-_fqOlNVg.js` to `index-DyDDt47w.js`), stylesheet and six renamed chunks as round 4's
+diff; the card's pattern over `assets/*.js` matches 6 times at the head and 33 at `<base>`, as round 5 gives. The
+commit after `2191bfa4` changes only this card, so the head builds the same bundle. Gate record: CI's green run at the exact head, cited in the PR by run
+id. The Status line and `tasks/README.md` stay as `main` has them.

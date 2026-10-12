@@ -1,5 +1,5 @@
 /** The same source-to-decision checks run against the API and a plain static server. */
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /** The slice of a served replay this journey reads its ids from. */
 interface ServedBallot {
@@ -43,6 +43,19 @@ interface ServedSummary {
 // tests/api/test_public_results.py; this journey asserts that every rendered
 // source link is the one the served summary carries. History: the two commit
 // literals left this file on 2026-10-09.
+
+/**
+ * The vote readout reads in words alone: no digit once each player id is
+ * removed, and none of the retired readout's terms or signs. The outcome words
+ * are awaited first, so the check reads a rendered readout and never passes on
+ * an empty one.
+ */
+async function expectPlainReadout(gate: Locator, outcome: string): Promise<void> {
+  await expect(gate).toContainText(outcome);
+  const text = await gate.innerText();
+  expect(text.replace(/p-\d+/g, "")).not.toMatch(/\d/);
+  expect(text).not.toMatch(/plurality|threshold|top ballot|your ballot|EJECTED|SKIPPED|[<>≥≤=→]/);
+}
 
 function isPath(response: { url(): string }, suffix: string): boolean {
   const path = decodeURIComponent(new URL(response.url()).pathname);
@@ -93,21 +106,21 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   const summary = (await (await summaryResponse).json()) as ServedSummary;
   await expect(page.getByRole("heading", { name: "What the recordings show" })).toBeVisible();
   await expect(results).toContainText("50 games");
-  await expect(results).toContainText("100% by construction");
+  await expect(results).toContainText("Only impostors can vent");
   expect(summary.cases.map((example) => example.case_id)).toEqual(["witnessed-vent", "weak-evidence"]);
   await expect(results.getByRole("article")).toHaveCount(summary.cases.length);
-  await expect(results).not.toContainText("No source-matched editorial cases are published for this set.");
+  await expect(results).not.toContainText("No worked examples for this set yet; the 9-player set has two.");
   for (const example of summary.cases) {
     const card = results.getByRole("article").filter({ has: page.getByRole("heading", { name: example.title }) });
     await expect(card.getByRole("button", { name: "Reveal case analysis (spoilers)", exact: true })).toHaveAttribute(
       "aria-expanded",
       "false",
     );
-    await expect(card.getByRole("link", { name: "Pinned recording source" })).toHaveAttribute(
+    await expect(card.getByRole("link", { name: "Raw recording file", exact: true })).toHaveAttribute(
       "href",
       example.source_url,
     );
-    await expect(card.getByRole("link", { name: "Pinned recording source" })).toHaveAttribute(
+    await expect(card.getByRole("link", { name: "Raw recording file", exact: true })).toHaveAttribute(
       "href",
       new RegExp(`replay-seed-${example.game_id.replace("headless-seed-", "")}\\.jsonl$`),
     );
@@ -127,7 +140,7 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   );
   await page.goto(`${origin}/?set=4p1i&view=tournament`);
   const fourSummary = (await (await fourSummaryResponse).json()) as ServedSummary;
-  await expect(results).toContainText("No source-matched editorial cases are published for this set.");
+  await expect(results).toContainText("No worked examples for this set yet; the 9-player set has two.");
   await expect(results.getByRole("article")).toHaveCount(0);
   await results.getByText("Recording provenance and reported usage").click();
   expect(fourSummary.source_url).not.toBeNull();
@@ -142,7 +155,7 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
     await page.goto(resultsUrl);
     const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name: example.title }) });
     const served = page.waitForResponse((response) => isPath(response, `/replays/${example.game_id}`));
-    await card.getByRole("link", { name: "Inspect the meeting" }).click();
+    await card.getByRole("link", { name: "Inspect the meeting (shows roles)", exact: true }).click();
     const replay = (await (await served).json()) as ServedReplay;
     await expect(page.getByRole("dialog", { name: `Meeting at tick ${example.meeting_tick}`, exact: true })).toBeVisible();
     return replay;
@@ -176,9 +189,12 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   if (other === undefined) throw new Error(`${meeting.meeting_id} has no second voter`);
   const meetingDialog = page.getByRole("dialog", { name: `Meeting at tick ${meeting.tick}`, exact: true });
   const observed = `${observer} · observation tick ${observationTick}`;
+  // The cited observation's link names who saw it and when, never its raw id.
+  const citedObservation = `What ${observer} saw at tick ${observationTick}`;
+  const outcome = meeting.outcome === "EJECTED" ? `${meeting.gate.leader ?? ""} was ejected` : "no one was ejected";
 
   const gate = page.getByText(/How the vote resolved/);
-  await expect(gate).toContainText(`top ballot ${meeting.gate.leader_max_confidence.toFixed(2)}`);
+  await expectPlainReadout(gate, outcome);
   await expect(evidence).toContainText(observed);
   const scene = evidence.getByRole("button", { name: /^View scene frame -?\d+$/ });
   const sceneTick = (await scene.innerText()).replace("View scene frame ", "").trim();
@@ -204,22 +220,17 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   await expect(evidence).toContainText("private observation");
   await expect(evidence).not.toContainText("You witnessed");
   await expect(page).toHaveURL(new RegExp(`perspective=${other}`));
-  await expect(gate).not.toContainText("top ballot");
-  await expect(gate).toContainText(meeting.outcome);
+  await expectPlainReadout(gate, outcome);
   const ballots = page.getByRole("region", { name: /^Ballots/ });
   await expect(ballots).toContainText(`Private ballot reasoning. See as ${observer} to inspect it.`);
-  await expect(ballots.getByRole("button", { name: `Cited observation · ${id}`, exact: true })).toHaveCount(0);
+  await expect(ballots.getByRole("button", { name: citedObservation, exact: true })).toHaveCount(0);
   await evidence.getByRole("button", { name: `See as ${observer}`, exact: true }).click();
   await expect(evidence).toContainText(observed);
   await expect(page).toHaveURL(new RegExp(`perspective=${observer}`));
-  // An agent lens names its own ballot on the leader, never the table's maximum.
-  if (ballot.target === meeting.gate.leader) {
-    await expect(gate).toContainText(`your ballot ${ballot.confidence.toFixed(2)}`);
-  } else {
-    await expect(gate).not.toContainText("your ballot");
-  }
-  await expect(gate).not.toContainText("top ballot");
-  await expect(ballots.getByRole("button", { name: `Cited observation · ${id}`, exact: true })).toBeVisible();
+  // An agent lens reads the same words, its own ballot's confidence included in none.
+  await expectPlainReadout(gate, outcome);
+  await expect(ballots.getByRole("button", { name: citedObservation, exact: true })).toBeVisible();
+  await expect(ballots.getByRole("button", { name: citedObservation, exact: true })).toHaveAttribute("title", id);
   await expect(ballots).not.toContainText(`Private ballot reasoning. See as ${observer} to inspect it.`);
   await expect(ballots).toContainText(`Private ballot reasoning. See as ${other} to inspect it.`);
   expect(new URL(page.url()).searchParams.get("reveal")).toBeNull();
