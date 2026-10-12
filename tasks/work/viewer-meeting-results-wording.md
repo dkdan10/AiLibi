@@ -766,5 +766,9 @@ tests/api/test_view_model.py -q` 126 passed, 1 skipped; `npm test` 1327 passed (
 exit 0; `npm run e2e` 15 passed, 3 skipped, on the pinned build 1194 (now installed here; CI's job is the record). The
 card's retired-phrase grep: 18 lines; the `As-agent` / `fog` grep: 4 comment lines; the `Ground-Truth` grep: no line
 (exit 1). `git diff --exit-code 9732623d HEAD` over the never-written paths: exit 0; `git diff --stat 9732623d HEAD`:
-24 files, none under `eval/`. BUNDLE_PLACEHOLDER Gate record: CI's green run at the exact head, cited in the PR by run
+24 files, none under `eval/`. The bundle at `<base>` and at `2191bfa4` (`build_demo_bundle.py --out`, one checkout,
+`9732623d` then `2191bfa4`): 110 files each side, 35 under `assets/`, all 72 `data/` files byte-identical; the same
+`index.html`, index chunk (`index-_fqOlNVg.js` to `index-DyDDt47w.js`), stylesheet and six renamed chunks as round 4's
+diff; the card's pattern over `assets/*.js` matches 6 times at the head and 33 at `<base>`, as round 5 gives. The
+commit after `2191bfa4` changes only this card, so the head builds the same bundle. Gate record: CI's green run at the exact head, cited in the PR by run
 id. The Status line and `tasks/README.md` stay as `main` has them.
