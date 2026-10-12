@@ -7188,6 +7188,87 @@ def test_the_wording_pin_reads_who_did_what_facts_in_their_section(
     }
 
 
+@pytest.mark.parametrize(
+    ("in_section", "below", "expected"),
+    [
+        pytest.param(
+            "AI reviews.",
+            "The audits here are not independent human assurance.",
+            {
+                _README: [
+                    f"{_README}: under {_WHO_DID_WHAT!r}, missing "
+                    "'not independent human assurance'"
+                ]
+            },
+            id="fact-moved-below",
+        ),
+        pytest.param(
+            "AI reviews, not independent human assurance.",
+            "Codex agents ran these commands.",
+            {},
+            id="agent-name-below",
+        ),
+    ],
+)
+def test_the_wording_pin_ends_who_did_what_at_the_next_heading(
+    tmp_path: Path, in_section: str, below: str, expected: dict[str, list[str]]
+) -> None:
+    # Planted: a paragraph just below the heading after "Who did what". It lies
+    # outside the section, so the second honesty fact moved there is missing
+    # from it, and an agent name written there is not the section's.
+    tree = _wording_tree(tmp_path)
+    readme = (tree / _README).read_text(encoding="utf-8")
+    lines = readme.splitlines()
+    start = lines.index(_WHO_DID_WHAT) + 1
+    following = f"\n{next(line for line in lines[start:] if line.startswith('## '))}\n"
+    fact = "AI reviews, not independent human assurance."
+    assert readme.count(fact) == 1 and readme.count(following) == 1
+    planted = readme.replace(fact, in_section).replace(
+        following, f"{following}\n{below}\n"
+    )
+    (tree / _README).write_text(planted, encoding="utf-8")
+    assert _wording_problems(tree) == expected
+
+
+def test_the_wording_pin_keeps_a_deeper_heading_inside_who_did_what(
+    tmp_path: Path,
+) -> None:
+    # Planted: the second honesty fact under a subheading of the section. Only a
+    # heading of the section's own level ends it, so the fact is still its own.
+    moved = (
+        "AI reviews.\n\n### What the audits are\n\n"
+        "They are not independent human assurance."
+    )
+    fact = "AI reviews, not independent human assurance."
+    assert _planted(tmp_path, _README, fact, moved) == {}
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [
+        pytest.param(
+            "AI reviews, not independent human assurance.",
+            "AI reviews, not independent\nhuman assurance.",
+            {},
+            id="fact-hard-wrapped",
+        ),
+        pytest.param(
+            "AI agents wrote it",
+            "**Claude** Code agents wrote it",
+            {_README: [f"{_README}: under {_WHO_DID_WHAT!r}, carries 'Claude Code'"]},
+            id="agent-name-split-by-bold",
+        ),
+    ],
+)
+def test_the_wording_pin_reads_who_did_what_as_a_visitor_reads_it(
+    tmp_path: Path, old: str, new: str, expected: dict[str, list[str]]
+) -> None:
+    # Planted: the section's text in marks a visitor never sees. A fact wrapped
+    # across two lines still reads whole, and an agent name split by bold still
+    # reads as that name.
+    assert _planted(tmp_path, _README, old, new) == expected
+
+
 def test_the_wording_pin_matches_whole_phrases() -> None:
     # A retired word inside a longer one is not that word: "findings" is not
     # "finding", and "v60" is not "v6"; the verdict word is read case-folded.
