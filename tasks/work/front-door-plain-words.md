@@ -64,6 +64,13 @@ states them; no rendered prompt, transcript text or seed-band prefix was printed
 
 Each item names its mechanism and the planted case that turns it red; each new test is seen red first.
 
+- [x] Review correction: the "Who did what" facts are read in their section only. Planted: "not independent human
+  assurance" moved out of the section into its own paragraph above the heading, the page still carrying it, fails
+  naming the section (`test_the_wording_pin_reads_who_did_what_facts_in_their_section`). Red first under L3, the
+  section's required read swapped for the whole page (round 4 below).
+- [x] Review correction: the guide's "Results" is the viewer's tab at this head (Codex P1). `main` at `9732623d`,
+  after PR #511, is merged into the branch (`7e823dd1`, never rebased); `App.tsx` and `copy.ts` carry no "Results &
+  cases" and `copy.ts` gives the tab "Results" (`git grep -c`); the pin and every count are re-run (round 4 below).
 - [x] Review correction: the wording pin's two line reads and every member of its term lists are held. Ten
   planted cases join `test_the_wording_pin_refuses_each_restored_text`, each failing naming its page while
   `check_doc_facts.py` exits 0: the byline with a link appended, the missed-targets sentence with a clause
@@ -74,10 +81,10 @@ Each item names its mechanism and the planted case that turns it red; each new t
 - [x] Review correction: the counts are restated at `3761eac0` and at this head, the earlier text kept as the
   record of `3f116d60`: 46 problems on the pages at B (README 25), 24 planted cases at `3761eac0` and 34 here, 30 new
   tests against B. Mechanism: the scratch count script and `pytest --collect-only` (commands in round 2 below).
-- [ ] Review correction: the guide's "Results" (`docs/reading-guide.md:72`) names the viewer's tab only once PR #511
+- [x] Review correction: the guide's "Results" (`docs/reading-guide.md:72`) names the viewer's tab only once PR #511
   lands; at this head `frontend/src/App.tsx:221` reads "Results & cases", so this head is not for merging. Open
   until `main` is merged after #511 (never rebased), `App.tsx` and `copy.ts` are seen to give "Results", and the pin
-  and every count are re-run (round 2 below).
+  and every count are re-run (round 2 below). Met at `7e823dd1` (round 4 below).
 - [x] Review correction: the report example's evidence denominator and total are held to the report. Planted:
   the report's `impostor_ejections` moved to 47 fails naming "36 of those 47 with evidence against that player"
   (`test_eval_report_count_drift_reaches_the_report_example`); its `total_ejections` moved to 62 fails naming "62
@@ -587,3 +594,52 @@ and the checker exit 0; `wc -w` unchanged: README 1,474, guide 1,340, lessons 1,
 (64 checks: 52 OK, 0 FAIL, 7 evidence-branch absent, 5 info). The diff against `3761eac0` is this card and
 `tests/scripts/test_check_doc_facts.py` only. The gate record is CI's run at the exact head of #513, cited there by
 run id (memo 8.7 item 1).
+
+### Review corrections, round 4 (2026-10-11)
+
+The review at `31e27706` found two blocking problems. This round merges `main` and adds one test: besides the merge,
+only `tests/scripts/test_check_doc_facts.py` and this card move, so no page, asset, live string or production line of
+`scripts/check_doc_facts.py` changes.
+
+1. **The "Who did what" facts, read in their section** (correctness lens). With the section's required-facts read
+   swapped for the whole README (L3, swapped collection), every test passed: each planted case that drops a fact drops
+   it from the page too. The new `test_the_wording_pin_reads_who_did_what_facts_in_their_section` moves "not
+   independent human assurance" out of the section into its own paragraph above `## Who did what`, asserts the page
+   still carries it, and expects exactly one problem: "README.md: under '## Who did what', missing 'not independent
+   human assurance'". Under L3 the two test files gave 1 failed (this test) and 481 passed; restored, 482 passed.
+2. **The guide's tab name** (docs lens, Codex P1). Valid, and answered by merging `main`. The merge commit `7e823dd1`
+   (`git merge --no-ff origin/main`) has parents `31e27706` and `9732623d` (main after PR #511 at `09fa779e` and its
+   card flip); no branch commit is rewritten. One file was written on both sides, `frontend/e2e/media.spec.ts`: it
+   merged without conflict, keeping main's banner pin line ("Watching as") and this branch's clip removal. `git diff
+   --stat 9732623d` lists the same 16 files as `git diff --stat 7d781f8e 31e27706`. At this head `git grep -c "Results
+   & cases" -- frontend/src/App.tsx frontend/src/lib/copy.ts` finds none (exit 1), and `git grep -c 'tournament:
+   "Results",' -- frontend/src/lib/copy.ts` finds 1, the label `App.tsx` gives the tab (`NAV_COPY.tournament`). So
+   `docs/reading-guide.md:72`'s "**Results** shows each set's figures" is true here, and the round-2 box is closed.
+
+**Item 17.** The orchestrator deferred the capture to the round after PR #512 merges, so that the GIF shows both
+viewer cards' final words; its box stays open.
+
+**Counts at this head**, restated (the earlier text is the record of its own head). The pin over the six pages at B
+finds 46 problems (README 25, guide 15, lessons 2, case study 1, SECURITY 2, CONTRIBUTING 1) and none at this head;
+`test_the_wording_pin_refuses_each_restored_text` has 34 planted cases; the AST diff of test names against B finds 31
+new, 3 of them replacing the 3 gone (the one added here is the 31st); `grep -c 'assert '` gives 865 (862 at
+`31e27706`) and 63. Commands as in round 2: the scratch script on copies of each page read at `7d781f8e`, `pytest
+--collect-only -q | grep -c`, Python's `ast`.
+
+**Mutation probe of this round.** One mutant over the span the finding names, one exact replacement run against both
+test files and restored (a scratch script): swapped collection 1, L3, `if term not in shown` read as `if term not in
+_visible(markdown)` in `_readme_wording_problems`. It survived at `31e27706` (under it here, every test but the new
+one passes); at this head it is killed, the first to fail being
+`test_the_wording_pin_reads_who_did_what_facts_in_their_section`.
+
+**Validation at this commit, count-only.** `check_doc_facts.py` exit 0; `validate_task_docs.py` exit 0 (110 work
+cards); the two test files 482 passed; `ruff check`, `ruff format --check` (scripts, tests/scripts) and `mypy` on the
+changed test file and the checker exit 0; `wc -w` README 1,474 of 1,600, guide 1,340 of 1,350, lessons 1,420,
+`_FRONT_DOOR_BUDGETS` unchanged; `verify_ml_evidence.py` exit 0 (64 checks: 52 OK, 0 FAIL, 7 evidence-branch absent, 5
+info); `tsc:check` 0; `lint` 0; `npm run e2e` 15 passed and 3 skipped (the capture specs, which run only with
+`AILIBI_CAPTURE_MEDIA=1`), after `npx playwright install chromium` fetched the pinned build 1194; `git ls-files
+docs/media` six files; `git grep -c -i -E 'webm|ffmpeg|recordVideo' -- frontend/e2e docs/media README.md` none; `git
+diff --numstat 9732623d -- docs/lessons.md docs/ownership-case-study.md` gives `0 2` and `32 0`; the never-written
+paths diff empty against `9732623d`. The demo bundle built at `9732623d` and at this head in this one checkout: 110
+files each, `diff -r` exit 0. The gate record is CI's run at the exact head of #513, cited in the PR by run id (memo
+8.7 item 1).
