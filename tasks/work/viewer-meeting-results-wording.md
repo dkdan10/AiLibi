@@ -1,6 +1,6 @@
 # The meeting, the panels and the Results tab read in plain words
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
