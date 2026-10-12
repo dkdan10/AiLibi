@@ -4,11 +4,15 @@
 
 by **Daniel Keinan** · implemented by Claude Code and Codex agents · AI-reviewed · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml)
 
-**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [See the results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read an ownership decision](docs/ownership-case-study.md)
+**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [See the results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read the five-minute guide](docs/reading-guide.md)
 
-AiLibi is a reproducible social-deduction simulation and spectator. Seven crewmates complete tasks while two impostors kill, deceive, and sabotage. Players move along room edges and observe only their surroundings. Reporting a body or calling an emergency meeting starts structured discussion and voting. Crew win by finishing tasks or ejecting every impostor; impostors win through parity or unresolved sabotage.
+## What this is
 
-The interesting question is whether a plausible accusation follows from the evidence. Open a ballot's statement or observation citation, check its exact source, inspect the corresponding scene, and return to the meeting. A resolvable citation can be irrelevant; a real sighting can support an invalid inference.
+AiLibi is a game of hidden roles, in the shape of Among Us, played by language-model agents and recorded so that anyone can replay it. Nine players move around a small space station: seven crewmates doing tasks, two impostors who kill, lie and sabotage. When a body is found, play stops for a meeting: each player speaks from what it saw, then votes to eject someone or to skip. Crew win by finishing tasks or ejecting both impostors; impostors win by killing enough of the crew.
+
+It is two things at once. It is a deterministic game engine and a viewer: every game is a recording that re-runs byte for byte, and the viewer shows any moment through the all-seeing camera or one player's fog. And it is an experiment in building software with AI coding agents, which wrote the code, the tests and most of the documents to written tasks, with one human setting the goal and deciding what was accepted.
+
+The question is exact: not whether the agents catch the impostors, but whether each vote rests on something the voter actually saw or heard. A crewmate who votes out an innocent player on a believable lie is the game working. A vote with nothing behind it is not.
 
 [![One scene in the omniscient view and through a crewmate's fog, with the agent's accusation below](docs/media/spectator-two-truths.png)](https://dkdan10.github.io/AiLibi/)
 
@@ -16,9 +20,30 @@ The interesting question is whether a plausible accusation follows from the evid
 
 [![The same game playing from its first tick to the meeting](docs/media/spectator-journey.gif)](https://dkdan10.github.io/AiLibi/)
 
-## What the measurements said
+The [recorded demo](https://dkdan10.github.io/AiLibi/) opens on a first meeting with a short tour: click any accusation to see the exact line behind it, and switch to one player's fog to see how little it knows when it votes.
 
-The shown 9-player set was recorded 2026-10-09 under the adopted gameplay changes; the 4-player set and the ML training games were recorded 2026-09-22. No figure pools the two. Each before cell is what that set's previously shown recording read.
+## How it works
+
+- **A deterministic engine.** One pure function advances the world a tick at a time, with the random state written into every recorded hash, so a committed game re-runs byte for byte.
+- **An observation boundary.** Agents never touch engine state. They receive sanitized packets and a public map; import rules and planted-leak tests enforce the line; only the viewer sees everything.
+- **Two tiers of reasoning.** Movement and tasks are rule-based every tick. A language model speaks and votes only at meetings, from a rendered memory of what that player saw and heard.
+- **A gate on every push.** Lint, strict typing, import contracts, the tests, and a checker that re-derives this page's numbers from the recordings. The default test tier holds 10,954 tests as of 2026-10-12.
+
+Python 3.11 · FastAPI/Pydantic · React/Vite/PixiJS · strict mypy · Hypothesis. [Current architecture and enforced boundaries](docs/architecture.md).
+
+## Who did what
+
+Daniel Keinan directed the project and decided what was accepted, without hand-writing the production code; AI agents wrote it, and the audits here are AI reviews, not independent human assurance. Each change arrived on its own branch with a written task, a pull request and the full gate.
+
+[How a change gets in](docs/workflow.md) · [Lessons](docs/lessons.md) · [One decision, traced](docs/ownership-case-study.md) · [History](docs/history.md)
+
+## What the recordings show, and what they do not
+
+The shown 9-player set was recorded 2026-10-09 under the adopted gameplay changes; the 4-player set and the ML training games were recorded 2026-09-22. Three things hold there, each with its command in the [reading guide](docs/reading-guide.md):
+
+- **Votes are grounded.** Almost every vote to eject names a line the voter held about the accused, and almost no ballot lacks a stated reason.
+- **The engine, not the model, catches venting.** Every ejection after a certified vent sighting removed an impostor. Without one the table is near a coin flip and some ejections removed crewmates.
+- **No change is claimed to have improved anything.** Each round of changes was recorded once, as fifty games; one recording cannot show that one version plays better than another.
 
 | What | Figure | Before | Recorded on, and where it lives |
 |---|---|---|---|
@@ -34,34 +59,15 @@ The shown 9-player set was recorded 2026-10-09 under the adopted gameplay change
 | Impostors ejected after a reported sighting of them venting (9p2i) | 24 of 46 (52%) | 24 of 44 (55%) | the 2026-10-09 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
 | Learned tactical policies that became the default | none, ruled twice | none, ruled twice | 2026-07-18 and 2026-08-01 — [phase 17](audits/audit-phase-17-close.md), [phase 18](audits/audit-phase-18-close.md) |
 
-*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 46 correct ejections follow certified vent evidence; without it, 22 of 37 ejections target impostors and 15 convict crewmates. This demonstrates processing of certified facts, and deception in older recordings, but **not general social deduction**.
+*Valid* means resolvable, not supported. Four learned impostor policies won more games than the scripted one and none became the default; each failed a gate written before measuring: [methods, negative results and limits](docs/ml-program.md).
 
 **Targets written down before measuring were missed twice:** the owner adopted the first recording anyway, in writing, and nothing from the second ([what each measured](docs/history.md#evidence-honesty-phase-20)).
 
-**Four learned impostor policies beat their scripted comparator on wins; none became the default.** Each failed a pre-registered evidence-quality gate; the retained candidate's edge is not significant at 50 games, and no comparison was re-run after two comparator defects were repaired. [ML methods, negative results, and limits](docs/ml-program.md).
+**One known leak.** In the 2026-09-22 recordings the opening prompts name each body by a label that reveals when it died; the shown 9-player set's report openings no longer carry it (0 of 115). The full repair stays switched off, not adopted. [Observation contract and limitations](docs/observation-contract.md).
 
-## How it works
+## Try it offline
 
-- **Deterministic engine:** pure tick transitions and recorded state hashes make outcomes reconstructible.
-- **Observation firewall:** agents receive sanitized packets and a public map; the boundary checks above defend it. The spectator is deliberately privileged.
-- **Two-tier reasoning:** rule-based movement and tasks every tick; LLM deliberation at meetings and explicit triggers. Models reason from rendered typed memory and derived beliefs.
-
-Python 3.11 · FastAPI/Pydantic · React/Vite/PixiJS · strict mypy · Hypothesis. [Current architecture and enforced boundaries](docs/architecture.md).
-
-**Known evidence leak:** in the 2026-09-22 recordings, the opening prompts name each body by a label that reveals when it died. The shown 9-player set's report openings no longer carry it (0 of 115). The full repair stays switched off, not adopted. [Observation contract and limitations](docs/observation-contract.md).
-
-## Who did what
-
-Daniel Keinan directed the project and decided what was accepted, without hand-writing the production code; AI agents wrote it, and the audits here are AI reviews, not independent human assurance.
-
-The [ownership case study](docs/ownership-case-study.md) traces two owner decisions from their evidence to what each leaves unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. Phase closes do not claim every issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
-
-## Install, then verify offline
-
-Local prerequisites: [uv](https://docs.astral.sh/uv/getting-started/installation/),
-Python 3.11 (`uv python install 3.11`), and Node.js 24+ with npm
-(22.x works from 22.13). Installation downloads locked dependencies over
-several minutes:
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/), Python 3.11 (`uv python install 3.11`) and Node.js 22 or newer; the locked install takes a few minutes:
 
 ```bash
 git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git
@@ -69,10 +75,14 @@ cd AiLibi
 bash scripts/setup_env.sh
 ```
 
-After setup, verification needs no provider account or network access:
+Nothing below needs a provider account or network access.
 
 ```bash
-# 1. Compare two bounded fake-provider runs in a fresh directory.
+# 1. Watch the committed recordings: starts the API and the viewer on
+#    http://localhost:5173, opening on the 50-game 9-player set.
+bash scripts/run_spectator.sh
+
+# 2. Two fake-provider runs of one seed produce identical replays.
 d=$(mktemp -d)
 AILIBI_LLM_PROVIDER=fake uv run --offline python scripts/run_game.py \
   --seed 42 --max-ticks 50 --replay-path "$d/r1.jsonl" &&
@@ -80,34 +90,23 @@ AILIBI_LLM_PROVIDER=fake uv run --offline python scripts/run_game.py \
   --seed 42 --max-ticks 50 --replay-path "$d/r2.jsonl" &&
   diff -q "$d/r1.jsonl" "$d/r2.jsonl"
 
-# 2. Verify every committed recording.
+# 3. Every committed recording re-runs through the engine byte for byte.
 UV_OFFLINE=1 bash scripts/verify_samples.sh
 
-# 3. Build the demo; open http://127.0.0.1:8080.
+# 4. Build the static demo the public site serves; open http://127.0.0.1:8080.
 uv run --offline python scripts/build_demo_bundle.py
 uv run --offline python -m http.server --bind 127.0.0.1 \
   -d frontend/dist/demo-bundle 8080
 ```
 
-Fake runs test mechanics; samples preserve hosted
-dialogue. Each replay has an audit sidecar, and `--force` replaces both.
-[Recording details](docs/deployment.md).
+Two of three reproducibility claims are proven: a committed recording always reconstructs, and a fake-provider run repeats on one machine. Fresh games against a real model are not deterministic. Bit-identical learned-optimizer output across machines is seen on Linux/x86-64 only.
 
-### Three reproducibility scopes
+The spectator's API is an unauthenticated game-master view and stays loopback-only. Real generation needs a selected provider plus token, cost and wall-time limits: [provider setup](llm/README.md), [.env.example](.env.example), [recording procedure](docs/deployment.md).
 
-1. **Replay integrity** — committed replay bytes reconstruct through the engine's per-tick state hashes. Command 2 above, free and offline. **Verified strong.**
-2. **Same-runtime repeatability** — one seed, config, agent factory and set of provider responses produce byte-identical replays on one runtime. Command 1 above, under the fake provider. With a real provider, fresh generation is *not* deterministic: the recording reproduces, the seed does not.
-3. **Cross-platform optimizer portability** — independent hosts producing bit-identical learned-optimizer bytes. **Designed for, not yet confirmed:** observed on Linux/x86-64 alone, so no caller should rely on it until the recorded failure host reproduces the pinned digest.
+## The recordings
 
+A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was regenerated 2026-09-22 (4p1i) with every experimental switch off ([its record](audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the [route lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)): impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md)). The picture above is from the 9-player game the guided tour opens on.
 
-## Running locally or using a real model
+**The fake provider's report is empty on purpose.** A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections; 46 removed an impostor, 36 of those 46 with evidence against that player on the meeting's record.
 
-`bash scripts/run_spectator.sh` serves the API and UI on localhost:5173. The API is an unauthenticated game-master view and must remain loopback-only; the static bundle is the public distribution. `bash scripts/check.sh` runs the full local gate; `cd frontend && npm run e2e` runs the browser journeys.
-
-Real generation needs an explicitly selected provider and token, cost, and wall-time limits, even with flat-rate service. Follow [provider setup](llm/README.md), [.env.example](.env.example), and [bounded tournament/resume instructions](docs/deployment.md); keep new outputs in a separate directory.
-
-**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections; 46 removed an impostor, 36 of those 46 with evidence against that player on the meeting's record. The demo publishes a smaller, strictly validated summary.
-
-**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was regenerated 2026-09-22 (4p1i) with every experimental switch off ([its record](audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the [route lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)): impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md)). The picture above is from the 9-player game the guided tour opens on.
-
-[Reading guide](docs/reading-guide.md) · [Glossary](docs/glossary.md) · [Audits](audits/README.md) · [Artifact retention](docs/artifacts.md) · [Contributing](CONTRIBUTING.md)
+[Reading guide](docs/reading-guide.md) · [Glossary](docs/glossary.md) · [Audits](audits/README.md) · [Contributing](CONTRIBUTING.md)
