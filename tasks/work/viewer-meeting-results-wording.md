@@ -71,6 +71,14 @@ rule" or "weak signal" in `:158-392`; front-door page `scripts/check_doc_facts.p
 
 Each item names its enforcing mechanism and a planted or perturbed case that turns it red; new tests are seen red first.
 
+- [x] Review correction (round 6): the held spans are stated by their bounds and unit. Round 4 gave the ballot badge
+  as 1678 bytes from a scratch-only script; 1678 is the character count of `BallotCard.tsx` lines 191-225 at the head
+  (the correctness comment through the correct / incorrect line), 1686 bytes. Each held span now names its lines at
+  `<base>` and at the head with characters and bytes, the final newline excluded: that span 1678 / 1686, the badge
+  element (lines 215-227) 549 / 553, the gate (`copy.ts` 149-154) 141 / 141, the "vote gate" line (`copy.ts` 494)
+  37 / 37, the Error legend rows (`BeliefPanel.tsx` 523-546) 896 / 902; "READING: ERROR" once each side. Mechanism:
+  the two commands in Results, round 6 (`git show <rev>:<path> | sed -n` counted by Python; `diff` of the two ranges,
+  exit 0 for each). Perturbed: the head's ballot range shifted by one line gives exit 1. Docs only.
 - [x] Review correction (round 5): the built-chunk count is restated. Round 4 said every retired phrase of the card's
   grep appears 0 times in the built chunks at the head, bar "suspicion matrix" once; the pattern matches 6 times there,
   all in the index chunk: "suspicion matrix" once (step 3, held) and the spaced "ground truth" 5 times, in strings this
@@ -613,9 +621,12 @@ its pin in `PrivateReasoning.test.tsx` follows, and no test is weakened. Reversi
 holds the sentence to `BELIEF_PANEL_COPY.layers` ("Real roles", "Error"); the planted case puts the old word back and is
 named by file. Seen red first: at `c5746909` the source still read "Ground-Truth" (T1 below is that state).
 
-**Held, measured against `<base>`** (`held_spans.py` in the run's scratch directory, count-only): the ballot's
-correct / incorrect badge (1678 bytes), its gate `showsBallotCorrectness` (141), the "vote gate" badge (37), the Error
-legend rows (896) and "READING: ERROR" are byte-identical at `9732623d` and `a5fdce2a`.
+**Held, measured against `<base>`** (corrected in round 6: each size is in characters, the final newline excluded, and
+round 6 gives every span's bounds at both sides and the committed command): the ballot's correctness span,
+`BallotCard.tsx` lines 191-225 at the head (the correctness comment through the correct / incorrect line), 1678
+characters (1686 bytes); its gate `showsBallotCorrectness` (`copy.ts` lines 149-154, 141 characters, 141 bytes); the
+"vote gate" line (`copy.ts` line 494, 37 characters, 37 bytes); the Error legend rows (`BeliefPanel.tsx` lines 523-546,
+896 characters, 902 bytes); and "READING: ERROR" are byte-identical at `9732623d` and `a5fdce2a`.
 
 **Mutation probe, round 4.** Only the spans the merge changed (the combined imports, the two exports, the chip) and
 step 3's word, exactly the listed classes: 16 mutants, each an exact edit, a full `npx vitest run` and a restore
@@ -701,3 +712,59 @@ literal 1 (16 in all). The finding is valid.
 `check_doc_facts.py` exit 0; the tally command above gives 10, 2, 1 and 3 by class; the bundle counts as above. The
 suites are not re-run (no source byte moves since `a5fdce2a`, whose counts round 4 gives). Gate record: CI's green run
 at the exact head, cited in the PR by run id. The Status line and `tasks/README.md` stay as `main` has them.
+
+### Review corrections, round 6 (2026-10-11)
+
+One blocking finding at `466330f0`, in round 4's evidence text: the ballot badge was published as 1678 bytes from a
+scratch-only `held_spans.py`, and no held-span size had a committed command. Valid: 1678 is the character count of
+`BallotCard.tsx` lines 191-225 at the head (the correctness comment through the correct / incorrect line), 1686 bytes;
+the badge element alone is smaller. Docs only: no production line, test, compiled byte or `data/` file moves. Round 4's
+Held sentence is corrected in place, marked "corrected in round 6"; the PR body's A16 reads the same.
+
+**The held spans, by bounds and unit.** Each is measured at `<base>` (`9732623d`) and at the head in characters and
+UTF-8 bytes, the final newline excluded, then compared with `diff` (exit 0 = byte-identical). The source has not moved
+since `a5fdce2a`, so the head's bounds are those at `a5fdce2a` too.
+
+```bash
+# characters and bytes of one span, the final newline excluded
+git show <rev>:<path> | sed -n '<first>,<last>p' | uv run python -c 'import sys; s = sys.stdin.read()[:-1]; print(len(s), len(s.encode()))'
+# the span at <base> against the span at the head: exit 0
+diff <(git show 9732623d:<path> | sed -n '<base first>,<base last>p') <(git show HEAD:<path> | sed -n '<first>,<last>p')
+# the Error heading's literal, once each side
+git show <rev>:frontend/src/components/BeliefPanel.tsx | grep -c 'READING: ERROR'
+```
+
+| Held span | File (`frontend/src/`) | Lines at `9732623d` | Lines at the head | Characters | Bytes | `diff` exit |
+| --- | --- | --- | --- | --- | --- | --- |
+| Round 4's ballot span: the correctness comment through the correct / incorrect line | `components/BallotCard.tsx` | 189-223 | 191-225 | 1678 | 1686 | 0 |
+| The badge element, `{showCorrectness && correct !== null && (` to its `)}` | `components/BallotCard.tsx` | 213-225 | 215-227 | 549 | 553 | 0 |
+| The gate `showsBallotCorrectness` | `lib/copy.ts` | 146-151 | 149-154 | 141 | 141 | 0 |
+| The "vote gate" line, `resolutionGateBadge: "vote gate",` | `lib/copy.ts` | 477 | 494 | 37 | 37 | 0 |
+| The Error legend rows, `{layer === "error" && (` to its `)}` | `components/BeliefPanel.tsx` | 526-549 | 523-546 | 896 | 902 | 0 |
+
+"READING: ERROR" appears once at each side (line 478 at `9732623d`, 475 at the head); the line around it moves (the
+truth heading became `COPY.legendTruthHeading`), so the literal is held, not the line. The badge element measures 545
+bytes with its leading indentation stripped, the figure the finding gives. Perturbed: the head's ballot range shifted
+by one line (192-226) gives `diff` exit 1.
+
+**Mutation probe, round 6.** No span changes, so no mutant is due on this card's lines. The spans the finding names
+were probed in exactly the listed classes: 14 mutants, each an exact edit, a full `npx vitest run` and a restore
+(`mutate.py` in the run's scratch directory; the tree clean after): message argument to a constant 8 (H1, H2, H6,
+H9-H13), swapped branches 2 (H3, H4), comparison to its inverse 1 (H5), dropped filter 2 (H7, H8), kind read to a
+constant 1 (H14). Killed 8: the gate's two conjuncts each dropped
+(H7, H8: 1 and 3 tests), the "vote gate" word made a constant (H9: 1), three Error row words and "READING: ERROR" made
+a constant (H10-H13: 1 each), and the Error branch's layer read made a constant (H14: 3). Alive 6, all on the ballot
+badge: its "correct" and "incorrect" words and its title each made a constant (H1, H2, H6), its two ternaries swapped
+(H3, H4) and its `correct !== null` made the inverse (H5). No unit test renders a ballot with the outcome revealed in
+the all-roles view; the badge's bytes are held by the `diff` above, which is A16's mechanism for it, not by a test.
+Those lines are `main`'s, byte-identical here, and the bounded standard covers lines the merge changes, so the six are
+recorded, not repaired here (a pin would be new scope); the PR's Questions name them for the owner.
+
+**Validation, count-only, at the round-6 head** (this commit changes only the card; the suites run on the same source):
+`validate_task_docs.py` exit 0; `check_doc_facts.py` exit 0; `pytest tests/api/test_public_results.py
+tests/api/test_view_model.py -q` 126 passed, 1 skipped; `npm test` 1327 passed (34 files); `tsc:check` exit 0; `lint`
+exit 0; `npm run e2e` 15 passed, 3 skipped, on the pinned build 1194 (now installed here; CI's job is the record). The
+card's retired-phrase grep: 18 lines; the `As-agent` / `fog` grep: 4 comment lines; the `Ground-Truth` grep: no line
+(exit 1). `git diff --exit-code 9732623d HEAD` over the never-written paths: exit 0; `git diff --stat 9732623d HEAD`:
+24 files, none under `eval/`. BUNDLE_PLACEHOLDER Gate record: CI's green run at the exact head, cited in the PR by run
+id. The Status line and `tasks/README.md` stay as `main` has them.
