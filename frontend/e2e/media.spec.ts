@@ -18,15 +18,12 @@
 //     same tick under one crewmate's fog, with that crewmate's accusation from
 //     the following meeting composited underneath.
 //   • spectator-meeting.png — the meeting still, mid-deliberation.
-//   • spectator-journey.webm — the clip: a token crossing rooms, a kill flash,
-//     the transport stopping itself at a meeting, then the flip into fog.
-//   • spectator-journey.gif — the same walk as still frames, because GitHub
-//     strips <video> out of a rendered README and a GIF is what survives.
+//   • spectator-journey.gif — the walk from the opening tick to the first
+//     meeting as still frames, which GitHub plays inline in the README.
 //
-// DETERMINISM. The stills are shot under `prefers-reduced-motion: reduce`, which
+// DETERMINISM. Every asset is shot under `prefers-reduced-motion: reduce`, which
 // is what the map layer reads to snap token tweens and freeze the kill ring, so
-// two runs produce the same bytes. The clip is the opposite case on purpose (the
-// flash has to pulse), so its running time is cut to a fixed window instead.
+// two runs produce the same bytes.
 //
 // Task 20.39; the recipe and every asset's provenance live in docs/media/README.md.
 
@@ -37,7 +34,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -46,7 +42,7 @@ import {
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { extname, join, resolve, sep } from "node:path";
 
 import { expect, test as base } from "@playwright/test";
@@ -116,18 +112,12 @@ const PART_CONTEXT = {
   reducedMotion: "reduce",
 } as const;
 
-/** The clip: a fixed window cut out of the recording, so its length is a constant. */
-const CLIP_SETTLE_SECONDS = 0.6;
-const CLIP_SECONDS = 9;
-const CLIP_BITRATE = "1200k";
-
-/** The GIF: the same walk as stills, at the pace the transport plays it. */
+/** The GIF: the walk as stills, at the pace the transport plays it. */
 const GIF_WIDTH = 640;
 const GIF_FRAME_MS = 500;
 
 /** Budgets the PR quotes; `docs/media/README.md` records them too. */
 const STILL_MAX_BYTES = 400_000;
-const CLIP_MAX_BYTES = 3_000_000;
 const GIF_MAX_BYTES = 1_500_000;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -515,85 +505,8 @@ image.quantize(palette=palette, dither=Image.Dither.NONE).save(path, optimize=Tr
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The two tools the assets need beyond the browser
+// Assembling the GIF
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Playwright's own ffmpeg — the only one this repository assumes exists.
- *
- * It is a stripped build (PNG and VP8 encoders, nothing else), which is exactly
- * what the clip needs: cut a fixed window out of the recording and re-encode it
- * in the container Playwright already produced.
- */
-function ffmpegBinary(): string {
-  const roots = [
-    process.env.PLAYWRIGHT_BROWSERS_PATH,
-    join(homedir(), "Library", "Caches", "ms-playwright"),
-    join(homedir(), ".cache", "ms-playwright"),
-  ].filter((root): root is string => root !== undefined && root !== "");
-  for (const root of roots) {
-    if (!existsSync(root)) continue;
-    for (const entry of readdirSync(root)) {
-      if (!entry.startsWith("ffmpeg-")) continue;
-      for (const file of readdirSync(join(root, entry))) {
-        if (file.startsWith("ffmpeg-")) return join(root, entry, file);
-      }
-    }
-  }
-  throw new Error(
-    "Playwright's bundled ffmpeg is missing — run `npx playwright install ffmpeg`.",
-  );
-}
-
-function runFfmpeg(args: readonly string[]): string {
-  const result = spawnSync(ffmpegBinary(), [...args], {
-    encoding: "utf-8",
-    timeout: 300_000,
-  });
-  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-  if (result.status !== 0) {
-    throw new Error(`ffmpeg failed (status ${String(result.status)}):\n${output}`);
-  }
-  return output;
-}
-
-/**
- * The metadata-probe form: `ffmpeg -i FILE` with no output file prints the
- * container's streams and then exits non-zero for the output it was not given.
- *
- * Kept separate from `runFfmpeg` so that expected exit code stays confined to the
- * probe — an ENCODE that fails must raise, or the checks below would measure the
- * committed file the encode was supposed to replace and call the run a success.
- */
-function probeFfmpeg(path: string): string {
-  const result = spawnSync(ffmpegBinary(), ["-hide_banner", "-i", path], {
-    encoding: "utf-8",
-    timeout: 300_000,
-  });
-  return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-}
-
-/** Seconds of video in a container, read back from the file rather than assumed. */
-function videoDurationSeconds(path: string): number {
-  const output = probeFfmpeg(path);
-  const match = /Duration: (\d+):(\d+):(\d+\.\d+)/.exec(output);
-  if (match === null) {
-    throw new Error(`ffmpeg reported no duration for ${path}:\n${output}`);
-  }
-  return (
-    Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
-  );
-}
-
-/** Frame size in a container, likewise read back rather than assumed. */
-function videoDimensions(path: string): string {
-  const output = probeFfmpeg(path);
-  const match = /Video: .*?, (\d+x\d+)/.exec(output);
-  if (match?.[1] === undefined) {
-    throw new Error(`ffmpeg reported no frame size for ${path}:\n${output}`);
-  }
-  return match[1];
-}
 
 /**
  * Assemble a GIF from still frames with Pillow, in an ephemeral environment.
@@ -658,62 +571,6 @@ flat[0].save(
   } finally {
     rmSync(frameDir, { recursive: true, force: true });
   }
-}
-
-/**
- * Which of two reference screenshots a video frame resembles, as RMS distance
- * over a small greyscale reduction of each.
- *
- * The point is to check the published clip's OWN bytes rather than a model of
- * where a beat landed in it. Playwright stretches a recording's final frame to
- * the end of the capture, so wall-clock offsets do not project linearly into the
- * container's timeline and any arithmetic answer to "is the beat inside the cut"
- * is a guess. Decoding the cut and comparing it to what the page looked like at
- * the beat is not.
- */
-function frameDistances(
-  framePath: string,
-  references: readonly string[],
-): readonly number[] {
-  const script = `
-import sys
-from PIL import Image, ImageChops, ImageStat
-
-def reduced(path):
-    return Image.open(path).convert("L").resize((64, 40), Image.LANCZOS)
-
-frame = reduced(sys.argv[1])
-for reference in sys.argv[2:]:
-    difference = ImageChops.difference(frame, reduced(reference))
-    print(round(ImageStat.Stat(difference).rms[0], 3))
-`;
-  const result = spawnSync(
-    "uv",
-    ["run", "--with", "pillow", "python", "-", framePath, ...references],
-    { cwd: REPO_ROOT, input: script, encoding: "utf-8", timeout: 300_000 },
-  );
-  if (result.status !== 0) {
-    throw new Error(
-      `frame comparison failed (status ${String(result.status)}):\n` +
-        `${result.stdout ?? ""}\n${result.stderr ?? ""}`,
-    );
-  }
-  return result.stdout.trim().split("\n").map(Number);
-}
-
-/** Decode one frame of a clip at `seconds` into `out`. */
-function extractFrame(clip: string, seconds: number, out: string): void {
-  runFfmpeg([
-    "-y",
-    "-hide_banner",
-    "-ss",
-    seconds.toFixed(3),
-    "-i",
-    clip,
-    "-frames:v",
-    "1",
-    out,
-  ]);
 }
 
 function digest(path: string): string {
@@ -927,220 +784,10 @@ test.describe("README media capture", () => {
     expect(size).toBeLessThanOrEqual(STILL_MAX_BYTES);
   });
 
-  test("the clip and the GIF", async ({ browser, bundle }) => {
-    const replay = bakedReplay(bundle);
-    const killFrame = replay.ticks.find((frame) =>
-      frame.events.some((event) => event.type === "kill"),
-    );
-    expect(killFrame, "the walk needs a kill to flash").toBeDefined();
-    const killTick = killFrame?.tick ?? 0;
-
-    // ── the clip ─────────────────────────────────────────────────────────────
-    // Recorded WITHOUT the reduced-motion hint: the tween between rooms and the
-    // pulsing kill ring are two of the four beats, and both are gated on it.
-    const videoDir = mkdtempSync(join(tmpdir(), "ailibi-media-video-"));
-    const context = await browser.newContext({
-      viewport: { ...SHOT_VIEWPORT },
-      recordVideo: { dir: videoDir, size: { ...SHOT_VIEWPORT } },
-    });
-    const clipPage = await context.newPage();
-    const startedAt = Date.now();
-    await openMoment(clipPage, momentUrl(bundle.origin, { tick: "1" }));
-    await uncoverMap(clipPage);
-    // The published window opens where the WALK does. Loading the bundle and
-    // settling the dock takes as long as the machine takes, and none of it is a
-    // beat, so the cut below starts from here rather than from a guessed offset.
-    await clipPage.waitForTimeout(CLIP_SETTLE_SECONDS * 1000);
-
-    // When each beat happened, in wall seconds from the page's first paint. The
-    // published window is chosen to CONTAIN these and asserted to, so a walk the
-    // machine ran too slowly fails the capture instead of publishing a clip whose
-    // last beat happened after the cut.
-    const beats: { name: string; wall: number }[] = [];
-    const mark = (name: string): void => {
-      beats.push({ name, wall: (Date.now() - startedAt) / 1000 });
-    };
-    mark("the map before anything moves");
-    const openingReference = await clipPage.screenshot({ animations: "disabled" });
-
-    const seek = clipPage.getByLabel("Seek tick");
-
-    // Beat 1 — a token crosses between rooms. Stepped by the transport so the
-    // tween runs, and the crossing itself is read out of the two frames the
-    // transport moved between rather than inferred from the picture.
-    const beforeStep = await seek.inputValue();
-    await clipPage.getByRole("button", { name: "Step forward 1 tick" }).click();
-    await expect(seek).not.toHaveValue(beforeStep);
-    const afterStep = Number(await seek.inputValue());
-    const roomsAt = (frameIndex: number): Map<string, string | null> =>
-      new Map(
-        (replay.ticks[frameIndex]?.agent_states ?? []).map((agent) => [
-          agent.agent_id,
-          agent.room_id,
-        ]),
-      );
-    const before = roomsAt(afterStep - 1);
-    const after = roomsAt(afterStep);
-    const crossed = [...after].filter(
-      ([id, room]) => room !== null && before.get(id) !== room,
-    );
-    expect(crossed.length).toBeGreaterThan(0);
-    mark("a token crosses between rooms");
-    await clipPage.waitForTimeout(300);
-
-    // Beat 2 — the kill flash. STEPPED onto the kill tick rather than played
-    // through it: autoplay holds a frame for a few hundred milliseconds, which is
-    // too short both to read and to assert on without racing the timer.
-    const forwardOne = clipPage.getByRole("button", { name: "Step forward 1 tick" });
-    while (Number(await seek.inputValue()) < killTick + 1) {
-      await forwardOne.click();
-    }
-    await expect(seek).toHaveValue(String(killTick + 1));
-    mark("the kill flash");
-    await clipPage.waitForTimeout(1_000);
-
-    // Beat 3 — the transport stops ITSELF when the meeting starts. At 2× the run
-    // into the meeting fits the published window; at 1× it does not.
-    await clipPage.getByRole("button", { name: "2×", exact: true }).click();
-    await clipPage.getByRole("button", { name: "▶ Play" }).click();
-    const pauseBar = clipPage
-      .getByRole("status")
-      .filter({ hasText: "playback paused" });
-    await expect(pauseBar).toBeVisible({ timeout: 60_000 });
-    await expect(pauseBar).toContainText(/Meeting at tick \d+ — playback paused/);
-    await expect(clipPage.getByRole("dialog")).toBeVisible();
-    // The play-through really crossed the flashed tick, and the meeting the
-    // transport stopped at is later than it.
-    expect(Number(await seek.inputValue())).toBeGreaterThan(killTick + 1);
-    mark("the transport pauses itself at the meeting");
-    // Long enough to read the room's first exchange before the fog lands.
-    await clipPage.waitForTimeout(1_200);
-    await clipPage.keyboard.press("Escape");
-    await expect(clipPage.getByRole("dialog")).toBeHidden();
-    await clipPage.waitForTimeout(300);
-
-    // Beat 4 — the perspective flips into fog, and the URL says whose.
-    await clipPage.getByRole("button", { name: "As-agent" }).click();
-    await expect(clipPage.locator('[aria-label^="Perspective:"]')).toHaveText(
-      /^As p-\d+ · fog$/,
-    );
-    await expect(clipPage).toHaveURL(/[?&]perspective=p-\d+\b/);
-    mark("the perspective flips into fog");
-    const fogReference = await clipPage.screenshot({ animations: "disabled" });
-
-    // A SHORT tail. Playwright stretches a recording's final frame to the end of
-    // the capture, so a long idle hold would inflate the container's running time
-    // without adding anything to look at — and the cut below takes the last
-    // window, which would then be mostly that one frame.
-    await clipPage.waitForTimeout(600);
-
-    const rawVideo = await clipPage.video()?.path();
-    const wallSeconds = (Date.now() - startedAt) / 1000;
-    await context.close();
-    expect(rawVideo).toBeDefined();
-    const raw = rawVideo ?? "";
-    // The recording's timebase is NOT the wall clock — a busy page drops frames,
-    // and the container's running time drifts from the walk's. So the moment the
-    // walk began is projected into the recording's own timeline before cutting,
-    // rather than assumed to be the same number of seconds in.
-    const rawSeconds = videoDurationSeconds(raw);
-    expect(rawSeconds).toBeGreaterThanOrEqual(CLIP_SECONDS);
-    console.log(
-      `[media] clip walk ${wallSeconds.toFixed(2)} s wall, recording ` +
-        `${rawSeconds.toFixed(2)} s; beats at ` +
-        beats.map((beat) => `${beat.wall.toFixed(2)} s ${beat.name}`).join(", "),
-    );
-
-    // A FIXED window out of the recording. The walk's wall-clock length depends
-    // on how busy the machine is; the published clip's must not, so the length
-    // is a constant here rather than a measurement of the run.
-    const clipPath = join(MEDIA_DIR, "spectator-journey.webm");
-    // Removed first: a failed encode must not leave the previously committed clip
-    // standing for the size/duration/dimension checks below to measure.
-    rmSync(clipPath, { force: true });
-    runFfmpeg([
-      "-y",
-      "-hide_banner",
-      "-sseof",
-      `-${String(CLIP_SECONDS)}`,
-      "-i",
-      raw,
-      "-an",
-      "-c:v",
-      "libvpx",
-      "-b:v",
-      CLIP_BITRATE,
-      "-deadline",
-      "good",
-      "-cpu-used",
-      "2",
-      "-threads",
-      "1",
-      clipPath,
-    ]);
-    rmSync(videoDir, { recursive: true, force: true });
-    expect(existsSync(clipPath)).toBe(true);
-    const clipSize = statSync(clipPath).size;
-    console.log(
-      `[media] spectator-journey.webm ${String(clipSize)} B ` +
-        `${videoDimensions(clipPath)} ${videoDurationSeconds(clipPath).toFixed(2)} s ` +
-        `sha256:${digest(clipPath)}`,
-    );
-    expect(clipSize).toBeLessThanOrEqual(CLIP_MAX_BYTES);
-    const clipSeconds = videoDurationSeconds(clipPath);
-    expect(clipSeconds).toBeLessThanOrEqual(10);
-    expect(videoDimensions(clipPath)).toBe(
-      `${String(SHOT_VIEWPORT.width)}x${String(SHOT_VIEWPORT.height)}`,
-    );
-
-    // THE GATE THIS WALK NEEDS: the beats the assertions above proved happened
-    // must be in the PUBLISHED bytes, not merely in the longer recording they
-    // were cut out of. Decoded from the clip itself and matched against what the
-    // page looked like at the first and last beat. It bites: shorten the window
-    // (or slow the walk) until the fog flip falls past the cut, and the final
-    // frame resolves to the opening reference instead.
-    const probeDir = mkdtempSync(join(tmpdir(), "ailibi-clip-probe-"));
-    try {
-      const openingPath = join(probeDir, "opening-reference.png");
-      const fogPath = join(probeDir, "fog-reference.png");
-      writeFileSync(openingPath, openingReference);
-      writeFileSync(fogPath, fogReference);
-
-      const firstFrame = join(probeDir, "first.png");
-      const lastFrame = join(probeDir, "last.png");
-      extractFrame(clipPath, 0, firstFrame);
-      extractFrame(clipPath, clipSeconds - 0.2, lastFrame);
-
-      const [firstToOpening, firstToFog] = frameDistances(firstFrame, [
-        openingPath,
-        fogPath,
-      ]);
-      const [lastToOpening, lastToFog] = frameDistances(lastFrame, [
-        openingPath,
-        fogPath,
-      ]);
-      console.log(
-        `[media] clip frame 0 → opening ${String(firstToOpening)} / fog ` +
-          `${String(firstToFog)}; final frame → opening ${String(lastToOpening)} / ` +
-          `fog ${String(lastToFog)}`,
-      );
-      expect(
-        lastToFog,
-        "the published clip must END on the As-agent fog beat",
-      ).toBeLessThan(lastToOpening ?? 0);
-      expect(
-        firstToOpening,
-        "the published clip must OPEN before the walk moves, so every beat " +
-          "between the two is inside it",
-      ).toBeLessThan(firstToFog ?? 0);
-    } finally {
-      rmSync(probeDir, { recursive: true, force: true });
-    }
-
-    // ── the GIF: the same walk, as frames GitHub will actually render ────────
-    // Shot rather than transcoded. Frames off the page palettise to a few dozen
-    // flat colours, where frames demuxed from a video carry the encoder's noise
-    // into every one of the GIF's 256 slots.
+  test("the GIF", async ({ browser, bundle }) => {
+    // ── the GIF: the walk to the first meeting, as frames GitHub renders ─────
+    // Shot from the page rather than transcoded: frames off the page palettise
+    // to a few dozen flat colours.
     const frames: Buffer[] = [];
     // Its own reduced-motion context: with the tween live, a frame shot between
     // two ticks catches tokens mid-flight, and the GIF stops being reproducible.

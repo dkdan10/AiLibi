@@ -201,7 +201,9 @@ bars and no verdict by design: it re-records, publishes every cell before and
 after, and leaves every judgment to the record that comes after it. Some of what
 it published is unwelcome — conviction accuracy without engine-certified proof
 fell, wrongful ejections rose from 42 to 46, and a class of wrongful conviction
-that the previous record had described as extinct reappeared at four cases. Those
+that the previous record had described as extinct reappeared at four cases.
+Pooled over its four recorded sets, accuracy without that proof read
+50 of 96 = 0.5208 with 46 innocent ejections. Those
 are published unchanged, which is the whole point of separating a maintenance
 record from an adopting one.
 [Record](../audits/audit-phase-21-rerecord.md).
@@ -211,13 +213,14 @@ kept switched off until a record could judge them — the reporter's own reasoni
 on its turn, a discipline on how corroborating accounts are counted, and
 structured testimony that survives into the ballot — and four bars were written
 down before any of it was measured. A 300-game recording taken over 2026-09-03
-and 2026-09-04 met three: conviction accuracy without engine-certified proof
-rose to 46 of 66 = 0.6970 against a bar of 0.60, and
-innocent ejections fell from 46 to 20 against a ceiling of fewer than 35, with
-the reporter's own count of them at 11 against a ceiling of 12. The fourth asked
+and 2026-09-04 met three. Conviction accuracy without engine-certified proof
+rose to 46 of 66 = 0.6970 against a bar of 0.60.
+Innocent ejections fell from 46 to 20 against a ceiling of fewer than 35; 11 of
+those 20 were the meeting's own reporter, against 34 of 46, inside the
+reporter's own ceiling of 12. The fourth asked
 that the reporter be under 0.40 of what was left, and 11 of 20 = 0.5500 is not
 — the reporter channel closed faster than every other route and still dominated
-the much smaller total behind it. The rule is conjunctive, so that is a
+the much smaller total behind it. Every bar has to pass, so the rule returns a
 **finding**, not an adoption: nothing was adopted, the three repairs stay
 switched off, the reference recording did not move, and those 300 games are kept
 as named evidence beside the record instead of replacing the committed sets. No
@@ -262,6 +265,9 @@ recorded off; what moved is the prompt set (three templates at `v6`, the ballot
 at `v8`). It published the process measures before and after and **decided
 nothing** — no bars, no verdict
 ([`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md)).
+Pooled over the four sets, accuracy without engine-certified proof read
+43 of 85 = 0.5059 with 42 innocent ejections, a movement these samples cannot
+call real.
 
 Reference recording 8 (2026-08-31) keeps its history and loses only its claim to
 be the current one

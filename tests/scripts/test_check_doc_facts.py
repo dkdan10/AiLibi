@@ -250,7 +250,7 @@ _FINDING_INNOCENT_SECTION_POOLED = "| pooled | 46 | **20** |"
 # The history cell both front-door tables carry for the conviction partition:
 # the 9p2i set's own read on round 2, the recording round 3's promotion replaced
 # (was baseline 9's "70 / 70 = 1.0000 vs 11 / 20 = 0.5500", before it).
-_PREVIOUS_PARTITION_CELL = "24 / 24 = 1.0000 vs 20 / 42 = 0.4762"
+_PREVIOUS_PARTITION_CELL = "24 of 24 (100%) vs 20 of 42 (48%)"
 _ML_PAGE = "docs/ml-program.md"
 _ML_ARM_ROW = "| `ea4bc955…` (put to the bar) | 26/50 = 0.52 | 13/50 = 0.26 |"
 _ML_DROPPED_ARM_ROW = (
@@ -296,19 +296,19 @@ _REPLACED_SET_ACCURACY_ROW = (
     "| `samples/9p2i` | 11/20 = 0.5500 | **20/42 = 0.4762** [0.3336, 0.6228] |"
 )
 _CITATION_ROW_CLAIM = (
-    "Eject ballots carrying a valid citation, a turn or an observation id (9p2i)"
+    "Eject ballots with a valid citation of a statement or sighting (9p2i)"
 )
 # The reading guide's §3 cross-tab, as committed.
 _FLAGGED_ROW = "| yes (24 meetings) | 24 | 0 |"
 _UNFLAGGED_ROW = (
     "| no (95 meetings) | 22 | 15 |"  # was "| no (93 meetings) | 20 | 22 |"
 )
-# The two dialect terms the front door keeps, and the links that define them.
-# Their first uses are in the line under the results heading.
+# The links that define two dialect terms. The README states neither term since
+# it dates its recordings in plain words, so a planted sentence naming a
+# baseline carries the link, and an unlinked one is what the dialect check
+# refuses.
 _BASELINE_LINK = "[baseline 9](docs/glossary.md#baseline-n-the-reference-recording)"
-_ERA_LINK = (
-    "[its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity)"
-)
+_BASELINE_5_LINK = "[baseline-5](docs/glossary.md#baseline-n-the-reference-recording)"
 _BASELINE_ANCHOR_HEADING = "### baseline N (the reference recording)"
 # "ladder tip" is private dialect too, so a planted ladder-tip sentence has to
 # carry its glossary link — otherwise the dialect check fires alongside the
@@ -569,8 +569,8 @@ def test_wrong_recording_model_detected(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "using `Qwen/Qwen3.6-27B`",
-        "using `Qwen/Qwen3-32B`",
+        "played by the `Qwen/Qwen3.6-27B` model",
+        "played by the `Qwen/Qwen3-32B` model",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -579,17 +579,86 @@ def test_wrong_recording_model_detected(doc_tree: Path) -> None:
 
 
 def test_wrong_prompt_set_version_detected(doc_tree: Path) -> None:
-    # As is the prompt-set version token the prompt_versions column records.
+    # The paragraph leaves the prompt stamps to the manifests it links, so a
+    # version it does name is a claim the prompt_versions column must record.
     _substitute(
         doc_tree,
         _README,
-        "`qwen3_6_27b` `v6` prompts",
-        "`qwen3_6_27b` `v2` prompts",
+        "played by the `Qwen/Qwen3.6-27B` model",
+        "played by the `Qwen/Qwen3.6-27B` model on `v2` prompts",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'v6'" in errors[0]
+    assert "'v2'" in errors[0]
     assert "`prompt_versions` column" in errors[0]
+
+
+@pytest.mark.parametrize(
+    ("stamp", "kind"),
+    [
+        ("v5", "prompt-set version"),
+        ("`v5`", "prompt-set version"),
+        ("`route_lines_v2`", "prompt arm"),
+        ("route_lines_v2", "prompt arm"),
+    ],
+)
+def test_samples_paragraph_naming_an_unrecorded_stamp_detected(
+    doc_tree: Path, stamp: str, kind: str
+) -> None:
+    # Planted: a stamp the manifests do not record, backticked or bare.
+    _substitute(
+        doc_tree,
+        _README,
+        "played by the `Qwen/Qwen3.6-27B` model",
+        f"played by the `Qwen/Qwen3.6-27B` model with {stamp}",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    token = stamp.strip("`")
+    assert f"names the {kind} {token!r}" in errors[0]
+    assert "no row's `prompt_versions` column records" in errors[0]
+
+
+def test_samples_paragraph_naming_recorded_stamps_passes(doc_tree: Path) -> None:
+    # The converse: a stamp the manifests do record may be named.
+    _substitute(
+        doc_tree,
+        _README,
+        "played by the `Qwen/Qwen3.6-27B` model",
+        "played by the `Qwen/Qwen3.6-27B` model on `v6` prompts and `route_lines_v1`",
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_a_stamp_like_token_outside_the_samples_paragraph_is_not_read(
+    doc_tree: Path,
+) -> None:
+    # The stamp rule reads the samples paragraph only: a version-like word in
+    # another paragraph is not a claim about the recorded prompts.
+    _substitute(
+        doc_tree,
+        _README,
+        "\nPython 3.11 · FastAPI/Pydantic",
+        "\nThe viewer reads replay format v5.\n\nPython 3.11 · FastAPI/Pydantic",
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+@pytest.mark.parametrize("name", ["4p1i", "9p2i"])
+def test_samples_paragraph_without_a_manifest_link_detected(
+    doc_tree: Path, name: str
+) -> None:
+    # Planted: one set's MANIFEST link removed, its text kept. The stamps are
+    # the manifest's to state, so the paragraph links each set's manifest.
+    manifest = f"replays/samples/{name}/MANIFEST.md"
+    links = (
+        "game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), "
+        "[9p2i](replays/samples/9p2i/MANIFEST.md))"
+    )
+    _substitute(doc_tree, _README, links, links.replace(f"[{name}]({manifest})", name))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert f"does not link {manifest}" in errors[0]
 
 
 def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
@@ -664,7 +733,7 @@ def test_promoted_rate_in_a_baseline_9_sentence_detected(doc_tree: Path) -> None
         doc_tree,
         _README,
         _read(doc_tree, _README)
-        + "\nAt baseline 9 the impostors won 34% (9p2i) of the games.\n",
+        + f"\nAt {_BASELINE_LINK} the impostors won 34% (9p2i) of the games.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -679,7 +748,7 @@ def test_stale_ladder_tip_sentence_detected(doc_tree: Path) -> None:
         doc_tree,
         _README,
         _read(doc_tree, _README)
-        + f"\nThe baseline-5 sets remain the {_LADDER_TIP_LINK}.\n",
+        + f"\nThe {_BASELINE_5_LINK} sets remain the {_LADDER_TIP_LINK}.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -730,7 +799,7 @@ def test_long_ladder_tip_sentence_detected(doc_tree: Path) -> None:
         doc_tree,
         _README,
         _read(doc_tree, _README)
-        + f"\nThe baseline-5 sets, {filler}remain the {_LADDER_TIP_LINK}.\n",
+        + f"\nThe {_BASELINE_5_LINK} sets, {filler}remain the {_LADDER_TIP_LINK}.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -1029,14 +1098,56 @@ def test_eval_report_rate_drift_detected(doc_tree: Path) -> None:
         '"vote_correctness_rate": 0.99',
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    # Twice over: the stamp check catches the rate contradicting its own
-    # counts, and the README's real-report example no longer matches the
-    # report it points a reader at.
-    assert len(errors) == 2
+    # The stamp check catches the rate contradicting its own counts. The
+    # README's real-report example states the counts the rate is taken over,
+    # not the rate, so it still matches the report (it named the rate, and
+    # failed here too, before the owner's answer 18 of 2026-10-11).
+    assert len(errors) == 1
     assert any(
         _EVAL_REPORT_9P2I in error and "36/46 = 0.7826" in error for error in errors
     )
-    assert any("vote correctness 0.990" in error for error in errors)
+
+
+def test_eval_report_count_drift_reaches_the_report_example(doc_tree: Path) -> None:
+    # A count moved in the report itself moves the README's example with it,
+    # beside the stamp the count's own rate no longer matches.
+    _substitute(
+        doc_tree,
+        _EVAL_REPORT_9P2I,
+        '"impostor_ejections": 46,',
+        '"impostor_ejections": 47,',
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        error.startswith(f"{_README}:")
+        and "'47 removed an impostor'" in error
+        and "impostor_ejections as 47" in error
+        for error in errors
+    )
+    # ...and the evidence clause's denominator, which is the same count read
+    # again, so the example cannot keep "36 of those 46" once the report says 47.
+    assert any(
+        error.startswith(f"{_README}:")
+        and "'36 of those 47 with evidence against that player'" in error
+        for error in errors
+    )
+
+
+def test_a_moved_ejection_total_reaches_the_report_example(doc_tree: Path) -> None:
+    # Planted: the report's own total of ejections moved by one. The README's
+    # example states that total, so it no longer matches the report it cites.
+    _substitute(
+        doc_tree,
+        _EVAL_REPORT_9P2I,
+        '"total_ejections": 61,',
+        '"total_ejections": 62,',
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    readme = [error for error in errors if error.startswith(f"{_README}:")]
+    assert readme == [
+        f"{_README}: the real-report example does not state '62 ejections' — "
+        f"{_EVAL_REPORT_9P2I} records total_ejections as 62."
+    ]
 
 
 def test_vote_correctness_provenance_drift_detected(doc_tree: Path) -> None:
@@ -1290,22 +1401,27 @@ def test_composite_stamp_split_before_the_token_parse() -> None:
     assert "qwen3_6_27b.v8.ballot_kill_row_v1" not in old_parse
 
 
-def test_composite_stamp_names_every_arm_in_the_provenance_paragraph(
-    doc_tree: Path,
-) -> None:
-    # The arms the promoted manifest records are claims the README makes (was two
-    # arms, before round 3 added the route lines).
-    _substitute(
-        doc_tree,
-        _README,
-        "`impostor_ballot_v1`, `ballot_kill_row_v1` and `route_lines_v1`",
-        "three settings",
-    )
-    errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 3
-    assert any("prompt arm 'ballot_kill_row_v1'" in error for error in errors)
-    assert any("prompt arm 'impostor_ballot_v1'" in error for error in errors)
-    assert any("prompt arm 'route_lines_v1'" in error for error in errors)
+def test_composite_stamp_arms_are_the_manifests_to_name(doc_tree: Path) -> None:
+    # The arms the promoted manifest records, split from its composite stamp,
+    # are what a paragraph naming one is held to (was: the paragraph named all
+    # three, before the owner's answer 18 of 2026-10-11 moved the stamps to the
+    # manifests). An arm the composite carries passes; its neighbour's version
+    # bump does not.
+    readme = _read(doc_tree, _README)
+    old = "played by the `Qwen/Qwen3.6-27B` model"
+    assert readme.count(old) == 1
+    for arm, recorded in (
+        ("`impostor_ballot_v1`", True),
+        ("`ballot_kill_row_v1`", True),
+        ("`ballot_kill_row_v2`", False),
+    ):
+        _write(doc_tree, _README, readme.replace(old, f"{old} with {arm}"))
+        errors = check_doc_facts.check_facts(doc_tree)
+        if recorded:
+            assert errors == [], arm
+        else:
+            assert len(errors) == 1
+            assert "prompt arm 'ballot_kill_row_v2'" in errors[0]
 
 
 def test_the_route_arm_dropped_from_the_promoted_manifest_fails_loud(
@@ -1378,9 +1494,18 @@ def test_evidence_count_above_its_denominator_fails_loud(doc_tree: Path) -> None
         '"evidence_backed_impostor_ejections": 52,',
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert _EVAL_REPORT_9P2I in errors[0]
-    assert "no larger than impostor_ejections" in errors[0]
+    # ...and the README's real-report example, which states that count, no
+    # longer matches the report it points a reader at.
+    assert len(errors) == 2
+    assert any(
+        _EVAL_REPORT_9P2I in error and "no larger than impostor_ejections" in error
+        for error in errors
+    )
+    assert any(
+        error.startswith(f"{_README}:")
+        and "'52 of those 46 with evidence against that player'" in error
+        for error in errors
+    )
 
 
 def test_eval_report_without_vote_correctness_block_fails_loud(
@@ -1411,10 +1536,14 @@ def test_disclosure_report_without_its_blocks_fails_loud(doc_tree: Path) -> None
 
 
 def test_unlinked_dialect_term_detected(doc_tree: Path) -> None:
-    # A private-dialect term the front door keeps loses its glossary link at
-    # its FIRST use — the line under the results heading — so a reader meets
-    # "baseline" with nowhere to look it up.
-    _substitute(doc_tree, _README, _BASELINE_LINK, "baseline 9")
+    # A private-dialect term on the front door without its glossary link at its
+    # FIRST use, so a reader meets "baseline" with nowhere to look it up (was
+    # the era sentence's link removed, before that sentence dated its
+    # recordings in plain words). Linked, the same sentence passes.
+    readme = _read(doc_tree, _README)
+    _write(doc_tree, _README, readme + f"\nThe sets sit at {_BASELINE_LINK}.\n")
+    assert check_doc_facts.check_facts(doc_tree) == []
+    _write(doc_tree, _README, readme + "\nThe sets sit at baseline 9.\n")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'baseline'" in errors[0]
@@ -1422,9 +1551,14 @@ def test_unlinked_dialect_term_detected(doc_tree: Path) -> None:
 
 
 def test_unlinked_era_term_detected(doc_tree: Path) -> None:
-    # "era" joined the dialect with the promotion: its first use must carry
-    # the glossary link too.
-    _substitute(doc_tree, _README, _ERA_LINK, "its own era")
+    # "era" joined the dialect with the promotion: a use must carry the
+    # glossary link too (was the era sentence's link removed; the README now
+    # dates its recordings in plain words and names no era).
+    _write(
+        doc_tree,
+        _README,
+        _read(doc_tree, _README) + "\nEach set sits in its own era.\n",
+    )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'era'" in errors[0]
@@ -1469,21 +1603,18 @@ def test_glossary_entry_for_an_unused_term_still_required(doc_tree: Path) -> Non
 def test_repeated_results_claim_detected(doc_tree: Path) -> None:
     # A stale row left beside a corrected one would otherwise satisfy the
     # row-by-row comparison while the page shows a reader two numbers.
-    row = "| Committed sample replays that reconstruct byte-identically | 100 of 100 |"
+    row = "| Sample games that replay byte for byte | 100 of 100 (100%) |"
     text = _read(doc_tree, _README)
     assert row in text
-    stale = row.replace("| 100 of 100 |", "| 99 of 100 |")
+    stale = row.replace("| 100 of 100 (100%) |", "| 99 of 100 (99%) |")
     # The stale row carries an empty third cell rather than a worded one: the
     # README sits close enough to its word ceiling that a few words of padding
     # would fire a second, unrelated error beside the drift under test.
     _write(doc_tree, _README, text.replace(row, f"{stale}|\n{row}", 1))
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 4
-    assert (
-        "states 'Committed sample replays that reconstruct byte-identically' twice"
-        in (errors[0])
-    )
-    assert "'99 of 100'" in errors[1]
+    assert "states 'Sample games that replay byte for byte' twice" in (errors[0])
+    assert "'99 of 100 (99%)'" in errors[1]
     # The stale copy is too narrow to reach the history column, so it has no
     # before cell at all — and the page then answers the history question two
     # ways as well.
@@ -1510,12 +1641,15 @@ def test_replay_count_figure_derived_from_the_committed_replays(
 ) -> None:
     # Agreement between the two tables cannot catch a figure edited identically
     # in both, so this row is recomputed from the replay files on disk.
-    _substitute(doc_tree, _README, "| 100 of 100 |", "| 96 of 96 |")
-    _substitute(doc_tree, _READING_GUIDE, "| 100 of 100 |", "| 96 of 96 |")
+    _substitute(doc_tree, _README, "| 100 of 100 (100%) |", "| 96 of 96 (100%) |")
+    _substitute(
+        doc_tree, _READING_GUIDE, "| 100 of 100 (100%) |", "| 96 of 96 (100%) |"
+    )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert any(
-        "'96 of 96'" in error and "100 committed replays" in error for error in errors
+        "'96 of 96 (100%)'" in error and "100 committed replays" in error
+        for error in errors
     )
     # The edit also leaves the row claiming its figure moved from 100 to 96,
     # which nothing owns — the same drift read from the history column.
@@ -1541,18 +1675,18 @@ def test_citation_figure_derived_from_the_committed_instrument(
     _substitute(
         doc_tree,
         _README,
-        "| 397 / 397, zero dangling |",
-        "| 396 / 397, zero dangling |",
+        "| 397 of 397 (100%), zero dangling |",
+        "| 396 of 397 (100%), zero dangling |",
     )
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 397 / 397, zero dangling |",
-        "| 396 / 397, zero dangling |",
+        "| 397 of 397 (100%), zero dangling |",
+        "| 396 of 397 (100%), zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'396 / 397, zero dangling'" in errors[0]
+    assert "'396 of 397 (100%), zero dangling'" in errors[0]
     assert _CITATION_INSTRUMENT in errors[0]
 
 
@@ -1567,7 +1701,7 @@ def test_instrument_pin_move_reaches_the_front_door(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'397 / 397, 3 dangling'" in errors[0]
+    assert "'397 of 397 (100%), 3 dangling'" in errors[0]
 
 
 def test_vent_headline_derived_from_the_crosstab(doc_tree: Path) -> None:
@@ -1578,8 +1712,8 @@ def test_vent_headline_derived_from_the_crosstab(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
-    assert "'24 / 46 = 52%'" in errors[0]
-    assert "'14 / 36 = 39%'" in errors[0]
+    assert "'24 of 46 (52%)'" in errors[0]
+    assert "'14 of 36 (39%)'" in errors[0]
     # ...and the drifted cell is no longer the one the instrument pins.
     assert "cross-tab's 'yes' row reads 14 impostor / 0 innocent" in errors[1]
 
@@ -1623,7 +1757,7 @@ def test_swapped_vent_crosstab_labels_detected(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "'24 / 46 = 52%'" in error and "'22 / 46 = 48%'" in error for error in errors
+        "'24 of 46 (52%)'" in error and "'22 of 46 (48%)'" in error for error in errors
     )
     # The pins name the same swap in their own terms: the flagged row is the
     # one the instrument recorded 24/0 for, whichever way round it is written.
@@ -1656,7 +1790,7 @@ def test_proof_partition_derived_from_the_previous_record(doc_tree: Path) -> Non
     errors = check_doc_facts.check_facts(doc_tree)
     figure = [error for error in errors if _PREVIOUS_PARTITION_CELL in error]
     assert len(figure) == 1
-    assert "'23 / 23 = 1.0000 vs 20 / 42 = 0.4762'" in figure[0]
+    assert "'23 of 23 (100%) vs 20 of 42 (48%)'" in figure[0]
 
 
 def test_summands_split_the_pooled_direct_cell_per_set() -> None:
@@ -1695,7 +1829,7 @@ def test_previous_set_row_reaches_the_before_column(doc_tree: Path) -> None:
         "| `samples/9p2i` | 11/20 = 0.5500 | **21/42 = 0.5000** [0.3336, 0.6228] |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert any("'24 / 24 = 1.0000 vs 21 / 42 = 0.5000'" in error for error in errors)
+    assert any("'24 of 24 (100%) vs 21 of 42 (50%)'" in error for error in errors)
     assert any(
         error.startswith(_PROMOTION_AUDIT)
         and "before cells for samples/9p2i read 20/42" in error
@@ -1710,26 +1844,54 @@ def test_previous_set_row_reaches_the_before_column(doc_tree: Path) -> None:
 # the whole round-2 front door inside the promoted tree.
 _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
     (
-        """*9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-09 record (9p2i): at tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. [Media provenance](docs/media/README.md#provenance) records the source and asset identities; the [short clip](docs/media/spectator-journey.webm) walks the same game.*
+        """# AiLibi — can agents reason from what they actually saw?
+
+*Recorded AI social deduction*
+""",
+        """# AiLibi — can agents reason from what they actually saw?
+""",
+    ),
+    (
+        """**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [See the results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read an ownership decision](docs/ownership-case-study.md)
+""",
+        """**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [Inspect results and decisions](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read an ownership decision](docs/ownership-case-study.md)
+""",
+    ),
+    (
+        """Daniel Keinan directed the project and decided what was accepted, without hand-writing the production code; AI agents wrote it, and the audits here are AI reviews, not independent human assurance.
+""",
+        """Daniel directed product scope, acceptance criteria, priorities, and adoption decisions. Claude Code implemented the initial project; Codex reviewed it and now also implements cleanup. Agents wrote production code and substantial supporting plans, cards, tests, documentation, and audits. Daniel did not hand-write the production code. “Independent” audits here mean separate AI reviewers, not independent human assurance.
+""",
+    ),
+    (
+        """*At tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. This is 9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-09 record (9p2i); [media provenance](docs/media/README.md#provenance) records its source and asset identities.*
+
+[![The same game playing from its first tick to the meeting](docs/media/spectator-journey.gif)](https://dkdan10.github.io/AiLibi/)
 """,
         """*9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-01 record (9p2i): at tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. [Media provenance](docs/media/README.md#provenance) records the source and asset identities; the [short clip](docs/media/spectator-journey.webm) walks the same game.*
 """,
     ),
     (
-        """The shown 9-player set was recorded 2026-10-09 under the adopted gameplay changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity); the 4-player set and the ML corpus stay at [baseline 9](docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22. No figure pools the two. Each before cell is what that set's previously shown recording read.
+        """The shown 9-player set was recorded 2026-10-09 under the adopted gameplay changes; the 4-player set and the ML training games were recorded 2026-09-22. No figure pools the two. Each before cell is what that set's previously shown recording read.
 """,
         """The shown 9-player set was recorded 2026-10-01 under the adopted gameplay changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity); the 4-player set and the ML corpus stay at [baseline 9](docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22. No figure pools the two. Each before cell is what that set's replaced recording read.
 """,
     ),
     (
-        """| Eject ballots citing a line the voter held about their target (9p2i) | 394/397 = 0.9924 | 407/410 = 0.9927 | [process scorecard](docs/process-scorecard.md); a floor: the ballot asks every eject to cite |
-| Crew eject ballots naming someone other than the voter's [top suspect](docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56/291 = 19.2% | 65/292 = 22.3% | [process scorecard](docs/process-scorecard.md) |
-| Ballots with no stated reason (9p2i) | 6/702 = 0.0085 | 11/691 = 0.0159 | [process scorecard](docs/process-scorecard.md) |
-| Ballots whose target is the one their voter wrote (9p2i) | 692/702 = 0.9858; 10 impostor votes against a partner turned into skips | 674/691 = 0.9754 | [process scorecard](docs/process-scorecard.md) |
-| Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 397 / 397, zero dangling | 410 / 410, zero dangling | the 2026-10-09 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
-| Impostor win rate, committed samples | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
-| Ejection accuracy with engine-certified proof of the ejectee's role, against without (9p2i) | 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 | 24 / 24 = 1.0000 vs 20 / 42 = 0.4762 | the 2026-10-09 record (9p2i) — [the record](audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](audits/audit-2026-10-01-stage-b-r2.md) §9.6; 15 of 15 innocent ejections sit in the no-proof cell |
-| Correct 9p ejections riding an ejectee-specific vent sighting | 24 / 46 = 52% | 24 / 44 = 55% | the 2026-10-09 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
+        """| Sample games that replay byte for byte | 100 of 100 (100%) | 100 of 100 (100%) | every commit — `scripts/verify_samples.sh` |
+""",
+        """| Committed sample replays that reconstruct byte-identically | 100 of 100 | 100 of 100 | every commit — `scripts/verify_samples.sh` |
+""",
+    ),
+    (
+        """| Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394 of 397 (99%) | 407 of 410 (99%) | [process scorecard](docs/process-scorecard.md); a floor: the ballot asks every eject to cite |
+| Crew eject ballots naming someone other than the voter's [top suspect](docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56 of 291 (19%) | 65 of 292 (22%) | [process scorecard](docs/process-scorecard.md) |
+| Ballots with no stated reason (9p2i) | 6 of 702 (1%) | 11 of 691 (2%) | [process scorecard](docs/process-scorecard.md) |
+| Ballots whose target is the one their voter wrote (9p2i) | 692 of 702 (99%); 10 impostor votes against a partner turned into skips | 674 of 691 (98%) | [process scorecard](docs/process-scorecard.md) |
+| Eject ballots with a valid citation of a statement or sighting (9p2i) | 397 of 397 (100%), zero dangling | 410 of 410 (100%), zero dangling | the 2026-10-09 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
+| Impostor win rate, sample games | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
+| Impostors among those ejected, with and without proof of their role (9p2i) | 24 of 24 (100%) vs 22 of 37 (59%) | 24 of 24 (100%) vs 20 of 42 (48%) | the 2026-10-09 record (9p2i) — [the record](audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](audits/audit-2026-10-01-stage-b-r2.md) §9.6; 15 of 15 innocent ejections sit in the no-proof cell |
+| Impostors ejected after a reported sighting of them venting (9p2i) | 24 of 46 (52%) | 24 of 44 (55%) | the 2026-10-09 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
 """,
         """| Impostor win rate, committed samples | 36% (4p1i), 48% (9p2i) | 36% (4p1i), 22% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-01 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
 | Eject ballots carrying a valid citation, a turn or an observation id (9p2i) | 410 / 410, zero dangling | 496 / 496, zero dangling | the 2026-10-01 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
@@ -1738,15 +1900,17 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 46 correct ejections follow certified vent evidence; without it, 22 of 37 ejections target impostors and 15 convict crewmates. This demonstrates processing of certified facts and deception, **not general social deduction**.
+        """*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 46 correct ejections follow certified vent evidence; without it, 22 of 37 ejections target impostors and 15 convict crewmates. This demonstrates processing of certified facts, and deception in older recordings, but **not general social deduction**.
 """,
         """*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 44 correct ejections follow certified vent evidence; without it, 20 of 42 ejections target impostors and 22 convict crewmates. This demonstrates processing of certified facts and deception, **not general social deduction**. The [reading guide](docs/reading-guide.md) reads these 50 games alone.
 """,
     ),
     (
-        """**Two bars were written down first, and both were missed.** Baseline 7 measured conviction accuracy without proof at 61 of 103 = 0.5922 against 0.60, and wrongful ejections at 42 against fewer than 35; its rule returned **FINDING**, and Daniel adopted it by explicit owner override on 2026-08-26. Baseline 8 registered none: 50 of 96 = 0.5208 with 46 innocent ejections. Nor did baseline 9: 43 of 85 = 0.5059 with 42 innocent ejections over four sets, a movement these samples cannot call real. [The decision and its limitations](docs/ownership-case-study.md).
+        """**Targets written down before measuring were missed twice:** the owner adopted the first recording anyway, in writing, and nothing from the second ([what each measured](docs/history.md#evidence-honesty-phase-20)).
 """,
         """**Two bars were written down first, and both were missed.** Baseline 7 measured conviction accuracy without proof at 61 of 103 = 0.5922 against 0.60, and wrongful ejections at 42 against fewer than 35. Its rule returned **FINDING**, but Daniel adopted that recording by explicit owner override on 2026-08-26; the bars did not pass. Baseline 8 registered no bars and measured 50 of 96 = 0.5208 and 46 innocent ejections. Baseline 9 registered none either and measured 43 of 85 = 0.5059 and 42 innocent ejections over its four recorded sets, a movement too small for these samples to call real. [The decision and its limitations](docs/ownership-case-study.md) preserve both judgments.
+
+**An experiment on baseline 8 met three of four fresh bars.** Innocent ejections fell from 46 to 20; 11 of those 20 were the meeting's own reporter, against 34 of 46. That share, 0.5500, missed 0.40, so the rule returns **a finding**, with no override and no adoption ([record](audits/audit-phase-21-adopting-record.md)).
 """,
     ),
     (
@@ -1762,13 +1926,16 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """report openings no longer carry it (0 of 115). The full temporal repair stays
+        """**Known evidence leak:** in the 2026-09-22 recordings, the opening prompts name each body by a label that reveals when it died. The shown 9-player set's report openings no longer carry it (0 of 115). The full repair stays switched off, not adopted. [Observation contract and limitations](docs/observation-contract.md).
 """,
-        """report openings no longer carry it (0 of 114). The full temporal repair stays
+        """**Known evidence leak:** in the baseline-9 recordings, default opening prompts
+reveal a hidden death tick through a body identifier. The shown 9-player set's
+report openings no longer carry it (0 of 114). The full temporal repair stays
+default-off, not adopted. [Observation contract and limitations](docs/observation-contract.md).
 """,
     ),
     (
-        """The [ownership case study](docs/ownership-case-study.md) traces one decision from its evidence to what remained unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. Phase closes do not claim every issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
+        """The [ownership case study](docs/ownership-case-study.md) traces two owner decisions from their evidence to what each leaves unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. Phase closes do not claim every issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
 """,
         """The [ownership case study](docs/ownership-case-study.md) traces one consequential decision through evidence, alternatives, implementation, review, and what remained unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. The cleanup branch merged into main on 2026-09-07; historical phase closes are not a claim that every current issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
 """,
@@ -1810,13 +1977,13 @@ Three distinct claims:
 """,
     ),
     (
-        """**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections, vote correctness 0.783, and ejection accuracy 0.754. The demo publishes a smaller, strictly validated summary.
+        """**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections; 46 removed an impostor, 36 of those 46 with evidence against that player on the meeting's record. The demo publishes a smaller, strictly validated summary.
 """,
         """**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 66 ejections, vote correctness 0.795, and ejection accuracy 0.667. The demo publishes a smaller, strictly validated summary; reported usage is separate from verified outcomes and is not a billing guarantee.
 """,
     ),
     (
-        """**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts with a `v8` ballot, each in its own era. The 4-player set was regenerated 2026-09-22 (4p1i) at [baseline 9](audits/audit-2026-09-22-process-rerecord.md), every experimental switch off: impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the route lines, a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)), its ballot stamped `impostor_ballot_v1`, `ballot_kill_row_v1` and `route_lines_v1`: impostor win rate 34% (9p2i). The picture above is from the 9-player game the guided tour opens on.
+        """**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was regenerated 2026-09-22 (4p1i) with every experimental switch off ([its record](audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the [route lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)): impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md)). The picture above is from the 9-player game the guided tour opens on.
 """,
         """**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts with a `v8` ballot, each in its own era. The 4-player set was regenerated 2026-09-22 (4p1i) at [baseline 9](audits/audit-2026-09-22-process-rerecord.md), every experimental switch off: impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-01 (9p2i) under the adopted gameplay changes ([its record](audits/audit-2026-10-01-stage-b-r2.md)), its ballot stamped `impostor_ballot_v1` and `ballot_kill_row_v1`: impostor win rate 48% (9p2i). Each manifest records per-game provenance. The picture above is from the 9-player game the guided tour opens on.
 """,
@@ -1970,12 +2137,7 @@ def test_samples_paragraph_dropping_only_the_tips_record_detected(
     # Planted, the mirror case: the promoted set's record link kept, baseline
     # 9's dropped. Only the 4p1i set, the one baseline-9 set the paragraph
     # names, is reported; the 9p2i set's own link still holds.
-    _substitute(
-        doc_tree,
-        _README,
-        f"at [baseline 9]({_LADDER_TIP_AUDIT}),",
-        "at baseline 9,",
-    )
+    _substitute(doc_tree, _README, f" ([its record]({_LADDER_TIP_AUDIT}))", "")
     paragraph = check_doc_facts.provenance_paragraph(_read(doc_tree, _README))
     assert paragraph is not None
     assert f"]({_PROMOTION_AUDIT})" in paragraph
@@ -1992,12 +2154,12 @@ def test_four_set_figure_kept_as_the_current_figure_detected(doc_tree: Path) -> 
         _substitute(
             doc_tree,
             document,
-            "| 24 / 24 = 1.0000 vs 22 / 37 = 0.5946 |",
-            "| 326 / 326 = 1.0000 vs 43 / 85 = 0.5059 |",
+            "| 24 of 24 (100%) vs 22 of 37 (59%) |",
+            "| 326 of 326 (100%) vs 43 of 85 (51%) |",
         )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "'24 / 24 = 1.0000 vs 22 / 37 = 0.5946'" in error and _PROMOTION_AUDIT in error
+        "'24 of 24 (100%) vs 22 of 37 (59%)'" in error and _PROMOTION_AUDIT in error
         for error in errors
     )
 
@@ -2012,7 +2174,7 @@ def test_published_partition_derived_from_the_record(doc_tree: Path) -> None:
         "| `samples/9p2i` | 20/42 = 0.4762 | **23/37 = 0.6216** [0.4349, 0.7365] |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert any("'24 / 24 = 1.0000 vs 23 / 37 = 0.6216'" in error for error in errors)
+    assert any("'24 of 24 (100%) vs 23 of 37 (62%)'" in error for error in errors)
     # ...and the record's two published cells now contradict each other.
     assert any(
         error.startswith(_PROMOTION_AUDIT)
@@ -2047,7 +2209,7 @@ def test_record_direct_proof_cell_reaches_the_front_door(doc_tree: Path) -> None
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("1 proof-present innocent ejection(s)" in error for error in errors)
-    assert any("'23 / 24 = 0.9583 vs 22 / 37 = 0.5946'" in error for error in errors)
+    assert any("'23 of 24 (96%) vs 22 of 37 (59%)'" in error for error in errors)
 
 
 def test_missing_record_bar_fails_loud(doc_tree: Path) -> None:
@@ -2481,11 +2643,12 @@ def test_partition_innocent_total_contradicting_its_own_accuracy_detected(
     )
     # ...and every wrongful-ejection sentence still naming 42 now names a count
     # neither this record nor the one before it carries — the record's own 42 on
-    # the README and the guide, and baseline 7's identical 42 in those two and
-    # the history. The ML page narrates only baseline 8's 46, which still holds.
+    # the history page and the guide, and baseline 7's identical 42 in those
+    # two. The README states no count since its missed-bar sentence moved its
+    # figures to the history; the ML page narrates only baseline 8's 46, which
+    # still holds.
     stale = [error for error in errors if "wrongful-ejection sentence" in error]
     assert {error.split(":")[0] for error in stale} == {
-        _README,
         _READING_GUIDE,
         _HISTORY,
     }
@@ -2884,9 +3047,10 @@ def test_older_recording_date_is_left_alone(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| Pre-registered emergence rulings demonstrated, phase 18 | 0 of 14 | 0 of 14 |",
-        "| Pre-registered emergence rulings demonstrated, phase 18 | 0 of 14 | 0 of 14 "
-        "(reference recording 6, 2026-07-20) |",
+        "| Learned behaviours the ML program set out to show | 0 of 14 (0%) | "
+        "0 of 14 (0%) |",
+        "| Learned behaviours the ML program set out to show | 0 of 14 (0%) | "
+        "0 of 14 (0%) (reference recording 6, 2026-07-20) |",
     )
     assert check_doc_facts.check_facts(doc_tree) == []
 
@@ -2899,8 +3063,8 @@ def test_moved_figure_quoted_without_its_baseline_stamp_detected(
     _substitute(
         doc_tree,
         _README,
-        "| 397 / 397, zero dangling | 410 / 410, zero dangling |",
-        "| 397 / 397, zero dangling |",
+        "| 397 of 397 (100%), zero dangling | 410 of 410 (100%), zero dangling |",
+        "| 397 of 397 (100%), zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
@@ -2933,13 +3097,13 @@ def test_before_column_drift_between_the_two_tables_detected(doc_tree: Path) -> 
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "| 397 / 397, zero dangling | 410 / 410, zero dangling |",
-        "| 397 / 397, zero dangling | 512 / 512, zero dangling |",
+        "| 397 of 397 (100%), zero dangling | 410 of 410 (100%), zero dangling |",
+        "| 397 of 397 (100%), zero dangling | 512 of 512 (100%), zero dangling |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'410 / 410, zero dangling'" in errors[0]
-    assert "'512 / 512, zero dangling'" in errors[0]
+    assert "'410 of 410 (100%), zero dangling'" in errors[0]
+    assert "'512 of 512 (100%), zero dangling'" in errors[0]
 
 
 def test_before_column_win_rate_held_to_the_record(doc_tree: Path) -> None:
@@ -3122,11 +3286,11 @@ def test_deleted_guide_no_proof_ratio_fails_loud(doc_tree: Path) -> None:
 def test_stale_partner_ballot_denominator_detected(doc_tree: Path) -> None:
     # The teammate-firewall row lives only in the guide, so README agreement
     # cannot reach it; the instrument that counts those ballots owns it.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 |", "| 0 of 197 |")
+    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 (0%) |", "| 0 of 197 (0%) |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'0 of 197'" in errors[0]
-    assert "pins '0 of 198'" in errors[0]
+    assert "'0 of 197 (0%)'" in errors[0]
+    assert "pins '0 of 198 (0%)'" in errors[0]
 
 
 def test_partner_ballot_row_without_its_pin_fails_loud(doc_tree: Path) -> None:
@@ -3144,7 +3308,12 @@ def test_partner_ballot_row_without_its_pin_fails_loud(doc_tree: Path) -> None:
 
 def test_guide_only_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
     # The guide carries rows the README does not, and they state history too.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 | 0 of 200 |", "| 0 of 198 |  |")
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 0 of 198 (0%) | 0 of 200 (0%) |",
+        "| 0 of 198 (0%) |  |",
+    )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -3156,7 +3325,12 @@ def test_truncated_row_losing_its_before_cell_detected(doc_tree: Path) -> None:
     # Removing the cell AND its delimiter must fail like an emptied one: a row
     # narrower than the header has no history cell, and reading whatever cell
     # happens to sit at the index would check it against the wrong column.
-    _substitute(doc_tree, _READING_GUIDE, "| 0 of 198 | 0 of 200 |", "| 0 of 198 |")
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 0 of 198 (0%) | 0 of 200 (0%) |",
+        "| 0 of 198 (0%) |",
+    )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(_READING_GUIDE)
@@ -3169,13 +3343,14 @@ def test_unowned_moved_history_cell_detected(doc_tree: Path) -> None:
     # Either this checker re-derives that value or the row is named as one it
     # only compares — otherwise the two tables can drift together, which is the
     # one failure the before/after column exists to prevent.
-    row = "| 100 of 100 | 100 of 100 |"
-    drifted = "| 100 of 100 | 99 of 100 |"
+    row = "| 100 of 100 (100%) | 100 of 100 (100%) |"
+    drifted = "| 100 of 100 (100%) | 99 of 100 (99%) |"
     _substitute(doc_tree, _README, row, drifted)
     # One-sided first: that is the agreement check's finding, not this one.
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'99 of 100'" in errors[0] and "records '100 of 100'" in errors[0]
+    assert "'99 of 100 (99%)'" in errors[0]
+    assert "records '100 of 100 (100%)'" in errors[0]
     # Made in BOTH tables it survives agreement, and only this check sees it —
     # no row is exempt, including the ones whose FIGURE is re-derived, because
     # deriving today's count says nothing about the one before it.
@@ -3183,7 +3358,7 @@ def test_unowned_moved_history_cell_detected(doc_tree: Path) -> None:
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "states a moved figure" in errors[0]
-    assert "'99 of 100'" in errors[0]
+    assert "'99 of 100 (99%)'" in errors[0]
 
 
 def test_verdict_rate_that_contradicts_its_own_fraction_detected(
@@ -3191,11 +3366,13 @@ def test_verdict_rate_that_contradicts_its_own_fraction_detected(
 ) -> None:
     # The verdict passage states the same cell the results row states. Every
     # "k of n = rate" on the front door is its own arithmetic, so a moved
-    # denominator in the prose cannot survive a correct table.
-    _substitute(doc_tree, _README, "61 of 103 = 0.5922", "61 of 104 = 0.5922")
+    # denominator in the prose cannot survive a correct table. Planted on the
+    # history page, the passage's home since the README gave it one sentence.
+    _substitute(doc_tree, _HISTORY, "61/103 = 0.5922", "61/104 = 0.5922")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'61 of 104 = 0.5922' does not recompute" in errors[0]
+    assert errors[0].startswith(f"{_HISTORY}:")
+    assert "'61/104 = 0.5922' does not recompute" in errors[0]
     assert "61/104 is 0.5865" in errors[0]
 
 
@@ -3221,9 +3398,10 @@ def test_verdict_fraction_rewritten_consistently_detected(doc_tree: Path) -> Non
     # Self-consistent arithmetic is not enough: a fraction over a conviction
     # population the record measured has to BE the cell the record recorded, or
     # the prose argues past the finding while adding up.
-    _substitute(doc_tree, _README, "50 of 96 = 0.5208", "51 of 96 = 0.5312")
+    _substitute(doc_tree, _HISTORY, "50 of 96 = 0.5208", "51 of 96 = 0.5312")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
+    assert errors[0].startswith(f"{_HISTORY}:")
     assert "is over a conviction population" in errors[0]
     assert "whose cell is 50/96" in errors[0]
 
@@ -3243,7 +3421,7 @@ def test_wrongful_ejection_count_inside_a_longer_number_detected(
     assert "names none of the counts the records read (pooled 42" in errors[0]
 
 
-@pytest.mark.parametrize("document", [_README, _READING_GUIDE])
+@pytest.mark.parametrize("document", [_HISTORY, _READING_GUIDE])
 @pytest.mark.parametrize(
     ("fraction", "recorded", "moved"),
     [("50 of 96 = 0.5208", "46", "47"), ("43 of 85 = 0.5059", "42", "41")],
@@ -3378,7 +3556,9 @@ def test_verdict_word_follows_the_bars_in_both_directions(doc_tree: Path) -> Non
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        "does not state 'the rule returns an adoption'" in error for error in errors
+        error.startswith(f"{_HISTORY}:")
+        and "does not state 'the rule returns an adoption'" in error
+        for error in errors
     )
 
 
@@ -3544,7 +3724,7 @@ def test_finding_count_wording_checked_on_every_claim_document(
     # The three pages hard-wrap at different columns, so each is perturbed on
     # the words it actually carries on one line.
     for document, wording in (
-        (_HISTORY, "innocent ejections fell from 46 to 20"),
+        (_HISTORY, "Innocent ejections fell from 46 to 20"),
         (_READING_GUIDE, "innocent ejections fell from 46 to 20"),
         (_ML_PAGE, "ejections fell from 46 to 20"),
     ):
@@ -3555,6 +3735,25 @@ def test_finding_count_wording_checked_on_every_claim_document(
         for error in errors
         if "innocent ejections fell from 46 to 20" in error
     } == {_HISTORY, _READING_GUIDE, _ML_PAGE}
+
+
+def test_the_readme_restating_the_fall_is_held_to_the_record(doc_tree: Path) -> None:
+    # The README gives the missed bars one sentence with no figure, so it is no
+    # longer the passage's home; a README that states the fall anyway is held
+    # to the record's numbers like every other page that states it.
+    _substitute(
+        doc_tree,
+        _README,
+        "**Targets written down before measuring were missed twice:**",
+        "Innocent ejections fell from 46 to 21. **Targets written down before "
+        "measuring were missed twice:**",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        error.startswith(f"{_README}:")
+        and "does not state 'innocent ejections fell from 46 to 20'" in error
+        for error in errors
+    )
 
 
 def test_a_claim_document_that_never_states_the_fall_is_not_required_to(
@@ -4125,7 +4324,7 @@ def test_published_pass_count_that_the_verdicts_refute_detected(
     # it is its own claim and is held to the recomputed verdict column.
     _substitute(
         doc_tree,
-        _README,
+        _READING_GUIDE,
         "met three of four fresh bars",
         "met two of four fresh bars",
     )
@@ -4143,7 +4342,7 @@ def test_published_registered_bar_count_that_the_table_refutes_detected(
     # all, which is the denominator every "three of four" claim rests on.
     _substitute(
         doc_tree,
-        _README,
+        _READING_GUIDE,
         "met three of four fresh bars",
         "met three of three fresh bars",
     )
@@ -4247,13 +4446,14 @@ def test_standalone_finding_count_sentence_is_refused(doc_tree: Path) -> None:
     # a sentence naming ONLY this record's own count lands red...
     _substitute(
         doc_tree,
-        _README,
-        "Innocent ejections fell from 46 to 20; 11 of those 20",
-        "The recording fell to 20 innocent ejections. 11 of those 20",
+        _HISTORY,
+        "Innocent ejections fell from 46 to 20 against a ceiling of fewer than 35; 11 of",
+        "The recording fell to 20 innocent ejections against a ceiling of fewer than "
+        "35. 11 of",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        error.startswith(f"{_README}:")
+        error.startswith(f"{_HISTORY}:")
         and "a wrongful-ejection sentence names none of the counts" in error
         for error in errors
     )
@@ -4268,7 +4468,7 @@ def test_history_cell_naming_the_recording_before_the_previous_one_detected(
     # holding the value from the recording BEFORE that — correct once, and
     # still internally consistent between the two tables — has to fail.
     # baseline 9's read (was baseline 8's "68 / 68 = 1.0000 vs 14 / 27 = 0.5185")
-    stale = "70 / 70 = 1.0000 vs 11 / 20 = 0.5500"
+    stale = "70 of 70 (100%) vs 11 of 20 (55%)"
     for document in (_README, _READING_GUIDE):
         _substitute(doc_tree, document, _PREVIOUS_PARTITION_CELL, stale)
     errors = check_doc_facts.check_facts(doc_tree)
@@ -4352,18 +4552,22 @@ def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:
     assert "total_ejections" in errors[0]
 
 
-def test_report_example_rate_drift_detected(doc_tree: Path) -> None:
-    _substitute(doc_tree, _README, "vote correctness 0.783", "vote correctness 0.938")
+def test_report_example_impostor_count_drift_detected(doc_tree: Path) -> None:
+    # (was the vote-correctness rate, before the example stated counts)
+    _substitute(doc_tree, _README, "46 removed an impostor", "45 removed an impostor")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'vote correctness 0.783'" in errors[0]
+    assert "'46 removed an impostor'" in errors[0]
+    assert "impostor_ejections" in errors[0]
 
 
-def test_report_example_accuracy_drift_detected(doc_tree: Path) -> None:
-    _substitute(doc_tree, _README, "ejection accuracy 0.754", "ejection accuracy 0.900")
+def test_report_example_evidence_count_drift_detected(doc_tree: Path) -> None:
+    # (was the ejection-accuracy rate, before the example stated counts)
+    _substitute(doc_tree, _README, "36 of those 46 with", "40 of those 46 with")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "'ejection accuracy 0.754'" in errors[0]
+    assert "'36 of those 46 with evidence against that player'" in errors[0]
+    assert "evidence_backed_impostor_ejections" in errors[0]
 
 
 def test_missing_report_example_paragraph_fails_loud(doc_tree: Path) -> None:
@@ -4495,8 +4699,8 @@ def test_results_row_absent_from_the_guide_detected(doc_tree: Path) -> None:
     # above the four rows on how each vote was cast.
     assert errors[1].startswith(
         f"{_README}: the results row 'Observation checks with no source' sits "
-        "above the process row 'Eject ballots citing a line the voter held about "
-        "their target (9p2i)'"
+        "above the process row 'Eject ballots citing what the voter saw or heard "
+        "about the accused (9p2i)'"
     )
 
 
@@ -4509,7 +4713,7 @@ def test_stubbed_results_table_detected(doc_tree: Path) -> None:
         "| Eject ",
         "| Crew eject ",
         "| Ballots ",
-        "| Ejection accuracy ",
+        "| Impostors among ",
         "| Learned tactical policies ",
     )
     kept = [line for line in text.splitlines() if not line.startswith(gutted)]
@@ -5556,17 +5760,18 @@ def test_experiment_registry_is_read_from_the_live_module() -> None:
 # role-correct row. Every case below fails naming the row it moved.
 
 _SCORECARD_PAGE = "docs/process-scorecard.md"
-_GROUNDED_CLAIM = "Eject ballots citing a line the voter held about their target (9p2i)"
+_GROUNDED_CLAIM = (
+    "Eject ballots citing what the voter saw or heard about the accused (9p2i)"
+)
 _DEVIATING_CLAIM = (
     "Crew eject ballots naming someone other than the voter's top suspect (9p2i)"
 )
 _UNEXPLAINED_CLAIM = "Ballots with no stated reason (9p2i)"
 _AUTHORED_CLAIM = "Ballots whose target is the one their voter wrote (9p2i)"
 _PROOF_CLAIM = (
-    "Ejection accuracy with engine-certified proof of the ejectee's role, "
-    "against without (9p2i)"
+    "Impostors among those ejected, with and without proof of their role (9p2i)"
 )
-_WIN_RATE_CLAIM = "Impostor win rate, committed samples"
+_WIN_RATE_CLAIM = "Impostor win rate, sample games"
 _SCORECARD_SOURCE = "the samples/9p2i table of docs/process-scorecard.md"
 # The shown set's row-4 and row-7 lines on the page: round 2's before cell,
 # then round 3's value.
@@ -5637,26 +5842,26 @@ def test_a_process_numerator_edited_in_both_tables_detected(doc_tree: Path) -> N
     # Planted: the same wrong numerator in both tables, so agreement holds and
     # only the page can refuse it.
     for document in (_README, _READING_GUIDE):
-        _substitute(doc_tree, document, "| 394/397 = 0.9924 |", "| 393/397 = 0.9924 |")
+        _substitute(doc_tree, document, "| 394 of 397 (99%) |", "| 393 of 397 (99%) |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     for document, error in zip((_README, _READING_GUIDE), errors):
         assert error.startswith(f"{document}: the results row {_GROUNDED_CLAIM!r}")
-        assert "reads '393/397 = 0.9924'" in error
-        assert f"{_SCORECARD_SOURCE} recomputes to '394/397 = 0.9924'" in error
+        assert "reads '393 of 397 (99%)'" in error
+        assert f"{_SCORECARD_SOURCE} recomputes to '394 of 397 (99%)'" in error
 
 
 def test_a_process_before_cell_edited_in_both_tables_detected(doc_tree: Path) -> None:
     # Planted: round 2's deviating count moved by one in both history cells.
     for document in (_README, _READING_GUIDE):
-        _substitute(doc_tree, document, "| 65/292 = 22.3% |", "| 64/292 = 22.3% |")
+        _substitute(doc_tree, document, "| 65 of 292 (22%) |", "| 64 of 292 (22%) |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     for document, error in zip((_README, _READING_GUIDE), errors):
         assert error.startswith(
             f"{document}: the 'Before' cell of results row {_DEVIATING_CLAIM!r}"
         )
-        assert f"{_SCORECARD_SOURCE} recomputes to '65/292 = 22.3%'" in error
+        assert f"{_SCORECARD_SOURCE} recomputes to '65 of 292 (22%)'" in error
 
 
 def test_a_scorecard_value_moved_under_an_unchanged_front_door_detected(
@@ -5673,7 +5878,7 @@ def test_a_scorecard_value_moved_under_an_unchanged_front_door_detected(
     assert len(errors) == 2
     for document, error in zip((_README, _READING_GUIDE), errors):
         assert error.startswith(f"{document}: the results row {_UNEXPLAINED_CLAIM!r}")
-        assert "recomputes to '7/702 = 0.0100'" in error
+        assert "recomputes to '7 of 702 (1%)'" in error
 
 
 def test_a_deleted_process_row_detected(doc_tree: Path) -> None:
@@ -5788,7 +5993,7 @@ def test_the_teammate_count_edited_in_both_tables_detected(doc_tree: Path) -> No
     for document, error in zip((_README, _READING_GUIDE), errors):
         assert error.startswith(f"{document}: the results row {_AUTHORED_CLAIM!r}")
         assert (
-            "recomputes to '692/702 = 0.9858; 10 impostor votes against a partner "
+            "recomputes to '692 of 702 (99%); 10 impostor votes against a partner "
             "turned into skips'"
         ) in error
 
@@ -5924,7 +6129,7 @@ def test_a_page_with_no_typed_rewrites_reads_a_zero_count(doc_tree: Path) -> Non
     assert len(errors) == 2
     assert all(f"results row {_AUTHORED_CLAIM!r}" in error for error in errors)
     assert all(
-        "'692/702 = 0.9858; 0 impostor votes against a partner turned into skips'"
+        "'692 of 702 (99%); 0 impostor votes against a partner turned into skips'"
         in error
         for error in errors
     )
@@ -6114,7 +6319,7 @@ def test_a_linked_claim_is_still_read_as_its_row(doc_tree: Path) -> None:
 @pytest.mark.parametrize(
     "integrity",
     [
-        "Committed sample replays that reconstruct byte-identically",
+        "Sample games that replay byte for byte",
         "Observation boundary checks",
     ],
 )
@@ -6136,3 +6341,1017 @@ def test_an_integrity_row_moved_below_the_process_rows_detected(
             f"{document}: the integrity row {integrity!r} sits below the process "
             f"row {_GROUNDED_CLAIM!r}"
         )
+
+
+# ── one number style in both results tables ──────────────────────────────────
+#
+# Every fraction in a figure or before cell reads "k of n (p%)", the percentage
+# rounded as the win rates are. One helper renders the form for every derived
+# cell; the style rule refuses the forms it replaced in any cell of either table.
+
+
+@pytest.mark.parametrize(
+    ("numerator", "denominator", "figure"),
+    [
+        (394, 397, "394 of 397 (99%)"),
+        (56, 291, "56 of 291 (19%)"),
+        (6, 702, "6 of 702 (1%)"),
+        (0, 198, "0 of 198 (0%)"),
+        (24, 24, "24 of 24 (100%)"),
+        # Rounded as the win rates are, round(100 * k / n): half to even.
+        (1, 8, "1 of 8 (12%)"),
+        (3, 8, "3 of 8 (38%)"),
+    ],
+)
+def test_one_helper_renders_each_fraction(
+    numerator: int, denominator: int, figure: str
+) -> None:
+    assert check_doc_facts.fraction_figure(numerator, denominator) == figure
+
+
+def test_a_fraction_over_no_population_raises() -> None:
+    with pytest.raises(ValueError, match="no population"):
+        check_doc_facts.fraction_figure(0, 0)
+
+
+@pytest.mark.parametrize(
+    ("cell", "figure"),
+    [
+        ("394/397 = 0.9924", "394 of 397 (99%)"),
+        ("56/291 = 19.2%", "56 of 291 (19%)"),
+        (" 11/691 = 0.0159 ", "11 of 691 (2%)"),
+    ],
+)
+def test_a_scorecard_cell_is_restated_in_the_tables_form(
+    cell: str, figure: str
+) -> None:
+    assert check_doc_facts.scorecard_fraction(cell) == figure
+
+
+@pytest.mark.parametrize(
+    "cell", ["394 / 397 = 0.9924", "394/397", "0.9924", "394 of 397 (99%)", ""]
+)
+def test_a_scorecard_cell_of_another_shape_is_refused(cell: str) -> None:
+    with pytest.raises(check_doc_facts.ScorecardPageError) as refused:
+        check_doc_facts.scorecard_fraction(cell)
+    assert refused.value.args[0] == (
+        f"the cell {cell!r} is not a 'k/n = rate' fraction"
+    )
+
+
+def test_a_partition_cell_is_two_fractions_in_the_tables_form() -> None:
+    assert (
+        check_doc_facts.partition_figure((24, 24), (22, 37))
+        == "24 of 24 (100%) vs 22 of 37 (59%)"
+    )
+
+
+def test_a_wrong_percentage_fails_by_row(doc_tree: Path) -> None:
+    # Planted: the cited-eject figure with its percentage off by one, in the
+    # README only. The style rule names the row and the percentage it reads.
+    _substitute(doc_tree, _README, "| 394 of 397 (99%) |", "| 394 of 397 (98%) |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    style = [error for error in errors if "that fraction reads" in error]
+    assert style == [
+        f"{_README}: the results row {_GROUNDED_CLAIM!r} states '394 of 397 (98%)', "
+        "but that fraction reads '394 of 397 (99%)' — both tables carry each "
+        "fraction's percentage, rounded as the win rates are."
+    ]
+    # ...and the process row and the agreement check see the same edit.
+    assert any("recomputes to '394 of 397 (99%)'" in error for error in errors)
+    assert any("records '394 of 397 (99%)'" in error for error in errors)
+
+
+def test_a_fraction_without_its_percentage_fails(doc_tree: Path) -> None:
+    # Planted: a guide-only cell, compared with nothing, losing its percentage.
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 0 of 14 (0%) | 0 of 14 (0%) |",
+        "| 0 of 14 (0%) | 0 of 14 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{_READING_GUIDE}: the results row 'Learned behaviours the ML program set "
+        "out to show' states '0 of 14', but that fraction reads '0 of 14 (0%)' — "
+        "both tables carry each fraction's percentage, rounded as the win rates are."
+    ]
+
+
+def test_the_vent_before_cell_in_its_old_form_fails_the_rule(doc_tree: Path) -> None:
+    # Planted: the vent row's before cell put back as "24 / 44 = 55%" in both
+    # tables. The cell is only compared between the tables, so agreement holds,
+    # and only the style rule refuses it, once per table.
+    for document in (_README, _READING_GUIDE):
+        _substitute(doc_tree, document, "| 24 of 44 (55%) |", "| 24 / 44 = 55% |")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{document}: the results row 'Impostors ejected after a reported sighting "
+        "of them venting (9p2i)' writes '24 / 44' — both tables state a fraction "
+        "as 'k of n (p%)' and print no decimal rate."
+        for document in (_README, _READING_GUIDE)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("cell", "retired"),
+    [
+        ("0/14", "0/14"),
+        ("0 / 14", "0 / 14"),
+        ("0 of 14 (0%) = 0.0000", "= 0.0000"),
+    ],
+)
+def test_each_retired_number_form_is_refused(
+    doc_tree: Path, cell: str, retired: str
+) -> None:
+    # Planted in a cell no other check reads: the guide-only row's before cell.
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 0 of 14 (0%) | 0 of 14 (0%) |",
+        f"| 0 of 14 (0%) | {cell} |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(f"writes {retired!r}" in error for error in errors), errors
+
+
+def test_a_retired_form_in_the_source_column_is_refused_too(doc_tree: Path) -> None:
+    # The refusal reads every value cell, not only the two fraction columns.
+    _substitute(
+        doc_tree,
+        _README,
+        "15 of 15 innocent ejections sit in the no-proof cell",
+        "15 of 15 innocent ejections sit in the no-proof cell (15/15)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{_README}: the results row {_PROOF_CLAIM!r} writes '15/15' — both tables "
+        "state a fraction as 'k of n (p%)' and print no decimal rate."
+    ]
+
+
+_VENT_CLAIM = "Impostors ejected after a reported sighting of them venting (9p2i)"
+
+
+@pytest.mark.parametrize(
+    ("cell", "expected"),
+    [
+        pytest.param(
+            "[24](docs/history.md) / [44](docs/history.md)",
+            f"{_README}: the results row {_VENT_CLAIM!r} writes '24 / 44' — both "
+            "tables state a fraction as 'k of n (p%)' and print no decimal rate.",
+            id="old-form-with-its-numbers-linked",
+        ),
+        pytest.param(
+            "[24](docs/history.md) of 44 (54%)",
+            f"{_README}: the results row {_VENT_CLAIM!r} states '24 of 44 (54%)', "
+            "but that fraction reads '24 of 44 (55%)' — both tables carry each "
+            "fraction's percentage, rounded as the win rates are.",
+            id="wrong-percentage-behind-a-linked-count",
+        ),
+    ],
+)
+def test_the_style_rule_reads_a_cell_as_its_link_text(cell: str, expected: str) -> None:
+    # Planted in the README's vent before cell: a link around a count hides it
+    # from neither scan, because a reader sees the link's text, not its markup.
+    readme = (_REPO_ROOT / _README).read_text(encoding="utf-8")
+    assert readme.count("| 24 of 44 (55%) |") == 1
+    errors: list[str] = []
+    check_doc_facts.check_number_style(
+        _README, readme.replace("| 24 of 44 (55%) |", f"| {cell} |"), errors
+    )
+    assert errors == [expected]
+
+
+# ── the front door's wording, pinned page by page ────────────────────────────
+#
+# The owner answered the visitor-wording survey on 2026-10-11
+# (tasks/decision-2026-10-11-visitor-wording.md): strings each page must carry,
+# and strings it no longer may. Each page is read as a visitor reads it, links
+# reduced to their text, emphasis and backticks dropped, whitespace collapsed;
+# a retired string is matched on word boundaries, the verdict word case-folded.
+
+_WORDING_PAGES = (
+    _README,
+    _READING_GUIDE,
+    _LESSONS,
+    _OWNERSHIP_CASE,
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+)
+_README_TITLE = "# AiLibi — can agents reason from what they actually saw?"
+_TAGLINE = "Recorded AI social deduction"
+# The byline, byte for byte: kept as it is and linked to nothing new.
+_BYLINE = (
+    "by **Daniel Keinan** · implemented by Claude Code and Codex agents · "
+    "AI-reviewed · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/"
+    "actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/"
+    "actions/workflows/ci.yml)"
+)
+# The missed targets' one sentence (answer 20), byte for byte, its link kept.
+_MISSED_BARS = (
+    "**Targets written down before measuring were missed twice:** the owner "
+    "adopted the first recording anyway, in writing, and nothing from the second "
+    "([what each measured](docs/history.md#evidence-honesty-phase-20))."
+)
+_WHO_DID_WHAT = "## Who did what"
+# The section says who did what without dividing the work by agent product,
+# and keeps both honesty facts.
+_WHO_DID_WHAT_RETIRED = ("Claude Code", "Codex")
+_WHO_DID_WHAT_REQUIRED = (
+    "without hand-writing the production code",
+    "not independent human assurance",
+)
+# The prompt stamps the samples paragraph left to the manifests.
+_README_STAMPS = (
+    "qwen3_6_27b",
+    "v6",
+    "v8",
+    "impostor_ballot_v1",
+    "ballot_kill_row_v1",
+    "route_lines_v1",
+)
+# Terms the README retired; the guide's sentences carrying one follow it (2b.8).
+_RETIRED_TERMS = (
+    "in its own era",
+    "ML corpus",
+    "body identifier",
+    "temporal repair",
+    "default-off",
+)
+# The case study's opening, which stays as it is (ruling 2b.9).
+_CASE_STUDY_OPENING = (
+    "Daniel Keinan directed AiLibi; Claude Code and Codex agents implemented and "
+    "reviewed it. This case study was drafted by Codex from the preserved "
+    "decision records. It describes an owner ruling, not hand-written "
+    "implementation or an independent human audit."
+)
+_GUIDE_AUDITS = "## 4. Four audits, in this order"
+_LATEST_AUDIT = "../audits/audit-2026-10-10-finalized-state.md"
+_DEMO_ADDRESS = "https://dkdan10.github.io/AiLibi/"
+# Per page: (required, retired, retired case-folded).
+_WORDING: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
+    _README: (
+        ("See the results",),
+        (
+            "Inspect results and decisions",
+            *_README_STAMPS,
+            *_RETIRED_TERMS,
+            "vote correctness 0.783",
+            "0.5922 against 0.60",
+            "against 34 of 46",
+            "50 of 96 = 0.5208",
+            "43 of 85 = 0.5059",
+            "missed 0.40",
+        ),
+        ("finding",),
+    ),
+    _READING_GUIDE: (
+        (
+            "Results shows each set's figures",
+            "Deception: demonstrated in earlier recordings",
+            "Four audits",
+        ),
+        (
+            "Results & cases",
+            "strongest capability on display",
+            "hand-picked, not scored",
+            *_RETIRED_TERMS,
+        ),
+        (),
+    ),
+    _LESSONS: ((), ("OWNER: confirm", "OWNER: end"), ()),
+    _OWNERSHIP_CASE: (("Keep the comparison records", _CASE_STUDY_OPENING), (), ()),
+    "SECURITY.md": ((_DEMO_ADDRESS,), ("There is no hosted instance",), ()),
+    "CONTRIBUTING.md": ((), ("a human review as the gates",), ()),
+}
+_MARKS = re.compile(r"[*`]")
+_LINK_TARGET = re.compile(r"\]\(([^)\s]+)\)")
+_AUDIT_TOKEN = re.compile(r"\baudit-[\w.-]*\w")
+
+
+def _visible(markdown: str) -> str:
+    """``markdown`` as a visitor reads it: link text only, no marks, one space."""
+
+    return " ".join(_MARKS.sub("", check_doc_facts.strip_links(markdown)).split())
+
+
+def _names(text: str, term: str, *, folded: bool = False) -> bool:
+    """Whether ``text`` carries ``term`` as a whole phrase."""
+
+    pattern = rf"(?<!\w){re.escape(term)}(?!\w)"
+    return re.search(pattern, text, re.IGNORECASE if folded else 0) is not None
+
+
+def _section(markdown: str, heading: str) -> str | None:
+    """The lines under ``heading`` up to the next heading of the same level."""
+
+    lines = markdown.splitlines()
+    if heading not in lines:
+        return None
+    level = heading.split(" ", 1)[0]
+    body: list[str] = []
+    for line in lines[lines.index(heading) + 1 :]:
+        if line.startswith("#") and line.split(" ", 1)[0] == level:
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _page_wording_problems(page: str, markdown: str) -> list[str]:
+    """Why ``markdown``, the text of ``page``, breaks the wording answered."""
+
+    visible = _visible(markdown)
+    required, retired, folded = _WORDING[page]
+    problems = [f"{page}: missing {term!r}" for term in required if term not in visible]
+    problems += [
+        f"{page}: carries {term!r}" for term in retired if _names(visible, term)
+    ]
+    problems += [
+        f"{page}: carries {term!r}"
+        for term in folded
+        if _names(visible, term, folded=True)
+    ]
+    if page == _README:
+        problems += _readme_wording_problems(markdown)
+    if page == _READING_GUIDE:
+        problems += _guide_wording_problems(markdown, visible)
+    return problems
+
+
+def _readme_wording_problems(markdown: str) -> list[str]:
+    """The README's tagline, byline and "Who did what" section."""
+
+    problems: list[str] = []
+    lines = markdown.splitlines()
+    if not lines or lines[0] != _README_TITLE:
+        problems.append(f"{_README}: the title line is not {_README_TITLE!r}")
+    following = [line for line in lines[1:] if line.strip()]
+    if not following or _visible(following[0]) != _TAGLINE:
+        problems.append(f"{_README}: the line under the title is not {_TAGLINE!r}")
+    if _BYLINE not in lines:
+        problems.append(f"{_README}: the byline is not kept byte for byte")
+    # The missed targets' one sentence, link included: what the owner did with
+    # each recording is a claim no figure check reaches once the figures moved.
+    if _MISSED_BARS not in lines:
+        problems.append(
+            f"{_README}: the missed-targets sentence is not kept as answered"
+        )
+    section = _section(markdown, _WHO_DID_WHAT)
+    if section is None:
+        return [*problems, f"{_README}: no {_WHO_DID_WHAT!r} section"]
+    shown = _visible(section)
+    problems += [
+        f"{_README}: under {_WHO_DID_WHAT!r}, carries {term!r}"
+        for term in _WHO_DID_WHAT_RETIRED
+        if _names(shown, term)
+    ]
+    problems += [
+        f"{_README}: under {_WHO_DID_WHAT!r}, missing {term!r}"
+        for term in _WHO_DID_WHAT_REQUIRED
+        if term not in shown
+    ]
+    return problems
+
+
+def _guide_wording_problems(markdown: str, visible: str) -> list[str]:
+    """The guide's audit list: the latest audit first, no filename as link text."""
+
+    problems = [
+        f"{_READING_GUIDE}: link text names the file {token!r}"
+        for token in _AUDIT_TOKEN.findall(visible)
+    ]
+    section = _section(markdown, _GUIDE_AUDITS)
+    if section is None:
+        return [*problems, f"{_READING_GUIDE}: no {_GUIDE_AUDITS!r} section"]
+    targets = _LINK_TARGET.findall(section)
+    if not targets or targets[0] != _LATEST_AUDIT:
+        first = targets[0] if targets else None
+        problems.append(
+            f"{_READING_GUIDE}: the audit list opens on {first!r}, not {_LATEST_AUDIT!r}"
+        )
+    return problems
+
+
+def _wording_problems(root: Path) -> dict[str, list[str]]:
+    """Every wording problem of the six pages under ``root``, by page."""
+
+    problems: dict[str, list[str]] = {}
+    for page in _WORDING_PAGES:
+        found = _page_wording_problems(page, (root / page).read_text(encoding="utf-8"))
+        if found:
+            problems[page] = found
+    return problems
+
+
+def test_the_front_door_wording_pin_holds() -> None:
+    assert _wording_problems(_REPO_ROOT) == {}
+
+
+# The texts the answers of 2026-10-11 replaced, as they stood at 7d781f8e.
+_ERA_SENTENCE_AT_BASE = (
+    "The shown 9-player set was recorded 2026-10-09 under the adopted gameplay "
+    "changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-"
+    "recorded-identity); the 4-player set and the ML corpus stay at [baseline 9]"
+    "(docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22."
+)
+_WHO_DID_WHAT_AT_BASE = (
+    "Daniel directed product scope, acceptance criteria, priorities, and adoption "
+    "decisions. Claude Code implemented the initial project; Codex reviewed it and "
+    "now also implements cleanup. Agents wrote production code and substantial "
+    "supporting plans, cards, tests, documentation, and audits. Daniel did not "
+    "hand-write the production code. “Independent” audits here mean separate AI "
+    "reviewers, not independent human assurance."
+)
+_BARS_AT_BASE = (
+    "**Two bars were written down first, and both were missed.** Baseline 7 "
+    "measured conviction accuracy without proof at 61 of 103 = 0.5922 against "
+    "0.60, and wrongful ejections at 42 against fewer than 35; its rule returned "
+    "**FINDING**, and Daniel adopted it by explicit owner override on 2026-08-26. "
+    "Baseline 8 registered none: 50 of 96 = 0.5208 with 46 innocent ejections. "
+    "Nor did baseline 9: 43 of 85 = 0.5059 with 42 innocent ejections over four "
+    "sets, a movement these samples cannot call real. [The decision and its "
+    "limitations](docs/ownership-case-study.md)."
+)
+_EXPERIMENT_AT_BASE = (
+    "**An experiment on baseline 8 met three of four fresh bars.** Innocent "
+    "ejections fell from 46 to 20; 11 of those 20 were the meeting's own reporter, "
+    "against 34 of 46. That share, 0.5500, missed 0.40, so the rule returns **a "
+    "finding**, with no override and no adoption "
+    "([record](audits/audit-phase-21-adopting-record.md))."
+)
+_CONTRIBUTING_AT_BASE = (
+    "working against a task contract authorized by the owner, in a fresh "
+    "checkout, with\nCI and a human review as the gates."
+)
+_SECURITY_AT_BASE = (
+    "service. There is no hosted instance, no user accounts, and no production\n"
+    "deployment to compromise."
+)
+_DECEPTION_AT_BASE = (
+    "**Deception: demonstrated, and the strongest capability on display.**"
+)
+_SECURITY_NOW = (
+    "service. Its one hosted copy is the static demo at\n"
+    "<https://dkdan10.github.io/AiLibi/>: recorded games, with no backend, no\n"
+    "accounts and no API."
+)
+_CONTRIBUTING_NOW = (
+    "working against a task contract authorized by the owner, in a fresh checkout. "
+    "CI\nis the gate, separate AI reviewers check each change, and the owner "
+    "decides what\nis accepted and published."
+)
+
+
+def _wording_tree(tmp_path: Path) -> Path:
+    """A scratch copy of the six pages the wording pin reads."""
+
+    for page in _WORDING_PAGES:
+        copied = tmp_path / page
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        copied.write_bytes((_REPO_ROOT / page).read_bytes())
+    return tmp_path
+
+
+def _planted(tmp_path: Path, page: str, old: str, new: str) -> dict[str, list[str]]:
+    """The pin's problems with ``old`` replaced by ``new`` on one scratch page."""
+
+    tree = _wording_tree(tmp_path)
+    assert _wording_problems(tree) == {}
+    text = (tree / page).read_text(encoding="utf-8")
+    assert text.count(old) == 1, (page, old)
+    (tree / page).write_text(text.replace(old, new), encoding="utf-8")
+    return _wording_problems(tree)
+
+
+_ERA_SENTENCE_NOW = (
+    "The shown 9-player set was recorded 2026-10-09 under the adopted gameplay "
+    "changes; the 4-player set and the ML training games were recorded 2026-09-22."
+)
+
+
+@pytest.mark.parametrize(
+    ("page", "old", "new", "expected"),
+    [
+        pytest.param(
+            _README,
+            _ERA_SENTENCE_NOW,
+            _ERA_SENTENCE_AT_BASE,
+            ["README.md: carries 'in its own era'", "README.md: carries 'ML corpus'"],
+            id="era-link-restored",
+        ),
+        pytest.param(
+            _README,
+            "\n*Recorded AI social deduction*\n",
+            "\n",
+            [
+                "README.md: the line under the title is not "
+                "'Recorded AI social deduction'"
+            ],
+            id="tagline-deleted",
+        ),
+        pytest.param(
+            _README,
+            f"*Recorded AI social deduction*\n\n{_BYLINE}\n",
+            f"{_BYLINE}\n\n*Recorded AI social deduction*\n",
+            [
+                "README.md: the line under the title is not "
+                "'Recorded AI social deduction'"
+            ],
+            id="tagline-below-the-byline",
+        ),
+        pytest.param(
+            _README,
+            "[See the results]",
+            "[Inspect results and decisions]",
+            [
+                "README.md: missing 'See the results'",
+                "README.md: carries 'Inspect results and decisions'",
+            ],
+            id="results-link-restored",
+        ),
+        pytest.param(
+            _README,
+            "by **Daniel Keinan**",
+            "by **[Daniel Keinan](docs/lessons.md)**",
+            ["README.md: the byline is not kept byte for byte"],
+            id="byline-linked",
+        ),
+        pytest.param(
+            _README,
+            f"{_BYLINE}\n",
+            f"{_BYLINE} · [Lessons](docs/lessons.md)\n",
+            ["README.md: the byline is not kept byte for byte"],
+            id="byline-with-a-link-appended",
+        ),
+        pytest.param(
+            _README,
+            "AI agents wrote it,",
+            "Claude Code implemented it,",
+            ["README.md: under '## Who did what', carries 'Claude Code'"],
+            id="agent-named-under-the-heading",
+        ),
+        pytest.param(
+            _README,
+            "and the audits here are AI reviews, not independent human assurance.",
+            "and the audits here are AI reviews.",
+            [
+                "README.md: under '## Who did what', missing 'not independent "
+                "human assurance'"
+            ],
+            id="second-honesty-fact-dropped",
+        ),
+        pytest.param(
+            _README,
+            "Daniel Keinan directed the project and decided what was accepted, "
+            "without hand-writing the production code; AI agents wrote it, and the "
+            "audits here are AI reviews, not independent human assurance.",
+            _WHO_DID_WHAT_AT_BASE,
+            [
+                "README.md: under '## Who did what', carries 'Claude Code'",
+                "README.md: under '## Who did what', carries 'Codex'",
+                "README.md: under '## Who did what', missing 'without "
+                "hand-writing the production code'",
+            ],
+            id="per-agent-paragraph-restored",
+        ),
+        pytest.param(
+            _README,
+            _MISSED_BARS,
+            _BARS_AT_BASE,
+            [
+                "README.md: carries '0.5922 against 0.60'",
+                "README.md: carries '50 of 96 = 0.5208'",
+                "README.md: carries '43 of 85 = 0.5059'",
+                "README.md: carries 'finding'",
+                "README.md: the missed-targets sentence is not kept as answered",
+            ],
+            id="missed-bar-paragraph-restored",
+        ),
+        pytest.param(
+            _README,
+            _MISSED_BARS,
+            _EXPERIMENT_AT_BASE,
+            [
+                "README.md: carries 'against 34 of 46'",
+                "README.md: carries 'missed 0.40'",
+                "README.md: carries 'finding'",
+                "README.md: the missed-targets sentence is not kept as answered",
+            ],
+            id="experiment-paragraph-restored",
+        ),
+        pytest.param(
+            _README,
+            f"\n{_MISSED_BARS}\n",
+            "\n",
+            ["README.md: the missed-targets sentence is not kept as answered"],
+            id="missed-targets-sentence-deleted",
+        ),
+        pytest.param(
+            _README,
+            _MISSED_BARS,
+            f"{_MISSED_BARS} Both are adopted now.",
+            ["README.md: the missed-targets sentence is not kept as answered"],
+            id="missed-targets-sentence-with-a-clause-appended",
+        ),
+        pytest.param(
+            _README,
+            "and nothing from the second",
+            "and the second as well",
+            ["README.md: the missed-targets sentence is not kept as answered"],
+            id="second-recording-said-adopted",
+        ),
+        pytest.param(
+            _README,
+            "(docs/history.md#evidence-honesty-phase-20)",
+            "(docs/ownership-case-study.md)",
+            ["README.md: the missed-targets sentence is not kept as answered"],
+            id="missed-targets-link-moved",
+        ),
+        pytest.param(
+            _README,
+            "records 61 ejections;",
+            "records 61 ejections, vote correctness 0.783;",
+            ["README.md: carries 'vote correctness 0.783'"],
+            id="report-rate-restored",
+        ),
+        pytest.param(
+            _README,
+            "played by the `Qwen/Qwen3.6-27B` model.",
+            "using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts.",
+            ["README.md: carries 'qwen3_6_27b'", "README.md: carries 'v6'"],
+            id="stamps-restored",
+        ),
+        pytest.param(
+            _README,
+            "played by the `Qwen/Qwen3.6-27B` model.",
+            "played by the `Qwen/Qwen3.6-27B` model with a `v8` ballot.",
+            ["README.md: carries 'v8'"],
+            id="ballot-stamp-restored",
+        ),
+        pytest.param(
+            _README,
+            "a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)):",
+            "a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)), "
+            "its ballot stamped `impostor_ballot_v1`, `ballot_kill_row_v1` and "
+            "`route_lines_v1`:",
+            [
+                "README.md: carries 'impostor_ballot_v1'",
+                "README.md: carries 'ballot_kill_row_v1'",
+                "README.md: carries 'route_lines_v1'",
+            ],
+            id="arm-stamps-restored",
+        ),
+        pytest.param(
+            _README,
+            "name each body by a label that reveals when it died",
+            "reveal a hidden death tick through a body identifier",
+            ["README.md: carries 'body identifier'"],
+            id="body-identifier-restored",
+        ),
+        pytest.param(
+            _README,
+            "The full repair stays switched off,",
+            "The full temporal repair stays switched off,",
+            ["README.md: carries 'temporal repair'"],
+            id="temporal-repair-restored",
+        ),
+        pytest.param(
+            _README,
+            "The full repair stays switched off,",
+            "The full repair stays default-off,",
+            ["README.md: carries 'default-off'"],
+            id="default-off-restored",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "**Results** shows",
+            "**Results & cases** shows",
+            [
+                'docs/reading-guide.md: missing "Results shows each set\'s figures"',
+                "docs/reading-guide.md: carries 'Results & cases'",
+            ],
+            id="tab-name-restored",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "**Deception: demonstrated in earlier recordings**, as",
+            _DECEPTION_AT_BASE + " As",
+            [
+                "docs/reading-guide.md: missing 'Deception: demonstrated in earlier "
+                "recordings'",
+                "docs/reading-guide.md: carries 'strongest capability on display'",
+            ],
+            id="deception-claim-restored",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "spoiler-free;",
+            "hand-picked, not scored, and spoiler-free;",
+            ["docs/reading-guide.md: carries 'hand-picked, not scored'"],
+            id="unscored-restored",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "the ML training games were recorded",
+            "the ML corpus were recorded",
+            ["docs/reading-guide.md: carries 'ML corpus'"],
+            id="ml-corpus-in-the-guide",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "[The fresh-clone audit](../audits/audit-phase-19-input-claude.md).",
+            "[audit-phase-19-input-claude.md](../audits/audit-phase-19-input-claude.md).",
+            [
+                "docs/reading-guide.md: link text names the file "
+                "'audit-phase-19-input-claude.md'"
+            ],
+            id="filename-as-link-text",
+        ),
+        pytest.param(
+            _READING_GUIDE,
+            "## 4. Four audits, in this order",
+            "## 4. Three audits, in this order",
+            [
+                "docs/reading-guide.md: missing 'Four audits'",
+                "docs/reading-guide.md: no '## 4. Four audits, in this order' section",
+            ],
+            id="three-audits-heading-restored",
+        ),
+        pytest.param(
+            _LESSONS,
+            "# What I learned\n",
+            "<!-- OWNER: confirm wording -->\n# What I learned\n",
+            ["docs/lessons.md: carries 'OWNER: confirm'"],
+            id="lessons-marker-restored",
+        ),
+        pytest.param(
+            _LESSONS,
+            "personally written every artifact.\n",
+            "personally written every artifact.\n<!-- OWNER: end. -->\n",
+            ["docs/lessons.md: carries 'OWNER: end'"],
+            id="lessons-end-marker-restored",
+        ),
+        pytest.param(
+            _OWNERSHIP_CASE,
+            'verbatim: "Keep the comparison\nrecords".',
+            'verbatim: "Keep the records".',
+            ["docs/ownership-case-study.md: missing 'Keep the comparison records'"],
+            id="ruling-not-quoted",
+        ),
+        pytest.param(
+            _OWNERSHIP_CASE,
+            "This case study was drafted by Codex",
+            "This case study was drafted by AI agents",
+            [f"docs/ownership-case-study.md: missing {_CASE_STUDY_OPENING!r}"],
+            id="opening-edited",
+        ),
+        pytest.param(
+            "SECURITY.md",
+            _SECURITY_NOW,
+            _SECURITY_AT_BASE,
+            [
+                "SECURITY.md: missing 'https://dkdan10.github.io/AiLibi/'",
+                "SECURITY.md: carries 'There is no hosted instance'",
+            ],
+            id="no-hosted-instance-restored",
+        ),
+        pytest.param(
+            "CONTRIBUTING.md",
+            _CONTRIBUTING_NOW,
+            _CONTRIBUTING_AT_BASE,
+            ["CONTRIBUTING.md: carries 'a human review as the gates'"],
+            id="human-review-restored",
+        ),
+    ],
+)
+def test_the_wording_pin_refuses_each_restored_text(
+    tmp_path: Path, page: str, old: str, new: str, expected: list[str]
+) -> None:
+    # Each planted case puts one replaced text back on one scratch page; the
+    # pin names that page alone, and every problem the case expects.
+    problems = _planted(tmp_path, page, old, new)
+    assert set(problems) == {page}
+    assert all(item in problems[page] for item in expected), problems[page]
+
+
+def test_the_wording_pin_reads_the_audit_list_in_order(tmp_path: Path) -> None:
+    # Planted: the 2026-10-10 entry moved second, below the fresh-clone audit.
+    tree = _wording_tree(tmp_path)
+    guide = (tree / _READING_GUIDE).read_text(encoding="utf-8")
+    lead = (
+        "1. [The finished-state audit of 2026-10-10]"
+        "(../audits/audit-2026-10-10-finalized-state.md).\n"
+        "   **What it proves:** what the finished project shows and does not, each\n"
+        "   figure with its command.\n"
+    )
+    fresh = (
+        "2. [The fresh-clone audit](../audits/audit-phase-19-input-claude.md). "
+        "**What it\n"
+        "   proves:** a stranger can reproduce every derived metric from the "
+        "committed\n"
+        "   bytes.\n"
+    )
+    assert guide.count(lead + fresh) == 1
+    moved = fresh.replace("2. ", "1. ", 1) + lead.replace("1. ", "2. ", 1)
+    (tree / _READING_GUIDE).write_text(guide.replace(lead + fresh, moved))
+    assert _wording_problems(tree) == {
+        _READING_GUIDE: [
+            f"{_READING_GUIDE}: the audit list opens on "
+            "'../audits/audit-phase-19-input-claude.md', not "
+            f"{_LATEST_AUDIT!r}"
+        ]
+    }
+
+
+def test_the_wording_pin_reads_who_did_what_facts_in_their_section(
+    tmp_path: Path,
+) -> None:
+    # Planted: the second honesty fact moved out of "Who did what" into its own
+    # paragraph above the heading. The page still carries it, so only a read of
+    # the section itself names it missing.
+    tree = _wording_tree(tmp_path)
+    readme = (tree / _README).read_text(encoding="utf-8")
+    fact = "and the audits here are AI reviews, not independent human assurance."
+    heading = f"\n{_WHO_DID_WHAT}\n"
+    assert readme.count(fact) == 1 and readme.count(heading) == 1
+    moved = readme.replace(fact, "and the audits here are AI reviews.").replace(
+        heading, f"\nThe audits here are not independent human assurance.\n{heading}"
+    )
+    (tree / _README).write_text(moved, encoding="utf-8")
+    assert "not independent human assurance" in _visible(moved)
+    assert _wording_problems(tree) == {
+        _README: [
+            f"{_README}: under {_WHO_DID_WHAT!r}, missing "
+            "'not independent human assurance'"
+        ]
+    }
+
+
+@pytest.mark.parametrize(
+    ("in_section", "below", "expected"),
+    [
+        pytest.param(
+            "AI reviews.",
+            "The audits here are not independent human assurance.",
+            {
+                _README: [
+                    f"{_README}: under {_WHO_DID_WHAT!r}, missing "
+                    "'not independent human assurance'"
+                ]
+            },
+            id="fact-moved-below",
+        ),
+        pytest.param(
+            "AI reviews, not independent human assurance.",
+            "Codex agents ran these commands.",
+            {},
+            id="agent-name-below",
+        ),
+    ],
+)
+def test_the_wording_pin_ends_who_did_what_at_the_next_heading(
+    tmp_path: Path, in_section: str, below: str, expected: dict[str, list[str]]
+) -> None:
+    # Planted: a paragraph just below the heading after "Who did what". It lies
+    # outside the section, so the second honesty fact moved there is missing
+    # from it, and an agent name written there is not the section's.
+    tree = _wording_tree(tmp_path)
+    readme = (tree / _README).read_text(encoding="utf-8")
+    lines = readme.splitlines()
+    start = lines.index(_WHO_DID_WHAT) + 1
+    following = f"\n{next(line for line in lines[start:] if line.startswith('## '))}\n"
+    fact = "AI reviews, not independent human assurance."
+    assert readme.count(fact) == 1 and readme.count(following) == 1
+    planted = readme.replace(fact, in_section).replace(
+        following, f"{following}\n{below}\n"
+    )
+    (tree / _README).write_text(planted, encoding="utf-8")
+    assert _wording_problems(tree) == expected
+
+
+def test_the_wording_pin_keeps_a_deeper_heading_inside_who_did_what(
+    tmp_path: Path,
+) -> None:
+    # Planted: the second honesty fact under a subheading of the section. Only a
+    # heading of the section's own level ends it, so the fact is still its own.
+    moved = (
+        "AI reviews.\n\n### What the audits are\n\n"
+        "They are not independent human assurance."
+    )
+    fact = "AI reviews, not independent human assurance."
+    assert _planted(tmp_path, _README, fact, moved) == {}
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [
+        pytest.param(
+            "AI reviews, not independent human assurance.",
+            "AI reviews, not independent\nhuman assurance.",
+            {},
+            id="fact-hard-wrapped",
+        ),
+        pytest.param(
+            "AI agents wrote it",
+            "**Claude** Code agents wrote it",
+            {_README: [f"{_README}: under {_WHO_DID_WHAT!r}, carries 'Claude Code'"]},
+            id="agent-name-split-by-bold",
+        ),
+    ],
+)
+def test_the_wording_pin_reads_who_did_what_as_a_visitor_reads_it(
+    tmp_path: Path, old: str, new: str, expected: dict[str, list[str]]
+) -> None:
+    # Planted: the section's text in marks a visitor never sees. A fact wrapped
+    # across two lines still reads whole, and an agent name split by bold still
+    # reads as that name.
+    assert _planted(tmp_path, _README, old, new) == expected
+
+
+def test_the_wording_pin_matches_whole_phrases() -> None:
+    # A retired word inside a longer one is not that word: "findings" is not
+    # "finding", and "v60" is not "v6"; the verdict word is read case-folded.
+    assert not _names("how findings become bounded changes", "finding", folded=True)
+    assert _names("its rule returned FINDING", "finding", folded=True)
+    assert not _names("a v60 stamp", "v6")
+    assert _names("`v6` prompts", "v6")
+    assert _visible("**[See the results](https://x.example/)** · `v8`") == (
+        "See the results · v8"
+    )
+
+
+def test_report_example_rates_are_not_its_claims(doc_tree: Path) -> None:
+    # Planted: a rate the counts are taken over, written back beside them. It is
+    # no longer one of the example's claims, so the doc-facts check passes it;
+    # the wording pin is what refuses it.
+    _substitute(
+        doc_tree,
+        _README,
+        "records 61 ejections;",
+        "records 61 ejections, vote correctness 0.783;",
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+    assert "README.md: carries 'vote correctness 0.783'" in _page_wording_problems(
+        _README, _read(doc_tree, _README)
+    )
+
+
+def test_a_removed_replay_moves_the_count_figure(doc_tree: Path) -> None:
+    # The replay count is read off the files on disk: one replay fewer, and the
+    # figure the row must state is 99 of 99, not the 100 it says.
+    replay = next(
+        (doc_tree / "replays" / "samples" / "4p1i").glob("replay-seed-*.jsonl")
+    )
+    replay.unlink()
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        error.startswith(f"{_README}: the results row 'Sample games that replay")
+        and "recomputes to '99 of 99 (100%)'" in error
+        for error in errors
+    )
+
+
+def test_the_cited_count_pin_moves_the_citation_figure(doc_tree: Path) -> None:
+    # Both counts of the citation row are the instrument's pins: the cited
+    # count moved there moves the figure the row must state.
+    _substitute(
+        doc_tree,
+        _CITATION_INSTRUMENT,
+        "assert nine.cited_eject_ballots == 397",
+        "assert nine.cited_eject_ballots == 396",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        "recomputes to '396 of 397 (100%), zero dangling'" in error for error in errors
+    )
+
+
+def test_the_partner_ballot_pin_moves_the_row(doc_tree: Path) -> None:
+    # The partner row's total is the instrument's pinned impostor-ballot count.
+    _substitute(
+        doc_tree,
+        _DEDUCTION_INSTRUMENT,
+        "samples.impostor_ballots) == (10, 198)",
+        "samples.impostor_ballots) == (10, 197)",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{_READING_GUIDE}: the row 'Impostor ballots cast against a partner (9p2i)' "
+        f"reads '0 of 198 (0%)', but {_DEDUCTION_INSTRUMENT} pins '0 of 197 (0%)'."
+    ]
+
+
+def test_a_fraction_over_no_population_in_a_table_fails(doc_tree: Path) -> None:
+    # Planted: a guide-only before cell over zero, which has no percentage.
+    _substitute(
+        doc_tree,
+        _READING_GUIDE,
+        "| 0 of 14 (0%) | 0 of 14 (0%) |",
+        "| 0 of 14 (0%) | 0 of 0 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert errors == [
+        f"{_READING_GUIDE}: the results row 'Learned behaviours the ML program set "
+        "out to show' states '0 of 0', a fraction over no population."
+    ]

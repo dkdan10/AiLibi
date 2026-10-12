@@ -7,8 +7,9 @@ pull requests are not the workflow.**
 
 AiLibi is an experiment in agentic software workflow as much as it is a
 social-deduction simulator. Every coding change is written by an AI coding agent
-working against a task contract authorized by the owner, in a fresh checkout, with
-CI and a human review as the gates. The contract — not this file, and not a
+working against a task contract authorized by the owner, in a fresh checkout. CI
+is the gate, separate AI reviewers check each change, and the owner decides what
+is accepted and published. The contract — not this file, and not a
 conversation on a PR — is the specification the agent sees.
 
 That has a direct consequence for outside contributions: there is no review lane

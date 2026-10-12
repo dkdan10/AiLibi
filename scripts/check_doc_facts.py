@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Twenty-two checks. Each accumulates precise errors; all of them are reported
+Twenty-three checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -30,10 +30,12 @@ together, so one run names every drifted fact rather than the first.
    refused. The paragraph's count claims are re-derived from the same rows —
    the per-set tournament size (``"<rows>-game"``) and the total
    (``"<sum> sample replays"``), with every count-shaped claim in the
-   paragraph held to the row totals — and the recording model plus the
-   prompt-set family, version and arm tokens the ``model`` /
-   ``prompt_versions`` columns record (a two-arm composite split on ``+``)
-   must be named in the paragraph as well. Both claim shapes are then scanned
+   paragraph held to the row totals — and the recording model the ``model``
+   column records must be named in the paragraph as well. The prompt stamps
+   are the manifests' to state: the paragraph links each set's MANIFEST.md, and
+   any version or arm token it does name (``v<N>``, ``<name>_v<N>``, backticked
+   or not) must be one the ``prompt_versions`` column records (a composite
+   split on ``+``). Both claim shapes are then scanned
    across every document allowed to repeat them — README.md,
    docs/history.md, docs/glossary.md, audits/README.md,
    docs/reading-guide.md and docs/ml-program.md — because a figure the front
@@ -116,8 +118,9 @@ together, so one run names every drifted fact rather than the first.
    the record read. The win rates are re-derived in check 1.
 10. **The real-report example matches that report.** README.md hands a reader a
     populated eval report because the default fake provider produces an empty
-    one; its ejection count and two rates come from that report's own
-    ``vote_correctness`` block, never from prose.
+    one; its three ejection counts (all ejections, those that removed an
+    impostor, and those with evidence on the meeting's record) come from that
+    report's own ``vote_correctness`` block, never from prose.
 11. **Volatile counts carry an as-of stamp.** A count that changes without any
     commit touching the prose (merged pull requests, commits, tests) must be
     stated with ``as of YYYY-MM-DD`` in its own sentence. The stamp's presence
@@ -154,7 +157,9 @@ together, so one run names every drifted fact rather than the first.
     ``k of n = rate`` is held to its own arithmetic at the precision it prints,
     and every sentence naming a wrongful or innocent ejection must name the
     count the record read — or the count the recording before it read, which
-    is what the before column is for.
+    is what the before column is for. The deciding record's verdict passage
+    lives on docs/history.md, which must carry it whole; the README gives the
+    missed bars one sentence and a link there.
 18. **The published review index accounts for every finding, and its map
     resolves.** Every register id named on a ``**Section refs:**`` line of
     ``tasks/phase-20.md`` must appear somewhere in
@@ -200,6 +205,11 @@ together, so one run names every drifted fact rather than the first.
     before column must name the era the shown set's recording replaced. The two
     integrity rows open both tables, the four follow, and every other row sits
     below all four.
+23. **Both results tables state a fraction one way.** Every fraction in a
+    figure or before cell reads ``k of n (p%)``, the percentage rounded as the
+    win rates are (``round(100 * k / n)``); one helper renders that form for
+    every derived cell, and the forms it replaced (``k/n``, ``k / n`` and a
+    printed ``= 0.…`` rate) are refused in any cell of either table.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -378,6 +388,10 @@ _RECORD_DATE_CLAIM: Final = re.compile(r"the (\d{4}-\d{2}-\d{2}) record\b")
 # parentheses directly after it: "the 2026-10-01 record (9p2i)". A claim naming
 # no set, or a set recorded on another day, is drift.
 _CLAIM_SETS: Final = re.compile(r"\s*\(([^)]*)\)")
+# A prompt stamp the provenance paragraph names, backticked or not: an arm token
+# (``route_lines_v1``) or a bare version (``v6``). The paragraph leaves the
+# stamps to the manifests it links, so one it does name must be recorded.
+_STAMP_TOKEN: Final = re.compile(r"\b\w*_v\d+\b|\bv\d+\b")
 _SET_NAME: Final = re.compile(r"\b(4p1i|9p2i)\b")
 
 # The .env.example section whose AILIBI_*= assignments must all resolve to a
@@ -555,12 +569,10 @@ _TABLE_RULE_CELL: Final = re.compile(r"\A:?-{2,}:?\Z")
 # the two tables: agreement catches a one-sided edit, not the same wrong figure
 # written into both. Each claim string is the row's first cell.
 _SAMPLE_REPLAY_DIR: Final = "replays/samples/{name}"
-_REPLAY_COUNT_CLAIM: Final = (
-    "Committed sample replays that reconstruct byte-identically"
-)
+_REPLAY_COUNT_CLAIM: Final = "Sample games that replay byte for byte"
 _CITATION_INSTRUMENT: Final = "tests/eval/test_vj_instruments.py"
 _CITATION_CLAIM: Final = (
-    "Eject ballots carrying a valid citation, a turn or an observation id (9p2i)"
+    "Eject ballots with a valid citation of a statement or sighting (9p2i)"
 )
 # The instrument's pinned assertions, read as the committed source of the
 # citation figure: ``assert nine.<field> == <n>``.
@@ -571,7 +583,9 @@ _CITATION_PIN_NAMES: Final[tuple[str, ...]] = (
     "turn_citations_dangling",
     "observation_citations_dangling",
 )
-_VENT_CLAIM: Final = "Correct 9p ejections riding an ejectee-specific vent sighting"
+_VENT_CLAIM: Final = (
+    "Impostors ejected after a reported sighting of them venting (9p2i)"
+)
 _VENT_TABLE_HEADER: Final = "Meeting contains a vent flag"
 # The reading guide's §3 cross-tab, and the committed instrument whose pinned
 # assertions own its cells. The guide's table is where the README's vent
@@ -606,7 +620,10 @@ _VENT_ROW_MEETINGS: Final = re.compile(r"\|\s*(yes|no)\s*\((\d+) meetings\)")
 # the recording. The zero is the firewall holding; the total is a pinned count
 # of the impostor ballots it held over.
 _PARTNER_BALLOT_CLAIM: Final = "Impostor ballots cast against a partner (9p2i)"
-_PARTNER_BALLOT_FIGURE: Final = "0 of {total}"
+# None is cast: the firewall rewrites every ballot naming a partner to a skip,
+# so the row's numerator is that zero, and the pin's own first count is the
+# ballots the model wrote naming one before the rewrite.
+_PARTNER_BALLOTS_CAST: Final = 0
 _PARTNER_BALLOT_PIN: Final = re.compile(
     r"samples\.model_partner_naming_ballots,\s*samples\.impostor_ballots\)\s*"
     r"==\s*\(\d+,\s*(\d+)\)"
@@ -681,8 +698,7 @@ _REPLACED_ERAS: Final[Mapping[str, Era]] = MappingProxyType(
 )
 _WIN_SPLIT_ROW: Final = "samples/{name}"
 _PROOF_CLAIM: Final = (
-    "Ejection accuracy with engine-certified proof of the ejectee's role, "
-    "against without (9p2i)"
+    "Impostors among those ejected, with and without proof of their role (9p2i)"
 )
 # The set the proof row reads, alone: its after cells are its own era's record's
 # row for it, its before cells the row the recording it replaced published.
@@ -716,7 +732,7 @@ _INJUSTICE_CLAIM: Final = (
 # ``NO_CONSUMER_NOTE``). Each pair is the row's claim and the page's row label.
 _SCORECARD_PAGE: Final = "docs/process-scorecard.md"
 _GROUNDED_EJECT_CLAIM: Final = (
-    "Eject ballots citing a line the voter held about their target (9p2i)"
+    "Eject ballots citing what the voter saw or heard about the accused (9p2i)"
 )
 _DEVIATING_EJECT_CLAIM: Final = (
     "Crew eject ballots naming someone other than the voter's top suspect (9p2i)"
@@ -753,7 +769,7 @@ _SCORECARD_NO_REWRITES: Final = "none"
 # A results row whose history cell this checker RE-DERIVES from the audit that
 # owns it, rather than only comparing the two tables' copies; the process rows'
 # history cells are re-derived from the scorecard page's before column.
-_WIN_RATE_ROW_CLAIM: Final = "Impostor win rate, committed samples"
+_WIN_RATE_ROW_CLAIM: Final = "Impostor win rate, sample games"
 _DERIVED_BEFORE_CLAIMS: Final[frozenset[str]] = frozenset(
     {_WIN_RATE_ROW_CLAIM, _PROOF_CLAIM, *(claim for claim, _ in _PROCESS_ROWS)}
 )
@@ -768,6 +784,15 @@ _QUOTED_BEFORE_CLAIMS: Final[frozenset[str]] = frozenset(
         _PARTNER_BALLOT_CLAIM,
     }
 )
+# The one form both results tables state a fraction in, ``k of n (p%)``, read
+# with its percentage when it carries one; and the forms it replaced, refused in
+# any cell of either table: a slash between two counts, or a printed decimal
+# rate after an equals sign.
+_TABLE_FRACTION: Final = re.compile(r"\b(\d+) of (\d+)\b(?: \((\d+)%\))?")
+_RETIRED_NUMBER_FORM: Final = re.compile(r"\d+\s*/\s*\d+|=\s*\d*\.\d+")
+# A scorecard page cell as the generated page prints it, ``k/n = rate``; its two
+# counts are what the tables restate in their own form.
+_SCORECARD_FRACTION: Final = re.compile(r"\A(\d+)/(\d+) = \d*\.?\d+%?\Z")
 # A whole integer, so a count is matched as a number and not as a run of digits
 # inside a longer one.
 _WHOLE_NUMBER: Final = re.compile(r"\b\d+\b")
@@ -910,15 +935,19 @@ _FINDING_VERDICT: Final = "a finding"
 _ADOPTION_VERDICT: Final = "an adoption"
 # The opening of each required claim. A document that states the claim AT ALL
 # must state it with the record's own numbers; a document that never mentions
-# it is not required to. The README is the exception — it is where the verdict
-# passage lives, so it must carry both.
+# it is not required to. The verdict passage's home is the exception — it is
+# where the figures and the verdict live, so it must carry all three.
 _FINDING_CLAIM_STEMS: Final[tuple[str | None, ...]] = (
     "innocent ejections fell from",
     "the meeting's own reporter",
-    # The verdict word is the README's alone: it is the sentence that reports
-    # the rule, and a page may narrate the counts without restating the rule.
+    # The verdict word is the home's alone: it is the sentence that reports the
+    # rule, and a page may narrate the counts without restating the rule.
     None,
 )
+# The page that carries the verdict passage whole. The README gives the missed
+# bars one plain sentence and links here, so the figures and the verdict word
+# are required on this page and held, wherever else they appear, to its wording.
+_VERDICT_HOME: Final = _HISTORY
 # The tally beside that verdict: how many bars were registered, and how many of
 # them passed. The verdict WORD does not carry it — one bar missed and three
 # reads "a finding" exactly as three missed and one does — so the inventory is
@@ -994,6 +1023,22 @@ _VENT_ROW_LABELS: Final[tuple[str, str]] = ("yes", "no")
 # fake-provider run produces, and the phrase that anchors its paragraph.
 _POPULATED_REPORT: Final = "replays/samples/9p2i/" + REPORT_FILENAME
 _EXAMPLE_ANCHOR: Final = "fake provider's report is empty on purpose"
+# What the example states, as ``(label, report key, wording)``: the three counts
+# the report's own ``vote_correctness`` block carries, each in what it counts.
+_REPORT_EXAMPLE_CLAIMS: Final[tuple[tuple[str, str, str], ...]] = (
+    ("ejections", "total_ejections", "{total_ejections:d} ejections"),
+    (
+        "impostor ejections",
+        "impostor_ejections",
+        "{impostor_ejections:d} removed an impostor",
+    ),
+    (
+        "evidence-backed impostor ejections",
+        "evidence_backed_impostor_ejections",
+        "{evidence_backed_impostor_ejections:d} of those {impostor_ejections:d} "
+        "with evidence against that player",
+    ),
+)
 
 # One word budget per front-door page, as ``(document, floor, ceiling)`` —
 # ``None`` where a page has no floor. Measured with ``wc -w`` semantics:
@@ -1508,7 +1553,6 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
 
     facts: dict[str, _SetFacts] = {}
     models: set[str] = set()
-    prompt_families: set[str] = set()
     prompt_versions: set[str] = set()
     prompt_arms: set[str] = set()
     for name in _SAMPLE_SETS:
@@ -1530,8 +1574,7 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
         )
         models.update(row.model.strip() for row in rows)
         for row in rows:
-            families, versions, arms = prompt_stamp_tokens(row.prompt_versions)
-            prompt_families |= families
+            _, versions, arms = prompt_stamp_tokens(row.prompt_versions)
             prompt_versions |= versions
             prompt_arms |= arms
 
@@ -1645,18 +1688,27 @@ def check_sample_provenance(repo_root: Path, readme: str, errors: list[str]) -> 
                 f"the recording model {model!r} — the manifest `model` column "
                 "records it on every row."
             )
-    for kind, tokens in (
-        ("prompt-set family", prompt_families),
-        ("prompt-set version", prompt_versions),
-        ("prompt arm", prompt_arms),
-    ):
-        for token in sorted(tokens):
-            if token not in paragraph:
-                errors.append(
-                    f"{_README}: the sample-provenance paragraph does not "
-                    f"name the {kind} {token!r} — the manifest "
-                    "`prompt_versions` column records it."
-                )
+    for name in facts:
+        manifest = _MANIFEST_PATH.format(name=name)
+        if f"]({manifest})" not in paragraph:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph does not link "
+                f"{manifest} — the paragraph names the model and leaves each "
+                "set's prompt stamps to its manifest, so the manifest is linked."
+            )
+    for match in _STAMP_TOKEN.finditer(paragraph):
+        token = match.group(0)
+        kind, recorded = (
+            ("prompt arm", prompt_arms)
+            if "_v" in token
+            else ("prompt-set version", prompt_versions)
+        )
+        if token not in recorded:
+            errors.append(
+                f"{_README}: the sample-provenance paragraph names the {kind} "
+                f"{token!r}, which no row's `prompt_versions` column records "
+                f"(recorded: {', '.join(sorted(recorded)) or 'none'})."
+            )
 
 
 def check_repeated_claims(
@@ -2935,6 +2987,67 @@ def check_results_agreement(repo_root: Path, readme: str, errors: list[str]) -> 
                 "same claim."
             )
     check_before_columns(readme, guide, errors)
+    for document, text in ((_README, readme), (_READING_GUIDE, guide)):
+        check_number_style(document, text, errors)
+
+
+def check_number_style(document: str, markdown: str, errors: list[str]) -> None:
+    """Every fraction in the results table, stated one way: ``k of n (p%)``.
+
+    The figure and before cells carry the fractions, so each ``k of n`` in them
+    must be followed by its percentage, rounded as :func:`fraction_figure`
+    rounds it. Every value cell of the table (all but the claim) is also read
+    for the forms that one style replaced, ``k/n``, ``k / n`` and a printed
+    ``= 0.…`` rate, so a cell this module only compares between the two tables
+    cannot keep an old form the derived cells have left.
+    """
+
+    header: list[str] | None = None
+    for line in markdown.splitlines():
+        cells = table_cells(line)
+        if cells is None or len(cells) < 2:
+            if header is not None:
+                break
+            continue
+        if header is None:
+            if tuple(cells[:2]) == _RESULTS_TABLE_HEADER:
+                header = [strip_links(cell) for cell in cells]
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        claim = strip_links(cells[0])
+        for cell in cells[1:]:
+            retired = _RETIRED_NUMBER_FORM.search(strip_links(cell))
+            if retired is not None:
+                errors.append(
+                    f"{document}: the results row {claim!r} writes "
+                    f"{retired.group(0)!r} — both tables state a fraction as "
+                    "'k of n (p%)' and print no decimal rate."
+                )
+        fractions = [
+            cells[index]
+            for index, name in enumerate(header)
+            if name in (_RESULTS_TABLE_HEADER[1], _BEFORE_COLUMN_HEADER)
+            and index < len(cells)
+        ]
+        for cell in fractions:
+            for match in _TABLE_FRACTION.finditer(strip_links(cell)):
+                numerator, denominator = int(match.group(1)), int(match.group(2))
+                stated = match.group(0)
+                if denominator <= 0:
+                    errors.append(
+                        f"{document}: the results row {claim!r} states "
+                        f"{stated!r}, a fraction over no population."
+                    )
+                    continue
+                expected = fraction_figure(numerator, denominator)
+                if stated != expected:
+                    errors.append(
+                        f"{document}: the results row {claim!r} states "
+                        f"{stated!r}, but that fraction reads {expected!r} — "
+                        "both tables carry each fraction's percentage, rounded "
+                        "as the win rates are."
+                    )
 
 
 def check_before_columns(readme: str, guide: str, errors: list[str]) -> None:
@@ -3075,7 +3188,7 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
         compare_result_figure(
             _REPLAY_COUNT_CLAIM,
             figures,
-            f"{replays} of {replays}",
+            fraction_figure(replays, replays),
             f"the {replays} committed replays under replays/samples/",
             errors,
         )
@@ -3093,7 +3206,8 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
             dangling = (
                 pins["turn_citations_dangling"] + pins["observation_citations_dangling"]
             )
-            expected = f"{pins['cited_eject_ballots']} / {pins['eject_ballots']}, " + (
+            cited = fraction_figure(pins["cited_eject_ballots"], pins["eject_ballots"])
+            expected = f"{cited}, " + (
                 "zero dangling" if dangling == 0 else f"{dangling} dangling"
             )
             compare_result_figure(
@@ -3116,7 +3230,7 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
         else:
             (flagged, _), (unflagged, _) = crosstab
             correct = flagged + unflagged
-            expected = f"{flagged} / {correct} = {round(100 * flagged / correct)}%"
+            expected = fraction_figure(flagged, correct)
             compare_result_figure(
                 _VENT_CLAIM,
                 figures,
@@ -3219,7 +3333,8 @@ def check_process_rows(repo_root: Path, readme: str, errors: list[str]) -> None:
     The front door leads with how each vote was cast: on a line its voter held,
     with or against its own top suspect, with a reason, and as its voter wrote
     it. Each row's figure and before cell, in BOTH results tables, is the shown
-    set's own cell on ``docs/process-scorecard.md`` — the generated markdown,
+    set's own cell on ``docs/process-scorecard.md``, restated in the tables'
+    ``k of n (p%)`` form (:func:`scorecard_fraction`) — the generated markdown,
     which ``scripts/publish_process_scorecard.py --check`` recomputes from the
     recordings — and its before cell is the page's frozen before column, the
     block of the era the shown set's recording replaced. The authored share
@@ -3240,13 +3355,19 @@ def check_process_rows(repo_root: Path, readme: str, errors: list[str]) -> None:
     try:
         replaced = replaced_era(era_of(path))
         cells = scorecard_process_cells(page, label, replaced.id)
+        expected = {
+            claim: (
+                scorecard_fraction(cells.rows[row][0]),
+                scorecard_fraction(cells.rows[row][1]),
+            )
+            for claim, row in _PROCESS_ROWS
+        }
     except (KeyError, ScorecardPageError) as error:
         errors.append(
             f"{_SCORECARD_PAGE}: {error.args[0]} — the four process rows the "
             "results tables lead with have no committed source to be held to."
         )
         return
-    expected = {claim: cells.rows[row] for claim, row in _PROCESS_ROWS}
     value, before = expected[_AUTHORED_CLAIM]
     expected[_AUTHORED_CLAIM] = (
         f"{value}; {coerced_clause(cells.teammate_coerced)}",
@@ -3497,10 +3618,38 @@ def set_before_cells(audit: str, label: str) -> tuple[tuple[int, int], int] | No
 def partition_figure(proof: tuple[int, int], non_proof: tuple[int, int]) -> str:
     """One conviction-partition cell, as the front door states it."""
 
-    return (
-        f"{proof[0]} / {proof[1]} = {proof[0] / proof[1]:.4f} vs "
-        f"{non_proof[0]} / {non_proof[1]} = {non_proof[0] / non_proof[1]:.4f}"
-    )
+    return f"{fraction_figure(*proof)} vs {fraction_figure(*non_proof)}"
+
+
+def fraction_figure(numerator: int, denominator: int) -> str:
+    """One fraction as both results tables state it: ``k of n (p%)``.
+
+    The percentage is rounded the way the win rates are, ``round(100 * k / n)``,
+    so every percentage the tables print follows one rule. A fraction over no
+    population has no percentage and raises rather than printing one.
+    """
+
+    if denominator <= 0:
+        raise ValueError(
+            f"{numerator} of {denominator}: a fraction over no population has no "
+            "percentage to state"
+        )
+    return f"{numerator} of {denominator} ({round(100 * numerator / denominator)}%)"
+
+
+def scorecard_fraction(cell: str) -> str:
+    """A scorecard page cell, ``k/n = rate``, restated as the tables state it.
+
+    The page is generated and stays as it is printed; its two counts are read
+    and handed to :func:`fraction_figure`. Raises :class:`ScorecardPageError`
+    for a cell of any other shape, so a page format change is named rather than
+    read around.
+    """
+
+    match = _SCORECARD_FRACTION.match(cell.strip())
+    if match is None:
+        raise ScorecardPageError(f"the cell {cell!r} is not a 'k/n = rate' fraction")
+    return fraction_figure(int(match.group(1)), int(match.group(2)))
 
 
 def check_record_partition_arithmetic(
@@ -4027,10 +4176,12 @@ def check_populated_report_example(
     """The README's real-report example, held to that report's own numbers.
 
     The front door hands a reader a populated report precisely because the
-    default fake provider produces an empty one. Copying its headline scalars
+    default fake provider produces an empty one. Copying its headline counts
     into prose would put them one re-record away from being someone else's
     numbers, so each is re-derived from the report's own
-    ``vote_correctness`` block.
+    ``vote_correctness`` block: every ejection, those that removed an impostor,
+    and those whose meeting carried evidence naming the player ejected. The
+    paragraph states counts, not the two rates taken over them.
     """
 
     paragraph = next(
@@ -4051,23 +4202,24 @@ def check_populated_report_example(
     block = read_vote_correctness_block(repo_root, _POPULATED_REPORT, errors)
     if block is None:
         return
-    for label, key, expected in (
-        ("ejections", "total_ejections", "{value:d} ejections"),
-        ("vote correctness", "vote_correctness_rate", "vote correctness {value:.3f}"),
-        ("ejection accuracy", "ejection_accuracy", "ejection accuracy {value:.3f}"),
-    ):
+    counts: dict[str, int] = {}
+    for label, key, _ in _REPORT_EXAMPLE_CLAIMS:
         value = block.get(key)
-        if not isinstance(value, (int, float)) or isinstance(value, bool):
+        if not isinstance(value, int) or isinstance(value, bool):
             errors.append(
-                f"{_POPULATED_REPORT}: {key} is {value!r}, not a number — the "
+                f"{_POPULATED_REPORT}: {key} is {value!r}, not a count — the "
                 f"{_README} example's {label} claim cannot be re-derived."
             )
             continue
-        claim = expected.format(value=value)
+        counts[key] = value
+    if len(counts) != len(_REPORT_EXAMPLE_CLAIMS):
+        return  # a wording naming a count the report lacks cannot be filled in
+    for _, key, expected in _REPORT_EXAMPLE_CLAIMS:
+        claim = expected.format_map(counts)
         if claim not in paragraph:
             errors.append(
                 f"{_README}: the real-report example does not state "
-                f"{claim!r} — {_POPULATED_REPORT} records {key} as {value!r}."
+                f"{claim!r} — {_POPULATED_REPORT} records {key} as {counts[key]!r}."
             )
 
 
@@ -4247,7 +4399,7 @@ def check_partner_ballot_row(repo_root: Path, guide: str, errors: list[str]) -> 
         return
     rows = results_rows(guide)
     figures = dict(rows) if rows is not None else {}
-    expected = _PARTNER_BALLOT_FIGURE.format(total=pin.group(1))
+    expected = fraction_figure(_PARTNER_BALLOTS_CAST, int(pin.group(1)))
     stated = figures.get(_PARTNER_BALLOT_CLAIM)
     if stated is None:
         errors.append(
@@ -5458,10 +5610,12 @@ def check_verdict_passage(
     wrongful-ejection gate admits only a count one of the conviction partitions
     carries and neither of this record's counts is one.
 
-    The README must carry the whole passage: it is where the verdict is first
-    written. Every other claim document is held to the same wording only where
-    it states the claim at all — a page that never mentions the fall is not
-    required to, and a page that does may not state it with other numbers.
+    The history page (:data:`_VERDICT_HOME`) must carry the whole passage: it
+    is where the figures and the verdict live, the README giving the missed bars
+    one sentence and a link there. Every other claim document is held to the
+    same wording only where it states the claim at all — a page that never
+    mentions the fall is not required to, and a page that does may not state it
+    with other numbers.
     """
 
     reporter, innocent = bars[_REPORTER_BAR], bars[_INNOCENT_BAR]
@@ -5486,7 +5640,7 @@ def check_verdict_passage(
     for claim, stem in zip(required, _FINDING_CLAIM_STEMS):
         if claim.casefold() in flat:
             continue
-        if document != _README and (stem is None or stem.casefold() not in flat):
+        if document != _VERDICT_HOME and (stem is None or stem.casefold() not in flat):
             continue
         errors.append(
             f"{document}: its verdict passage does not state {claim!r} — "

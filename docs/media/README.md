@@ -1,9 +1,9 @@
 # docs/media — the committed pictures
 
-Five visual assets are kept here. The repository [README](../../README.md)
-shows the two-perspective PNG and links the WebM clip. The architecture note
-embeds the diagram; the meeting still and GIF are archive assets no page embeds.
-The four spectator captures show the game the demo's guided tour opens on, 9p2i
+Four visual assets are kept here. The repository [README](../../README.md)
+shows the two-perspective PNG and, below it, the GIF. The architecture note
+embeds the diagram; the meeting still is an archive asset no page embeds.
+The three spectator captures show the game the demo's guided tour opens on, 9p2i
 seed 19 from the shown 9-player set, a game the current demo serves.
 [provenance.json](provenance.json) identifies their source and exact asset bytes:
 
@@ -13,11 +13,10 @@ Placement below refers to the README and architecture note.
 | --- | --- | --- |
 | `spectator-two-truths.png` | 2036×909 — the same scene through omniscient and crewmate views, with the following accusation | [README image](../../README.md) |
 | `spectator-meeting.png` | 1440×900 — accusation chain, ballots and mind inspector | Archive only |
-| `spectator-journey.gif` | 640×400, 13 frames — playback from the opening tick to a meeting | Archive only |
-| `spectator-journey.webm` | 1440×900, 9 s — movement, a kill flash, a meeting pause and fog | [README clip link](../../README.md) |
+| `spectator-journey.gif` | 640×400, 13 frames — playback from the opening tick to a meeting | [README image](../../README.md) |
 | `architecture.svg` | Text SVG of the packages, data flow and observation firewall | [Architecture image](../architecture.md) |
 
-The four spectator assets were captured from the **static demo bundle**
+The three spectator assets were captured from the **static demo bundle**
 (`scripts/build_demo_bundle.py`) built at the capture revision below, whose
 recordings are the ones the current checkout serves.
 
@@ -41,19 +40,18 @@ must either be refreshed from the new bytes, as these were after the 9-player
 set's promotion, or clearly labelled historical. A new capture must update the
 provenance file and its captions.
 
-## Regenerating all four spectator assets
+## Regenerating all three spectator assets
 
 One command, from a checkout with the frontend set up
-(`bash scripts/setup_env.sh`, plus one `npx playwright install chromium ffmpeg`
-on a laptop — `npm ci` installs the Playwright *package*, not the browser or the
-ffmpeg build it drives):
+(`bash scripts/setup_env.sh`, plus one `npx playwright install chromium` on a
+laptop — `npm ci` installs the Playwright *package*, not the browser it drives):
 
 ```bash
 cd frontend && AILIBI_CAPTURE_MEDIA=1 npx playwright test e2e/media.spec.ts
 ```
 
 `frontend/e2e/media.spec.ts` builds the demo bundle from the committed replays,
-serves it on a loopback port, and shoots all four. Without
+serves it on a loopback port, and shoots all three. Without
 `AILIBI_CAPTURE_MEDIA=1` the file skips entirely, so the standing browser gate
 (`npm run e2e`, the `frontend-e2e` CI job) never writes into this directory.
 Set `AILIBI_DEMO_BUNDLE_DIR` to a bundle you already built to skip the rebuild.
@@ -90,7 +88,6 @@ changed image with unchanged provenance.
 | `spectator-two-truths.png` | 9 (both halves), plus the meeting at tick 12 for the card | omniscient (left) and as-agent `p-5` (right) | 1440×900 at 2× density, laid out on a 2036 px sheet |
 | `spectator-meeting.png` | 12 — meeting `headless-seed-19:meeting-0` open | omniscient | 1440×900 |
 | `spectator-journey.gif` | 0 → 12 | omniscient | 1440×900 at 2× density, scaled to 640 wide |
-| `spectator-journey.webm` | 1 → 12, then as-agent fog | omniscient, then as-agent | 1440×900 |
 
 `p-5` is the fog subject because the picture's argument depends on it: at tick 9
 `p-5` is a crewmate in Labs who can see one other player, while the omniscient
@@ -102,34 +99,20 @@ accusation against the served bytes before shooting. The test suite reads each
 claim of the README caption's scene, MedBay and the vent included, and holds it
 to the same bytes in every run.
 
-### What is deterministic, and what is not
+### What is deterministic
 
 Two consecutive capture runs produce a byte-identical `spectator-two-truths.png`,
 `spectator-meeting.png` and `spectator-journey.gif`. They are shot under
 `prefers-reduced-motion: reduce`, which the map layer reads directly to snap
 token tweens and freeze the kill ring.
 
-`spectator-journey.webm` is deliberately the other case — the tween and the
-pulsing kill ring are two of its four beats — so its bytes differ run to run.
-What is fixed is its shape: the same 1440×900 frame size and the same 9.00 s
-running time, because the published clip is the last nine seconds of a longer
-recording rather than the recording itself.
-
-That cut is checked against the clip's own bytes, not against a clock. Playwright
-stretches a recording's final frame to the end of the capture, so a walk's
-wall-clock offsets do not project into the container's timeline and arithmetic
-cannot answer "is the last beat inside the cut". The capture instead decodes the
-published clip's first and final frames and matches each against what the page
-looked like at the first and last beat; if the fog flip has fallen past the cut,
-the final frame resolves to the opening view and the capture fails.
-
 ### Current README presentation
 
-The README embeds `spectator-two-truths.png` and links
-`spectator-journey.webm`; it does not embed the GIF or meeting still. Its caption
-names the game, its set and its recording date, and the image links to the
-interactive demo, which serves the same game.
+The README embeds `spectator-two-truths.png` and, below its caption,
+`spectator-journey.gif`; it does not embed the meeting still. The caption
+describes the scene and then names the game, its set and its recording date, and
+both images link to the interactive demo, which serves the same game.
 
-Budget: the directory is currently 1.6 MB. Keep the still under 400 kB, the clip
-under 3 MB and the GIF under 1.5 MB — the capture asserts all three, so a walk
-that grows past them fails instead of landing in the tree.
+Budget: the directory is currently 1.0 MB. Keep each still under 400 kB and the
+GIF under 1.5 MB — the capture asserts both, so a walk that grows past them
+fails instead of landing in the tree.

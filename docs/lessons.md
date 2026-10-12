@@ -1,4 +1,3 @@
-<!-- OWNER: confirm wording — first person, the author's own account; every figure is quoted from a committed source. -->
 # What I learned
 
 I directed AiLibi's initial build from May through August 2026 without writing
@@ -7,7 +6,6 @@ reviewed it; the August review used independent gameplay, code, and portfolio
 tracks. September's cleanup adds Codex implementation and agent-drafted task
 cards under my direction. The distinction matters: directing and reviewing work
 is an ownership claim, not a claim to have personally written every artifact.
-<!-- OWNER: end. -->
 
 ## Directing coding agents at scale
 
