@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { BallotCard, counterKind } from "./BallotCard";
+import { BallotCard, counterKind, rewriteLabel } from "./BallotCard";
 import { MeetingView } from "./MeetingView";
 import { MindInspectorPanel, type MindInspectorPanelProps } from "./MindInspector";
 import { BALLOT_COPY } from "../lib/copy";
@@ -56,44 +56,104 @@ const mind: MindInspectorPanelProps = {
   onSelectAgent: () => {}, onShowWhatTheySaw: () => {},
 };
 
+/** Markup as text: tags and React's text-joining comments dropped. */
+function textOf(html: string): string {
+  return html.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]*>/g, "");
+}
+
+/** The Resolution card's readout sentence, as a reader sees it. */
+function readoutOf(html: string): string {
+  const match = /<p data-vote-readout[^>]*>([\s\S]*?)<\/p>/.exec(html);
+  if (match === null) throw new Error("no vote readout rendered");
+  return (match[1] ?? "").replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]*>/g, "").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
+}
+
+/** The retired readout's terms and signs: plurality, the cut, the raw outcome, a comparison. */
+const RETIRED_READOUT = /plurality|threshold|top ballot|your ballot|EJECTED|SKIPPED|[<>≥≤=→]/;
+
+/**
+ * What a readout carries beyond plain words: a digit once each player id is
+ * removed (a confidence, a cut point), or a retired term or sign. Empty when it
+ * reads in words alone.
+ */
+function readoutProblems(readout: string): readonly string[] {
+  const problems: string[] = [];
+  const digit = /\d+(?:\.\d+)?/.exec(readout.replace(/p-\d+/g, ""));
+  if (digit !== null) problems.push(`a number: ${digit[0]}`);
+  const retired = RETIRED_READOUT.exec(readout);
+  if (retired !== null) problems.push(`a retired term: ${retired[0]}`);
+  return problems;
+}
+
+/** Every perspective the meeting can be read from: all roles, and each voter's own. */
+const PERSPECTIVES: readonly Perspective[] = [
+  { mode: "omniscient" },
+  { mode: "agent", agentId: "p-1" },
+  { mode: "agent", agentId: "p-2" },
+  { mode: "agent", agentId: "p-3" },
+];
+
+function renderMeeting(perspective: Perspective, shown: MeetingDTO = meeting): string {
+  state.perspective = perspective;
+  state.currentReplay = { players, meetings: [shown], ticks: [] };
+  return renderToStaticMarkup(<MeetingView />);
+}
+
+/** The planted meeting with its vote failed (leader set) or tied (no leader). */
+function skipped(leader: string | null): MeetingDTO {
+  return {
+    ...meeting, outcome: "SKIPPED", ejected_player_id: null,
+    ballots: meeting.ballots.map((entry) => entry.voter === "p-1" ? { ...entry, confidence: 0.53 } : entry),
+    gate: { ...meeting.gate, leader, passed: false, leader_max_confidence: 0.53 },
+  };
+}
+
 describe("private reasoning perspective", () => {
   it.each([false, true])("keeps another ballot's confidence out of Resolution, outcome reveal=%s", (revealOutcome) => {
-    state.perspective = { mode: "agent", agentId: "p-2" };
-    state.currentReplay = { players, meetings: [meeting], ticks: [] };
     state.revealOutcome = revealOutcome;
-    const html = renderToStaticMarkup(<MeetingView />);
+    const html = renderMeeting({ mode: "agent", agentId: "p-2" });
     expect(html).toContain("Resolution");
     expect(html).toContain("Ejected — p-2");
     expect(html).not.toContain("0.73");
     expect(html).not.toContain("0.42");
-    expect(html).not.toContain("top ballot");
+    expect(readoutProblems(readoutOf(html))).toEqual([]);
   });
-  it.each([["p-1", "0.73"], ["p-3", "0.42"]])("Resolution shows only %s's own leader ballot", (observerId, confidence) => {
-    state.perspective = { mode: "agent", agentId: observerId };
-    state.currentReplay = { players, meetings: [meeting], ticks: [] };
-    const html = renderToStaticMarkup(<MeetingView />);
-    expect(html).toContain(`your ballot ${confidence}`);
-    expect(html).not.toContain("top ballot");
+  it.each([["p-1"], ["p-3"]])("Resolution names no confidence under %s's own lens, its own ballot included", (observerId) => {
+    const html = renderMeeting({ mode: "agent", agentId: observerId });
+    expect(readoutProblems(readoutOf(html))).toEqual([]);
+    expect(readoutOf(html)).toContain("p-2 was ejected");
     if (observerId === "p-3") expect(html).not.toContain("0.73");
   });
-  it("retains the aggregate Resolution confidence only in omniscient mode", () => {
-    state.perspective = { mode: "omniscient" };
-    state.currentReplay = { players, meetings: [meeting], ticks: [] };
-    const html = renderToStaticMarkup(<MeetingView />);
-    expect(html).toContain("top ballot 0.73");
-    expect(html).not.toContain("your ballot");
+  it("names no confidence in the omniscient Resolution either", () => {
+    const html = renderMeeting({ mode: "omniscient" });
+    expect(readoutProblems(readoutOf(html))).toEqual([]);
+    expect(readoutOf(html)).toBe("How the vote resolved: Most votes went to p-2 and a voter was sure enough, so p-2 was ejected.");
   });
   it.each(["p-2", null])("does not expose confidence when the gate fails or ties, leader=%s", (leader) => {
-    state.perspective = { mode: "agent", agentId: "p-2" };
-    state.currentReplay = { players, ticks: [], meetings: [{
-      ...meeting, outcome: "SKIPPED", ejected_player_id: null,
-      ballots: meeting.ballots.map((entry) => entry.voter === "p-1" ? { ...entry, confidence: 0.53 } : entry),
-      gate: { ...meeting.gate, leader, passed: false, leader_max_confidence: 0.53 },
-    }] };
-    const html = renderToStaticMarkup(<MeetingView />);
-    expect(html).toContain("SKIPPED");
+    const html = renderMeeting({ mode: "agent", agentId: "p-2" }, skipped(leader));
+    expect(readoutOf(html)).toContain("no one was ejected");
     expect(html).not.toContain("0.53");
     expect(html).not.toContain("0.42");
+  });
+  it.each(PERSPECTIVES.map((perspective) => [perspective.mode === "agent" ? perspective.agentId : "omniscient", perspective] as const))(
+    "reads every way a vote ends in words alone under %s's view",
+    (_name, perspective) => {
+      for (const shown of [meeting, skipped("p-2"), skipped(null)]) {
+        const readout = readoutOf(renderMeeting(perspective, shown));
+        expect(readoutProblems(readout), readout).toEqual([]);
+      }
+    },
+  );
+  it("catches a number, the old templates and a retired sign in the readout (planted)", () => {
+    // A confidence left in the sentence fails while the player ids pass.
+    expect(readoutProblems("Most votes went to p-4 and a voter was sure enough, so p-4 was ejected.")).toEqual([]);
+    expect(readoutProblems("Most votes went to p-4 and a voter was sure enough (0.73), so p-4 was ejected.")).toEqual(["a number: 0.73"]);
+    // The old templates, one per perspective, each fail.
+    expect(readoutProblems("plurality leader p-2, top ballot 0.73 ≥ 0.60 threshold → EJECTED")).toEqual(["a number: 0.73", "a retired term: plurality"]);
+    expect(readoutProblems("plurality leader p-2, your ballot 0.73, threshold met → EJECTED")).toEqual(["a number: 0.73", "a retired term: plurality"]);
+    expect(readoutProblems("plurality leader p-2, threshold met → EJECTED")).toEqual(["a retired term: plurality"]);
+    expect(readoutProblems("no plurality leader (tie or SKIP led) → SKIPPED")).toEqual(["a retired term: plurality"]);
+    expect(readoutProblems("Most votes went to p-4 → SKIPPED")).toEqual(["a retired term: →"]);
   });
   it.each([false, true])("hides model-authored ballot secrets without relying on guard markers, outcome reveal=%s", (revealOutcome) => {
     state.perspective = { mode: "agent", agentId: "p-2" };
@@ -211,7 +271,7 @@ describe("private reasoning perspective", () => {
     expect(alternativesBlock(html)).toContain(BALLOT_COPY.groundingLabels.uncited);
     expect(html).not.toContain("grounding_label");
     expect(html).not.toContain("uncited\"");
-    expect(html).not.toContain("before the vote was redirected");
+    expect(html).not.toContain(BALLOT_COPY.redirectNote);
   });
   it.each(Object.entries(BALLOT_COPY.groundingLabels))("renders %s in plain language", (label, copy) => {
     state.perspective = { mode: "omniscient" };
@@ -238,18 +298,32 @@ describe("private reasoning perspective", () => {
     expect(html).not.toContain("data-ballot-grounding");
   });
   it.each([
-    ["off_target_coerced", "Off-target citation changed vote to skip"],
-    ["invalid_basis", "Unreadable stated basis removed"],
+    ["off_target_coerced", "Vote citing evidence about someone else changed to skip"],
+    ["invalid_basis", "Unreadable stated reason removed"],
   ])("names the %s adjustment instead of falling back to the generic chip", (reason, copy) => {
     // Review round 3: the two `rewriteLabel` cases the substrate wave added.
     // Neither appears on a committed recording — `off_target_coerced` never
     // fired at all, and `invalid_basis` first mints at the re-record — so
     // deleting either case left the suite green while the chip silently
-    // degraded to the default "Recorded vote adjustment".
+    // degraded to the fallback.
     const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: [reason] }} players={players} omniscient revealOutcome={false} />);
     expect(html).toContain(copy);
-    expect(html).not.toContain("Recorded vote adjustment");
+    expect(html).not.toContain(BALLOT_COPY.rewriteFallback);
     expect(html).not.toContain(reason);
+  });
+  it.each(Object.entries(BALLOT_COPY.rewriteLabels))("renders the %s chip in its own plain words", (reason, copy) => {
+    // One render per reason the ballot copy names: dropping a reason from the
+    // copy turns its chip into the fallback, which this fails on.
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: [reason] }} players={players} omniscient revealOutcome={false} />);
+    expect(html).toContain(copy);
+    expect(html).not.toContain(BALLOT_COPY.rewriteFallback);
+    expect(html).not.toContain(`>${reason}<`);
+    expect(rewriteLabel(reason)).toBe(copy);
+  });
+  it.each(["something_new", "constructor", "toString"])("reads a reason it was never taught, %s, as the fallback", (reason) => {
+    expect(rewriteLabel(reason)).toBe(BALLOT_COPY.rewriteFallback);
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: [reason] }} players={players} omniscient revealOutcome={false} />);
+    expect(html).toContain(BALLOT_COPY.rewriteFallback);
   });
   it("links the counter citation beside the two the voter reasoned from", () => {
     // Ruling D5 of 2026-09-19: what the voter itself named as pointing AWAY
@@ -264,6 +338,99 @@ describe("private reasoning perspective", () => {
     expect(counterKind("p-1:12:0")).toBe("observation");
     const obsCited = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, counter_reason_id: "p-1:12:0" }} players={players} omniscient revealOutcome={false} />);
     expect(obsCited).toContain("p-1:12:0");
+    expect(textOf(obsCited)).toContain(`${BALLOT_COPY.counterLabel} · What p-1 saw at tick 12`);
+  });
+  it("names each citation by what it points at, the exact id on hover", () => {
+    // The speaker comes from the meeting's public turn with that id; the turn
+    // number, the observer and the tick from the id itself.
+    state.perspective = { mode: "omniscient" };
+    state.selectedMeetingId = "meeting-0";
+    const reply: MeetingDTO["turns"][number] = { turn_id: "meeting-0:turn-3", turn_index: 3, speaker: "p-3", turn_kind: "reply", reply_to: null, observations: [], claims: [], free_text: "", annotations: [], fabricated_opening: false };
+    state.currentReplay = { players, meetings: [{ ...meeting, turns: [reply] }], ticks: [] };
+    const cited: BallotView = { ...ballot, primary_reason_id: "meeting-0:turn-3", primary_reason_observation_id: "p-1:12:0", counter_reason_id: "meeting-0:turn-3" };
+    const html = renderToStaticMarkup(<BallotCard ballot={cited} players={players} omniscient revealOutcome={false} />);
+    expect(html).toContain('title="meeting-0:turn-3"');
+    expect(html).toContain('title="p-1:12:0"');
+    expect(html).toContain(">Statement by p-3 (turn 3)</button>");
+    expect(html).toContain(">What p-1 saw at tick 12</button>");
+    expect(textOf(html)).toContain(`${BALLOT_COPY.counterLabel} · Statement by p-3 (turn 3)`);
+    expect(html).not.toMatch(/Cited (?:statement|observation)/);
+    // A statement id this meeting does not hold says so instead of naming anyone.
+    const stray = renderToStaticMarkup(<BallotCard ballot={{ ...cited, primary_reason_id: "meeting-0:turn-9" }} players={players} omniscient revealOutcome={false} />);
+    expect(stray).toContain(">Statement (turn 9), not found in this meeting</button>");
+    state.currentReplay = null;
+  });
+  it("names a statement's speaker from the selected meeting, not the replay's first", () => {
+    // A replay holds every meeting; the ballot belongs to the selected one, so
+    // its citation is looked up there even when an earlier meeting comes first.
+    state.perspective = { mode: "omniscient" };
+    state.selectedMeetingId = "meeting-1";
+    const turn = (turn_id: string, speaker: string): MeetingDTO["turns"][number] => ({ turn_id, turn_index: 3, speaker, turn_kind: "reply", reply_to: null, observations: [], claims: [], free_text: "", annotations: [], fabricated_opening: false });
+    state.currentReplay = {
+      players,
+      meetings: [
+        { ...meeting, turns: [turn("meeting-0:turn-3", "p-1")] },
+        { ...meeting, meeting_id: "meeting-1", tick: 30, turns: [turn("meeting-1:turn-3", "p-3")] },
+      ],
+      ticks: [],
+    };
+    try {
+      const cited: BallotView = { ...ballot, primary_reason_id: "meeting-1:turn-3", counter_reason_id: "meeting-1:turn-3" };
+      const html = renderToStaticMarkup(<BallotCard ballot={cited} players={players} omniscient revealOutcome={false} />);
+      expect(html).toContain(">Statement by p-3 (turn 3)</button>");
+      expect(textOf(html)).toContain(`${BALLOT_COPY.counterLabel} · Statement by p-3 (turn 3)`);
+      expect(html).not.toContain("not found in this meeting");
+      // With no replay loaded there is no turn to name, so the link says so.
+      state.currentReplay = null;
+      const unloaded = renderToStaticMarkup(<BallotCard ballot={cited} players={players} omniscient revealOutcome={false} />);
+      expect(unloaded).toContain(">Statement (turn 3), not found in this meeting</button>");
+    } finally {
+      state.selectedMeetingId = "meeting-0";
+      state.currentReplay = null;
+    }
+  });
+  it("names an observation citation in words when no meeting is selected to link it to", () => {
+    // With no meeting selected the citations cannot select anything, so they
+    // render as plain spans; they still name what they point at, each with
+    // its exact id on hover, and the counter slot still reads its id's kind.
+    state.perspective = { mode: "omniscient" };
+    state.selectedMeetingId = null as unknown as string;
+    try {
+      const cited: BallotView = { ...ballot, primary_reason_observation_id: "p-1:12:0", counter_reason_id: "p-1:12:0" };
+      const html = renderToStaticMarkup(<BallotCard ballot={cited} players={players} omniscient revealOutcome={false} />);
+      const spans = [...html.matchAll(/<span class="text-xs" title="([^"]*)">([\s\S]*?)<\/span>/g)].map((match) => [match[1], textOf(match[2] ?? "")]);
+      expect(spans).toEqual([
+        ["p-1:12:0", "What p-1 saw at tick 12"],
+        ["p-1:12:0", `${BALLOT_COPY.counterLabel} · What p-1 saw at tick 12`],
+      ]);
+      expect(html).not.toContain("<button");
+      // Two different ids, so each span's words and hover read its own slot.
+      const apart = renderToStaticMarkup(<BallotCard ballot={{ ...cited, counter_reason_id: "p-3:7:1" }} players={players} omniscient revealOutcome={false} />);
+      expect([...apart.matchAll(/<span class="text-xs" title="([^"]*)">([\s\S]*?)<\/span>/g)].map((match) => [match[1], textOf(match[2] ?? "")])).toEqual([
+        ["p-1:12:0", "What p-1 saw at tick 12"],
+        ["p-3:7:1", `${BALLOT_COPY.counterLabel} · What p-3 saw at tick 7`],
+      ]);
+    } finally {
+      state.selectedMeetingId = "meeting-0";
+    }
+  });
+  it("leads the grounding chip with its label, in view", () => {
+    state.perspective = { mode: "omniscient" };
+    const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, grounding_label: "uncited" }} players={players} omniscient revealOutcome={false} />);
+    const chip = /<span data-ballot-grounding[^>]*>([\s\S]*?)<\/span>/.exec(html)?.[1] ?? "";
+    expect(textOf(chip)).toBe(`Basis on the record: ${BALLOT_COPY.groundingLabels.uncited}`);
+    expect(html).not.toMatch(/data-ballot-grounding[^>]*title=/);
+  });
+  it("shows a ballot's confidence as its word, the number on hover and in the meter's spoken value", () => {
+    state.perspective = { mode: "omniscient" };
+    for (const [confidence, word] of [[0.73, "High"], [0.72, "Med"], [0.21, "Low"]] as const) {
+      const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, confidence }} players={players} omniscient revealOutcome={false} />);
+      const face = /<span data-bucket="true" title="([^"]*)"[^>]*>([^<]*)<\/span>/.exec(html);
+      expect(face?.[1]).toBe(confidence.toFixed(2));
+      expect(face?.[2]).toBe(word);
+      expect(html).toContain(`aria-valuetext="${word} (${confidence.toFixed(2)})"`);
+      expect(html).toContain(">confidence</span>");
+    }
   });
   it("renders no counter link for a recording that predates the field", () => {
     // Every committed recording carries `null` here, so the shipped tour must
@@ -291,14 +458,14 @@ describe("private reasoning perspective", () => {
     // The layer nulls a counter it cannot resolve and chips the ballot; the
     // chip must say WHICH slot, or a reader reads it as a lost basis.
     const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: ["invalid_counter_reason_id"] }} players={players} omniscient revealOutcome={false} />);
-    expect(html).toContain("Unknown counter-evidence citation removed");
-    expect(html).not.toContain("Recorded vote adjustment");
+    expect(html).toContain("The evidence it weighed against its vote was not found, so it was removed");
+    expect(html).not.toContain(BALLOT_COPY.rewriteFallback);
     expect(html).not.toContain("invalid_counter_reason_id");
   });
   it("explains redirected votes without presenting the original rationale as the applied choice", () => {
     const html = renderToStaticMarkup(<BallotCard ballot={{ ...ballot, rewrite_reasons: ["under_gate_redirect"] }} players={players} omniscient revealOutcome={false} />);
-    expect(html).toContain("Vote redirected by the meeting rule");
-    expect(html).toContain("before the vote was redirected");
+    expect(html).toContain("Vote changed by the vote rule");
+    expect(html).toContain("before the vote rule changed the vote");
     expect(html).not.toContain("under_gate_redirect");
   });
   it.each(["belief", "memory", "flags", "prompt", "response"] as const)("hides cached private %s through another lens", (tab) => {

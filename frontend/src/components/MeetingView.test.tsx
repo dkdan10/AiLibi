@@ -13,6 +13,7 @@ import { MEETING_COPY } from "../lib/copy";
 import type { Perspective } from "../lib/playback";
 import type {
   AgentTickStateView,
+  ContradictionView,
   ExperimentConfigView,
   MeetingView as MeetingDTO,
   PlayerView,
@@ -182,8 +183,8 @@ function assertNoEngineRecord(html: string): void {
 describe("the omniscient meeting record", () => {
   it("states the corpse's age, the reply and each accused player's true route", () => {
     const html = render({ mode: "omniscient" });
-    expect(html).toContain('aria-label="What the recording shows"');
-    expect(html).toContain(">What the recording shows</h3>");
+    expect(html).toContain('aria-label="Where everyone really was"');
+    expect(html).toContain(">Where everyone really was</h3>");
     expect(html).toContain("Shown in the omniscient view only, and read from the recording itself.");
     expect(html).toContain(
       "These are the map&#x27;s ticks; a player&#x27;s own account of the same moment is stamped one tick later.",
@@ -306,8 +307,9 @@ describe("the omniscient meeting record", () => {
       turns: MEETING.turns.map((item) => ({ ...item, claims: [] })),
     };
     const html = render({ mode: "omniscient" }, quiet);
-    expect(html).toContain("What the recording shows");
-    expect(html).not.toContain("really was");
+    expect(html).toContain("Where everyone really was");
+    // The heading says "really was" too, so the route lead is matched by its own words.
+    expect(html).not.toContain("accused player really was");
     expect(html).not.toContain("speak again");
     expect(html).not.toContain("killed at tick");
   });
@@ -332,5 +334,134 @@ describe("the omniscient meeting record", () => {
     state.perspective = { mode: "omniscient" };
     state.currentReplay = { ...replay(MEETING), map: { rooms: [room("ADMIN", "Admin")], vents: [], edges: [] } };
     expect(() => renderToStaticMarkup(<MeetingView />)).toThrow(/no room LABS/);
+  });
+});
+
+// ── the meeting's words ──────────────────────────────────────────────────────
+
+/** Markup as text: tags and React's text-joining comments dropped. */
+function textOf(html: string): string {
+  return html.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]*>/g, "").replaceAll("&#x27;", "'");
+}
+
+/** The planted meeting with `player` voted out on one confident ballot. */
+function ejected(player: string): MeetingDTO {
+  return {
+    ...MEETING,
+    outcome: "EJECTED",
+    ejected_player_id: player,
+    gate: { leader: player, leader_max_confidence: 0.8, threshold: 0.6, passed: true },
+  };
+}
+
+const LENSES: readonly Perspective[] = players.map((player) => ({ mode: "agent", agentId: player.agent_id }));
+
+/** The role line's text, or null when the render carries none. */
+function roleLineOf(html: string): string | null {
+  const match = /<div data-role-line="true"[^>]*>([\s\S]*?)<\/div>/.exec(html);
+  return match === null ? null : textOf(match[1] ?? "");
+}
+
+describe("the ejected player's role line", () => {
+  it.each([
+    ["p-2", "p-2 was an impostor"],
+    ["p-3", "p-3 was a crewmate"],
+  ])("names %s's real role in plain words, all-roles view only", (player, words) => {
+    const html = render({ mode: "omniscient" }, ejected(player));
+    expect(roleLineOf(html)).toBe(`⌖${words}`);
+    expect(html).not.toContain("post-hoc");
+    for (const lens of LENSES) {
+      const fogged = render(lens, ejected(player));
+      expect(roleLineOf(fogged)).toBeNull();
+      expect(fogged).not.toContain(words);
+    }
+  });
+
+  it("shows no role line when no one was ejected", () => {
+    expect(roleLineOf(render({ mode: "omniscient" }))).toBeNull();
+  });
+});
+
+describe("the vote readout", () => {
+  it.each([
+    ["a passed vote", ejected("p-2"), "Most votes went to p-2 and a voter was sure enough, so p-2 was ejected."],
+    [
+      "a vote no one was sure enough of",
+      { ...MEETING, gate: { leader: "p-2", leader_max_confidence: 0.4, threshold: 0.6, passed: false } },
+      "Most votes went to p-2, but none of those voters was sure enough, so no one was ejected.",
+    ],
+    ["a tie or a skip lead", MEETING, "No single player got the most votes (a tie, or skip led), so no one was ejected."],
+  ])("says why for %s, the same under every perspective", (_name, meeting, sentence) => {
+    for (const perspective of [{ mode: "omniscient" } as Perspective, ...LENSES]) {
+      const readout = /<p data-vote-readout="true"[^>]*>([\s\S]*?)<\/p>/.exec(render(perspective, meeting))?.[1];
+      expect(textOf(readout ?? "")).toBe(`${MEETING_COPY.resolutionGateLead}: ${sentence}`);
+    }
+  });
+});
+
+describe("the accusation chain", () => {
+  it("captions the arrows plainly and has every turn accuse, a reply included", () => {
+    const html = render({ mode: "omniscient" });
+    expect(textOf(html)).toContain("Arrows point from accuser to accused");
+    const verbs = [...html.matchAll(/text-ink-900">(accuses|redirects)<\/span><svg/g)].map((match) => match[1]);
+    // The planted meeting's three turns: an opening, a reply and a speak-up.
+    expect(verbs).toEqual(["accuses", "accuses", "accuses"]);
+    expect(html).not.toMatch(/distrust orange|who points at whom|guilt is never|role-neutral/);
+  });
+});
+
+describe("the turn tag", () => {
+  it("reads each kind of turn by name, with its tick in words", () => {
+    const tags = [...render({ mode: "omniscient" }).matchAll(/text-ink-500">(tick \d+ · [^<]+)<\/span>/g)].map((match) => match[1]);
+    expect(tags).toEqual(["tick 5 · first statement", "tick 5 · reply", "tick 5 · spoke up"]);
+  });
+  it("reads the meeting's own tick, not the planted meeting's", () => {
+    // An emergency meeting, so the record asks no report of the later frame.
+    const tags = [...render({ mode: "omniscient" }, { ...MEETING, tick: 37, trigger_kind: "emergency" }).matchAll(/text-ink-500">(tick \d+ · [^<]+)<\/span>/g)].map((match) => match[1]);
+    expect(tags).toEqual(["tick 37 · first statement", "tick 37 · reply", "tick 37 · spoke up"]);
+  });
+});
+
+describe("the evidence list", () => {
+  const flag = (id: string, category: ContradictionView["category"], a: string, b: string): ContradictionView => ({
+    contradiction_id: id,
+    kind: category === "role_proof" ? "vent_sighting" : "alibi_conflict",
+    event_a_id: a,
+    event_b_id: b,
+    subjects: ["p-2"],
+    description: "",
+    weak: category === "weak_signal",
+    severity: category === "weak_signal" ? "weak" : "strong",
+    category,
+  });
+  const claimOf = (turnIndex: number) => `turn:planted:meeting-0:turn-${String(turnIndex)}:claim:0`;
+  const flagged: MeetingDTO = {
+    ...MEETING,
+    contradictions: [
+      flag("proof", "role_proof", claimOf(0), claimOf(0)),
+      flag("conflict", "cross_statement", claimOf(0), claimOf(1)),
+      flag("weak", "weak_signal", claimOf(2), "turn:planted:meeting-0:turn-2:whereabouts:0"),
+    ],
+  };
+
+  it("says in each caption what its group holds, with no detector words", () => {
+    const text = textOf(render({ mode: "omniscient" }, flagged));
+    // The evidence list alone: the record beside it says "stamped" of the clock.
+    const list = text.slice(text.indexOf("Evidence (3)"), text.indexOf("Ballots ("));
+    expect(list).toContain("Evidence (3)");
+    for (const group of Object.values(MEETING_COPY.evidenceGroups)) {
+      expect(list).toContain(`${group.heading} (1)`);
+      expect(list).toContain(group.caption);
+    }
+    expect(list).not.toMatch(/grounded|detector|stamped|endpoint tick/);
+  });
+
+  it("names each source by its speaker and kind of turn", () => {
+    const text = textOf(render({ mode: "omniscient" }, flagged));
+    expect(text).toContain("from p-1 (first statement)");
+    expect(text).toContain("p-1 (first statement) ↔ p-2 (reply)");
+    expect(text).toContain("within p-3 (spoke up)");
+    expect(text).toContain("Source 1 · p-1 (first statement)");
+    expect(text).not.toMatch(/\((?:opening|opt-in)\)/);
   });
 });

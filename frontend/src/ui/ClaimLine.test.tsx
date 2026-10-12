@@ -50,3 +50,19 @@ describe("alibi routes on the transcript", () => {
     expect(html).not.toContain("no route stated");
   });
 });
+
+describe("an accusation's confidence on the transcript", () => {
+  it.each([
+    [0.73, "High"],
+    [0.72, "Med"],
+    [0.35, "Low"],
+  ])("reads %s as %s, the number on hover and for a screen reader", (confidence, word) => {
+    const claim: StatementClaimView = { type: "accusation", against: "p-4", confidence, reason: "seen near the body" };
+    const html = renderToStaticMarkup(<ClaimLine claim={claim} />);
+    const number = confidence.toFixed(2);
+    expect(html).toContain(`<span data-bucket="true" title="${number}">confidence ${word}<span class="sr-only">, ${number}</span></span>`);
+    // The face, with what only a screen reader reads set aside, carries no figure.
+    const face = html.replace(/<span class="sr-only">[^<]*<\/span>/g, "").replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]*>/g, "");
+    expect(face).toBe(`accusation · against p-4 (confidence ${word}) — seen near the body`);
+  });
+});

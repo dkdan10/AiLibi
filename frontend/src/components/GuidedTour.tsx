@@ -180,7 +180,7 @@ export const STEPS: readonly Step[] = [
       <p className="text-sm text-ink-700">
         Open the <strong>Belief × Truth</strong> panel from the perspective banner
         (top, beside the perspective toggle) for the suspicion matrix — a bucketed
-        heat ramp (Low / Med / High) you can flip to Ground-Truth or Error.
+        heat ramp (Low / Med / High) you can flip to Real roles or Error.
         Confidently-wrong cells are drawn loud (fill + border + ✗), and “no belief
         yet” is a hatched cell, never a 0.
       </p>

@@ -3,9 +3,9 @@
 
 import { useId } from "react";
 
-import { EvidenceLink } from "./EvidencePanel";
+import { EvidenceLink, citationLabel } from "./EvidencePanel";
 import { useReplayStore } from "../store/replayStore";
-import { BALLOT_COPY, PERSPECTIVE_COPY, fmt, showsBallotCorrectness } from "../lib/copy";
+import { BALLOT_COPY, PERSPECTIVE_COPY, bucketWord, fmt, showsBallotCorrectness } from "../lib/copy";
 import { tokens } from "../tokens";
 import type { BallotView, PlayerView } from "../types/api";
 
@@ -18,21 +18,16 @@ export function visibleRationale(
   return omniscient || observerId === ballot.voter ? ballot.rationale_text_clean.trim() : "";
 }
 
-/** Explain the applied decision without treating an adjustment as model intent. */
-function rewriteLabel(reason: string): string {
-  switch (reason) {
-    case "invalid_target": return "Invalid target changed to skip";
-    case "teammate_coerced": return "Teammate vote changed to skip";
-    case "under_gate_redirect": return "Vote redirected by the meeting rule";
-    case "invalid_reason_id": return "Unknown statement citation removed";
-    case "invalid_observation_id": return "Unknown observation citation removed";
-    case "uncited_coerced": return "Unsupported vote changed to skip";
-    case "off_target_coerced": return "Off-target citation changed vote to skip";
-    case "invalid_basis": return "Unreadable stated basis removed";
-    case "invalid_counter_reason_id": return "Unknown counter-evidence citation removed";
-    case "parse_default": return "Unreadable ballot replaced with skip";
-    default: return "Recorded vote adjustment";
-  }
+/**
+ * Explain the applied decision without treating an adjustment as model intent.
+ *
+ * Read from the ballot copy's own keys only (`Object.hasOwn`), so a recorded
+ * reason this build has not been taught, or one that happens to share a name
+ * with an inherited property, reads as the fallback rather than as a guess.
+ */
+export function rewriteLabel(reason: string): string {
+  const labels: Readonly<Record<string, string>> = BALLOT_COPY.rewriteLabels;
+  return Object.hasOwn(labels, reason) ? labels[reason]! : BALLOT_COPY.rewriteFallback;
 }
 
 /**
@@ -171,12 +166,19 @@ export function BallotCard({
 }: BallotCardProps) {
   const alternativesLabelId = useId();
   const meetingId = useReplayStore((s) => s.selectedMeetingId);
+  // The meeting's public turns, so a statement citation can name its speaker.
+  const turns =
+    useReplayStore((s) => s.currentReplay?.meetings.find((m) => m.meeting_id === meetingId)?.turns) ?? [];
   const perspective = useReplayStore((s) => s.perspective);
   const observerId = perspective.mode === "agent" ? perspective.agentId : null;
   const privateVisible = omniscient || observerId === ballot.voter;
   const isSkip = ballot.target === "SKIP";
   const confidence = Math.max(0, Math.min(1, ballot.confidence));
   const pct = Math.round(confidence * 100);
+  // The face shows the word; the recorded number is on hover and in the
+  // meter's spoken value.
+  const confidenceWord = bucketWord(confidence);
+  const confidenceNumber = ballot.confidence.toFixed(2);
   const rationale = visibleRationale(ballot, omniscient, observerId);
   const rewriteReasons = privateVisible ? ballot.rewrite_reasons : [];
   // Same private class as the citations and the weighed list: the label reports
@@ -229,11 +231,19 @@ export function BallotCard({
         <span className="w-20 shrink-0 font-mono text-[10px] uppercase tracking-wide text-ink-400">
           confidence
         </span>
-        <div className="h-2 flex-1 overflow-hidden rounded-pill bg-paper-3">
+        <div
+          role="meter"
+          aria-label="confidence"
+          aria-valuenow={confidence}
+          aria-valuemin={0}
+          aria-valuemax={1}
+          aria-valuetext={`${confidenceWord} (${confidenceNumber})`}
+          className="h-2 flex-1 overflow-hidden rounded-pill bg-paper-3"
+        >
           <div className="h-full rounded-pill bg-ink-700" style={{ width: `${pct}%` }} />
         </div>
-        <span className="w-10 shrink-0 text-right font-mono text-xs text-ink-700">
-          {ballot.confidence.toFixed(2)}
+        <span data-bucket title={confidenceNumber} className="w-10 shrink-0 text-right font-mono text-xs text-ink-700">
+          {confidenceWord}
         </span>
       </div>}
 
@@ -257,11 +267,12 @@ export function BallotCard({
           link kind it resolves to is decided by `counterKind` rather than by a
           fixed choice; an unresolvable one still renders as a plain token, the
           same fallback the observation link already has, because the record is
-          that the voter cited it. */}
+          that the voter cited it. Each names what it points at
+          (`citationLabel`); the raw id is on hover. */}
       {privateVisible && <div className="mb-2 flex flex-wrap gap-2">
-        {ballot.primary_reason_id !== null && meetingId !== null && <EvidenceLink target={{ kind: "statement", id: ballot.primary_reason_id, meetingId, observerId: ballot.voter }}>Cited statement · {ballot.primary_reason_id}</EvidenceLink>}
-        {ballot.primary_reason_observation_id !== null && (meetingId !== null ? <EvidenceLink target={{ kind: "observation", id: ballot.primary_reason_observation_id, meetingId, observerId: ballot.voter }}>Cited observation · {ballot.primary_reason_observation_id}</EvidenceLink> : <span className="text-xs">{ballot.primary_reason_observation_id}</span>)}
-        {ballot.counter_reason_id !== null && (meetingId !== null ? <EvidenceLink target={{ kind: counterKind(ballot.counter_reason_id), id: ballot.counter_reason_id, meetingId, observerId: ballot.voter }}>{BALLOT_COPY.counterLabel} · {ballot.counter_reason_id}</EvidenceLink> : <span className="text-xs">{ballot.counter_reason_id}</span>)}
+        {ballot.primary_reason_id !== null && meetingId !== null && <EvidenceLink target={{ kind: "statement", id: ballot.primary_reason_id, meetingId, observerId: ballot.voter }}>{citationLabel("statement", ballot.primary_reason_id, turns)}</EvidenceLink>}
+        {ballot.primary_reason_observation_id !== null && (meetingId !== null ? <EvidenceLink target={{ kind: "observation", id: ballot.primary_reason_observation_id, meetingId, observerId: ballot.voter }}>{citationLabel("observation", ballot.primary_reason_observation_id, turns)}</EvidenceLink> : <span className="text-xs" title={ballot.primary_reason_observation_id}>{citationLabel("observation", ballot.primary_reason_observation_id, turns)}</span>)}
+        {ballot.counter_reason_id !== null && (meetingId !== null ? <EvidenceLink target={{ kind: counterKind(ballot.counter_reason_id), id: ballot.counter_reason_id, meetingId, observerId: ballot.voter }}>{BALLOT_COPY.counterLabel} · {citationLabel(counterKind(ballot.counter_reason_id), ballot.counter_reason_id, turns)}</EvidenceLink> : <span className="text-xs" title={ballot.counter_reason_id}>{BALLOT_COPY.counterLabel} · {citationLabel(counterKind(ballot.counter_reason_id), ballot.counter_reason_id, turns)}</span>)}
       </div>}
 
       {/* The one weighing artefact already on disk: who this voter wrote down
@@ -287,9 +298,8 @@ export function BallotCard({
             <span
               data-ballot-grounding
               className="ml-2 inline-flex items-center rounded-md border border-ink-200 bg-paper-2 px-1.5 py-0.5 font-mono text-[10px] text-ink-700"
-              title={BALLOT_COPY.groundingLabel}
             >
-              {grounding}
+              {BALLOT_COPY.groundingLabel} {grounding}
             </span>
           )}
           {ballot.considered_alternatives.length > 0 ? (
@@ -319,7 +329,7 @@ export function BallotCard({
       )}
 
       {privateVisible && ballot.rewrite_reasons.includes("under_gate_redirect") && (
-        <p className="mb-1 text-xs text-ink-500">The recorded explanation describes the original choice, before the vote was redirected.</p>
+        <p className="mb-1 text-xs text-ink-500">{BALLOT_COPY.redirectNote}</p>
       )}
       {!privateVisible ? (
         <p className="text-xs text-ink-500">{fmt(PERSPECTIVE_COPY.privateBallot, { voter: ballot.voter })}</p>

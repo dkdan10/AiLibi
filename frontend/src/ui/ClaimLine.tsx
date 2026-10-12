@@ -9,7 +9,11 @@
 // carries `route` and renders its legs in order, so a spectator sees the walk
 // the speaker actually described instead of a single room it was squeezed into.
 // The two surfaces are disjoint on the wire, so `route` is the discriminant.
+//
+// An accusation's confidence reads as its Low / Med / High word; the recorded
+// number is on hover and in the text a screen reader reads.
 
+import { INSPECTOR_COPY, bucketWord, fmt } from "../lib/copy";
 import type { AlibiSegmentView, StatementClaimView } from "../types/api";
 
 function alibiLegs(claim: Extract<StatementClaimView, { type: "alibi" }>):
@@ -60,7 +64,12 @@ export function ClaimLine({ claim }: { claim: StatementClaimView }) {
       return (
         <span className="min-w-0 break-words">
           <span className="font-semibold text-ink-900">accusation</span> · against{" "}
-          {claim.against} (confidence {claim.confidence.toFixed(2)}) — {claim.reason}
+          {claim.against} (
+          <span data-bucket title={claim.confidence.toFixed(2)}>
+            {fmt(INSPECTOR_COPY.confidence, { bucket: bucketWord(claim.confidence) })}
+            <span className="sr-only">, {claim.confidence.toFixed(2)}</span>
+          </span>
+          ) — {claim.reason}
         </span>
       );
     case "corroboration":
