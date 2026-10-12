@@ -64,6 +64,14 @@ states them; no rendered prompt, transcript text or seed-band prefix was printed
 
 Each item names its mechanism and the planted case that turns it red; each new test is seen red first.
 
+- [x] Review correction: item 17's capture runs at the merged head, after both viewer cards. `main` at `b703bd41`
+  (PR #512 at `8194bf40`, then its card flip) is merged into the branch (`07c3e138`, parents `5206cdef` and
+  `b703bd41`, never rebased); one run of `e2e/media.spec.ts` there, on the pinned chromium build 1194, re-shoots the
+  hero still, the meeting still and the GIF, which land with their new digests and that capture revision in
+  `f1c6fefd`. Mechanism: `test_media_hashes_and_labels_are_current` (each committed file's sha256 against
+  `provenance.json`; planted: each old digest restored, and two digests swapped, fail),
+  `test_media_placement_claims_follow_actual_frontdoor_links`, and a count-only read of the GIF's first frame and
+  both stills (round 7 below).
 - [x] Review correction: the "Who did what" section ends at the next heading of its own level. Planted: "not
   independent human assurance" moved into a paragraph just below the next `##` heading fails with exactly the one
   section problem, and "Codex" written there gives none
@@ -134,13 +142,15 @@ Each item names its mechanism and the planted case that turns it red; each new t
   e.g. "Daniel Keinan directed the project and decided what was accepted, without hand-writing the production code; AI
   agents wrote it, and the audits are AI reviews, not human assurance." Mechanism: the pin. Planted: "Claude Code
   implemented" under the heading fails, naming the section; the old paragraph, or the byline linked, fails.
-- [ ] **17: the GIF under the still, the WebM gone.** The README embeds `docs/media/spectator-journey.gif` under the
+- [x] **17: the GIF under the still, the WebM gone.** The README embeds `docs/media/spectator-journey.gif` under the
   still, plain alt text. Deleted: the WebM, its link, the spec's clip (walk, cut, frame probe, `CLIP_*`, every helper
   only it used, ffmpeg's too), its provenance entry, row, prose and budget; the GIF's row: "README image"; the recipe
   installs chromium only; the artifacts row re-derived; `.webm` stays in the placement inventory. The trimmed spec runs
   once at the head, after the viewer cards (the banner pin, `media.spec.ts:813-815`); a changed asset lands with digest,
   capture revision and row, or Results says none did. Mechanism: `test_public_recording_provenance.py:724` (placement),
-  `:138` (hashes), lint, `tsc:check`. Planted: no GIF embed, an empty `.webm` or a digest off by one fails.
+  `:138` (hashes), lint, `tsc:check`. Planted: no GIF embed, an empty `.webm` or a digest off by one fails. Captured
+  once at `07c3e138`, after both viewer cards; the three assets land with their digests and that revision in
+  `f1c6fefd`, the rows re-derived unchanged (round 7 below).
 - [x] **18: one number style.** Every fraction in both tables, figure and Before cell, reads "k of n (p%)", p rounded as
   the win-rate check rounds (`round(100 * k / n)`): the survey's "394 of 397 (99%)". Win-rate cells keep "36% (4p1i)",
   which `check_repeated_claims` reads on every claim page. One helper renders the form; `check_result_sources`,
@@ -701,3 +711,71 @@ none; `git diff --numstat 9732623d -- docs/lessons.md docs/ownership-case-study.
 --name-only 9732623d` lists 16 files, none under the never-written paths. The demo bundle built at `9732623d` and at
 this head: 110 files each, `diff -r` exit 0. The gate record is CI's run at the exact head of #513, cited in the PR by
 run id (memo 8.7 item 1).
+
+### Review corrections, round 7 (2026-10-12)
+
+The review at `5206cdef` (docs lens) found one blocking problem: item 17's box was open, since the orchestrator had
+deferred the capture until PR #512 merged, so that the GIF and the stills show the finished viewer. This round merges
+`main` and runs the capture; no page, copy string, viewer source, test or production line of
+`scripts/check_doc_facts.py` moves, so the word counts, the live strings and every count of round 5 hold.
+
+1. **The merge.** `07c3e138` (`git merge --no-ff origin/main`) has parents `5206cdef` and `b703bd41` (main after PR
+   #512 at `8194bf40` and its card flip); no branch commit is rewritten. No file was written on both sides since
+   `9732623d` (`comm -12` of the two `git diff --name-only` lists is empty), so it merged without conflict.
+2. **The capture.** One run at `07c3e138`, the tree clean: `AILIBI_CAPTURE_MEDIA=1 npx playwright test
+   e2e/media.spec.ts`, 3 passed, on Playwright 1.56.1's pinned chromium headless shell 1194 (141.0.7390.37; `npx
+   playwright install chromium` found it present). `f1c6fefd` commits the three assets and stamps `provenance.json`
+   with that revision and their digests; `git merge-base --is-ancestor 07c3e138 HEAD` exits 0. The recording entry is
+   unchanged. No WebM is captured: `git ls-files docs/media` lists 6 files, and `git grep -c -i -E
+   'webm|ffmpeg|recordVideo' -- frontend/e2e docs/media README.md` finds none (exit 1).
+
+   | Asset | sha256, old | sha256, new | Bytes, old to new | Size |
+   | --- | --- | --- | --- | --- |
+   | `spectator-two-truths.png` | `3e5e1c31…be67` | `6092d2eb…7d30` | 107,401 to 109,169 | 2036×909 |
+   | `spectator-meeting.png` | `afa121fa…8566` | `861994c1…f9d6` | 263,404 to 259,971 | 1440×900 |
+   | `spectator-journey.gif` | `5d8fd110…a387` | `e6c269a6…ca53` | 599,731 to 580,643 | 640×400, 13 frames |
+
+   The GIF is assembled from 17 shots (ticks 0 to 12, then the meeting held four times); Pillow merges identical
+   neighbours, so `ffprobe -count_frames` reads 13 frames over 8.5 s, as before. Every visible change is the viewer's
+   words (a scratch Pillow diff, old against new): the hero differs in 7,210 of 1,850,724 pixels by more than 4
+   levels (1,634,282 by any, its palette re-quantised over the changed colours), the meeting still in 57,561 of
+   1,296,000, the GIF's first frame in 8,178 of 256,000. Each asset stays inside its cap (400 kB, 1.5 MB).
+3. **The rows, re-derived.** The media README's rows (2036×909; 1440×900; 640×400, 13 frames) and its "1.0 MB" hold:
+   `wc -c` over `git ls-files docs/media` gives 967,276 bytes in 6 files. The `docs/media/` row of `docs/artifacts.md`,
+   "1.0 MB / 6 files", holds; `verify_ml_evidence.py` exits 0. The README shows the still at `README.md:13` and the
+   GIF at `:17`, both linked to the demo; neither line moves.
+4. **The final wording, count-only.** Two reads; no frame is committed and no page text is printed. (a) The committed
+   bytes: the GIF's first frame extracted with `ffmpeg` to a scratch file, each image and 3× crops read by eye. The
+   GIF's first frame carries the tagline once, one GitHub link beside it, and the Replays, Moments and Results tabs
+   once each; the hero's unseen half 9 rooms reading "Unseen" and its omniscient half 2 bodies naming their killer in
+   words, its card "tick 12"; the meeting still 7 chain edges reading "accuses"; retired forms 0 in each. The old
+   assets carried 9 on the GIF's first frame (Highlights, Results & cases, a "seed 19 · 9p" title, the map's
+   internal name with its corridor and vent-ring counts, As-agent, "mtg", "imp 2"), 11 on the hero (9 FOG, 2
+   daggers) and 9 on the meeting still (the title's "9p", 2 REDIRECTS, the distrust-orange legend, two "Cited"
+   ballot labels, two decimal confidences, Next beat). (b) A
+   scratch Playwright script on the same browser over the head's bundle, at the four captured moments (tick 0, tick 9
+   omniscient, tick 9 as p-5, the meeting at tick 12), counting in the rendered text 52 retired terms (the viewer's
+   own lists in `frontend/src/lib/copy.test.ts` and the old forms above; the meeting card's set-aside sentence
+   excluded as its test excludes it): 0 hits at each moment; tagline 1 and one GitHub link to the repository at the
+   three map moments, 0 on the meeting, whose header is hidden. Planted: "Next beat" appended to the page gives 1 hit
+   at each of the four.
+
+**Mutation probe of this round.** Five data mutants over the one span this round writes, `provenance.json`, each an
+exact replacement run against `tests/scripts/test_public_recording_provenance.py` and restored (a scratch script):
+loaded value read as its old literal 4 (P1 to P3, each digest back to the old capture's; P5, the capture revision
+back to `2c7f9ef8`), swapped collection 1 (P4, the two still digests swapped). P1 to P4 are killed by
+`test_media_hashes_and_labels_are_current`. P5 survives, reported: no gate reads `capture_revision`, which is a record
+field, checked here by `git merge-base --is-ancestor`. A gate on it would need history that a shallow CI clone may not
+hold, and this round adds no test logic beyond what the capture requires.
+
+**Validation at `f1c6fefd`, count-only.** `check_doc_facts.py` exit 0; `validate_task_docs.py` exit 0 (110 work
+cards); the two test files 487 passed; `wc -w` README 1,474 of 1,600, guide 1,340 of 1,350, lessons 1,420,
+`_FRONT_DOOR_BUDGETS` unchanged (`git diff 7d781f8e HEAD -- scripts/check_doc_facts.py | grep -c _FRONT_DOOR_BUDGETS`
+0); `verify_ml_evidence.py` exit 0 (64 checks: 52 OK, 0 FAIL, 7 evidence-branch absent, 5 info); `tsc:check` 0;
+`lint` 0; `npm run e2e` 15 passed, 3 skipped; `git diff --numstat b703bd41 -- docs/lessons.md
+docs/ownership-case-study.md` gives `0 2` and `32 0`; `git diff --name-only b703bd41` lists 19 files, round 5's 16
+and the three assets; the never-written paths, with the architecture page and its SVG, the bundle script, `.github`,
+`DESIGN.md`, the audits, `tasks/README.md` and the glossary, diff empty against `b703bd41` (exit 0). The demo bundle
+built at `b703bd41` and at `f1c6fefd` in this one checkout: 110 files each, 72 under `data/`, `diff -r` exit 0, since
+no file this card writes is baked. The gate record is CI's run at the exact head of #513, cited in the PR by run id
+(memo 8.7 item 1). The Limitations' "The capture has not run" is the record of its own head; this round runs it.
