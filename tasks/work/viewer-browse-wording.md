@@ -1,6 +1,6 @@
 # The replay browser, the workspace and the endings speak plain words
 
-**Status:** ready
+**Status:** done
 
 ## Outcome
 
