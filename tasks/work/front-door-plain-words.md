@@ -64,6 +64,16 @@ states them; no rendered prompt, transcript text or seed-band prefix was printed
 
 Each item names its mechanism and the planted case that turns it red; each new test is seen red first.
 
+- [x] Review correction: the "Who did what" section ends at the next heading of its own level. Planted: "not
+  independent human assurance" moved into a paragraph just below the next `##` heading fails with exactly the one
+  section problem, and "Codex" written there gives none
+  (`test_the_wording_pin_ends_who_did_what_at_the_next_heading`); the fact under a `###` subheading of the section
+  gives none (`test_the_wording_pin_keeps_a_deeper_heading_inside_who_did_what`). Red first under M3, the same-level
+  test inverted, and D2, that test dropped (round 5 below).
+- [x] Review correction: the "Who did what" section is read as a visitor reads it. Planted: the fact wrapped across
+  two lines gives no problem, and "**Claude** Code" in the section fails with the one carries problem
+  (`test_the_wording_pin_reads_who_did_what_as_a_visitor_reads_it`). Red first under M5, the section read raw
+  instead of through `_visible` (round 5 below).
 - [x] Review correction: the "Who did what" facts are read in their section only. Planted: "not independent human
   assurance" moved out of the section into its own paragraph above the heading, the page still carrying it, fails
   naming the section (`test_the_wording_pin_reads_who_did_what_facts_in_their_section`). Red first under L3, the
@@ -643,3 +653,51 @@ diff --numstat 9732623d -- docs/lessons.md docs/ownership-case-study.md` gives `
 paths diff empty against `9732623d`. The demo bundle built at `9732623d` and at this head in this one checkout: 110
 files each, `diff -r` exit 0. The gate record is CI's run at the exact head of #513, cited in the PR by run id (memo
 8.7 item 1).
+
+### Review corrections, round 5 (2026-10-11)
+
+The review at `577f670d` found two blocking problems, both in the wording pin's read of "Who did what". This round
+adds tests only: besides this card, only `tests/scripts/test_check_doc_facts.py` moves, so no page, asset, live string
+or production line of `scripts/check_doc_facts.py` changes. `main` had not moved (`9732623d`), so round 4's merge
+(`7e823dd1`, parents `31e27706` and `9732623d`) stands and no branch commit is rewritten.
+
+1. **The section's lower bound** (correctness lens). With the same-level test in `_section` inverted (M3), every test
+   passed: the read then runs past the next `##` heading. The new
+   `test_the_wording_pin_ends_who_did_what_at_the_next_heading` adds a paragraph just below the heading after the
+   section: "not independent human assurance" moved there gives exactly "README.md: under '## Who did what', missing
+   'not independent human assurance'", and "Codex agents ran these commands." there gives no problem. On the same
+   line, dropping the same-level test (D2) also survived; the new
+   `test_the_wording_pin_keeps_a_deeper_heading_inside_who_did_what` puts the fact under a `###` subheading of the
+   section and expects no problem.
+2. **The section's visible read** (correctness lens). With the section read raw instead of through `_visible` (M5),
+   every test passed. The new `test_the_wording_pin_reads_who_did_what_as_a_visitor_reads_it` wraps the fact across
+   two lines (no problem) and writes "**Claude** Code agents wrote it" in the section (exactly "README.md: under '##
+   Who did what', carries 'Claude Code'").
+
+**Item 17.** The orchestrator deferred the capture to the round after PR #512 merges; its box stays open.
+
+**Mutation probe of this round.** Seven mutants over the spans the findings name, `_section` and the section read in
+`_readme_wording_problems`, one exact replacement each, run against the pin's tests (`-k wording`) and restored (a
+scratch script): comparison inverted 2 (M3; C1, the heading's membership test), dropped wrapper 1 (M5), swapped
+collection 1 (L3, round 4's), dropped filter 2 (D1, the `startswith("#")` test; D2, the same-level test), key read
+made a constant 1 (K1, the level read as `##`). At `577f670d` M3, M5 and D2 survived (40 passed each). At this head,
+of 45: M3 3 failed (the three section-bound cases), M5 2 (the two visible-read cases), D2 1 (the subheading case), L3
+42, C1 42. D1 and K1 pass every test and are equivalent: a line whose first word is the heading's level starts with
+"#", and both headings the pin reads are level `##`.
+
+**Counts at this head**, restated (the earlier text is the record of its own head). The pin over the six pages at B
+finds 46 problems (README 25, guide 15, lessons 2, case study 1, SECURITY 2, CONTRIBUTING 1) and none here;
+`test_the_wording_pin_refuses_each_restored_text` has 34 planted cases; the AST diff of test names against B finds 34
+new and 3 gone; `grep -c 'assert '` gives 869 (865 at `577f670d`) and 63. Commands as in round 2.
+
+**Validation at this commit, count-only.** `check_doc_facts.py` exit 0; `validate_task_docs.py` exit 0 (110 work
+cards); the two test files 487 passed (482 at `577f670d`); `ruff check`, `ruff format --check` and `mypy` on the
+changed test file exit 0; `wc -w` README 1,474 of 1,600, guide 1,340 of 1,350, lessons 1,420, `_FRONT_DOOR_BUDGETS`
+unchanged against B; `verify_ml_evidence.py` exit 0 (64 checks: 52 OK, 0 FAIL, 7 evidence-branch absent, 5 info);
+`tsc:check` 0; `lint` 0; `npm run e2e` 15 passed, 3 skipped; `git grep -c "Results & cases" -- frontend/src/App.tsx
+frontend/src/lib/copy.ts` none (exit 1) and `git grep -c 'tournament: "Results",' -- frontend/src/lib/copy.ts` 1, so
+the guide's Results tab sentence holds; `git ls-files docs/media` six files; the webm, ffmpeg and recordVideo grep
+none; `git diff --numstat 9732623d -- docs/lessons.md docs/ownership-case-study.md` gives `0 2` and `32 0`; `git diff
+--name-only 9732623d` lists 16 files, none under the never-written paths. The demo bundle built at `9732623d` and at
+this head: 110 files each, `diff -r` exit 0. The gate record is CI's run at the exact head of #513, cited in the PR by
+run id (memo 8.7 item 1).
