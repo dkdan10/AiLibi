@@ -54,7 +54,14 @@ import {
 } from "./ReplayFilters";
 
 import { ApiError, getGameProfile } from "../api/client";
-import { PICKER_COPY, PROFILE_COPY, fmt, setOptionLabel } from "../lib/copy";
+import {
+  PICKER_COPY,
+  PROFILE_COPY,
+  fmt,
+  gameName,
+  gameSeedTitle,
+  setOptionLabel,
+} from "../lib/copy";
 import { useReplayStore } from "../store/replayStore";
 import type { GameProfileView, ReplayMetadataView, ShelfView } from "../types/api";
 import { Banner } from "../ui/Banner";
@@ -309,7 +316,7 @@ function FeaturedStrip({
   }
   return (
     <section aria-label="Featured games" className="flex flex-col gap-2">
-      <SectionLabel as="h3">Featured — picked by hand</SectionLabel>
+      <SectionLabel as="h3">{PICKER_COPY.featuredHeading}</SectionLabel>
       <ul className="flex flex-col gap-2">
         {entries.map((entry) => (
           <li key={`f-${entry.set}-${entry.seed}`}>
@@ -320,8 +327,11 @@ function FeaturedStrip({
               }}
               className="flex w-full items-start gap-3 rounded-lg border-2 border-ink-900 bg-paper-0 px-3 py-2 text-left shadow-data hover:bg-paper-2"
             >
-              <span className="shrink-0 rounded-pill border-2 border-ink-900 bg-paper-2 px-2 py-0.5 font-mono text-xs font-semibold text-ink-900">
-                seed {entry.seed}
+              <span
+                title={gameSeedTitle(entry.seed)}
+                className="shrink-0 rounded-pill border-2 border-ink-900 bg-paper-2 px-2 py-0.5 font-mono text-xs font-semibold text-ink-900"
+              >
+                {gameName(entry.seed)}
               </span>
               <span className="min-w-0 flex-1 text-sm text-ink-900">
                 {entry.label}
@@ -563,18 +573,19 @@ export function ReplayBrowserView({
       <Loading
         label={
           set !== null
-            ? `Loading ${set}…`
+            ? fmt(PICKER_COPY.loadingSet, { set: setOptionLabel(set) })
             : isHighlights
               ? PROFILE_COPY.loading
-              : "Loading replays…"
+              : PICKER_COPY.loadingReplays
         }
       />
     );
   } else if (status === "error") {
+    // What could not load, then the raw error, or a sentence when none came.
     body = (
       <Banner tone="error">
-        {isHighlights ? PROFILE_COPY.loadError : "Failed to load replays:"}{" "}
-        {error ?? "unknown error"}
+        {isHighlights ? PROFILE_COPY.loadError : PICKER_COPY.replaysLoadError}{" "}
+        {error ?? PICKER_COPY.unknownError}
       </Banner>
     );
   } else if (isHighlights && profileMissing) {
@@ -605,9 +616,7 @@ export function ReplayBrowserView({
   } else if (cards.length === 0) {
     body =
       totalCount === 0 ? (
-        <EmptyState title="No replays found">
-          No replays in the configured replay directory.
-        </EmptyState>
+        <EmptyState title={PICKER_COPY.emptySet} />
       ) : (
         <EmptyState title="No games match these filters">
           <p>Adjust or clear the filters to see more games.</p>
@@ -660,7 +669,6 @@ export function ReplayBrowserView({
       <ReplayFilters
         filters={filters}
         onChange={onFiltersChange}
-        set={set}
         resultCount={cards.length}
         totalCount={totalCount}
         disabled={status === "loading"}
@@ -923,7 +931,7 @@ export function ReplayPicker() {
           place (Task 12.13), so a sets outage isn't a silent dead-end. */}
       {availableSets.length === 0 && availableSetsError !== null ? (
         <Banner tone="error">
-          Couldn’t load the set list: {availableSetsError}{" "}
+          {PICKER_COPY.setListError} {availableSetsError}{" "}
           <button
             type="button"
             onClick={() => {
@@ -942,7 +950,7 @@ export function ReplayPicker() {
         // concurrent /replays list failure stays visible (not hidden behind a
         // spinner).
         <Banner tone="error" onDismiss={clearReplayLoadError}>
-          Failed to load replay: {replayLoadError}
+          {PICKER_COPY.replayLoadError} {replayLoadError}
         </Banner>
       )}
       <ReplayBrowserView

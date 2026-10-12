@@ -62,7 +62,7 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   const moments = page.getByRole("region", { name: "Browse by moment", exact: true });
   await page.goto(`${origin}/?set=9p2i&view=highlights`);
   const reporter = moments.getByRole("region", { name: "The reporter saw it happen", exact: true });
-  await expect(reporter.getByRole("button", { name: "Open replay seed 19", exact: true })).toBeVisible();
+  await expect(reporter.getByRole("button", { name: "Open game 19", exact: true })).toBeVisible();
   await expect(moments.getByRole("region", { name: "All games", exact: true })).toBeVisible();
   await expect(moments).not.toContainText("Caught venting");
   await expect(moments).not.toContainText("ships no game-shape profile");
@@ -73,7 +73,7 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
 
   const browser = page.getByRole("region", { name: "Replay browser", exact: true });
   await page.goto(`${origin}/?set=9p2i&view=replays`);
-  await expect(browser.getByRole("button", { name: "Open replay seed 19", exact: true })).toContainText(
+  await expect(browser.getByRole("button", { name: "Open game 19", exact: true })).toContainText(
     "The reporter saw it happen",
   );
   await expect(browser).not.toContainText("ships no game-shape profile");
@@ -207,9 +207,9 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   await expect(gate).not.toContainText("top ballot");
   await expect(gate).toContainText(meeting.outcome);
   const ballots = page.getByRole("region", { name: /^Ballots/ });
-  await expect(ballots).toContainText(`Private ballot reasoning. View ${observer}`);
+  await expect(ballots).toContainText(`Private ballot reasoning. See as ${observer} to inspect it.`);
   await expect(ballots.getByRole("button", { name: `Cited observation · ${id}`, exact: true })).toHaveCount(0);
-  await evidence.getByRole("button", { name: `Switch to ${observer}'s perspective` }).click();
+  await evidence.getByRole("button", { name: `See as ${observer}`, exact: true }).click();
   await expect(evidence).toContainText(observed);
   await expect(page).toHaveURL(new RegExp(`perspective=${observer}`));
   // An agent lens names its own ballot on the leader, never the table's maximum.
@@ -220,8 +220,8 @@ export async function evidenceJourney(page: Page, origin: string): Promise<void>
   }
   await expect(gate).not.toContainText("top ballot");
   await expect(ballots.getByRole("button", { name: `Cited observation · ${id}`, exact: true })).toBeVisible();
-  await expect(ballots).not.toContainText(`Private ballot reasoning. View ${observer}`);
-  await expect(ballots).toContainText(`Private ballot reasoning. View ${other}`);
+  await expect(ballots).not.toContainText(`Private ballot reasoning. See as ${observer} to inspect it.`);
+  await expect(ballots).toContainText(`Private ballot reasoning. See as ${other} to inspect it.`);
   expect(new URL(page.url()).searchParams.get("reveal")).toBeNull();
 
   // An invented ID stays missing after hydration; it must never choose nearby content.

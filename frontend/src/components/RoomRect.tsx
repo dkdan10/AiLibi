@@ -13,12 +13,13 @@
 // 3:1–3.5:1; task rooms are ~1.4–1.6:1). Corridors get a lighter fill/stroke and,
 // when tall-and-narrow, a rotated label. No invented id→kind mapping.
 //
-// `visible` is the As-agent fog gate: when false the room is unseen — it renders
-// as a muted, hatched, dashed-outline "FOG" cell with NO name and NO contents
-// (the firewall, simulated in the UI: an unseen room reveals nothing).
+// `visible` is the one-player view's gate: when false the room is unseen — it
+// renders as a muted, hatched, dashed-outline "Unseen" cell with NO name and NO
+// contents (the firewall, simulated in the UI: an unseen room reveals nothing).
 
 import type { Graphics } from "pixi.js";
 
+import { MAP_COPY } from "../lib/copy";
 import { pixiHex, tokens } from "../tokens";
 import type { RoomView } from "../types/api";
 
@@ -112,7 +113,7 @@ export function RoomRect({ room, scale, offsetX, offsetY, visible }: RoomRectPro
   const cy = y + height / 2;
 
   if (!visible) {
-    // Fog cell: muted fill + subtle hatch + dashed ghost outline + "FOG".
+    // Unseen cell: muted fill + subtle hatch + dashed ghost outline + "Unseen".
     return (
       <>
         <pixiGraphics
@@ -127,7 +128,7 @@ export function RoomRect({ room, scale, offsetX, offsetY, visible }: RoomRectPro
           }}
         />
         <pixiText
-          text="FOG"
+          text={MAP_COPY.unseenRoom}
           anchor={0.5}
           x={cx}
           y={cy}

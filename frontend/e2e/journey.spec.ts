@@ -34,7 +34,7 @@ const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
  * default — and return the seed it opened.
  *
  * `want` names a specific card instead, matched on the pill's EXACT text. Exact
- * matters: `seed 2` is a prefix of `seed 23`, and a substring match would open
+ * matters: `Game 2` is a prefix of `Game 23`, and a substring match would open
  * whichever of the two the strip happens to list first. `set` lands on that
  * set's strip through the set switch (`?set=`) instead of the served default.
  * The evidence guard's planted case passes `want`: it needs a zero-flag game
@@ -101,7 +101,7 @@ async function openFeaturedReplay(
   const head = (
     want === null
       ? items.first()
-      : items.filter({ has: page.getByText(`seed ${want}`, { exact: true }) }).first()
+      : items.filter({ has: page.getByText(`Game ${want}`, { exact: true }) }).first()
   ).getByRole("button");
   const seedLabel = await head.locator("span").first().innerText();
   // Read back off the card even when one was asked for: the pin is the JOIN
@@ -393,10 +393,10 @@ test.describe("spectator journey", () => {
     const banner = page
       .locator("header")
       .filter({ has: page.locator('[aria-label^="Perspective:"]') });
-    await expect(banner).toContainText(`seed ${seed}`);
+    await expect(banner).toContainText(`Game ${seed}`);
     await expect(banner).toContainText("outcome hidden");
-    await expect(banner).not.toContainText("CREWMATES");
-    await expect(banner).not.toContainText("IMPOSTORS");
+    await expect(banner).not.toContainText("Crew win");
+    await expect(banner).not.toContainText("Impostor win");
     await expect(frameIndex(page)).toHaveValue("0");
 
     // ── the tail surfaces open EMPTY (Task 19.17) ────────────────────────────
@@ -421,7 +421,7 @@ test.describe("spectator journey", () => {
     // bar offers both ways forward.
     await expect(page.getByRole("button", { name: "▶ Play" })).toBeVisible();
     await expect(pauseBar.getByRole("button", { name: /Resume/ })).toBeVisible();
-    await expect(pauseBar.getByRole("button", { name: /Next beat/ })).toBeVisible();
+    await expect(pauseBar.getByRole("button", { name: /Next key moment/ })).toBeVisible();
 
     // ── the tail surfaces followed the playhead (Task 19.17) ─────────────────
     // The feed carries the beat the transport just stopped on, and the chips
@@ -838,14 +838,17 @@ test.describe("spectator journey", () => {
     await expect(roster.getByText(/^crew \d+$/)).toBeVisible();
     await expect(page.getByText("= impostor")).toBeVisible();
 
-    // Enter the fog from the map toolbar — the ONE interactive switcher (the
-    // shell banner is a read-only indicator by design).
-    await page.getByRole("button", { name: "As-agent" }).click();
+    // Enter one player's view from the map toolbar — the ONE interactive
+    // switcher (the shell banner is a read-only indicator by design).
+    const seeAs = page
+      .getByRole("group", { name: "Map perspective" })
+      .getByRole("button", { name: /^See as p-\d+$/ });
+    await seeAs.click();
 
     // THE FIREWALL, simulated in the UI: an agent does not know anyone's role,
     // the living-crew count, or the impostor count. None of it may remain in the
     // DOM — not greyed, not hidden behind an attribute: absent.
-    await expect(perspective).toHaveText(/^As p-\d+ · fog$/);
+    await expect(perspective).toHaveText(/^Watching as p-\d+$/);
     await expect(roleBadges).toHaveCount(0);
     await expect(roster.getByText(/^crew \d+$/)).toBeHidden();
     await expect(page.getByText("= impostor")).toBeHidden();
@@ -857,7 +860,7 @@ test.describe("spectator journey", () => {
     await expect(page).toHaveURL(/[?&]perspective=p-\d+\b/);
 
     // Exiting restores exactly what fog took away.
-    await page.getByRole("button", { name: "Exit fog" }).click();
+    await page.getByRole("button", { name: "Back to Omniscient" }).click();
     await expect(perspective).toHaveText("Omniscient");
     await expect(roleBadges).toHaveCount(omniscientRoleCount);
     await expect(page).not.toHaveURL(/[?&]perspective=p-\d+\b/);
@@ -907,8 +910,8 @@ test.describe("spectator journey", () => {
     expect(renderedRoutes).toEqual(servedRoutes);
     expect(omniscientRows.filter((row) => row.includes("→")).length).toBe(servedRoutes.length);
 
-    await page.getByRole("button", { name: "As-agent" }).click();
-    await expect(ticker(page)).toContainText(/as p-\d+ · fog/);
+    await seeAs.click();
+    await expect(ticker(page)).toContainText(/watching as p-\d+/);
     // A re-projection, not a styling change: the fog feed is a SUBSET. WHICH
     // beats survive depends on which agent the switcher lands on and what it
     // happened to see, so the four exact fog cases (witnessed/unwitnessed ×
@@ -922,7 +925,7 @@ test.describe("spectator journey", () => {
     // the Omniscient feed renders has no fogged form at all.
     await expect(ticker(page)).not.toContainText("→");
 
-    await page.getByRole("button", { name: "Exit fog" }).click();
+    await page.getByRole("button", { name: "Back to Omniscient" }).click();
     await expect(ticker(page)).toContainText("omniscient");
     expect(await ticker(page).getByRole("listitem").count()).toBe(omniscientBeats);
 
@@ -993,7 +996,7 @@ test.describe("spectator journey", () => {
         window.localStorage.setItem(key, "1");
       }, TOUR_SEEN_KEY);
       await page.goto("/");
-      const tab = page.getByRole("button", { name: "Highlights" });
+      const tab = page.getByRole("button", { name: "Moments" });
       await expect(tab).toBeVisible();
       const reading = await tab.evaluate((element) => ({
         // The DOM-side blanket reset (src/index.css).

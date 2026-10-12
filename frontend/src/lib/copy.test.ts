@@ -26,16 +26,31 @@ import { describe, expect, it } from "vitest";
 
 import {
   DASHBOARD_COPY,
+  GAME_COPY,
   HEADER_COPY,
   MAP_COPY,
+  NAV_COPY,
+  OUTCOME_COPY,
+  PERSPECTIVE_COPY,
   PICKER_COPY,
   PROFILE_COPY,
   PUBLIC_RESULTS_COPY,
+  SITE_COPY,
   SPECTATOR_COPY,
+  TOUR_COPY,
   TRANSPORT_COPY,
   dialectHits,
+  endingPhrase,
   expandSetName,
   fmt,
+  gameName,
+  gameSeedTitle,
+  killedByLabel,
+  meetingCount,
+  openGameLabel,
+  outcomeTag,
+  playerCount,
+  sabotageHud,
   setOptionLabel,
   showsBallotCorrectness,
 } from "./copy";
@@ -587,7 +602,7 @@ function missingHeaderReads(title: string): readonly string[] {
 /** The tour's welcome step, and the one link inside it. */
 function welcomeSpans(source: string): readonly [string, string] {
   const stepStart = source.indexOf("export const STEPS");
-  const stepEnd = source.indexOf('title: "Perspective switcher', stepStart);
+  const stepEnd = source.indexOf("title: TOUR_COPY.perspectiveTitle", stepStart);
   const step = source.slice(stepStart, stepEnd);
   const linkStart = step.indexOf("<a ");
   const linkEnd = step.indexOf("</a>", linkStart);
@@ -832,14 +847,27 @@ describe("the game-shape profile's copy", () => {
     expect(PROFILE_COPY.pair.note).toContain("always show together");
   });
 
-  it("names no score, rank or order anywhere a viewer reads the profile", () => {
-    for (const leaf of leaves) {
-      expect(leaf.text, leaf.path).not.toMatch(/\bscore|\branks?\b|\bbest\b|\btop\b/i);
-    }
-    expect(PICKER_COPY.highlightsIntro).toContain("Nothing here ranks or scores a game.");
+  it("names no score, rank or order anywhere a viewer reads the profile or the browser", () => {
+    expect(rankingLeaves(PROFILE_COPY, "PROFILE_COPY")).toEqual([]);
+    expect(stringLeaves(PICKER_COPY, "PICKER_COPY").length).toBeGreaterThan(5);
+    expect(rankingLeaves(PICKER_COPY, "PICKER_COPY")).toEqual([]);
     expect(DASHBOARD_COPY.momentsDescription).toContain("nothing is averaged");
   });
+
+  it("catches a picker leaf that ranks the games (planted)", () => {
+    const planted = { ...PICKER_COPY, replaysIntro: "Recorded games for this set, ranked by drama." };
+    expect(rankingLeaves(planted, "PICKER_COPY")).toEqual(["PICKER_COPY.replaysIntro"]);
+    const scored = { ...PROFILE_COPY, allGames: "Top games" };
+    expect(rankingLeaves(scored, "PROFILE_COPY")).toEqual(["PROFILE_COPY.allGames"]);
+  });
 });
+
+/** The path of every string leaf in `tree` that scores, ranks or orders a game. */
+function rankingLeaves(tree: unknown, path: string): readonly string[] {
+  return stringLeaves(tree, path)
+    .filter((leaf) => /\bscor|\brank|\bbest\b|\btop\b/i.test(leaf.text))
+    .map((leaf) => leaf.path);
+}
 
 // ── set ids in words ─────────────────────────────────────────────────────────
 
@@ -853,9 +881,9 @@ describe("expandSetName", () => {
     expect(expandSetName("ml_corpus_v3")).toBe("ml_corpus_v3");
   });
 
-  it("labels a control with id + words, and an unknown id exactly once", () => {
-    expect(setOptionLabel("9p2i")).toBe("9p2i — 9 players, 2 impostors");
-    expect(setOptionLabel("4p1i")).toBe("4p1i — 4 players, 1 impostor");
+  it("names a set in words with its id after, and an unknown id exactly once", () => {
+    expect(setOptionLabel("9p2i")).toBe("9 players, 2 impostors (9p2i)");
+    expect(setOptionLabel("4p1i")).toBe("4 players, 1 impostor (4p1i)");
     expect(setOptionLabel("ml_corpus_v3")).toBe("ml_corpus_v3");
   });
 });
@@ -901,9 +929,9 @@ describe("the copy's substance", () => {
     expect(title).not.toMatch(/recording bug|detector bug/i);
   });
 
-  it("stops claiming the picker lists every recorded replay", () => {
+  it("claims no completeness for the replays the picker lists", () => {
     expect(PICKER_COPY.replaysIntro).not.toMatch(/every recorded replay/i);
-    expect(PICKER_COPY.replaysIntro).toMatch(/serves/i);
+    expect(PICKER_COPY.replaysIntro).not.toMatch(/\bevery\b|\ball\b/i);
   });
 
   it("keeps the agent-clock note free of measurements and ids", () => {
@@ -960,5 +988,483 @@ describe("the copy's substance", () => {
       expect(dialectHits(text)).toEqual([]);
       expect(text).not.toMatch(/successor|legacy_note|compute_/);
     }
+  });
+});
+
+// ── retired wording: the scan ────────────────────────────────────────────────
+//
+// The visitor-wording answers of 2026-10-11 retire a set of words from the
+// viewer. Each row below names a source those answers rewrote and one retired
+// literal. The source is read off disk with comments stripped, so provenance in a
+// comment stays allowed while a rendered word, tooltip or accessible name does
+// not; the copy tree is walked for the same literals, because a word moved into
+// `SPECTATOR_COPY` is rendered just the same.
+
+type Retired = string | RegExp;
+
+/** Whether `text` carries a retired literal (a string matches exactly, case and all). */
+function carries(text: string, retired: Retired): boolean {
+  return typeof retired === "string" ? text.includes(retired) : retired.test(text);
+}
+
+/** The retired literals a source still carries once its comments are stripped. */
+function retiredIn(source: string, retired: readonly Retired[]): readonly string[] {
+  const stripped = stripComments(source);
+  return retired.filter((literal) => carries(stripped, literal)).map(String);
+}
+
+// Word-bounded, so the identifiers `inFog`, `fogAgentId` and `lensIsSelf` are code
+// rather than copy.
+const FOG = /\bfog\b/i;
+const LENS = /\blens\b/i;
+
+/**
+ * Each rewritten source (from `frontend/src`), a fragment it still renders
+ * after the strip, and the literals it no longer carries.
+ */
+const RETIRED_IN_SOURCES: readonly {
+  readonly file: string;
+  readonly kept: string;
+  readonly retired: readonly Retired[];
+}[] = [
+  { file: "../index.html", kept: "<title>", retired: ["Replay Viewer"] },
+  {
+    file: "App.tsx",
+    kept: "Show finale",
+    retired: [
+      "Highlights",
+      "Results & cases",
+      /\bseed \$\{/,
+      /\}p · /,
+      "mtg",
+      /\bimp [{$]/,
+      "As-agent",
+      FOG,
+      "Next beat",
+      "edge-triggered",
+      "two-truth grammar",
+      "WINNER_REASON_LABEL",
+      "reached parity",
+      "sabotage unresolved",
+      "engine-adjusted",
+      "✓",
+      "✗",
+    ],
+  },
+  {
+    file: "components/GuidedTour.tsx",
+    kept: "Start exploring",
+    retired: [
+      /Results (?:&amp;|&) cases/,
+      "As-agent",
+      FOG,
+      "Perspective switcher",
+      "</strong> hero",
+      "at parity",
+      "unresolved sabotage",
+    ],
+  },
+  {
+    file: "components/ReplayPicker.tsx",
+    kept: "Clear filters",
+    retired: [
+      "picked by hand",
+      /\bseed \{/,
+      "Loading ${set}",
+      "Failed to load replays",
+      "unknown error",
+      "No replays found",
+      "configured replay directory",
+      "Couldn’t load the set list",
+      "Failed to load replay:",
+    ],
+  },
+  {
+    file: "components/ReplayFilters.tsx",
+    kept: "Any winner",
+    retired: ["Show outcome filters", 'label="Set"'],
+  },
+  {
+    file: "components/HighlightCard.tsx",
+    kept: "Outcome hidden",
+    retired: [/\bseed \{/, "Open replay seed", "Tick limit"],
+  },
+  {
+    file: "components/MapToolbar.tsx",
+    kept: "= impostor",
+    retired: ["canonical_1", "-vent ring", "corridors", "As-agent", FOG, "simulate"],
+  },
+  {
+    file: "components/EventTicker.tsx",
+    kept: "Nothing has happened yet.",
+    retired: ["· fog", "fog admits"],
+  },
+  { file: "components/BodyMarker.tsx", kept: "victimLabel", retired: ["† ${"] },
+  { file: "components/RoomRect.tsx", kept: "room.name", retired: ['"FOG"'] },
+  {
+    file: "components/SabotageOverlay.tsx",
+    kept: "hudText",
+    retired: ["SABOTAGE · ALARM", "LIGHTS · DARK", "· t-"],
+  },
+  {
+    file: "components/MindInspector.tsx",
+    kept: "role hidden",
+    retired: ["Show what they saw", "Seeing what they saw", FOG, "(firewall)"],
+  },
+  {
+    file: "components/BallotCard.tsx",
+    kept: "no rationale recorded",
+    retired: ["perspective to inspect"],
+  },
+  {
+    file: "components/EvidencePanel.tsx",
+    kept: "Check the source",
+    retired: ["Switch to {observer}"],
+  },
+  {
+    file: "components/MemoryPanel.tsx",
+    kept: "Raw rendered memory (sent to LLM)",
+    retired: [FOG, LENS],
+  },
+  {
+    file: "components/TournamentDashboard.tsx",
+    kept: "TournamentDashboardView",
+    retired: ["costMeanHint"],
+  },
+  { file: "components/CalibrationCurve.tsx", kept: "bins populated", retired: [/\bECE\b/] },
+];
+
+/** The same retired words, refused anywhere in the copy tree. */
+const RETIRED_IN_COPY: readonly Retired[] = [
+  "Replay Viewer",
+  "Highlights",
+  "Results & cases",
+  "picked by hand",
+  "Show outcome filters",
+  "As-agent",
+  FOG,
+  LENS,
+  "Show what they saw",
+  "Next beat",
+  "edge-triggered",
+  "two-truth grammar",
+  "reached parity",
+  "sabotage unresolved",
+  "engine-adjusted",
+  "the vote was",
+  "0.20/game",
+  /\bECE\b/,
+  "in seed order",
+  "Nothing here ranks",
+  "tripwire keeps",
+  "this build serves",
+  "unknown error",
+  "configured replay directory",
+  "canonical_1",
+];
+
+/** The path and literal of every leaf that carries a retired word. */
+function retiredLeaves(
+  leaves: readonly { readonly path: string; readonly text: string }[],
+): readonly string[] {
+  return leaves.flatMap((leaf) =>
+    RETIRED_IN_COPY.filter((literal) => carries(leaf.text, literal)).map(
+      (literal) => `${leaf.path}: ${String(literal)}`,
+    ),
+  );
+}
+
+function sourceText(file: string): string {
+  return readFileSync(resolve(LIB_DIR, "..", file), "utf8");
+}
+
+describe("the retired wording (the scan)", () => {
+  it("catches a retired literal in rendered code and ignores it in a comment (planted)", () => {
+    expect(retiredIn('const label = "As-agent";', ["As-agent"])).toEqual(["As-agent"]);
+    expect(
+      retiredIn('// The As-agent switcher used to live here.\nconst label = "See as";', [
+        "As-agent",
+      ]),
+    ).toEqual([]);
+    expect(retiredIn("<button>Exit fog</button>", [FOG])).toEqual([String(FOG)]);
+    expect(retiredIn("{/* fog of war */}<span>Map</span>", [FOG])).toEqual([]);
+    expect(retiredIn("const inFog = fogAgentId !== null && lensIsSelf;", [FOG, LENS])).toEqual(
+      [],
+    );
+  });
+
+  it.each(
+    RETIRED_IN_SOURCES.flatMap((row) =>
+      row.retired.map((literal) => [row.file, String(literal), row.kept, literal] as const),
+    ),
+  )("%s no longer carries %s", (file, _name, kept, literal) => {
+    const source = sourceText(file);
+    // The strip is only trustworthy if it left the render behind.
+    expect(stripComments(source)).toContain(kept);
+    expect(retiredIn(source, [literal])).toEqual([]);
+  });
+
+  it("finds none of them anywhere in SPECTATOR_COPY", () => {
+    const leaves = stringLeaves(SPECTATOR_COPY, "SPECTATOR_COPY");
+    expect(leaves.length).toBeGreaterThan(20);
+    expect(retiredLeaves(leaves)).toEqual([]);
+  });
+
+  it("names the leaf when a retired word returns to the copy (planted)", () => {
+    const planted = {
+      ...SPECTATOR_COPY,
+      picker: { ...PICKER_COPY, highlightsIntro: "Games grouped by moment, in seed order." },
+    };
+    expect(retiredLeaves(stringLeaves(planted, "SPECTATOR_COPY"))).toEqual([
+      "SPECTATOR_COPY.picker.highlightsIntro: in seed order",
+    ]);
+    expect(retiredLeaves(stringLeaves({ chip: "As p-3 · fog" }, "TREE"))).toEqual([
+      `TREE.chip: ${String(FOG)}`,
+    ]);
+  });
+});
+
+// ── the tab title and the link preview ──────────────────────────────────────
+
+const INDEX_HTML = resolve(LIB_DIR, "../../index.html");
+
+/** One element of a page's head, named by its tag and the attribute that tells it apart. */
+function headElement(tag: string): string {
+  const name = /^<(\w+)/.exec(tag)?.[1] ?? "";
+  const key = /\b(charset|name|property)="?([^"\s/>]*)/.exec(tag);
+  return key === null ? name : `${name} ${key[1] ?? ""}=${key[2] ?? ""}`;
+}
+
+/** The head's elements, the only ones the page may carry. */
+const HEAD_ELEMENTS: readonly string[] = [
+  "meta charset=UTF-8",
+  "meta name=viewport",
+  "title",
+  "meta name=description",
+  "meta property=og:title",
+];
+
+/** What differs between a page's head and the site copy; empty when they agree. */
+function headProblems(html: string): readonly string[] {
+  const head = /<head>([\s\S]*?)<\/head>/.exec(html)?.[1];
+  if (head === undefined) return ["the page has no head"];
+  const problems: string[] = [];
+  const title = /<title>([^<]*)<\/title>/.exec(head)?.[1];
+  if (title !== SITE_COPY.title) problems.push(`the title reads ${String(title)}`);
+  const description = /<meta name="description" content="([^"]*)"/.exec(head)?.[1];
+  if (description !== SITE_COPY.title) {
+    problems.push(`the description reads ${String(description)}`);
+  }
+  const preview = /<meta property="og:title" content="([^"]*)"/.exec(head)?.[1];
+  if (preview !== SITE_COPY.title) problems.push(`the preview title reads ${String(preview)}`);
+  const elements = [...head.matchAll(/<\w+\b[^>]*>/g)].map((match) => headElement(match[0]));
+  for (const element of elements) {
+    if (!HEAD_ELEMENTS.includes(element)) problems.push(`the head also carries ${element}`);
+  }
+  return problems;
+}
+
+describe("the tab title and the link preview", () => {
+  const html = readFileSync(INDEX_HTML, "utf8");
+
+  it("carry the name and the tagline, and nothing else enters the head", () => {
+    // The same bytes the scan reads, so neither read can stand in for the file.
+    expect(html).toBe(sourceText("../index.html"));
+    expect(SITE_COPY.title).toBe("AiLibi — Recorded AI social deduction");
+    expect(SITE_COPY.title).toBe(`AiLibi — ${HEADER_COPY.tagline}`);
+    expect(headProblems(html)).toEqual([]);
+  });
+
+  it("name the old title, a dropped tag or a new one (planted)", () => {
+    const old = html.replace(
+      `<title>${SITE_COPY.title}</title>`,
+      "<title>AiLibi — Replay Viewer</title>",
+    );
+    expect(old).not.toBe(html);
+    expect(headProblems(old)).toEqual(["the title reads AiLibi — Replay Viewer"]);
+    const dropped = html.replace(/\s*<meta name="description"[^>]*>/, "");
+    expect(dropped).not.toBe(html);
+    expect(headProblems(dropped)).toEqual(["the description reads undefined"]);
+    const image = html.replace(
+      "</head>",
+      '  <meta property="og:image" content="hero.png" />\n  </head>',
+    );
+    expect(image).not.toBe(html);
+    expect(headProblems(image)).toEqual(["the head also carries meta property=og:image"]);
+  });
+});
+
+// ── the navigation, the tour and the workspace's names ──────────────────────
+
+describe("the navigation and the tour", () => {
+  it("names the tabs after the pages they open", () => {
+    expect(NAV_COPY).toEqual({
+      replays: "Replays",
+      highlights: "Moments",
+      tournament: "Results",
+      tourTitle: "A short tour of how to watch a recorded game",
+    });
+  });
+
+  it("states the game's endings in the ending words and names one player's view", () => {
+    expect(TOUR_COPY.perspectiveTitle).toBe("What one player could see");
+    expect(TOUR_COPY.rules).toContain("voting out every impostor");
+    expect(TOUR_COPY.rules).toContain("match the crew in number or a sabotage runs out");
+    expect(TOUR_COPY.rules).not.toMatch(/parity|unresolved/);
+    expect(TOUR_COPY.perspectiveBody).toContain("“See as”");
+  });
+});
+
+/** The ten rooms of the canonical map, which a one-player view must not name. */
+const ROOM_NAMES: readonly string[] = [
+  "Cafeteria",
+  "Upper Hall",
+  "Admin",
+  "East Hallway",
+  "Engineering",
+  "Reactor",
+  "Storage",
+  "West Hallway",
+  "MedBay",
+  "Labs",
+];
+
+/** What a one-player HUD line reveals that the view hides; empty when it hides both. */
+function oneViewHudProblems(text: string): readonly string[] {
+  const problems: string[] = [];
+  if (/\d/.test(text)) problems.push("a countdown");
+  for (const room of ROOM_NAMES) {
+    if (text.toLowerCase().includes(room.toLowerCase())) problems.push(`the room ${room}`);
+  }
+  return problems;
+}
+
+describe("the workspace's names", () => {
+  it("names a game by its number, with the seed in a tooltip", () => {
+    expect(gameName(19)).toBe("Game 19");
+    expect(gameSeedTitle(19)).toBe("Recorded from random seed 19");
+    expect(openGameLabel(19)).toBe("Open game 19");
+    expect(GAME_COPY.name).toBe("Game {n}");
+  });
+
+  it("spells out the counts, one and many", () => {
+    expect(playerCount(9)).toBe("9 players");
+    expect(playerCount(1)).toBe("1 player");
+    expect(meetingCount(3)).toBe("3 meetings");
+    expect(meetingCount(1)).toBe("1 meeting");
+    expect(meetingCount(0)).toBe("0 meetings");
+    expect(fmt(GAME_COPY.rosterCrew, { count: "7" })).toBe("crew 7");
+    expect(fmt(GAME_COPY.rosterImpostors, { count: "2" })).toBe("impostors 2");
+  });
+
+  it("gives one tag per ending, from the copy", () => {
+    expect(outcomeTag("CREWMATES", "completed")).toBe("Crew win");
+    expect(outcomeTag("IMPOSTORS", undefined)).toBe("Impostor win");
+    expect(outcomeTag(null, "aborted")).toBe("Aborted");
+    expect(outcomeTag(null, "tick_limited")).toBe("Stopped at the tick limit");
+    expect(outcomeTag(null, "unfinished")).toBe("Unfinished");
+    expect(outcomeTag(null, undefined)).toBe("Unfinished");
+    expect(outcomeTag(null, null)).toBe("Unfinished");
+    // A recorded winner wins over the stop classification beside it.
+    expect(outcomeTag("IMPOSTORS", "tick_limited")).toBe("Impostor win");
+    expect([
+      OUTCOME_COPY.crewWin,
+      OUTCOME_COPY.impostorWin,
+      OUTCOME_COPY.aborted,
+      OUTCOME_COPY.tickLimited,
+      OUTCOME_COPY.unfinished,
+    ]).toEqual(["Crew win", "Impostor win", "Aborted", "Stopped at the tick limit", "Unfinished"]);
+  });
+
+  it("words a recorded ending as the cards do, and an unknown one not at all", () => {
+    expect(endingPhrase("CREWMATE_EJECT")).toBe(PROFILE_COPY.revealFacets.endings.CREWMATE_EJECT);
+    expect(endingPhrase("IMPOSTOR_SABOTAGE")).toBe("a sabotage ran out");
+    expect(endingPhrase("all_tasks_complete")).toBeNull();
+    // Inherited keys are not endings.
+    expect(endingPhrase("constructor")).toBeNull();
+    expect(endingPhrase("toString")).toBeNull();
+  });
+
+  it("says who killed a lone body", () => {
+    expect(killedByLabel("p-4")).toBe("killed by p-4");
+    expect(killedByLabel("p-7")).toBe("killed by p-7");
+    expect(MAP_COPY.chip).toBe("Map");
+    expect(MAP_COPY.unseenRoom).toBe("Unseen");
+  });
+
+  it("counts a sabotage down in the all-roles view", () => {
+    expect(sabotageHud("reactor", 5, true)).toBe("Reactor meltdown in 5 ticks");
+    expect(sabotageHud("reactor", 1, true)).toBe("Reactor meltdown in 1 tick");
+    expect(sabotageHud("lights", 12, true)).toBe("Lights out, 12 ticks left");
+    expect(sabotageHud("lights", 1, true)).toBe("Lights out, 1 tick left");
+  });
+
+  it("names neither the room nor the countdown in one player's view", () => {
+    for (const kind of ["reactor", "lights"] as const) {
+      const line = sabotageHud(kind, 5, false);
+      expect(line, kind).not.toBe("");
+      expect(oneViewHudProblems(line), kind).toEqual([]);
+    }
+    expect(sabotageHud("reactor", 5, false)).toBe("Sabotage alarm");
+    expect(sabotageHud("lights", 5, false)).toBe("Lights out");
+  });
+
+  it("catches the all-roles line in one player's view, whatever its case (planted)", () => {
+    expect(oneViewHudProblems(sabotageHud("reactor", 5, true))).toEqual([
+      "a countdown",
+      "the room Reactor",
+    ]);
+    expect(oneViewHudProblems("REACTOR · ALARM")).toEqual(["the room Reactor"]);
+    expect(oneViewHudProblems("Sabotage alarm")).toEqual([]);
+  });
+
+  it("names one player's view one way", () => {
+    expect(fmt(PERSPECTIVE_COPY.watchingAs, { agent: "p-3" })).toBe("Watching as p-3");
+    expect(fmt(PERSPECTIVE_COPY.seeAs, { agent: "p-1" })).toBe("See as p-1");
+    expect(fmt(PERSPECTIVE_COPY.bannerLabel, { view: "Watching as p-3" })).toBe(
+      "Perspective: Watching as p-3",
+    );
+    expect(TRANSPORT_COPY.nextKeyMoment).toBe("Next key moment");
+    expect(TRANSPORT_COPY.resumeTitle).toBe("Resume playback past this meeting");
+  });
+});
+
+// ── the replay browser's notes ───────────────────────────────────────────────
+
+describe("the replay browser's notes", () => {
+  it("say what the browser shows, in plain words", () => {
+    expect(PICKER_COPY.featuredHeading).toBe("Featured");
+    expect(PICKER_COPY.revealOutcomes).toBe("Reveal outcomes");
+    expect(PICKER_COPY.replaysIntro).toBe("Recorded games for this set. Open one to watch it.");
+    expect(PICKER_COPY.highlightsIntro).toBe(
+      "Games grouped by the moments they hold, each list in game order.",
+    );
+    expect(PROFILE_COPY.allGamesNote).toBe(
+      "Every game listed here, in game order, including games kept off the shelves.",
+    );
+    expect(PICKER_COPY.emptySet).toBe("No recorded games are available for this set.");
+    expect(fmt(PICKER_COPY.loadingSet, { set: setOptionLabel("9p2i") })).toBe(
+      "Loading 9 players, 2 impostors (9p2i)…",
+    );
+    expect(PICKER_COPY.loadingReplays).toBe("Loading recorded games…");
+    expect(PICKER_COPY.replaysLoadError).toBe("The recorded games could not be loaded:");
+    expect(PICKER_COPY.setListError).toBe("The set list could not be loaded:");
+    expect(PICKER_COPY.replayLoadError).toBe("This game could not be loaded:");
+    expect(PICKER_COPY.unknownError).toBe("No reason was given.");
+  });
+});
+
+// ── the local dashboard's leftovers ──────────────────────────────────────────
+
+describe("the local dashboard's leftovers", () => {
+  it("drops the cost target and spells out the calibration error", () => {
+    expect(Object.keys(DASHBOARD_COPY)).not.toContain("costMeanHint");
+    expect(fmt(DASHBOARD_COPY.calibrationError, { value: "0.123" })).toBe(
+      "Expected calibration error 0.123",
+    );
+    expect(DASHBOARD_COPY.calibrationErrorTitle).toBe("lower is better");
+    expect(DASHBOARD_COPY.calibrationLowPower).toBe(
+      "Too few to trust the calibration — read the expected calibration error with care.",
+    );
   });
 });

@@ -25,6 +25,7 @@
 import type { Graphics } from "pixi.js";
 
 import { paintGlyph } from "../assets/map/glyphs";
+import { killedByLabel } from "../lib/copy";
 import { pixiHex, tokens } from "../tokens";
 import type { RoomView } from "../types/api";
 
@@ -162,10 +163,10 @@ export function BodyMarker({
         }}
       />
       {!collapsed && slotCount === 1 && killedBy !== null && (
-        // Spectator-only kill attribution (dagger + killer id) for a lone body;
+        // Spectator-only kill attribution ("killed by p-4") for a lone body;
         // suppressed in a cluster to keep the stacked labels legible.
         <pixiText
-          text={`† ${killedBy}`}
+          text={killedByLabel(killedBy)}
           anchor={0.5}
           x={x}
           y={y + DISC_RADIUS + 19}

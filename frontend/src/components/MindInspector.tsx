@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import { useReplayStore } from "../store/replayStore";
+import { PERSPECTIVE_COPY, fmt } from "../lib/copy";
 import type { Perspective } from "../lib/playback";
 import { tokens, suspicionBucketOf, type SuspicionBucket } from "../tokens";
 import { EmptyState } from "../ui/EmptyState";
@@ -578,7 +579,7 @@ function InspectedAgent({
           </span>
         ) : (
           <span
-            title="Role is hidden through another agent's fog (firewall)."
+            title={PERSPECTIVE_COPY.roleHiddenTitle}
             className="inline-flex items-center rounded-pill border border-dashed border-ink-300 px-2 py-1 font-mono text-3xs uppercase tracking-wide text-ink-500"
           >
             role hidden
@@ -598,7 +599,8 @@ function InspectedAgent({
               : "bg-paper-0 text-ink-900 hover:bg-paper-2")
           }
         >
-          {lensIsSelf ? "Seeing what they saw ✓" : "Show what they saw"}
+          {fmt(PERSPECTIVE_COPY.seeAs, { agent: agentId })}
+          {lensIsSelf && <span aria-hidden> ✓</span>}
         </button>
       </header>
 
@@ -657,7 +659,7 @@ function InspectedAgent({
             tabIndex={0}
             className="min-h-[6rem] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink-900"
           >
-            {!revealSecrets ? <RedactedMind /> : <>
+            {!revealSecrets ? <RedactedMind agentId={agentId} /> : <>
             {tab === "belief" && (
               <MemoryGate memory={memory} memoryError={memoryError}>
                 {(m) => <BeliefTab memory={m} trail={trail} />}
@@ -714,11 +716,10 @@ function InspectedAgent({
   );
 }
 
-function RedactedMind() {
+function RedactedMind({ agentId }: { agentId: string }) {
   return (
     <p className="rounded-md border-2 border-dashed border-ink-300 px-3 py-3 text-xs text-ink-500">
-      This agent’s memory and reasoning are private. Use “Show what they saw”
-      or switch to Omniscient to inspect them. Public statements remain in the meeting transcript.
+      {fmt(PERSPECTIVE_COPY.privateMind, { agent: agentId })}
     </p>
   );
 }

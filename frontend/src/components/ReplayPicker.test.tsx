@@ -1,9 +1,10 @@
 import { isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   ReplayBrowserView,
+  ReplayPicker,
   activeProfile,
   browserState,
   buildCards,
@@ -23,8 +24,32 @@ import {
 } from "./ReplayFilters";
 import { shelfTitle } from "./HighlightCard";
 import { ApiError } from "../api/client";
-import { DASHBOARD_COPY, PICKER_COPY, PROFILE_COPY } from "../lib/copy";
+import { DASHBOARD_COPY, PICKER_COPY, PROFILE_COPY, gameSeedTitle, setOptionLabel } from "../lib/copy";
 import type { GameFacetsView, GameProfileView, ReplayMetadataView } from "../types/api";
+
+// The store, reduced to what the connected browser reads, so its two error lines
+// render from the fields that hold them. Only `ReplayPicker` reads the store here;
+// every other case renders the presentational view or calls a pure function.
+const store = vi.hoisted(() => ({
+  view: "replays",
+  replayList: [] as unknown,
+  replayListError: null as string | null,
+  replayLoadError: null as string | null,
+  clearReplayLoadError: () => {},
+  seedSet: "9p2i" as string | null,
+  setSeedSet: () => {},
+  availableSets: [] as readonly string[],
+  loadSets: () => Promise.resolve(),
+  availableSetsError: null as string | null,
+  loadReplayList: () => Promise.resolve(),
+  setView: () => {},
+  selectReplay: () => Promise.resolve(),
+  revealOutcome: false,
+  setRevealOutcome: () => {},
+}));
+vi.mock("../store/replayStore", () => ({
+  useReplayStore: (selector: (s: typeof store) => unknown) => selector(store),
+}));
 
 function facets(seed: number, tripped = false): GameFacetsView {
   return {
@@ -265,7 +290,7 @@ describe("Browse by moment", () => {
     const wrongHalf = html.slice(wrongAt, rightAt);
     const rightHalf = html.slice(rightAt, allAt);
     const opens = (region: string, seed: number) =>
-      region.split(`aria-label="Open replay seed ${seed}"`).length - 1;
+      region.split(`aria-label="Open game ${seed}"`).length - 1;
     expect([opens(wrongHalf, 8), opens(wrongHalf, 7)]).toEqual([1, 0]);
     expect([opens(rightHalf, 7), opens(rightHalf, 8)]).toEqual([1, 0]);
     expect(html).not.toContain(PROFILE_COPY.pair.emptyHalf);
@@ -357,7 +382,7 @@ describe("the no-profile and stale states", () => {
   it("keeps a replay card factual without a profile", () => {
     const html = render({ view: "replays", profile: null, profileMissing: true, cards: buildCards(null, LIST) });
     expect(html).toContain("33 ticks");
-    expect(html).toContain("Open replay seed 3");
+    expect(html).toContain("Open game 3");
   });
 });
 
@@ -418,7 +443,6 @@ describe("the ejection filter", () => {
   const bar = (filters: ReplayFilterState, onChange: (next: ReplayFilterState) => void) => ({
     filters,
     onChange,
-    set: "9p2i",
     resultCount: 2,
     totalCount: 3,
     reveal: true,
@@ -446,7 +470,7 @@ describe("the ejection filter", () => {
 
 describe("what each list renders", () => {
   const opens = (html: string, seed: number) =>
-    html.split(`aria-label="Open replay seed ${seed}"`).length - 1;
+    html.split(`aria-label="Open game ${seed}"`).length - 1;
 
   it("describes each shelf and lists its games as cards", () => {
     const html = render();
@@ -506,7 +530,7 @@ describe("what each list renders", () => {
       `>${PROFILE_COPY.browseReplays}</button>`,
     );
     expect(render({ view: "replays", cards: [], totalCount: 0 })).toContain(
-      "No replays in the configured replay directory.",
+      PICKER_COPY.emptySet,
     );
   });
 });
@@ -577,5 +601,126 @@ describe("the profile request and the browser's status", () => {
     });
     expect(replays({ replayList: null })).toEqual({ status: "loading", error: null });
     expect(replays({ replayListError: "list down" })).toEqual({ status: "error", error: "list down" });
+  });
+});
+
+describe("the browser's notes and names", () => {
+  /** The featured strip's markup, so a claim about it cannot be met elsewhere on the page. */
+  function strip(html: string): string {
+    return /<section aria-label="Featured games"[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
+  }
+
+  it("heads the featured strip Featured and names each game by its number", () => {
+    const featured = [
+      { set: "9p2i", seed: 19, label: "A hand-written line.", gameId: "headless-seed-19" },
+      { set: "9p2i", seed: 14, label: "Another line.", gameId: "headless-seed-14" },
+    ];
+    const html = strip(render({ view: "replays", featured }));
+    expect(html).toContain(`>${PICKER_COPY.featuredHeading}</h3>`);
+    expect(html).toContain(`title="${gameSeedTitle(19)}"`);
+    expect(html).toMatch(/>Game 19<\/span>/);
+    expect(html).toContain(`title="${gameSeedTitle(14)}"`);
+    expect(html).toMatch(/>Game 14<\/span>/);
+    expect(html).not.toMatch(/picked by hand|>seed 19</);
+  });
+
+  it("reveals outcomes from one warned button, and shows no set chip", () => {
+    const html = renderToStaticMarkup(
+      <ReplayFilters
+        filters={EMPTY_FILTERS}
+        onChange={() => {}}
+        resultCount={3}
+        totalCount={3}
+        reveal={false}
+        onReveal={() => {}}
+      />,
+    );
+    const button = /<button[^>]*aria-describedby="([^"]+)"[^>]*>([^<]*)<\/button>/.exec(html);
+    expect(button?.[2]).toBe(PICKER_COPY.revealOutcomes);
+    expect(html).toContain(
+      `id="${button?.[1] ?? ""}" class="font-mono text-2xs text-ink-500"><span aria-hidden="true">⚠</span> reveals winners and endings across the whole set</span>`,
+    );
+    expect(html).not.toMatch(/Show outcome filters|>Set</);
+  });
+
+  it("names the set while it loads, and says what failed to load", () => {
+    expect(render({ status: "loading", set: "9p2i" })).toContain(
+      "Loading 9 players, 2 impostors (9p2i)…",
+    );
+    expect(render({ status: "loading", set: "4p1i" })).toContain(
+      "Loading 4 players, 1 impostor (4p1i)…",
+    );
+    expect(render({ view: "replays", status: "loading", set: null })).toContain(
+      PICKER_COPY.loadingReplays,
+    );
+    expect(render({ view: "replays", status: "error", error: "boom" })).toContain(
+      `${PICKER_COPY.replaysLoadError} boom`,
+    );
+    expect(render({ view: "replays", status: "error", error: null })).toContain(
+      `${PICKER_COPY.replaysLoadError} ${PICKER_COPY.unknownError}`,
+    );
+  });
+
+  it("names a set with no profile in words, with its id after", () => {
+    const html = render({
+      view: "replays",
+      set: "4p1i",
+      profile: null,
+      profileMissing: true,
+      cards: buildCards(null, LIST),
+    });
+    expect(html).toContain(
+      `${setOptionLabel("4p1i")}: this set ships no game-shape profile, so its cards show no shelves.`,
+    );
+    const absent = render({ set: "4p1i", profile: null, profileMissing: true });
+    expect(absent).toContain(`${setOptionLabel("4p1i")}: the served set ships no game-shape profile`);
+  });
+});
+
+describe("the connected browser's error lines", () => {
+  /** The text of each error line the connected browser shows, in page order. */
+  function errorLines(over: Partial<typeof store>): readonly string[] {
+    Object.assign(store, {
+      seedSet: "9p2i",
+      replayList: [],
+      availableSets: ["9p2i"],
+      availableSetsError: null,
+      replayLoadError: null,
+      ...over,
+    });
+    const html = renderToStaticMarkup(<ReplayPicker />);
+    return [
+      ...html.matchAll(/<div role="status"[^>]*\bbg-kill\b[^>]*><div class="min-w-0 flex-1">([\s\S]*?)<\/div>/g),
+    ].map((match) => (match[1] ?? "").replace(/<[^>]*>/g, "").trim());
+  }
+
+  it("shows no error line when the sets and the game loaded", () => {
+    expect(errorLines({})).toEqual([]);
+  });
+
+  it("says the set list could not load, the raw error after", () => {
+    for (const error of ["network down", "the server answered 503"]) {
+      expect(errorLines({ availableSets: [], availableSetsError: error })).toEqual([
+        `${PICKER_COPY.setListError} ${error} Retry`,
+      ]);
+    }
+  });
+
+  it("keeps the set selector once the sets loaded, whatever a later fetch says", () => {
+    expect(errorLines({ availableSets: ["9p2i"], availableSetsError: "network down" })).toEqual([]);
+  });
+
+  it("says the game could not load, the raw error after", () => {
+    for (const error of ["not found", "the request timed out"]) {
+      expect(errorLines({ replayLoadError: error })).toEqual([
+        `${PICKER_COPY.replayLoadError} ${error}`,
+      ]);
+    }
+  });
+
+  it("keeps each failure in its own words when both happen", () => {
+    expect(
+      errorLines({ availableSets: [], availableSetsError: "network down", replayLoadError: "not found" }),
+    ).toEqual([`${PICKER_COPY.setListError} network down Retry`, `${PICKER_COPY.replayLoadError} not found`]);
   });
 });
