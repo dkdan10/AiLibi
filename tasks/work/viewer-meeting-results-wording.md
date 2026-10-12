@@ -71,6 +71,15 @@ rule" or "weak signal" in `:158-392`; front-door page `scripts/check_doc_facts.p
 
 Each item names its enforcing mechanism and a planted or perturbed case that turns it red; new tests are seen red first.
 
+- [x] Review correction (round 4): `main` is merged and the deferred pieces are done. The merge commit `c5746909` has
+  parents `2c4477a0` and `9732623d` (`origin/main`, the browse card merged at `09fa779e`); every conflict keeps both
+  cards' content, and tour step 3's one word reads "Real roles" at `a5fdce2a`. Mechanism: the full suites at the merged
+  head (`npm test` 1327 passed, 34 files; `npm run e2e` 15 passed, 3 skipped); every `describe` and `it` title of both
+  parents present in `copy.test.ts`, `EvidencePanel.test.tsx` and `MindInspector.test.tsx` save the ones a parent
+  itself replaced; `copy.test.ts` "components/GuidedTour.tsx renders none of them", "names the truth layer in tour step
+  3 as the panel's toggle does" and its planted case; `git diff --word-diff origin/main HEAD` over `GuidedTour.tsx`
+  shows that one word. Proof: T1, "Ground-Truth" back in step 3, turns three cases red; T3, the counter chip's old
+  "the vote was", turns the browse card's scan red.
 - [x] Review correction (round 2): the trail's other claim kinds carry no confidence. `MindInspector.tsx` reads a
   claim's confidence only for an accusation. Mechanism: `MindInspector.test.tsx` "reads an alibi and a corroboration
   as Claimed, with no confidence word" renders a route alibi, a one-room alibi recorded before routes, an alibi with no
@@ -140,7 +149,7 @@ Each item names its enforcing mechanism and a planted or perturbed case that tur
   the ballot (its written reason and vote) Voted, the outcome Result, "Meeting: p-4 was ejected" or the plain
   no-ejection form. Mechanism: `MindInspector.test.tsx` renders the belief tab over a turn, a claim and a ballot,
   asserting the labels in order. Planted: the ballot reason labelled Said fails.
-- [ ] **A9. The panel and step 3 read by meaning (item 11, §2b ruling 1).** Heading "Who suspects whom", a plain
+- [x] **A9. The panel and step 3 read by meaning (item 11, §2b ruling 1).** Heading "Who suspects whom", a plain
   rows-and-columns line; "Real roles" in the truth toggle, group label, fog chip, disabled title (`:142`), legend
   heading (`:478`; "READING: ERROR" held) and fog note (`:552`, "error" kept); legend rows say what each mark means
   ("Dagger: a real impostor, all-roles view only", `:143`), no "hue", "mono", "file" or "role-neutral"; step 3's
@@ -174,22 +183,22 @@ Each item names its enforcing mechanism and a planted or perturbed case that tur
   cost reads "$0: a flat-rate service, so usage, not a bill" (`:151`), no provider-aware branch (§2b ruling 5); a
   non-zero cost keeps its value with "usage, not a bill". Mechanism: `PublicResults.test.tsx` per branch (`:101-114`,
   `:180-209` follow). Planted: flags-off read as unknown fails; a cost of 1.5 shown as "$0" fails.
-- [ ] **A16. Nothing held moves.** The badge, the Error layer's label, rows, look and accessible words, the ballot badge
+- [x] **A16. Nothing held moves.** The badge, the Error layer's label, rows, look and accessible words, the ballot badge
   with its gate, and every word of tour step 3 but "Ground-Truth" keep their bytes (measured from `<base>`, after that
   "panel"). Mechanism: a copy case pins the
   badge, `BeliefPanel.test.tsx` the Error words; `git diff <base> <head>` over those lines and `GuidedTour.tsx` is
   quoted in the PR. Perturbed: either edited fails; a second step-3 word edited shows in the diff.
-- [ ] **A17. Copy ownership and the walk.** Every reworded string sits in `SPECTATOR_COPY` (keys under `meeting`,
+- [x] **A17. Copy ownership and the walk.** Every reworded string sits in `SPECTATOR_COPY` (keys under `meeting`,
   `turn`, `ballot`, `publicResults` and the new `inspector`, `beliefPanel`, `evidenceSource`, `buckets`); strings not
   reworded may stay inline (survey `:175`). The walk reads every leaf and the comment-stripped source of each file
   written here for the retired phrases, plus `As-agent` and `fog` in `BeliefPanel.tsx`, and only "Ground-Truth" in
   `GuidedTour.tsx` (the rest of step 3 is held); `proseLiterals` runs over each reworded span; the dialect scan gains
   these files. Planted: a phrase restored as a literal fails naming the file, as a value naming the key.
-- [ ] **A18. Nothing else moves; the live strings.** `git diff --stat <base> <head>` lists only Expected scope;
+- [x] **A18. Nothing else moves; the live strings.** `git diff --stat <base> <head>` lists only Expected scope;
   `check_doc_facts.py` exits 0. The PR body lists every live string, old against new, the bundle diff file by file
   (expected: compiled assets only, no `data/` file; the measured diff governs) and, count-only, each committed capture
   showing a changed string. Perturbed: a scratch edit under `api/` shows in the `git diff --exit-code` guard (exit 1).
-- [ ] **A19. One bounded mutation pass.** The listed classes (a dropped filter or wrapper, a swapped collection, a
+- [x] **A19. One bounded mutation pass.** The listed classes (a dropped filter or wrapper, a swapped collection, a
   comparison made a None test, a kind or key read made a constant, a dropped tuple member, swapped branches, a loaded
   source read as its literal, message arguments) run once over the readout, bucket read, kind map, id labels, cost
   branch, proof row and defaults; survivors killed or reported. Gate record: CI's green run at the exact head (run id).
@@ -300,6 +309,8 @@ and the new `evidenceSource`, `inspector`, `beliefPanel`, `buckets`); the PR bod
 new.
 
 ### Pending: the merge of `main` (decision §3)
+
+Done in round 4, at the merged head (Review corrections, round 4, below); kept as written.
 
 `viewer-browse-wording` (#511) had not merged when this was written. Before the final review this branch merges `main`
 (never a rebase), keeps both cards' groups in `copy.ts`, `copy.test.ts` and the shared test files, calls the set-name
@@ -546,3 +557,99 @@ checkout): 110 files each side, 35 under `assets/`; all 72 `data/` files byte-id
 (`index-clC97fic.js` to `index-BkjKJRyy.js`), the stylesheet (`index-D7ay7349.css` to `index-B6Y7MwOb.css`) and six
 renamed chunks differ, the same names as at `50fd2f4e`. Gate record: CI's green run at the exact head, cited in the PR
 by run id.
+
+### Review corrections, round 4 (2026-10-11)
+
+The integration round's one blocking finding at `2c4477a0`: `viewer-browse-wording` (#511) merged at `09fa779e` and
+`main` moved to `9732623d`, so this branch merges `main` and finishes the pieces held for it (decision §3; §2b ruling
+1). Done at `c5746909` (the merge) and `a5fdce2a` (step 3's word with its walk row); this subsection and the round-4
+Review correction item at the head of Acceptance follow them. `<base>` is `9732623d` (`git merge-base HEAD
+origin/main`); no branch commit was rewritten.
+
+**The merge.** `git merge --no-ff --no-commit origin/main`, never a rebase; parents `2c4477a0` and `9732623d`. Eight
+files conflicted; each keeps both cards' content:
+
+- `copy.ts`: the module imports (this card's `suspicionBucketOf`, the browse card's view types) and the group exports
+  (`EVIDENCE_SOURCE_COPY`, `GAME_COPY`), both kept. Every group of both cards merged without conflict and is kept as
+  written; the browse card's set-name helper `setOptionLabel` is the one `PublicResults.tsx` calls, so the Results
+  intro now names the set "9 players, 2 impostors (9p2i)".
+- `copy.test.ts`: the two import lists, both cards' names kept; the two sections each card appended after the file's
+  last block, kept whole one after the other (no top-level name is shared).
+- `BallotCard.tsx`, `EvidencePanel.tsx`, `MindInspector.tsx`: import lines only, combined (this card's copy groups and
+  `bucketWord` beside the browse card's `PERSPECTIVE_COPY` and `fmt`); every other hunk of both merged cleanly.
+- `EvidencePanel.test.tsx` and `MindInspector.test.tsx`, which both cards created: one file each holding every case of
+  both. The evidence panel's cases share one store fixture (the browse card's), reset before each case, and this
+  card's render helper opens its meeting itself; the inspector keeps both fixtures, this card's players renamed
+  `trailPlayers` because the two fixtures give the players different roles, and the browse card's store mock serves
+  both.
+- `evidence-journey.ts`: the browse card's private-ballot line and "See as" button with this card's plain-readout
+  check and citation words.
+
+Every `describe` and `it` title of each parent is in the merged `copy.test.ts`, `EvidencePanel.test.tsx`,
+`MindInspector.test.tsx`, `PrivateReasoning.test.tsx` and `journey.spec.ts`, save five that a parent itself replaced
+since `7d781f8e`: three the browse card rewrote (in `copy.test.ts`) and two this card replaced with the per-perspective
+readout (A2, in `PrivateReasoning.test.tsx`); count-only, a title scan over the merged file against each parent.
+
+One string moves so both cards' tests hold together: the browse card's scan refuses "the vote was" in every copy
+value (its item 9), and this card's counter-evidence chip read "The evidence it weighed against the vote was not
+found, so it was removed". It now reads "The evidence it weighed against its vote was not found, so it was removed";
+its pin in `PrivateReasoning.test.tsx` follows, and no test is weakened. Reversible by the owner's word.
+
+**Step 3's one word (ruling 1).** "flip to Ground-Truth or Error" reads "flip to Real roles or Error";
+`git diff --word-diff=porcelain origin/main HEAD -- frontend/src/components/GuidedTour.tsx` shows exactly
+`-Ground-Truth` / `+Real roles`, and "Error" and the rest of step 3 keep their bytes. The walk gains
+`components/GuidedTour.tsx` with that one word only; "names the truth layer in tour step 3 as the panel's toggle does"
+holds the sentence to `BELIEF_PANEL_COPY.layers` ("Real roles", "Error"); the planted case puts the old word back and is
+named by file. Seen red first: at `c5746909` the source still read "Ground-Truth" (T1 below is that state).
+
+**Held, measured against `<base>`** (`held_spans.py` in the run's scratch directory, count-only): the ballot's
+correct / incorrect badge (1678 bytes), its gate `showsBallotCorrectness` (141), the "vote gate" badge (37), the Error
+legend rows (896) and "READING: ERROR" are byte-identical at `9732623d` and `a5fdce2a`.
+
+**Mutation probe, round 4.** Only the spans the merge changed (the combined imports, the two exports, the chip) and
+step 3's word, exactly the listed classes: 16 mutants, each an exact edit, a full `npx vitest run` and a restore
+(`mutate.py` in the run's scratch directory). Killed 16, survived 0. By class: dropped tuple member 11, message
+argument to a constant 3, dropped wrapper 1, loaded source read to its literal 1. A dropped import that a module reads
+when it loads fails its test files rather than single tests; those are counted as files.
+
+| Mutant | Class | Edit | Red |
+| --- | --- | --- | --- |
+| T1 | loaded source | step 3 back to "Ground-Truth" | 3 tests (the walk row, the sentence case, the planted case) |
+| T2 | message argument | step 3's "Real roles" made "real roles" | 2 tests |
+| T3 | message argument | the chip back to "against the vote was" | 3 tests (the browse card's scan and its planted case, the chip pin) |
+| T4 | message argument | the chip made "x" | 1 test |
+| T5 | dropped tuple member | `PERSPECTIVE_COPY` dropped from the ballot's import | 13 tests |
+| T6 | dropped tuple member | `bucketWord` dropped from the ballot's import | 57 tests |
+| T7 | dropped tuple member | `PERSPECTIVE_COPY` dropped from the source panel's import | 4 tests |
+| T8 | dropped tuple member | `EVIDENCE_SOURCE_COPY` dropped from the source panel's import | 73 tests |
+| T9 | dropped tuple member | `TURN_COPY` dropped from the source panel's import | 3 tests |
+| T10 | dropped wrapper | the source panel's `OBSERVATION_EVENT_SEGMENTS` import dropped | 5 test files |
+| T11 | dropped tuple member | `PERSPECTIVE_COPY` dropped from the inspector's import | 16 tests |
+| T12 | dropped tuple member | `INSPECTOR_COPY` dropped from the inspector's import | 3 test files |
+| T13 | dropped tuple member | `bucketWord` dropped from the inspector's import | 5 tests |
+| T14 | dropped tuple member | the `EVIDENCE_SOURCE_COPY` export dropped | 54 tests |
+| T15 | dropped tuple member | the `GAME_COPY` export dropped | 44 tests |
+| T16 | dropped wrapper | the copy module's `suspicionBucketOf` import dropped | 109 tests |
+
+**Validation, count-only, at `a5fdce2a`** (this subsection changes only the card). `validate_task_docs.py` exit 0;
+`check_doc_facts.py` exit 0; `pytest tests/api/test_public_results.py tests/api/test_view_model.py -q` 126 passed,
+1 skipped; `npm test` 1327 passed (34 files; 1324 at `c5746909`); `tsc:check` exit 0; `lint` exit 0; `npm run e2e` 15
+passed, 3 skipped, run locally through a scratch copy of the config on the cached headless shell (build 1234), because
+the pinned build 1194 is not installed here (CI's `frontend-e2e` job on the pinned browser is the record). The card's
+retired-phrase grep: 18 lines, all comments, the e2e readout check's own pattern or the inspector's empty state, as
+before; the `As-agent` / `fog` grep in `BeliefPanel.tsx`: 4 comment lines; the `Ground-Truth` grep in
+`GuidedTour.tsx`: no line (exit 1). `git diff --exit-code 9732623d a5fdce2a` over the never-written paths: exit 0
+(perturbed: a scratch line in `api/__init__.py` gives exit 1, then restored). `git diff --stat 9732623d a5fdce2a`: 24
+files, all in Expected scope (the glossary, the two e2e pin files, nine components and `ui/ClaimLine.tsx`, the tests,
+`copy.ts`, `copy.test.ts`, `tests/api/test_public_results.py`, this card), none under `eval/`.
+
+**The bundle at `<base>` and the merged head** (`build_demo_bundle.py --out`, one checkout, `9732623d` then
+`a5fdce2a`): 110 files each side, 35 under `assets/`; all 72 `data/` files byte-identical. What differs is compiled
+assets only: `index.html` (its asset names), the index chunk (`index-_fqOlNVg.js` to `index-DyDDt47w.js`), the
+stylesheet (`index-D7ay7349.css` to `index-B6Y7MwOb.css`) and six renamed chunks (`MapView`, `ReplayPicker`,
+`TournamentDashboard`, `CanvasRenderer`, `WebGLRenderer`, `WebGPURenderer`). In the built chunks, count-only: every
+retired phrase of the grep above, "the vote was", "Vote redirected" and "Recorded vote adjustment" appear 0 times at
+the head; "suspicion matrix" appears once, in step 3, which is held; "flip to Real roles or Error" once.
+
+Gate record: CI's green run at the exact head, cited in the PR by run id. The Status line and `tasks/README.md` are
+kept as `main` has them (the orchestrator's).
