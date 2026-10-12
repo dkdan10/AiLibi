@@ -7164,6 +7164,30 @@ def test_the_wording_pin_reads_the_audit_list_in_order(tmp_path: Path) -> None:
     }
 
 
+def test_the_wording_pin_reads_who_did_what_facts_in_their_section(
+    tmp_path: Path,
+) -> None:
+    # Planted: the second honesty fact moved out of "Who did what" into its own
+    # paragraph above the heading. The page still carries it, so only a read of
+    # the section itself names it missing.
+    tree = _wording_tree(tmp_path)
+    readme = (tree / _README).read_text(encoding="utf-8")
+    fact = "and the audits here are AI reviews, not independent human assurance."
+    heading = f"\n{_WHO_DID_WHAT}\n"
+    assert readme.count(fact) == 1 and readme.count(heading) == 1
+    moved = readme.replace(fact, "and the audits here are AI reviews.").replace(
+        heading, f"\nThe audits here are not independent human assurance.\n{heading}"
+    )
+    (tree / _README).write_text(moved, encoding="utf-8")
+    assert "not independent human assurance" in _visible(moved)
+    assert _wording_problems(tree) == {
+        _README: [
+            f"{_README}: under {_WHO_DID_WHAT!r}, missing "
+            "'not independent human assurance'"
+        ]
+    }
+
+
 def test_the_wording_pin_matches_whole_phrases() -> None:
     # A retired word inside a longer one is not that word: "findings" is not
     # "finding", and "v60" is not "v6"; the verdict word is read case-folded.
