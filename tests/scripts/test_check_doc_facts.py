@@ -1852,14 +1852,21 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [See the results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read an ownership decision](docs/ownership-case-study.md)
-""",
+        (
+            "**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [See the "
+            "results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read "
+            "the five-minute guide](docs/reading-guide.md)\n"
+        ),
         """**[Watch the recorded demo](https://dkdan10.github.io/AiLibi/)** · [Inspect results and decisions](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Read an ownership decision](docs/ownership-case-study.md)
 """,
     ),
     (
-        """Daniel Keinan directed the project and decided what was accepted, without hand-writing the production code; AI agents wrote it, and the audits here are AI reviews, not independent human assurance.
-""",
+        (
+            "Daniel Keinan directed the project and decided what was accepted, without "
+            "hand-writing the production code; AI agents wrote it, and the audits here are "
+            "AI reviews, not independent human assurance. Each change arrived on its own "
+            "branch with a written task, a pull request and the full gate.\n"
+        ),
         """Daniel directed product scope, acceptance criteria, priorities, and adoption decisions. Claude Code implemented the initial project; Codex reviewed it and now also implements cleanup. Agents wrote production code and substantial supporting plans, cards, tests, documentation, and audits. Daniel did not hand-write the production code. “Independent” audits here mean separate AI reviewers, not independent human assurance.
 """,
     ),
@@ -1872,8 +1879,12 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """The shown 9-player set was recorded 2026-10-09 under the adopted gameplay changes; the 4-player set and the ML training games were recorded 2026-09-22. No figure pools the two. Each before cell is what that set's previously shown recording read.
-""",
+        (
+            "The shown 9-player set was recorded 2026-10-09 under the adopted gameplay "
+            "changes; the 4-player set and the ML training games were recorded 2026-09-22. "
+            "Three things hold there, each with its command in the [reading "
+            "guide](docs/reading-guide.md):\n"
+        ),
         """The shown 9-player set was recorded 2026-10-01 under the adopted gameplay changes, in [its own era](docs/glossary.md#era-recordings-that-share-one-recorded-identity); the 4-player set and the ML corpus stay at [baseline 9](docs/glossary.md#baseline-n-the-reference-recording), recorded 2026-09-22. No figure pools the two. Each before cell is what that set's replaced recording read.
 """,
     ),
@@ -1900,8 +1911,7 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 46 correct ejections follow certified vent evidence; without it, 22 of 37 ejections target impostors and 15 convict crewmates. This demonstrates processing of certified facts, and deception in older recordings, but **not general social deduction**.
-""",
+        ("*Valid* means resolvable, not supported. "),
         """*Valid* means resolvable, not supported. No citation check establishes that the source bears out its accusation. In the shown 9-player set, 24 of 44 correct ejections follow certified vent evidence; without it, 20 of 42 ejections target impostors and 22 convict crewmates. This demonstrates processing of certified facts and deception, **not general social deduction**. The [reading guide](docs/reading-guide.md) reads these 50 games alone.
 """,
     ),
@@ -1914,20 +1924,31 @@ _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
 """,
     ),
     (
-        """**Four learned impostor policies beat their scripted comparator on wins; none became the default.** Each failed a pre-registered evidence-quality gate; the retained candidate's edge is not significant at 50 games, and no comparison was re-run after two comparator defects were repaired. [ML methods, negative results, and limits](docs/ml-program.md).
-""",
+        (
+            "Four learned impostor policies won more games than the scripted one and none "
+            "became the default; each failed a gate written before measuring: [methods, "
+            "negative results and limits](docs/ml-program.md).\n"
+        ),
         """**Four learned impostor policies beat their scripted comparator on wins; none became the default.** Each failed a pre-registered evidence-quality gate. The retained candidate's advantage is not statistically significant at 50 games; the old comparator also had two since-repaired defects, and those learned comparisons were not re-run. [ML methods, negative results, and limits](docs/ml-program.md).
 """,
     ),
     (
-        """- **Observation firewall:** agents receive sanitized packets and a public map; the boundary checks above defend it. The spectator is deliberately privileged.
-""",
+        (
+            "- **An observation boundary.** Agents never touch engine state. They receive "
+            "sanitized packets and a public map; import rules and planted-leak tests "
+            "enforce the line; only the viewer sees everything.\n"
+        ),
         """- **Observation firewall:** agents receive sanitized packets and a public map. Import-linter, planted import leaks, and recursive packet sweeps defend this boundary. The spectator is deliberately privileged.
 """,
     ),
     (
-        """**Known evidence leak:** in the 2026-09-22 recordings, the opening prompts name each body by a label that reveals when it died. The shown 9-player set's report openings no longer carry it (0 of 115). The full repair stays switched off, not adopted. [Observation contract and limitations](docs/observation-contract.md).
-""",
+        (
+            "**One known leak.** In the 2026-09-22 recordings the opening prompts name "
+            "each body by a label that reveals when it died; the shown 9-player set's "
+            "report openings no longer carry it (0 of 115). The full repair stays switched "
+            "off, not adopted. [Observation contract and "
+            "limitations](docs/observation-contract.md).\n"
+        ),
         """**Known evidence leak:** in the baseline-9 recordings, default opening prompts
 reveal a hidden death tick through a body identifier. The shown 9-player set's
 report openings no longer carry it (0 of 114). The full temporal repair stays
@@ -1935,29 +1956,30 @@ default-off, not adopted. [Observation contract and limitations](docs/observatio
 """,
     ),
     (
-        """The [ownership case study](docs/ownership-case-study.md) traces two owner decisions from their evidence to what each leaves unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. Phase closes do not claim every issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
-""",
+        (
+            "[How a change gets in](docs/workflow.md) · [Lessons](docs/lessons.md) · [One "
+            "decision, traced](docs/ownership-case-study.md) · [History](docs/history.md)\n"
+        ),
         """The [ownership case study](docs/ownership-case-study.md) traces one consequential decision through evidence, alternatives, implementation, review, and what remained unproven. [Lessons](docs/lessons.md) and the [rolling workflow](docs/workflow.md) explain how findings become bounded changes. The cleanup branch merged into main on 2026-09-07; historical phase closes are not a claim that every current issue is resolved. [History](docs/history.md) · [Current work](tasks/README.md).
 """,
     ),
     (
-        """(22.x works from 22.13). Installation downloads locked dependencies over
-""",
+        (
+            "You need [uv](https://docs.astral.sh/uv/getting-started/installation/), "
+            "Python 3.11 (`uv python install 3.11`) and Node.js 22 or newer; the locked "
+            "install takes a few minutes:\n"
+        ),
         """(22.x works from 22.13). Installation downloads locked dependencies; allow
 """,
     ),
     (
-        """Fake runs test mechanics; samples preserve hosted
-dialogue. Each replay has an audit sidecar, and `--force` replaces both.
-""",
+        ("Nothing below needs a provider account or network access.\n"),
         """Stop serving with Ctrl-C. Fake runs test mechanics; samples preserve hosted
 dialogue. Each replay has an audit sidecar; `--force` replaces both together.
 """,
     ),
     (
-        """### Three reproducibility scopes
-
-""",
+        ("Two of three reproducibility claims are proven: "),
         """### Three reproducibility scopes
 
 Three distinct claims:
@@ -1965,26 +1987,48 @@ Three distinct claims:
 """,
     ),
     (
-        """3. **Cross-platform optimizer portability** — independent hosts producing bit-identical learned-optimizer bytes. **Designed for, not yet confirmed:** observed on Linux/x86-64 alone, so no caller should rely on it until the recorded failure host reproduces the pinned digest.
-""",
+        (
+            "Bit-identical learned-optimizer output across machines is seen on "
+            "Linux/x86-64 only.\n"
+        ),
         """3. **Cross-platform optimizer portability** — independent hosts producing bit-identical learned-optimizer bytes. **Designed for, not yet confirmed.** The sampler uses only operations IEEE-754 requires to be correctly rounded, but has been observed on Linux/x86-64 alone; no caller should rely on it until a run on the recorded failure host reproduces the pinned digest.
 """,
     ),
     (
-        """Real generation needs an explicitly selected provider and token, cost, and wall-time limits, even with flat-rate service. Follow [provider setup](llm/README.md), [.env.example](.env.example), and [bounded tournament/resume instructions](docs/deployment.md); keep new outputs in a separate directory.
-""",
+        (
+            "The spectator's API is an unauthenticated game-master view and stays "
+            "loopback-only. Real generation needs a selected provider plus token, cost and "
+            "wall-time limits: [provider setup](llm/README.md), "
+            "[.env.example](.env.example), [recording procedure](docs/deployment.md).\n"
+        ),
         """The default fake provider tests mechanics offline. Real generation needs an explicitly selected provider and token, cost, and wall-time limits, even with flat-rate service. Follow [provider setup](llm/README.md), [.env.example](.env.example), and [bounded tournament/resume instructions](docs/deployment.md); keep new outputs in a separate directory. Fresh model dialogue is not reproduced by a seed alone.
 """,
     ),
     (
-        """**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections; 46 removed an impostor, 36 of those 46 with evidence against that player on the meeting's record. The demo publishes a smaller, strictly validated summary.
-""",
+        (
+            "**The fake provider's report is empty on purpose.** A real report, gzipped at "
+            "[replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), "
+            "records 61 ejections; 46 removed an impostor, 36 of those 46 with evidence "
+            "against that player on the meeting's record.\n"
+        ),
         """**The fake provider's report is empty on purpose.** It normally skips and does not measure model reasoning. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 66 ejections, vote correctness 0.795, and ejection accuracy 0.667. The demo publishes a smaller, strictly validated summary; reported usage is separate from verified outcomes and is not a billing guarantee.
 """,
     ),
     (
-        """**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was regenerated 2026-09-22 (4p1i) with every experimental switch off ([its record](audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the [route lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)): impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md)). The picture above is from the 9-player game the guided tour opens on.
-""",
+        (
+            "A clone includes 100 sample replays under `replays/samples/`: two 50-game "
+            "tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was "
+            "regenerated 2026-09-22 (4p1i) with every experimental switch off ([its "
+            "record](audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% "
+            "(4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted "
+            "gameplay changes plus the [route "
+            "lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), "
+            "a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)): "
+            "impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions "
+            "game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), "
+            "[9p2i](replays/samples/9p2i/MANIFEST.md)). The picture above is from the "
+            "9-player game the guided tour opens on.\n"
+        ),
         """**The samples.** A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments using `Qwen/Qwen3.6-27B` and `qwen3_6_27b` `v6` prompts with a `v8` ballot, each in its own era. The 4-player set was regenerated 2026-09-22 (4p1i) at [baseline 9](audits/audit-2026-09-22-process-rerecord.md), every experimental switch off: impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-01 (9p2i) under the adopted gameplay changes ([its record](audits/audit-2026-10-01-stage-b-r2.md)), its ballot stamped `impostor_ballot_v1` and `ballot_kill_row_v1`: impostor win rate 48% (9p2i). Each manifest records per-game provenance. The picture above is from the 9-player game the guided tour opens on.
 """,
     ),
