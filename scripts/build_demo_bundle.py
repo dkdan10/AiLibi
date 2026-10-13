@@ -26,7 +26,8 @@ not a cut-down copy of it.
 ``replays/samples/`` — the games the live ``GET /replays`` lists — with its
 replay view, belief frames, meetings, per-agent memories and rendered prompts,
 plus each set's picker metadata, compact results and game-shape profile.
-:func:`games_to_bake` lists them from the recording files on disk. The
+:func:`games_to_bake` lists them from the recording files on disk, and
+:func:`plan_bundle` is the one place :func:`main` takes its games from. The
 hand-curated ``FEATURED_GAMES`` in ``frontend/src/components/ReplayPicker.tsx``
 stay the picker's Featured strip and the guided tour's first game; the build
 reads them only to fail when one of them has no recording to bake. Deliberately
@@ -162,7 +163,7 @@ _LOCAL_GUIDANCE_MARKER = "scripts/run_tournament.py"
 #   gate mean something different on a laptop than in CI, and a build gate that
 #   moves with its host is not a gate.
 _HOST_PATH_IN_TEXT = re.compile(
-    r"(?<![\w:/])(?:/[^\s/`]+)+"  # POSIX: /root, /Users/dan/replays
+    r"(?<![\w:/])(?:/[^\s/`]+)+"  # POSIX: /root, /Users/someone/replays
     r"|(?<!\w)[A-Za-z]:[\\/]"  # Windows drive: C:\… or C:/…
     r"|\\\\[^\s\\`]+"  # Windows UNC: \\server\share
 )
@@ -182,11 +183,20 @@ _AUTHORED_TEXT_FILES = ("README.md", _BUNDLE_MARKER)
 
 
 @dataclass(frozen=True)
-class FeaturedGame:
-    """A ``(set, seed)`` pair: a game to bake, or a ``FEATURED_GAMES`` entry."""
+class BakedGame:
+    """A recorded game as ``(set, seed)``: one to bake, or a ``FEATURED_GAMES`` entry."""
 
     set_name: str
     seed: int
+
+
+@dataclass(frozen=True)
+class BundlePlan:
+    """What one build bakes, and the default set its frontend compiles in."""
+
+    games: tuple[BakedGame, ...]
+    sets: tuple[str, ...]
+    default_set: str
 
 
 @dataclass(frozen=True)
@@ -196,6 +206,9 @@ class BakeSummary:
     sets: tuple[str, ...]
     default_set: str
     games: tuple[str, ...]
+    # The same games as ``(set, seed)``, so the note can tell whether they are
+    # every recording in ``samples_dir`` (:func:`bakes_every_recording`).
+    baked: tuple[BakedGame, ...]
     files: int
     bytes_written: int
     # WHERE the baked bytes came from. The bundle's note states this and stops
@@ -204,7 +217,7 @@ class BakeSummary:
     samples_dir: Path
 
 
-def parse_featured_games(picker_tsx: Path = _PICKER_TSX) -> tuple[FeaturedGame, ...]:
+def parse_featured_games(picker_tsx: Path = _PICKER_TSX) -> tuple[BakedGame, ...]:
     """The committed featured ``(set, seed)`` pairs, in their curated order.
 
     Raises :class:`ValueError` when the block is missing, parses empty, or parses
@@ -228,7 +241,7 @@ def parse_featured_games(picker_tsx: Path = _PICKER_TSX) -> tuple[FeaturedGame, 
         raise ValueError(f"FEATURED_GAMES not found in {picker_tsx}")
     body = block.group(1)
     games = tuple(
-        FeaturedGame(set_name=set_name, seed=int(seed))
+        BakedGame(set_name=set_name, seed=int(seed))
         for set_name, seed in _FEATURED_ENTRY.findall(body)
     )
     if not games:
@@ -245,9 +258,7 @@ def parse_featured_games(picker_tsx: Path = _PICKER_TSX) -> tuple[FeaturedGame, 
     return games
 
 
-def games_to_bake(
-    samples_dir: Path = _SAMPLES_DIR, picker_tsx: Path = _PICKER_TSX
-) -> tuple[FeaturedGame, ...]:
+def recorded_games(samples_dir: Path = _SAMPLES_DIR) -> tuple[BakedGame, ...]:
     """Every recorded game under ``samples_dir``, ordered by set, then seed.
 
     A set is what the live API serves (:meth:`SetLoaderRegistry.available_sets`)
@@ -257,16 +268,13 @@ def games_to_bake(
     listing, so a recording that fails validation reaches :func:`_bake_set` as
     a missing seed and fails the build instead of leaving the bundle quietly.
 
-    Raises :class:`ValueError` when there is no set, or when a curated
-    ``FEATURED_GAMES`` entry is not among the games: the picker joins its
-    Featured strip to the baked list by seed and drops an entry it cannot find
-    without a word.
+    Raises :class:`ValueError` when there is no set.
     """
 
     sets = SetLoaderRegistry(samples_dir).available_sets()
     if not sets:
         raise ValueError(f"no recorded set under {samples_dir}: nothing to bake")
-    games: list[FeaturedGame] = []
+    games: list[BakedGame] = []
     for set_name in sets:
         seeds = {
             seed
@@ -274,7 +282,22 @@ def games_to_bake(
             if path.is_file()
             and (seed := replay_seed_from_filename(path.name)) is not None
         }
-        games.extend(FeaturedGame(set_name=set_name, seed=s) for s in sorted(seeds))
+        games.extend(BakedGame(set_name=set_name, seed=s) for s in sorted(seeds))
+    return tuple(games)
+
+
+def games_to_bake(
+    samples_dir: Path = _SAMPLES_DIR, picker_tsx: Path = _PICKER_TSX
+) -> tuple[BakedGame, ...]:
+    """:func:`recorded_games`, once every curated featured game is among them.
+
+    Raises :class:`ValueError` when there is no set, or when a curated
+    ``FEATURED_GAMES`` entry is not among the games: the picker joins its
+    Featured strip to the baked list by seed and drops an entry it cannot find
+    without a word.
+    """
+
+    games = recorded_games(samples_dir)
     recorded = frozenset(games)
     unbaked = [
         f"{game.set_name} seed {game.seed}"
@@ -287,7 +310,23 @@ def games_to_bake(
             f"{samples_dir}: {', '.join(unbaked)}. The Featured strip would drop "
             "them without a word; record them, or take them off the list."
         )
-    return tuple(games)
+    return games
+
+
+def plan_bundle(
+    samples_dir: Path = _SAMPLES_DIR, picker_tsx: Path = _PICKER_TSX
+) -> BundlePlan:
+    """The games :func:`main` bakes and the default set it compiles in.
+
+    Both come from one read of ``samples_dir``: every recording there
+    (:func:`games_to_bake`), and the default resolved over their sets exactly as
+    :func:`bake_data` resolves it, so the compiled default names a directory the
+    bake writes.
+    """
+
+    games = games_to_bake(samples_dir, picker_tsx)
+    sets = tuple(sorted({game.set_name for game in games}))
+    return BundlePlan(games=games, sets=sets, default_set=resolve_default_set(sets))
 
 
 def _file_segment(value: str) -> str:
@@ -551,7 +590,7 @@ def _bake_set(
 def bake_data(
     out_dir: Path,
     *,
-    games: tuple[FeaturedGame, ...],
+    games: tuple[BakedGame, ...],
     samples_dir: Path = _SAMPLES_DIR,
 ) -> BakeSummary:
     """Write ``<out_dir>/data/`` — the API's URL space mirrored as files.
@@ -579,15 +618,13 @@ def bake_data(
         shutil.rmtree(data_root)
     writer = _Writer(data_root)
     baked_games: list[str] = []
+    baked: list[BakedGame] = []
     for set_name in set_names:
+        seeds = tuple(sorted(set(seeds_by_set[set_name])))
         baked_games.extend(
-            _bake_set(
-                writer,
-                set_name=set_name,
-                seeds=tuple(sorted(set(seeds_by_set[set_name]))),
-                samples_dir=samples_dir,
-            )
+            _bake_set(writer, set_name=set_name, seeds=seeds, samples_dir=samples_dir)
         )
+        baked.extend(BakedGame(set_name=set_name, seed=seed) for seed in seeds)
 
     # ``GET /sets`` is the one endpoint that is not per-set. Rather than buy a
     # special case in the client seam, the identical answer is written into EVERY
@@ -602,6 +639,7 @@ def bake_data(
         sets=set_names,
         default_set=default_set,
         games=tuple(baked_games),
+        baked=tuple(baked),
         files=writer.files,
         bytes_written=writer.bytes_written,
         samples_dir=samples_dir.resolve(),
@@ -773,6 +811,17 @@ def _source_phrase(samples_dir: Path) -> str:
     return "baked from a recordings directory outside the repository."
 
 
+def bakes_every_recording(summary: BakeSummary) -> bool:
+    """Whether the bake holds exactly the recordings in its source directory.
+
+    The note says "every recording" only when this holds. A partial bake (the
+    tests, ``scripts/measure_replay_loading.py``, a caller passing its own
+    games) is described as the recordings it was given instead.
+    """
+
+    return frozenset(summary.baked) == frozenset(recorded_games(summary.samples_dir))
+
+
 def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
     """A short note beside the artifact saying what it is and what it is not.
 
@@ -805,8 +854,26 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
     repository-relative path, or none at all. That is a rendering decision, not a
     retreat from the doctrine above — the source is still named as precisely as
     it can be named to a reader who does not have the builder's filesystem.
+
+    The note's count claims follow :func:`bakes_every_recording`: "every
+    recording in those sets" for a complete bake, and the recordings the build
+    was given otherwise.
     """
 
+    if bakes_every_recording(summary):
+        games_are = "every recording in those sets"
+        coverage = [
+            "Compact results and the playable replays both cover every validated",
+            "recording in each source set. Full diagnostics and reproduction live in",
+            "the repository: https://github.com/dkdan10/AiLibi",
+        ]
+    else:
+        games_are = "the recordings this build was given"
+        coverage = [
+            "Compact results cover every validated recording in each source set;",
+            "the playable replays cover only the games above. Full diagnostics and",
+            "reproduction live in the repository: https://github.com/dkdan10/AiLibi",
+        ]
     lines = [
         "# AiLibi — static spectator demo",
         "",
@@ -833,16 +900,14 @@ def write_bundle_readme(out_dir: Path, summary: BakeSummary) -> None:
         "```",
         "",
         f"Recorded sets: {', '.join(summary.sets)} (default: {summary.default_set}).",
-        f"Games: {len(summary.games)} — every recording in those sets. The Featured",
+        f"Games: {len(summary.games)} — {games_are}. The Featured",
         "strip is a hand-picked starting point among them.",
         "",
         "NOT included, on purpose: the aggregate tournament eval report (tens of",
         "MB — that is the corpus, not a demo); the Results tab shows the compact",
         "verified results only.",
         "",
-        "Compact results and the playable replays both cover every validated",
-        "recording in each source set. Full diagnostics and reproduction live in",
-        "the repository: https://github.com/dkdan10/AiLibi",
+        *coverage,
         "",
         "Built by `scripts/build_demo_bundle.py`.",
         "",
@@ -964,16 +1029,15 @@ def main() -> int:
     args = parser.parse_args()
     out_dir: Path = args.out.resolve()
 
-    games = games_to_bake(args.samples_dir)
-    set_names = tuple(sorted({game.set_name for game in games}))
-    default_set = resolve_default_set(set_names)
+    plan = plan_bundle(args.samples_dir)
+    games = plan.games
 
     # Whether THIS run brings the directory into existence decides how far a
     # failed build has to rewind: to nothing, or to empty.
     assert_safe_out_dir(out_dir)
     created_out_dir = not out_dir.exists()
     try:
-        build_frontend(out_dir, default_set=default_set)
+        build_frontend(out_dir, default_set=plan.default_set)
         out_dir.mkdir(parents=True, exist_ok=True)
         # Ownership is recorded HERE, before the fallible bake, so that even a
         # cleanup that itself fails leaves a directory the guard will accept.

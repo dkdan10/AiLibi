@@ -2,12 +2,31 @@
 
 The repository is published, so a home path or an address in any tracked line
 reaches every reader. The gate runs ``git grep`` over the tracked tree for a
-cheap superset of home-path and address shapes, then reports every match whose
-account or domain is not one of the generic ones below: the cloud container's
-``/home/user``, the CI and test-fixture accounts, and the no-reply and reserved
-example domains. A home directory written as ``~`` passes, which is how the
-recorded run output and the review archive spell the operator's. Commit
-metadata lives outside the tree and outside this gate.
+cheap, case-insensitive superset of home-path and address shapes, then reports
+every match that is not on the allow-lists below.
+
+A home path is ``/Users/<name>`` or ``/home/<name>`` (which also covers the
+``C:/Users/<name>`` spelling), the backslash form ``C:\\Users\\<name>`` with or
+without its drive letter and with single or doubled backslashes, or the dashed
+``-Users-<name>-`` a tool derives from a working path. ``Users`` matches in any
+case, as the macOS and Windows file systems resolve it; ``home`` matches in any
+case only in the backslash form, since on Linux ``/Home/`` is not the home root
+(``Arrow/Home/End`` names keys). The account passes only when it is one of
+:data:`_GENERIC_ACCOUNTS`, compared without case: the cloud container's
+``user``, the CI and infrastructure accounts ``runner``, ``ci``, ``node`` and
+``linuxbrew``, macOS's ``Shared``, the fixtures' ``nobody`` and ``someone``, and
+an elided ``...``. A home directory written as ``~`` never matches, which is how
+the recorded run output and the review archive spell the operator's.
+
+An address passes only when it is one of :data:`_GENERIC_ADDRESSES` exactly
+(the commit trailer's ``noreply@anthropic.com`` and GitHub's
+``noreply@github.com``) or sits on one of :data:`_GENERIC_DOMAINS`: the reserved
+example domains, and GitHub's per-user no-reply domain. Anyone else at
+``anthropic.com`` or ``github.com`` is reported.
+
+The gate guards the current tracked tree only. Earlier commits' contents and
+every commit's author and committer identity still carry the data: history is
+not rewritten, and nothing here reads it.
 """
 
 from __future__ import annotations
@@ -19,24 +38,41 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Final
 
+import pytest
+
 _REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 
-#: The cheap ``git grep`` superset: any home-path or mail-address shape.
-_CANDIDATES: Final = r"/(Users|home)/|-(Users|home)-|@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}"
-#: ``/Users/<name>`` or ``/home/<name>``, and the dashed form a tool derives from
-#: a working path when it names a per-project directory after it.
+#: The cheap ``git grep -i`` superset: any home-path or mail-address shape.
+_CANDIDATES: Final = (
+    r"/(users|home)/|\\+(users|home)\\+|-(users|home)-|@([a-z0-9-]+\.)+[a-z]{2,}"
+)
+#: The three home-path spellings; whichever group matched holds the account.
 _HOME: Final = re.compile(
-    r"/(?:Users|home)/([A-Za-z0-9._-]+)|-(?:Users|home)-([A-Za-z0-9._]+)-"
+    r"/(?:(?i:users)|home)/([\w.-]+)"
+    r"|(?i:(?:[a-z]:)?\\+(?:users|home)\\+)([\w.-]+)"
+    r"|-(?:(?i:users)|home)-([\w.]+)-"
 )
 #: An address: a local part directly before the ``@``, so a decorator never matches.
-_MAIL: Final = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})")
-#: Account names that belong to no person: the cloud container, CI, the test
-#: fixtures (``dan`` is the demo-bundle host-path fixture) and an elided name.
-_GENERIC_ACCOUNTS: Final = frozenset({"user", "ci", "nobody", "someone", "dan", "..."})
-#: Domains that address no person.
-_GENERIC_DOMAINS: Final = frozenset(
-    {"anthropic.com", "example.invalid", "example.com", "users.noreply.github.com"}
+_MAIL: Final = re.compile(r"[\w.%+-]+@((?:[a-z0-9-]+\.)+[a-z]{2,})", re.IGNORECASE)
+#: Account names that belong to no person, lower-cased.
+_GENERIC_ACCOUNTS: Final = frozenset(
+    {"user", "runner", "ci", "node", "linuxbrew", "shared", "nobody", "someone", "..."}
 )
+#: Addresses that reach no person, matched whole and without case.
+_GENERIC_ADDRESSES: Final = frozenset({"noreply@anthropic.com", "noreply@github.com"})
+#: Domains on which no address reaches a person, matched whole and without case.
+_GENERIC_DOMAINS: Final = frozenset(
+    {
+        "example.com",
+        "example.org",
+        "example.net",
+        "example.invalid",
+        "users.noreply.github.com",
+    }
+)
+
+#: One ``git grep -z -n`` record: the path, the line number, the line's text.
+_RECORD: Final = re.compile(rb"([^\0]*)\0([0-9]+)\0([^\n]*)\n")
 
 #: One ``git grep`` match: repo-relative path, line number, line text.
 GrepRow = tuple[str, str, str]
@@ -48,44 +84,65 @@ def personal_data_hits(rows: Iterable[GrepRow]) -> list[str]:
     hits: list[str] = []
     for path, line, text in rows:
         for match in _HOME.finditer(text):
-            account = match.group(1) or match.group(2)
-            if account not in _GENERIC_ACCOUNTS:
+            account = next(group for group in match.groups() if group is not None)
+            if account.lower() not in _GENERIC_ACCOUNTS:
                 hits.append(f"{path}:{line}: {match.group(0)}")
         for match in _MAIL.finditer(text):
-            if match.group(1).lower() not in _GENERIC_DOMAINS:
+            if (
+                match.group(0).lower() not in _GENERIC_ADDRESSES
+                and match.group(1).lower() not in _GENERIC_DOMAINS
+            ):
                 hits.append(f"{path}:{line}: {match.group(0)}")
     return hits
 
 
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def grep_rows(output: bytes) -> list[GrepRow]:
+    """Split ``git grep -z -n`` output into rows, raising on anything else.
+
+    Read as bytes and cut on git's own separators only: a line runs to the next
+    ``\\n`` byte, so a carriage return inside one stays part of its text. Bytes
+    that are not UTF-8 decode to U+FFFD, which leaves the ASCII shapes around
+    them matchable.
+    """
+
+    rows: list[GrepRow] = []
+    position = 0
+    while position < len(output):
+        record = _RECORD.match(output, position)
+        if record is None:
+            raise ValueError(
+                f"unparseable git grep output at byte {position}: "
+                f"{output[position : position + 80]!r}"
+            )
+        path, line, text = (
+            field.decode("utf-8", errors="replace") for field in record.groups()
+        )
+        rows.append((path, line, text))
+        position = record.end()
+    return rows
+
+
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
     # An inherited GIT_DIR or GIT_INDEX_FILE would point git at another repository.
     env = {
         name: value for name, value in os.environ.items() if not name.startswith("GIT_")
     }
     return subprocess.run(
-        ["git", "-C", str(root), *args],
-        capture_output=True,
-        encoding="utf-8",
-        env=env,
-        check=False,
+        ["git", "-C", str(root), *args], capture_output=True, env=env, check=False
     )
 
 
 def tracked_candidate_rows(root: Path) -> list[GrepRow]:
     """Every line of a tracked text file under ``root`` with a candidate shape."""
 
-    completed = _git(root, "grep", "-z", "-n", "-I", "--no-color", "-E", _CANDIDATES)
+    completed = _git(
+        root, "grep", "-z", "-n", "-I", "-i", "--no-color", "-E", _CANDIDATES
+    )
     # git grep exits 1 when nothing matches; any other status is a failed scan.
     if completed.returncode not in (0, 1):
-        raise RuntimeError(
-            f"git grep exited {completed.returncode}: {completed.stderr}"
-        )
-    rows: list[GrepRow] = []
-    for record in completed.stdout.split("\n"):
-        if record:
-            path, line, text = record.split("\0", 2)
-            rows.append((path, line, text))
-    return rows
+        stderr = completed.stderr.decode("utf-8", errors="replace")
+        raise RuntimeError(f"git grep exited {completed.returncode}: {stderr}")
+    return grep_rows(completed.stdout)
 
 
 def test_no_tracked_file_names_a_personal_account_or_address() -> None:
@@ -101,18 +158,30 @@ def test_a_planted_home_path_and_address_in_a_tracked_file_are_reported(
         "-Users-" + "alice-",
         "alice" + "@icloud.com",
     )
+    staff = "alice" + "@anthropic.com"
+    windows, doubled = "C:\\" + "Users\\alice", "C:\\\\" + "Users\\\\alice"
+    shouted, lowered = "/USERS/" + "alice", "c:\\" + "users\\alice"
+    accented = "/home/" + "émile"
     planted = tmp_path / "docs" / "x.md"
     planted.parent.mkdir()
-    planted.write_text(
-        "# Notes\n"
-        "\n"
-        f"ran from {home}/projects/AiLibi\n"
-        f"scratch at /private/tmp/claude-501/{dashed}projects-AiLibi/s\n"
-        f"authored as {mail}\n"
-        "/home/user/AiLibi, /Users/someone/x and noreply@anthropic.com\n"
-        "~/projects/AiLibi, ~/.claude/projects/.../memory and /private/tmp/.../scratchpad\n"
-        "    @pytest.mark.parametrize\n",
-        encoding="utf-8",
+    planted.write_bytes(
+        (
+            "# Notes\n"
+            "\n"
+            f"ran from {home}/projects/AiLibi\n"
+            f"scratch at /private/tmp/claude-501/{dashed}projects-AiLibi/s\n"
+            f"authored as {mail}\n"
+            "/home/user/AiLibi, /Users/someone/x and noreply@anthropic.com\n"
+            "~/projects/AiLibi, ~/.claude/projects/.../memory and /private/tmp/.../scratchpad\n"
+            "    @pytest.mark.parametrize\n"
+            f"reviewed by {staff}\n"
+            "noreply@github.com, 1+someone@users.noreply.github.com, a@example.org\n"
+            "/home/runner/work, /Users/Shared/x, /home/linuxbrew/.linuxbrew, /home/node\n"
+            f"ran from {windows}\\AiLibi and {doubled}\\\\AiLibi\n"
+            f"ran from {shouted}, {lowered} and {accented}; Arrow/Home/End seek\n"
+            f"progress 10%\rprogress 100% in {home}/scratch\n"
+            f"after the carriage return, {mail}\n"
+        ).encode("utf-8")
     )
     (tmp_path / "untracked.md").write_text(f"{home}/scratch\n", encoding="utf-8")
     for args in (("init", "-q"), ("add", "docs/x.md")):
@@ -122,4 +191,22 @@ def test_a_planted_home_path_and_address_in_a_tracked_file_are_reported(
         f"docs/x.md:3: {home}",
         f"docs/x.md:4: {dashed}",
         f"docs/x.md:5: {mail}",
+        f"docs/x.md:9: {staff}",
+        f"docs/x.md:12: {windows}",
+        f"docs/x.md:12: {doubled}",
+        f"docs/x.md:13: {shouted}",
+        f"docs/x.md:13: {lowered}",
+        f"docs/x.md:13: {accented}",
+        f"docs/x.md:14: {home}",
+        f"docs/x.md:15: {mail}",
     ]
+
+
+def test_grep_output_without_git_separators_raises() -> None:
+    """A record the parser cannot split is an error, never a skipped line."""
+
+    assert grep_rows(b"a.md\x002\x00one\rtwo\n") == [("a.md", "2", "one\rtwo")]
+    with pytest.raises(ValueError, match="unparseable git grep output at byte 0"):
+        grep_rows(b"a.md:2:" + b"/Users/" + b"alice\n")
+    with pytest.raises(ValueError, match="at byte 11"):
+        grep_rows(b"a.md\x002\x00one\nno separators\n")

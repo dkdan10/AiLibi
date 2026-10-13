@@ -59,6 +59,11 @@ function committedGameCount(set: string): number {
   return seeds.size;
 }
 
+/** Whether a committed set ships a game-shape profile for the bundle to bake. */
+function shipsGameProfile(set: string): boolean {
+  return existsSync(join(REPO_ROOT, "replays", "samples", set, "results-game-profile.json"));
+}
+
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -373,11 +378,26 @@ test.describe("static demo bundle", () => {
       window.localStorage.setItem(key, "1");
     }, TOUR_SEEN_KEY);
     const browser = page.getByRole("region", { name: "Replay browser", exact: true });
+    const setControl = page.getByRole("combobox", { name: "Served replay set" });
+    const noProfile = browser.getByText(/ships no game-shape profile/u);
+    const shelves = browser.getByRole("list", { name: "Shelves this game sits on" });
     for (const set of ["9p2i", "4p1i"]) {
       const count = committedGameCount(set);
       expect(count).toBeGreaterThan(0);
       await page.goto(`${bundle.origin}/?set=${set}&view=replays`);
       await expect(browser.getByText(`${String(count)} games`, { exact: true })).toBeVisible();
+      // Both sets record seeds 0-49, so the count alone cannot tell them
+      // apart. The control names the served set, and the cards show that
+      // set's own profile: shelves where its directory ships one, and the
+      // no-profile banner, naming the set, where it does not.
+      await expect(setControl).toHaveValue(set);
+      if (shipsGameProfile(set)) {
+        await expect(shelves.first()).toBeVisible();
+        await expect(noProfile).toHaveCount(0);
+      } else {
+        await expect(noProfile).toContainText(`(${set}): this set ships no game-shape profile`);
+        await expect(shelves).toHaveCount(0);
+      }
     }
 
     expect(apiAttempts).toEqual([]);

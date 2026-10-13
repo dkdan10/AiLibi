@@ -4,9 +4,9 @@ Three things have to hold for the artifact to be worth shipping, and each is a
 different kind of failure:
 
 * the bundle bakes EVERY recorded game and nothing else — the games are listed
-  from the recording files, a featured game in ``ReplayPicker.tsx`` with no
-  recording fails the build, and a recording the loader refuses fails the bake
-  rather than leaving the bundle one game short;
+  from the recording files, ``main()`` bakes exactly that list, a featured game
+  in ``ReplayPicker.tsx`` with no recording fails the build, and a recording the
+  loader refuses fails the bake rather than leaving the bundle one game short;
 * every baked file sits at the URL the client will ask for — including the
   filename reduction that turns ``headless-seed-2:meeting-0`` into a portable
   name, which is duplicated across a TypeScript file and a Python file and so is
@@ -24,6 +24,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
+from collections import Counter
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
@@ -45,7 +47,7 @@ _CLIENT_TS = _REPO_ROOT / "frontend" / "src" / "api" / "client.ts"
 
 # One 9p2i game with meetings in it (so the meeting + memory mirrors are
 # non-empty); the shown set ships the game-shape profile, trimmed to it.
-_ONE_9P2I = (bdb.FeaturedGame(set_name="9p2i", seed=2),)
+_ONE_9P2I = (bdb.BakedGame(set_name="9p2i", seed=2),)
 
 
 @pytest.fixture(scope="module")
@@ -127,13 +129,13 @@ def test_a_partially_parsed_curation_fails_loud(tmp_path: Path) -> None:
     assert [g.seed for g in bdb.parse_featured_games(fake)] == [2, 17]
 
 
-def test_a_featured_seed_the_set_does_not_carry_fails_loud(tmp_path: Path) -> None:
+def test_a_partial_bake_naming_an_unrecorded_seed_fails_loud(tmp_path: Path) -> None:
     """A seed asked for with no recording is an error, not a missing card."""
 
     with pytest.raises(FileNotFoundError, match="seeds absent from"):
         bdb.bake_data(
             tmp_path,
-            games=(bdb.FeaturedGame(set_name="9p2i", seed=9999),),
+            games=(bdb.BakedGame(set_name="9p2i", seed=9999),),
             samples_dir=_SAMPLES,
         )
 
@@ -389,7 +391,9 @@ def test_the_profile_is_trimmed_to_the_baked_seeds(
     assert served["pre_reveal"]["tripwires"]["alibi_flags"] == 15
 
 
-def test_the_featured_bake_ships_seeds_19_and_14_only(tmp_path: Path) -> None:
+def test_a_two_game_partial_bake_trims_the_profile_to_those_games(
+    tmp_path: Path,
+) -> None:
     games = tuple(
         game for game in bdb.parse_featured_games() if game.set_name == "9p2i"
     )
@@ -453,7 +457,7 @@ def test_the_four_player_set_bakes_no_profile(tmp_path: Path, api: TestClient) -
 
     bdb.bake_data(
         tmp_path,
-        games=(bdb.FeaturedGame(set_name="4p1i", seed=29),),
+        games=(bdb.BakedGame(set_name="4p1i", seed=29),),
         samples_dir=_SAMPLES,
     )
     assert not (tmp_path / "data" / "4p1i" / "eval" / "game-profile.json").exists()
@@ -491,8 +495,8 @@ def test_rebaking_removes_the_previous_data_tree(tmp_path: Path) -> None:
     bdb.bake_data(
         tmp_path,
         games=(
-            bdb.FeaturedGame(set_name="9p2i", seed=2),
-            bdb.FeaturedGame(set_name="4p1i", seed=29),
+            bdb.BakedGame(set_name="9p2i", seed=2),
+            bdb.BakedGame(set_name="4p1i", seed=29),
         ),
         samples_dir=_SAMPLES,
     )
@@ -752,6 +756,10 @@ def test_bundle_readme_names_what_is_missing(tmp_path: Path) -> None:
     note = (tmp_path / "README.md").read_text(encoding="utf-8")
     assert "No tournament report" in note or "tournament eval report" in note
     assert "9p2i" in note
+    # One game of fifty is a partial bake, and the note counts it as one.
+    assert "Games: 1 — the recordings this build was given." in note
+    assert "every recording in those sets" not in note
+    assert "the playable replays cover only the games above" in note
     # The GM data the bundle DOES carry is named, so "no GM endpoint" cannot be
     # read as "the hidden information is stripped".
     assert "roles, kill attribution, vent usage" in note
@@ -781,7 +789,7 @@ def test_the_note_names_its_source_and_claims_nothing_more(tmp_path: Path) -> No
 
     out = tmp_path / "bundle"
     summary = bdb.bake_data(
-        out, games=(bdb.FeaturedGame(set_name="4p1i", seed=29),), samples_dir=alt
+        out, games=(bdb.BakedGame(set_name="4p1i", seed=29),), samples_dir=alt
     )
     bdb.write_bundle_readme(out, summary)
     note = (out / "README.md").read_text(encoding="utf-8")
@@ -876,12 +884,12 @@ def test_the_repository_url_is_not_read_as_a_host_path() -> None:
     # Every absolute shape, at any depth and in any script — the gate claims
     # "no absolute path", so an ASCII-only or two-deep reading of it is a hole.
     for named in (
-        "run `/Users/dan/x/y`",
+        "run `/Users/someone/x/y`",
         "built in /root",
         "built in /équipe/private",
         "built in /+srv/private",
-        "built in C:\\Users\\dan",
-        "built in C:/Users/dan",
+        "built in C:\\Users\\someone",
+        "built in C:/Users/someone",
         r"built in \\corp-server\private\replays",
     ):
         assert bdb._HOST_PATH_IN_TEXT.search(named) is not None, named
@@ -892,7 +900,7 @@ def test_summary_covers_full_validated_set_but_links_only_baked_cases(
 ) -> None:
     # The featured head, seed 19, carries both curated cases, so its baked
     # summary is the live one over all fifty games, both cases included.
-    head = (bdb.FeaturedGame(set_name="9p2i", seed=19),)
+    head = (bdb.BakedGame(set_name="9p2i", seed=19),)
     bdb.bake_data(tmp_path, games=head, samples_dir=_SAMPLES)
     path = tmp_path / "data/9p2i/eval/summary.json"
     summary = json.loads(path.read_text())
@@ -966,7 +974,7 @@ def _uncovered_cases(
     ]
 
 
-def test_the_bundle_bakes_every_committed_game(tmp_path: Path) -> None:
+def test_the_bake_list_is_every_committed_recording(tmp_path: Path) -> None:
     # The bundle carries every recording the live API serves, so the browser,
     # the results and the published cases all describe the same games. Both
     # listings are checked: the files on disk and the loader's validated list.
@@ -975,10 +983,13 @@ def test_the_bundle_bakes_every_committed_game(tmp_path: Path) -> None:
     games = bdb.games_to_bake(_SAMPLES)
     recordings = _recordings(_SAMPLES)
     assert list(games) == [
-        bdb.FeaturedGame(set_name=set_name, seed=seed)
+        bdb.BakedGame(set_name=set_name, seed=seed)
         for set_name, seed in sorted(recordings)
     ]
-    assert len(games) == 100
+    plan = bdb.plan_bundle(_SAMPLES)
+    assert plan.games == games
+    assert plan.sets == tuple(sorted({set_name for set_name, _ in recordings}))
+    assert plan.default_set == DEFAULT_SET
     baked: list[tuple[str, Path]] = []
     for set_name in sorted({set_name for set_name, _ in recordings}):
         listed = ReplayLoader(_SAMPLES / set_name).list_replays()
@@ -1012,6 +1023,43 @@ def test_the_bundle_bakes_every_committed_game(tmp_path: Path) -> None:
         bdb.games_to_bake(tmp_path / "empty", picker)
 
 
+def test_main_bakes_every_committed_recording(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The published build's choice of games, end to end through ``main()``.
+
+    The Pages workflow runs the script with no samples directory, so what it
+    publishes is ``main()``'s own pick over the committed samples. Everything
+    after the frontend build (stubbed here: no npm) runs as published, and each
+    set's baked listing must hold every recording on disk, which a ``main()``
+    baking the featured strip alone falls well short of.
+    """
+
+    compiled_defaults: list[str] = []
+
+    def no_frontend(out_dir: Path, *, default_set: str) -> None:
+        compiled_defaults.append(default_set)
+
+    monkeypatch.setattr(bdb, "build_frontend", no_frontend)
+    out = tmp_path / "bundle"
+    monkeypatch.setattr(sys, "argv", ["build_demo_bundle.py", "--out", str(out)])
+    assert bdb.main() == 0
+
+    on_disk = Counter(set_name for set_name, _ in _recordings(_SAMPLES))
+    assert sorted(path.name for path in (out / "data").iterdir()) == sorted(on_disk)
+    baked: dict[str, int] = {}
+    for set_name in on_disk:
+        listing = _read(out / "data" / set_name / "replays.json")
+        assert isinstance(listing, list)
+        baked[set_name] = len(listing)
+    assert baked == dict(on_disk)
+    assert compiled_defaults == [DEFAULT_SET]
+    note = (out / "README.md").read_text(encoding="utf-8")
+    total = sum(on_disk.values())
+    assert f"Games: {total} — every recording in those sets." in note
+    assert (out / bdb._BUNDLE_MARKER).is_file()
+
+
 def test_a_recording_the_loader_refuses_fails_the_bake(tmp_path: Path) -> None:
     """A bad recording file is a build error, not a game the bundle leaves out.
 
@@ -1035,8 +1083,8 @@ def test_a_recording_the_loader_refuses_fails_the_bake(tmp_path: Path) -> None:
 
     games = bdb.games_to_bake(samples, picker)
     assert games == (
-        bdb.FeaturedGame(set_name="4p1i", seed=7),
-        bdb.FeaturedGame(set_name="4p1i", seed=29),
+        bdb.BakedGame(set_name="4p1i", seed=7),
+        bdb.BakedGame(set_name="4p1i", seed=29),
     )
     # The defect this guards: the loader's own list drops seed 7 silently.
     assert [meta.seed for meta in ReplayLoader(samples / "4p1i").list_replays()] == [29]
