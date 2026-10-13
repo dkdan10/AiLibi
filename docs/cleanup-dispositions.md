@@ -11,10 +11,11 @@ implemented experimental candidate is not an adopted behavior.
 The source inventories are the independent [gameplay register](../audits/review-2026-08-26/A/collated-findings.md),
 [code register](../audits/review-2026-08-26/B/collated-findings.md),
 [close](../audits/audit-phase-21-close.md) and
-[hardening review](../audits/audit-phase-21-hardening.md). `check_doc_facts.py`
-checks the historical 104-item partition and its actual contract attribution,
-including partial, refuted and unadopted work. It does not certify current repairs
-from a routing table. The controls and measurements below do that narrower work.
+[hardening review](../audits/audit-phase-21-hardening.md). Those records hold
+the historical 104-item partition and its actual contract attribution,
+including partial, refuted and unadopted work; since 2026-10-13 no gate check
+re-reads them. They do not certify current repairs from a routing table. The
+controls and measurements below do that narrower work.
 
 ## Original register
 

@@ -14,7 +14,7 @@ explicit scope, and executable acceptance criteria. Generated prompts and
 fresh checkouts supported that build. The [cleanup workflow](workflow.md) now
 uses one canonical card per change, explicit shared-file ownership, independent
 review, and focused commits on a short-lived branch merged by pull request.
-Historical contracts keep their checks; new work does not need a second
+Historical contracts stay as records; new work does not need a second
 generated copy of its instructions.
 
 Three habits did more for throughput than any amount of prompt wording. The first is

@@ -68,10 +68,8 @@ makes it canonical are the same event
 ### the ladder tip (the newest reference recording)
 
 Where the substrate currently stands. "The ladder tip stands at baseline 9"
-([`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md)); the
-phrase is checked against that audit by
-[`scripts/check_doc_facts.py`](../scripts/check_doc_facts.py), so no document
-can quietly name a different one. The shown 9-player set moved to later eras
+([`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md)).
+The shown 9-player set moved to later eras
 on 2026-10-02 and 2026-10-09 without moving the tip: no substrate setting
 changed, and baseline 10 is reserved for a full re-record.
 

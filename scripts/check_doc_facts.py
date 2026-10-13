@@ -20,9 +20,11 @@ that owns it, and every mismatch is reported, not only the first.
    the citation row from the pinned assertions in
    ``tests/eval/test_vj_instruments.py``, the vent and proof rows from the
    shown 9p2i set's column of ``docs/gameplay-census.md``, and the four process
-   rows from that set's table on ``docs/process-scorecard.md``. Before cells
-   come from that page's before column or from the frozen before cells, values
-   copied once from the records and pinned here by their sha256.
+   rows from that set's table on ``docs/process-scorecard.md``. The process
+   rows' Before cells come from that page's before column; the win-rate and
+   proof Before cells from the frozen before cells, values copied once from the
+   records and pinned here by their sha256. The other Before cells are not
+   checked.
 4. **The real-report example.** Its three ejection counts come from the
    ``vote_correctness`` block of the committed 9p2i report.
 5. **The prose figures.** The top-suspect sentence, the vent sentence, the
@@ -30,8 +32,8 @@ that owns it, and every mismatch is reported, not only the first.
    install block's recording count are each recomputed from their source.
 6. **The ML results table.** ``docs/ml-program.md``'s table is recomputed from
    ``training/reports/results-finalist-eval.jsonl``.
-7. **Relative links.** Every relative link on the README and the pages
-   published beside it points at a file that exists.
+
+Relative links are ``scripts/check_links.py``'s job.
 
 ``--repo-root`` points the reads at another tree; the tests perturb a copy.
 Exit 0 when everything matches, 1 with every failure printed.
@@ -65,7 +67,6 @@ for _bootstrap_path in (_REPO_ROOT, _SCRIPTS_DIR):
 
 from _manifest_writer import parse_manifest  # noqa: E402
 from _verify_samples import sample_paths  # noqa: E402
-from check_links import relative_targets  # noqa: E402
 from paired_stats import compute_paired_stats  # noqa: E402
 
 from api.replay_loader import SetLoaderRegistry  # noqa: E402
@@ -87,22 +88,6 @@ from orchestrator.replay import (  # noqa: E402
 
 _README: Final = "README.md"
 _ENV_EXAMPLE: Final = ".env.example"
-# The README and the pages published beside it, whose relative links must
-# resolve. The record pages are listed because scripts/check_links.py leaves
-# the records out of its default scope.
-_LINKED_DOCUMENTS: Final[tuple[str, ...]] = (
-    _README,
-    "docs/history.md",
-    "docs/glossary.md",
-    "docs/reading-guide.md",
-    "docs/lessons.md",
-    "docs/ownership-case-study.md",
-    "audits/README.md",
-    "audits/audit-phase-21-close.md",
-    "audits/review-2026-08-19/README.md",
-    "audits/review-2026-09-06/README.md",
-    "audits/review-2026-09-06/correction-record.md",
-)
 _SAMPLE_SETS: Final[tuple[str, ...]] = ("4p1i", "9p2i")
 _MANIFEST_PATH: Final = "replays/samples/{name}/MANIFEST.md"
 _SAMPLE_REPLAY_DIR: Final = "replays/samples/{name}"
@@ -440,8 +425,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"candidate replays; {_ENV_EXAMPLE} agrees with the "
         f"{len(SUBSTRATE_FLAG_KEYS)}-lever substrate registry and the "
         f"{len(EXPERIMENT_ENV_NAMES)}-switch experiment registry; {_ML_PAGE}'s "
-        f"results table recomputes from {_FINALIST_JSONL}; every relative link "
-        f"in {len(_LINKED_DOCUMENTS)} documents resolves."
+        f"results table recomputes from {_FINALIST_JSONL}."
     )
     return 0
 
@@ -469,7 +453,6 @@ def check_facts(repo_root: Path) -> list[str]:
     if environment is not None:
         check_lever_registry(environment, errors)
         check_experiment_registry(environment, errors)
-    check_relative_links(repo_root, errors)
     check_ml_results_table(repo_root, errors)
     return errors
 
@@ -2191,7 +2174,13 @@ def check_vent_prose(repo_root: Path, readme: str, errors: list[str]) -> None:
         ),
         _ProseClaim(_VENT_INNOCENT_PROSE, (str(innocent),), required=False),
     ]
-    if flagged_innocent == 0:
+    if flagged_innocent < 0:
+        errors.append(
+            f"{source}: the vent-proof table's crew cells disagree: "
+            f"{vent.band_crew[1]} crewmate(s) ejected in all, {innocent} of them "
+            "in meetings without vent proof."
+        )
+    elif flagged_innocent == 0:
         claims += [_ProseClaim(pattern, ()) for pattern in _VENT_CLEAN_RECORD_PROSE]
     else:
         for number, text in blocks:
@@ -2593,34 +2582,6 @@ def ml_results_rows(page: str) -> list[list[str]] | None:
             continue
         rows.append(cells)
     return rows
-
-
-# ── 7. Relative links ────────────────────────────────────────────────────────
-
-
-def check_relative_links(repo_root: Path, errors: list[str]) -> None:
-    """Every relative link on the README and the published pages resolves.
-
-    Offline by construction: the fragment is stripped and the path is stat-ed,
-    parsed the way ``scripts/check_links.py`` parses every page.
-    """
-
-    for document in _LINKED_DOCUMENTS:
-        text = read_document(repo_root, document, errors)
-        if text is None:
-            continue
-        for target, resolved in relative_targets(repo_root, document, text):
-            if resolved.exists():
-                continue
-            shown = (
-                resolved.relative_to(repo_root)
-                if resolved.is_relative_to(repo_root)
-                else resolved
-            )
-            errors.append(
-                f"{document}: the relative link {target!r} resolves to {shown}"
-                ", which does not exist."
-            )
 
 
 def read_document(repo_root: Path, relative_path: str, errors: list[str]) -> str | None:

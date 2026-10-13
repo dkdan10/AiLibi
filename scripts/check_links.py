@@ -2,9 +2,10 @@
 """Report relative markdown links that point at nothing.
 
 Reads each tracked ``.md`` page with markdown-it, so a link inside code is not a
-link, drops the ``#fragment`` from every link and image target, resolves the
-path from the page's own folder and reports each target that does not exist.
-Web addresses and in-page anchors are skipped.
+link, drops the ``#fragment`` from every link and image target, including the
+``href`` and ``src`` of raw HTML, resolves the path from the page's own folder
+and reports each target that does not exist. Web addresses and in-page anchors
+are skipped.
 
 By default only the live pages are read (:data:`DEFAULT_SCOPE`). Old records
 keep links that were true when they were written, so ``--all`` reads every
@@ -29,7 +30,9 @@ from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
 _REPO_ROOT: Final = Path(__file__).resolve().parents[1]
-# Task cards are left out: several link a card that is not written yet.
+# The live pages, plus the record pages the README and the reading guide send a
+# reader to. Task cards are left out: several link a card that is not written
+# yet.
 DEFAULT_SCOPE: Final[tuple[str, ...]] = (
     "README.md",
     "AGENTS.md",
@@ -42,8 +45,16 @@ DEFAULT_SCOPE: Final[tuple[str, ...]] = (
     "replays/**/README.md",
     "tasks/README.md",
     "process/README.md",
+    "audits/README.md",
+    "audits/audit-phase-21-close.md",
+    "audits/review-2026-08-19/README.md",
+    "audits/review-2026-09-06/README.md",
+    "audits/review-2026-09-06/correction-record.md",
 )
 _ABSOLUTE_TARGET: Final = re.compile(r"\A(?:[a-z][a-z0-9+.-]*:|//)", re.IGNORECASE)
+_HTML_TARGET: Final = re.compile(
+    r"""\b(?:href|src)\s*=\s*["']([^"']*)["']""", re.IGNORECASE
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -122,7 +133,11 @@ def relative_targets(
 
 
 def markdown_targets(tokens: Sequence[Token]) -> Iterator[str]:
-    """Rendered link and image targets, never code or image alt text."""
+    """Rendered link and image targets, never code or image alt text.
+
+    Raw HTML counts too: the ``href`` and ``src`` of an inline tag or an HTML
+    block, since GitHub renders both.
+    """
 
     for token in tokens:
         attribute = {"link_open": "href", "image": "src"}.get(token.type)
@@ -132,6 +147,8 @@ def markdown_targets(tokens: Sequence[Token]) -> Iterator[str]:
                 if not isinstance(target, str):
                     raise TypeError(f"Markdown {attribute} must be text: {target!r}")
                 yield target
+        elif token.type in ("html_inline", "html_block"):
+            yield from _HTML_TARGET.findall(token.content)
         elif token.children is not None:
             yield from markdown_targets(token.children)
 

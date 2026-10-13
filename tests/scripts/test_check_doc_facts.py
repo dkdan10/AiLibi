@@ -21,7 +21,6 @@ from pathlib import Path
 import pytest
 
 import check_doc_facts
-import check_links
 from eval.eras import BASELINE_9, STAGE_B_R3, Era
 from eval.report_io import REPORT_FILENAME, read_report_text, write_report_text
 from meetings.evidence_profile import EXPERIMENT_ENV_NAMES, MeetingEvidenceProfile
@@ -109,8 +108,6 @@ _COPIED = tuple(
             "training/reports/results-finalist-eval.jsonl",
             # The import-linter config, whose contract sections the README counts.
             ".importlinter",
-            # Every page whose relative links are checked.
-            *check_doc_facts._LINKED_DOCUMENTS,
         )
     )
 )
@@ -138,10 +135,7 @@ _MANIFEST_9P2I = "replays/samples/9p2i/MANIFEST.md"
 _TOGGLE_EXAMPLE_LINE = "# AILIBI_IMPOSTOR_ROLL_CALL=0"
 _EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json.gz"
 _CITATION_INSTRUMENT = "tests/eval/test_vj_instruments.py"
-_LESSONS = "docs/lessons.md"
-_REVIEW_INDEX = "audits/review-2026-08-19/README.md"
 _CORRECTION_INDEX = "audits/review-2026-09-06/README.md"
-_CORRECTION_RECORD = "audits/review-2026-09-06/correction-record.md"
 _ML_PAGE = "docs/ml-program.md"
 _ML_DROPPED_ARM_ROW = (
     "| `bfd145cb…` | 28/50 = 0.56 | 13/50 = 0.26 | **0.0041** | **FAIL** |\n"
@@ -186,12 +180,6 @@ def _stand_in_enumerated_paths(root: Path) -> None:
             path.relative_to(_REPO_ROOT).as_posix()
             for path in (_REPO_ROOT / directory).glob(pattern)
         )
-    for document in check_doc_facts._LINKED_DOCUMENTS:
-        text = (root / document).read_text(encoding="utf-8")
-        for _, resolved in check_links.relative_targets(_REPO_ROOT, document, text):
-            relative = resolved.relative_to(_REPO_ROOT).as_posix()
-            wanted.add(f"{relative}/" if resolved.is_dir() else relative)
-
     for relative in sorted(wanted):
         destination = root / relative.rstrip("/")
         if relative.endswith("/"):
@@ -2772,89 +2760,7 @@ def test_missing_ml_results_table_fails_loud(doc_tree: Path) -> None:
     assert "no results table" in errors[0]
 
 
-# ── 7. relative links, and the command line ──────────────────────────────────
-
-
-def test_broken_relative_link_detected(doc_tree: Path) -> None:
-    # The front door's relative links are 0-broken and stay that way.
-    _substitute(
-        doc_tree,
-        _README,
-        "[Current architecture and enforced boundaries](docs/architecture.md)",
-        "[Current architecture and enforced boundaries](docs/architecture-notes.md)",
-    )
-    errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert "'docs/architecture-notes.md'" in errors[0]
-    assert "does not exist" in errors[0]
-
-
-def test_broken_relative_link_on_a_published_page_detected(doc_tree: Path) -> None:
-    # The lessons page and the review index carry the same link rule as the
-    # front door: they are published surfaces, not scratch notes.
-    _substitute(
-        doc_tree,
-        _LESSONS,
-        "(../CONTRIBUTING.md)",
-        "(../CONTRIBUTING.markdown)",
-    )
-    errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert errors[0].startswith(f"{_LESSONS}: ")
-    assert "'../CONTRIBUTING.markdown'" in errors[0]
-    assert "does not exist" in errors[0]
-
-
-def test_broken_relative_link_on_the_review_index_detected(doc_tree: Path) -> None:
-    _substitute(
-        doc_tree,
-        _REVIEW_INDEX,
-        "(A/verdicts.md)",
-        "(A/verdict.md)",
-    )
-    errors = check_doc_facts.check_facts(doc_tree)
-    assert errors and all(error.startswith(f"{_REVIEW_INDEX}: ") for error in errors)
-    assert all("'A/verdict.md'" in error for error in errors)
-
-
-def test_broken_relative_link_on_the_correction_record_detected(doc_tree: Path) -> None:
-    # The correction record's whole value is the card each repair is owned by:
-    # a link to a card that does not exist is a repair nobody can follow.
-    _substitute(
-        doc_tree,
-        _CORRECTION_RECORD,
-        "(../../tasks/work/aborted-meeting-calls.md)",
-        "(../../tasks/work/aborted-calls.md)",
-    )
-    errors = check_doc_facts.check_facts(doc_tree)
-    assert errors and all(
-        error.startswith(f"{_CORRECTION_RECORD}: ") for error in errors
-    )
-    assert all("'../../tasks/work/aborted-calls.md'" in error for error in errors)
-
-
-def test_broken_relative_link_on_the_correction_index_detected(doc_tree: Path) -> None:
-    # The index's job is to hand a reader the supplied documents it preserves.
-    _substitute(
-        doc_tree,
-        _CORRECTION_INDEX,
-        "(REVIEW_APPENDIX_findings.md)",
-        "(REVIEW_APPENDIX_findings.markdown)",
-    )
-    errors = check_doc_facts.check_facts(doc_tree)
-    assert errors and all(
-        error.startswith(f"{_CORRECTION_INDEX}: ") for error in errors
-    )
-    assert all("'REVIEW_APPENDIX_findings.markdown'" in error for error in errors)
-
-
-def test_missing_document_reported(doc_tree: Path) -> None:
-    (doc_tree / _ENV_EXAMPLE).unlink()
-    errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 2
-    assert errors[0].startswith(f"{_ENV_EXAMPLE}: unreadable")
-
-    assert any("relative link" in error and ".env.example" in error for error in errors)
+# ── 7. the command line ──────────────────────────────────────────────────────
 
 
 def test_main_reports_every_failure_at_once(

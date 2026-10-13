@@ -25,7 +25,7 @@ recordings are the ones the current checkout serves.
 both GitHub themes, which its internal `prefers-color-scheme` block handles. The
 rule for changing it: edit the file whenever the layering in
 [`docs/architecture.md`](../architecture.md) moves, and keep the two saying the
-same thing. `tests/scripts/test_check_doc_facts.py` pins the parse, the size
+same thing. `tests/scripts/test_architecture_svg.py` pins the parse, the size
 ceiling, the labels the picture has to carry, and the contrast of every ink
 against the ground it really sits on — the backdrop composited over a light page
 and over a dark one, because the picture's theme follows the reader's system and

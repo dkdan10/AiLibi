@@ -16,4 +16,8 @@ and two honesty phrases.
 
 **What changed source.** The vent and proof rows read the generated gameplay census instead of hand-copied audit tables.
 The win-rate and proof Before cells are frozen once in `docs/results-before.json`, pinned by its sha256. The reading guide
-links the README's table instead of repeating it.
+links the README's table instead of repeating it. Relative links moved to `scripts/check_links.py`, which reads the live
+pages and the five record pages the front door sends a reader to.
+
+**What is no longer checked.** The Before cells of the replay, citation and vent rows were held only to the reading
+guide's copy of the table; with that copy gone they are unchecked text.

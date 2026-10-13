@@ -62,6 +62,23 @@ def test_relative_links_preserve_rendered_links(tmp_path: Path, text: str) -> No
     ]
 
 
+def test_raw_html_targets_count_and_html_in_code_does_not(tmp_path: Path) -> None:
+    # Planted: a raw <img> and an <a> that GitHub renders, beside the same tags
+    # inside a code block, which it shows as text.
+    text = (
+        '<p align="center"><img src="docs/media/missing.png" alt="x"></p>\n'
+        '\nread <a href="gone.md#top">this</a> first\n'
+        '\n```html\n<img src="docs/media/also-missing.png">\n```\n'
+    )
+    assert [
+        target
+        for target, _ in check_links.relative_targets(tmp_path, "README.md", text)
+    ] == [
+        "docs/media/missing.png",
+        "gone.md#top",
+    ]
+
+
 def test_relative_links_decode_paths_and_include_images(tmp_path: Path) -> None:
     text = '[space](<two words.md>) ![image](pic.png "caption")'
     assert list(check_links.relative_targets(tmp_path, "page.md", text)) == [
@@ -80,7 +97,9 @@ def test_relative_links_decode_paths_and_include_images(tmp_path: Path) -> None:
         ("experiments/lab/torch_probe/README.md", True),
         ("replays/candidates/stage-b-r2/README.md", True),
         ("tasks/README.md", True),
-        ("audits/README.md", False),
+        ("audits/README.md", True),
+        ("audits/review-2026-09-06/correction-record.md", True),
+        ("audits/audit-2026-10-09-stage-b-r3.md", False),
         ("tasks/phase-21.md", False),
         ("experiments/lab/notes.md", False),
         ("docs.md", False),

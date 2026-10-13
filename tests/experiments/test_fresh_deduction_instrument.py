@@ -336,8 +336,7 @@ def _instrument_source_at(revision: str) -> str:
 def _frozen_analysis_amendments() -> dict[str, list[str]] | None:
     """``{abbreviated commit: the constants it moved}`` since the manifest froze.
 
-    ``None`` with no usable history — a shallow clone or a missing git — the way
-    ``tests/scripts/test_check_doc_facts.py`` handles the same problem: a
+    ``None`` with no usable history — a shallow clone or a missing git: a
     truncated log would report an empty amendment set and pass vacuously, so the
     caller skips rather than passes.
     """

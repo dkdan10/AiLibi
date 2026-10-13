@@ -167,8 +167,8 @@ def test_samples_9p2i_meeting_flag_partition(
     assert cross_tab.flagged_ejections_innocent == 0
     assert cross_tab.unflagged_ejections_impostor == 22  # was 20
     assert cross_tab.unflagged_ejections_innocent == 15  # was 22
-    # The lines above are the reading guide's committed source, parsed by
-    # scripts/check_doc_facts.py, so they stay literal; the cell below is derived.
+    # The lines above are the reading guide's committed source, so they stay
+    # literal; the cell below is derived.
     accuracy = cross_tab.unflagged_meeting_accuracy
     unflagged = (
         cross_tab.unflagged_ejections_impostor + cross_tab.unflagged_ejections_innocent
@@ -546,9 +546,8 @@ def test_roll_call_coverage_split_under_both_estimators(
     macro-average of the same turns reads 46.5% (45.4% on round 2's) and
     41.6%. ``replays/ml_corpus/README.md`` item 8 publishes the pooled pair as
     its headline and names the macro-average
-    beside it; ``check_doc_facts.check_corpus_disclosures`` re-derives the
-    corpus cells from the same reports these asserts read. The shown set's
-    cells are derived here rather than transcribed.
+    beside it, re-derived from the same reports these asserts read. The shown
+    set's cells are derived here rather than transcribed.
     """
 
     samples = samples_9p2i.deduction.public_response_coverage
@@ -1101,9 +1100,8 @@ def test_scaffold_leakage_reproduces_the_19_8_disclosure(
 
     samples = samples_9p2i.deduction.scaffold_leakage
     # was (10, 200) on round 2's bytes, (41, 210) on the baseline-9 bytes. Kept on
-    # ONE line with no trailing comma: this is the pin scripts/check_doc_facts.py
-    # reads to hold the reading guide's partner-ballot row, and its pattern needs
-    # the tuple literal contiguous.
+    # ONE line with no trailing comma, the shape the reading guide's partner-ballot
+    # row was once read from.
     assert (samples.model_partner_naming_ballots, samples.impostor_ballots) == (10, 198)
     assert samples.crew_partner_naming_ballots == 0
     assert samples.player_visible_leak_turns == 0

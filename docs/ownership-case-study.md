@@ -66,7 +66,7 @@ final review. The original phases used generated prompts. The historical example
 below makes that earlier contract-to-implementation path inspectable; it does
 not claim that Daniel personally authored every source contract or generated file.
 
-<!-- EXHIBIT: the excerpt below is byte-checked against its source by tests/scripts/test_check_doc_facts.py. -->
+<!-- EXHIBIT: the excerpt below is copied verbatim from its source; no test checks it since 2026-10-13. -->
 
 **1 — the historical contract**, from [`tasks/phase-19.md`](../tasks/phase-19.md). Two runs of it, verbatim:
 
