@@ -676,7 +676,7 @@ to the first gate. No live evaluation, calibration or provider call is a check.
 Delivered on `work/alibi-as-route`. The contract is
 [the direction of 2026-09-19](../direction-2026-09-19-process-over-outcome.md)
 §5, §7 and ruling D4 of §12; the layering it moves is
-[architecture](../../docs/architecture.md)'s meeting layer (DESIGN.md §5.3 claim
+[architecture](../../../docs/architecture.md)'s meeting layer (DESIGN.md §5.3 claim
 shapes, §5.4 contradiction detection, §6.6 the rendered belief view) and the
 served view-model contract (DESIGN.md §7).
 

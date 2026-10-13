@@ -2,7 +2,7 @@
 
 Read this file, [docs/architecture.md](docs/architecture.md), and the assigned
 `tasks/work/<slug>.md` card before each task. New cards follow
-[docs/workflow.md](docs/workflow.md); [tasks/README.md](tasks/README.md) names the
+[docs/workflow.md](docs/workflow.md); [tasks/README.md](process/tasks/README.md) names the
 active ownership and next candidates. Dispatch by card path, without generated
 prompt copies.
 

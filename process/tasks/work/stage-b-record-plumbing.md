@@ -500,7 +500,7 @@ that merge is this branch's.
 **What it implements.** Decision memo (`tasks/decision-2026-09-24-stage-b-wave.md`) section 0.3 items 1, 5, 9
 and 10; section 1, "The recorder needs" and "The candidate keeps verifying"; 2.1 (no MANIFEST column; the
 config's sha256 in the round README; the gate checks every row); 3.2 (the writer map) and the card-5 brief in
-3.4. The spine's arm page, [`docs/experiment-arms.md`](../../docs/experiment-arms.md), linked from
+3.4. The spine's arm page, [`docs/experiment-arms.md`](../../../docs/experiment-arms.md), linked from
 `docs/architecture.md` ("Determinism and the substrate ladder"), for `FIELD_LAYER`, `threaded_layers`,
 `engine_arguments`, `profile_from_config` and the pending guard. The owner's rulings of 2026-09-24 ("We should
 implement stage B"; the 50-seed record paragraph) and the dated 2026-09-24 addendum to

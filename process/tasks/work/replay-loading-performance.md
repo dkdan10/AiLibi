@@ -12,19 +12,19 @@ before any further optimization is selected.
 
 ## Evidence
 
-The [replay route](../../api/routes/replays.py) returns the complete `ReplayView`.
-[`_llm_call_view`](../../api/replay_loader.py) includes both text
-bodies; [`windowReplay`](../../frontend/src/store/replayStore.ts) then blanks
+The [replay route](../../../api/routes/replays.py) returns the complete `ReplayView`.
+[`_llm_call_view`](../../../api/replay_loader.py) includes both text
+bodies; [`windowReplay`](../../../frontend/src/store/replayStore.ts) then blanks
 them after download. The inspector already fetches the existing per-meeting
 detail route when its prompt/response tab is opened. The
-[static builder](../../scripts/build_demo_bundle.py) writes those full bodies
+[static builder](../../../scripts/build_demo_bundle.py) writes those full bodies
 into both the bulk replay JSON and the individual meeting JSON.
 
 The loader has separate bounded LRU caches for playback, meeting memories,
 belief frames and summaries. Opening beliefs is already lazy in the browser,
 but its first server request performs another engine/memory walk. Concurrent
 misses can repeat that work before the first result enters the cache. The
-[existing benchmark](../../tests/eval/test_performance.py) measures generation
+[existing benchmark](../../../tests/eval/test_performance.py) measures generation
 throughput, not this reader path.
 
 Preliminary characterization on 2026-09-05 used the frozen working tree awaiting
@@ -111,7 +111,7 @@ its results as durable performance evidence.
 
 Production begins only after the current combined gate/commits and coordinating
 dispatch. Work directly on `codex/cleanup`; root owns commits and the full gate.
-Follow [architecture](../../docs/architecture.md) Packages, Enforced boundaries,
+Follow [architecture](../../../docs/architecture.md) Packages, Enforced boundaries,
 and Determinism and the substrate ladder. No provider calls, dependencies,
 prompt/gameplay/engine changes, canonical-record rewrites or broad rewrite.
 

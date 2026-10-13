@@ -27,7 +27,7 @@ Daniel's part:
 
 Coding agents wrote the code, tests and most documents and drafted the tasks, with AI review passes. The history holds 2,131 commits as of 2026-10-12.
 
-[How a change gets in](docs/workflow.md) · [Lessons](docs/lessons.md) · [One decision, traced](docs/ownership-case-study.md) · [History](docs/history.md)
+[How a change gets in](docs/workflow.md) · [Lessons](docs/lessons.md) · [One decision, traced](docs/ownership-case-study.md) · [History](process/README.md)
 
 ## The demo
 
@@ -53,9 +53,9 @@ Python 3.11 · FastAPI/Pydantic · React/Vite/PixiJS · strict mypy · Hypothesi
 
 In the 9-player set:
 
-1. **Votes follow a rule-based suspicion score, and going against it is usually wrong.** The ballot prompt shows the voter's rule-kept suspicion of every player ([`agents/memory/`](agents/memory/)). Crew votes for the highest-rated player hit an impostor [215 of 235 times](docs/process-scorecard.md) (91%); the 56 against it hit one twice (4%), where chance is about one in three.
+1. **Votes follow a rule-based suspicion score, and going against it is usually wrong.** The ballot prompt shows the voter's rule-kept suspicion of every player ([`agents/memory/`](agents/memory/)). Crew votes for the highest-rated player hit an impostor [215 of 235 times](eval/reports/process-scorecard.md) (91%); the 56 against it hit one twice (4%), where chance is about one in three.
 2. **Meetings with a reported vent sighting never ejected a crewmate.** A vent claim counts only when the engine's witness record matches it. In the 24 meetings with one, every ejection removed an impostor; in the 95 without, [22 of 37](docs/reading-guide.md) did and 15 removed crewmates, near a coin flip: hard evidence, not general social deduction.
-3. **Votes cite what the voter saw.** [394 of 397](docs/process-scorecard.md) votes to eject cite something the voter saw or heard; the ballot demands a citation, so this is by design.
+3. **Votes cite what the voter saw.** [394 of 397](eval/reports/process-scorecard.md) votes to eject cite something the voter saw or heard; the ballot demands a citation, so this is by design.
 
 *Before* is each set's previously shown recording.
 
@@ -63,15 +63,15 @@ In the 9-player set:
 |---|---|---|---|
 | Sample games that replay byte for byte | 100 of 100 (100%) | 100 of 100 (100%) | `scripts/verify_samples.sh`; in CI, a [gate test](tests/api/test_replay_loader.py) for the 9-player set |
 | Observation boundary checks | import rules and planted/recursive leak checks | import rules and planted/recursive leak checks | [contracts](.importlinter), [planted imports](tests/test_firewall.py), [packet scans](eval/leak_scan.py); bounded checks, not complete privacy assurance |
-| Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394 of 397 (99%) | 407 of 410 (99%) | [process scorecard](docs/process-scorecard.md); a floor: the ballot asks every eject to cite |
-| Crew eject ballots naming someone other than the voter's [top suspect](docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56 of 291 (19%) | 65 of 292 (22%) | [process scorecard](docs/process-scorecard.md) |
-| Ballots with no stated reason (9p2i) | 6 of 702 (1%) | 11 of 691 (2%) | [process scorecard](docs/process-scorecard.md) |
-| Ballots whose target is the one their voter wrote (9p2i) | 692 of 702 (99%); 10 impostor votes against a partner turned into skips | 674 of 691 (98%) | [process scorecard](docs/process-scorecard.md) |
+| Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394 of 397 (99%) | 407 of 410 (99%) | [process scorecard](eval/reports/process-scorecard.md); a floor: the ballot asks every eject to cite |
+| Crew eject ballots naming someone other than the voter's [top suspect](docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56 of 291 (19%) | 65 of 292 (22%) | [process scorecard](eval/reports/process-scorecard.md) |
+| Ballots with no stated reason (9p2i) | 6 of 702 (1%) | 11 of 691 (2%) | [process scorecard](eval/reports/process-scorecard.md) |
+| Ballots whose target is the one their voter wrote (9p2i) | 692 of 702 (99%); 10 impostor votes against a partner turned into skips | 674 of 691 (98%) | [process scorecard](eval/reports/process-scorecard.md) |
 | Eject ballots with a valid citation of a statement or sighting (9p2i) | 397 of 397 (100%), zero dangling | 410 of 410 (100%), zero dangling | the 2026-10-09 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
 | Impostor win rate, sample games | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
-| Impostors among those ejected, with and without proof of their role (9p2i) | 24 of 24 (100%) vs 22 of 37 (59%) | 24 of 24 (100%) vs 20 of 42 (48%) | the 2026-10-09 record (9p2i) — [the record](audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](audits/audit-2026-10-01-stage-b-r2.md) §9.6; 15 of 15 innocent ejections sit in the no-proof cell |
+| Impostors among those ejected, with and without proof of their role (9p2i) | 24 of 24 (100%) vs 22 of 37 (59%) | 24 of 24 (100%) vs 20 of 42 (48%) | the 2026-10-09 record (9p2i) — [the record](process/audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](process/audits/audit-2026-10-01-stage-b-r2.md) §9.6; 15 of 15 innocent ejections sit in the no-proof cell |
 | Impostors ejected after a reported sighting of them venting (9p2i) | 24 of 46 (52%) | 24 of 44 (55%) | the 2026-10-09 record (9p2i) — the cross-tab in the [reading guide](docs/reading-guide.md). Reading: general social deduction, **not** demonstrated |
-| Learned tactical policies that became the default | none, ruled twice | none, ruled twice | 2026-07-18 and 2026-08-01 — [phase 17](audits/audit-phase-17-close.md), [phase 18](audits/audit-phase-18-close.md) |
+| Learned tactical policies that became the default | none, ruled twice | none, ruled twice | 2026-07-18 and 2026-08-01 — [phase 17](process/audits/audit-phase-17-close.md), [phase 18](process/audits/audit-phase-18-close.md) |
 
 *Valid* means resolvable, not supported.
 
@@ -81,7 +81,7 @@ In the 9-player set:
 - **Learned policies stayed off.** Four learned impostor policies won more games than the scripted one and still failed gates written before measuring ([negative results](docs/ml-program.md)).
 - **Reproducibility has limits.** Recordings always reconstruct; fake-provider runs repeat on one machine; real-model games are not deterministic; bit-identical optimizer output across machines is seen on Linux/x86-64 only.
 
-**Targets written down before measuring were missed twice:** the owner adopted the first recording anyway, in writing, and nothing from the second ([what each measured](docs/history.md#evidence-honesty-phase-20)).
+**Targets written down before measuring were missed twice:** the owner adopted the first recording anyway, in writing, and nothing from the second ([what each measured](process/README.md#evidence-honesty-phase-20)).
 
 **One known leak.** In the 2026-09-22 recordings the opening prompts name each body by a label that reveals when it died; the shown 9-player set's report openings no longer carry it (0 of 115). The full repair stays switched off, not adopted ([observation contract](docs/observation-contract.md)).
 
@@ -120,8 +120,8 @@ Fake-provider games are short and every meeting skips, because the fake provider
 
 ## The recordings
 
-A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was regenerated 2026-09-22 (4p1i) with every experimental switch off ([its record](audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the [route lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), a recorded setting ([its record](audits/audit-2026-10-09-stage-b-r3.md)): impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md)). The picture above is from the 9-player game the guided tour opens on.
+A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was regenerated 2026-09-22 (4p1i) with every experimental switch off ([its record](process/audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the [route lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), a recorded setting ([its record](process/audits/audit-2026-10-09-stage-b-r3.md)): impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md)). The picture above is from the 9-player game the guided tour opens on.
 
 **The fake provider's report is empty on purpose.** A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections; 46 removed an impostor, 36 of those 46 with evidence against that player on the meeting's record.
 
-[Glossary](docs/glossary.md) · [Audits](audits/README.md) · [Contributing](CONTRIBUTING.md)
+[Glossary](docs/glossary.md) · [Audits](process/audits/README.md) · [Contributing](CONTRIBUTING.md)

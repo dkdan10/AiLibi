@@ -8,7 +8,7 @@
 > Task 19.1. Read this document for **design rationale and history** — why the
 > observation firewall is a package boundary, why reasoning is two-tier, why
 > memory is structured first — and not for the system's current shape. The
-> current-architecture note is [`docs/architecture.md`](docs/architecture.md),
+> current-architecture note is [`docs/architecture.md`](../docs/architecture.md),
 > authoritative for the layering as built; `AGENTS.md` carries the routing that
 > points there; the per-PR implementation contract remains the task file under
 > `tasks/phase-N.md`, whose section refs bind. Where this document and
@@ -137,7 +137,7 @@ The tick clock is wall-clock-locked for live spectating but can run as fast as t
 
 ## 2. Core Modules and File Structure
 
-> **Superseded —** see [`docs/architecture.md`](docs/architecture.md): the tree below predates
+> **Superseded —** see [`docs/architecture.md`](../docs/architecture.md): the tree below predates
 > `training/` and `experiments/` entirely, `llm/` has grown from the four modules drawn here to
 > nine (the Protocol, four provider adapters, cache, budget, the budgeted wrapper and report
 > normalization), and `frontend/src/components/` now holds thirty components, not five.
@@ -612,7 +612,7 @@ The voting prompt presents — as **evidence to weigh, not a directive** — the
 
 ## 6. Memory Architecture
 
-> **Superseded in part —** see [`docs/architecture.md`](docs/architecture.md): §6.1's HEAD-status
+> **Superseded in part —** see [`docs/architecture.md`](../docs/architecture.md): §6.1's HEAD-status
 > note still describes `testimony_as_content` as an `AILIBI_*` flag defaulting OFF, but that lever
 > graduated — its env gate is deleted and the behavior is unconditional (`orchestrator/replay.py`,
 > `_RETIRED_ALWAYS_ON_LEVERS`). §6.3's closing correction still holds: `agents/runtime.py::AgentRuntime`
@@ -724,7 +724,7 @@ For scale (later phase): switch episodic store to SQLite per agent, add embeddin
 > agent's persistent store, so the contradictions block appeared in **0 of 1,656** replay
 > renders sampled by the 2026-08-19 review. Suspicion, the alibi map and the observations
 > block are as drawn. Read the rest of this section as the design; `docs/architecture.md`
-> and [`docs/adr/0001-three-load-bearing-decisions.md`](docs/adr/0001-three-load-bearing-decisions.md)
+> and [`docs/adr/0001-three-load-bearing-decisions.md`](../docs/adr/0001-three-load-bearing-decisions.md)
 > carry the as-built status.
 
 `memory/store.py::render_for_prompt(meeting_id)` produces a token-budgeted, structured view:
@@ -755,7 +755,7 @@ Token budget is enforced — events past the budget are dropped by salience.
 
 ## 7. Tech Stack
 
-> **Superseded —** see [`docs/architecture.md`](docs/architecture.md): the LLM row is two model
+> **Superseded —** see [`docs/architecture.md`](../docs/architecture.md): the LLM row is two model
 > generations stale — four providers now sit behind the `LLMClient` Protocol, and the canonical
 > eval provider has been hosted Featherless (`Qwen/Qwen3.6-27B`, locked at Task 16.2,
 > non-thinking) since Phase 14, not the Phase-7 local Ollama model named below. `mypy --strict`
@@ -794,7 +794,7 @@ Two stack questions deserve explicit calls:
 > scope contract that was met, not as the system's boundary. The scope has grown well past the
 > list below (a learned-policy training program, a tournament dashboard, four LLM providers), and
 > the meeting LLM named here — Claude Sonnet — is no longer the canonical eval provider. See
-> [`docs/architecture.md`](docs/architecture.md).
+> [`docs/architecture.md`](../docs/architecture.md).
 
 ### 8.1 In scope
 
@@ -1017,7 +1017,7 @@ A more general version walks the schema and asserts no field whose value should 
 > (`scripts/run_tournament.py` plus the typed eval report and its dashboard tab), and the learned
 > tactical policy — which arrived as the evolution-strategies program under `training/` rather
 > than reinforcement learning, and whose champion stays opt-in behind the scripted FSM (the
-> Phase-18 NO-FLIP close). See [`docs/architecture.md`](docs/architecture.md).
+> Phase-18 NO-FLIP close). See [`docs/architecture.md`](../docs/architecture.md).
 
 - **Multiple maps** with procedural variation. Map authoring as YAML.
 - **Agent personalities** — prompt-injected traits (cautious / aggressive / talkative) that bias tactical and strategic policies. Personality vector becomes a knob for tournament diversity.

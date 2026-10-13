@@ -32,7 +32,7 @@ quotes the parenthetical gets a claim the tree does not support.
   covered, and every caller of it in the tree was under `tests/`. A live agent's trust
   score therefore never left its initial value, and no rendered memory view ever showed
   a moved one. Ruling D5 of 2026-09-19
-  ([the direction](../../tasks/direction-2026-09-19-process-over-outcome.md)) deleted
+  ([the direction](../../process/tasks/direction-2026-09-19-process-over-outcome.md)) deleted
   the writer rather than wiring it: a credibility scalar computed in Python and handed
   to the agent is a second engine verdict, which is the defect that ruling exists to
   remove, and the credibility information reaches the voter as evidence instead — a

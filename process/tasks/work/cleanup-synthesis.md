@@ -73,7 +73,7 @@ The RNG reseed repair already exists; defensive immutable-state mapping copies
 remain until a measured alias-safe alternative earns their replacement.
 
 Roadmap 47 stays parked. The earlier
-[tally study](../../experiments/lab/report-tally-lab.md) found that relaxing
+[tally study](../../../experiments/lab/report-tally-lab.md) found that relaxing
 abstention could add both correct and innocent ejections, and explicitly warned
 that per-meeting counterfactuals did not propagate changed game states. These
 historical tradeoffs are not a new current quality measurement. The new reasoning

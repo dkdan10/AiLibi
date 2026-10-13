@@ -18,7 +18,7 @@
 The 50-game tournament was not started. The 3-game smoke was not started.
 Both were gated on a direct sanity call to the live provider, and the
 sanity call failed because no real Anthropic SDK transport is wired into
-[llm/provider.py](../llm/provider.py).
+[llm/provider.py](../../llm/provider.py).
 
 This is a code/dependency gap, not an operator error. It is not
 remediable from inside this audit prompt (the prompt forbids edits to
@@ -130,8 +130,8 @@ Not applicable.
 
 The static / fake-provider audit substrate is healthy — Task 3.13's
 production wire-up (commit `ec023be`) does close R-1 and R-2 *for the
-FakeProvider path*: [scripts/run_game.py:77](../scripts/run_game.py#L77)
-and [eval/balance_eval.py:147](../eval/balance_eval.py#L147) both
+FakeProvider path*: [scripts/run_game.py:77](../../scripts/run_game.py#L77)
+and [eval/balance_eval.py:147](../../eval/balance_eval.py#L147) both
 construct a `meeting_runner` + a fresh `GameBudget` per game, and the
 667-test suite is green. The unreachability of the real provider is
 not a regression introduced by Task 3.13; it predates that task and
@@ -164,22 +164,22 @@ Two compounding gaps explain the failure; both must close before the
 eval can be re-attempted.
 
 **Gap A — production CLI/tournament path ignores
-`AILIBI_LLM_PROVIDER`.** [scripts/run_game.py:77](../scripts/run_game.py#L77)
-and [eval/balance_eval.py:147](../eval/balance_eval.py#L147) call
+`AILIBI_LLM_PROVIDER`.** [scripts/run_game.py:77](../../scripts/run_game.py#L77)
+and [eval/balance_eval.py:147](../../eval/balance_eval.py#L147) call
 `build_default_meeting_runner(budget=GameBudget())` with no
 `llm_client=` argument.
-[orchestrator/game.py:342](../orchestrator/game.py#L342) then
+[orchestrator/game.py:342](../../orchestrator/game.py#L342) then
 unconditionally falls back to `FakeProvider()`. Setting
 `AILIBI_LLM_PROVIDER=anthropic` in `.env` has no effect on the public
 entry-points. The docstring at
-[orchestrator/game.py:326-329](../orchestrator/game.py#L326)
+[orchestrator/game.py:326-329](../../orchestrator/game.py#L326)
 acknowledges this: "explicit local / eval runs pass an
 :class:`llm.provider.AnthropicClient`" — but no caller does so today.
 
 **Gap B — `AnthropicClient` has no real transport.**
-[llm/provider.py:207-221](../llm/provider.py#L207) `_default_send` is
+[llm/provider.py:207-221](../../llm/provider.py#L207) `_default_send` is
 a one-line `raise RuntimeError(...)`. The module docstring at
-[llm/provider.py:9-11](../llm/provider.py#L9) describes a *plan*
+[llm/provider.py:9-11](../../llm/provider.py#L9) describes a *plan*
 ("the adapter does the import lazily inside `complete`") but the
 plan is not implemented — there is no `import anthropic` anywhere
 in the source tree (`grep -rn 'import anthropic\|from anthropic'
@@ -197,21 +197,21 @@ prompt's edit scope):
 1. Add `anthropic` to `pyproject.toml` `dependencies` (pin a
    specific version per project convention).
 2. Implement the real `_default_send` in
-   [llm/provider.py](../llm/provider.py) — lazy `import anthropic`
+   [llm/provider.py](../../llm/provider.py) — lazy `import anthropic`
    inside the function, construct an `AsyncAnthropic` client with
    `api_key`, call `messages.create(...)`, translate the response
    into `AnthropicRawResponse`. Mind: extended-thinking +
    prompt-caching-beta knobs are already plumbed through the
    call signature but are no-ops until the SDK call uses them.
-3. In [scripts/run_game.py](../scripts/run_game.py) and
-   [eval/balance_eval.py](../eval/balance_eval.py), pass
+3. In [scripts/run_game.py](../../scripts/run_game.py) and
+   [eval/balance_eval.py](../../eval/balance_eval.py), pass
    `llm_client=build_default_client()` into
    `build_default_meeting_runner(...)` so the env-driven selector
    actually flows through.
 4. Add one `pytest.mark.real_provider` round-trip test that the
    developer can opt into with `--real-provider`, mirroring the
    sanity call here. (CI continues to skip it by default per
-   [llm/README.md](../llm/README.md).)
+   [llm/README.md](../../llm/README.md).)
 5. Re-run this prompt. If the sanity call passes and the 3-game
    smoke completes, the 50-game eval may proceed.
 

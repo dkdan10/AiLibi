@@ -36,7 +36,7 @@ belong outside task contracts unless a task explicitly needs them.
 > dispatched, phase by phase. It is read once, at onboarding, not per task.
 > Where it names `DESIGN.md` as the source of truth, that was true **at build
 > time**; it is not the live routing. Today `AGENTS.md` carries the routing and
-> points architecture reading at [`docs/architecture.md`](docs/architecture.md),
+> points architecture reading at [`docs/architecture.md`](../docs/architecture.md),
 > the current-architecture note; `DESIGN.md` is the historical design record (a
 > v0.1 draft, reconciled to HEAD as of the Phase 6 close, 2026-05-30), read for
 > rationale and history. The per-PR implementation contract is still the task

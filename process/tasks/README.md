@@ -47,7 +47,7 @@ either drifts, so flipping one card's Status is enough to make this paragraph
 wrong out loud.
 A card's `Status` is its work state; the delivery states each card reached are
 in [the review ledger](review-ledger.md) and defined in
-[the workflow](../docs/workflow.md).
+[the workflow](../../docs/workflow.md).
 
 ## Original implementation inventory
 
@@ -85,7 +85,7 @@ their mechanisms through the [finite scenario matrix](work/deduction-evaluation-
 The [bounded investigation](work/bounded-investigation.md) implementation and
 [source-bound comparisons](../audits/investigation-candidate/README.md) are verified.
 The [fresh-evaluation plan](work/fresh-deduction-evaluation.md) is complete as
-planning only. New work uses [one canonical work card](../docs/workflow.md), with evidence, acceptance,
+planning only. New work uses [one canonical work card](../../docs/workflow.md), with evidence, acceptance,
 record impact, measurement and one writer per shared file. Preserve the separate
 gameplay-first and code-first investigations before combining their decisions.
 

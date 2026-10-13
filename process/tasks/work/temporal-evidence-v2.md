@@ -27,7 +27,7 @@ randomized action order or deletion of legitimately acquired memory.
 
 The [temporal contract](temporal-observation-contract.md),
 [reasoning contract](reasoning-evidence-experiments.md), and
-[observation contract](../../docs/observation-contract.md) describe the current
+[observation contract](../../../docs/observation-contract.md) describe the current
 v1 behavior. Its live/reader parity does not establish correct timing. Current
 readers collapse temporal versions to a boolean; changing v1 producers in place
 would silently reinterpret previously stamped ON recordings.

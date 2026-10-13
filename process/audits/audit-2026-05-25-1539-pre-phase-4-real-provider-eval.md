@@ -18,7 +18,7 @@
 
 The 50-game tournament aborted at seed 22 (the first game in which a
 meeting actually fired) with a `pydantic_core.ValidationError` raised
-by [llm/provider.py:121](../llm/provider.py#L121) because the live
+by [llm/provider.py:121](../../llm/provider.py#L121) because the live
 Anthropic Sonnet 4.6 model wrapped its JSON `ReportDocument` in
 markdown code fences:
 
@@ -51,7 +51,7 @@ unevaluable from this run.
 | Trigger model env var | `AILIBI_LLM_TRIGGER_MODEL=claude-haiku-4-5-20251001` |
 | API key prefix (8 chars only) | `sk-ant-a` |
 | API key length | 108 |
-| `.env` source | repo-root `.env`, sourced via `set -a; source .env; set +a` for each invocation (the project does not auto-load `.env`; see [llm/README.md](../llm/README.md)) |
+| `.env` source | repo-root `.env`, sourced via `set -a; source .env; set +a` for each invocation (the project does not auto-load `.env`; see [llm/README.md](../../llm/README.md)) |
 | Static gates (`bash scripts/check.sh`) | All checks passed; Contracts: 1 kept, 0 broken; Task docs: 65 / 65; **666 passed, 2 skipped** (delta vs the prior 667/1: `tests/llm/test_real_provider.py` adds an opt-in real-provider test that is now skipped by default per Task 3.14) |
 
 ### Direct sanity-call invocation
@@ -85,7 +85,7 @@ All four sanity-call success conditions met: exit 0, non-zero
 `cost_usd`, sensible English response, model id matches
 `AILIBI_LLM_MEETING_MODEL`. This proves the Task 3.14 real-transport
 wire-up (`anthropic.AsyncAnthropic` via `_default_send` at
-[llm/provider.py:207](../llm/provider.py#L207)) is reachable and that
+[llm/provider.py:207](../../llm/provider.py#L207)) is reachable and that
 the `schema=None` path through `complete()` works end-to-end.
 
 ### Smoke (3-game tournament) outcome
@@ -135,7 +135,7 @@ be written.
 
 `run_tournament.py` does not emit per-game progress to stdout (it
 only prints the aggregate `BalanceReport` at the end via
-[scripts/run_tournament.py:104](../scripts/run_tournament.py#L104)),
+[scripts/run_tournament.py:104](../../scripts/run_tournament.py#L104)),
 so no four-bucket summary was produced. Per-game tick counts (proxy
 for game length) for the 23 written replay files:
 
@@ -172,18 +172,18 @@ pydantic_core._pydantic_core.ValidationError: 1 validation error for ReportDocum
 ```
 
 Root cause: the call to `schema.model_validate_json(raw.text)` at
-[llm/provider.py:121](../llm/provider.py#L121) assumes the model
+[llm/provider.py:121](../../llm/provider.py#L121) assumes the model
 returns raw JSON. Anthropic Sonnet 4.6 wraps JSON in
 markdown code fences (``` ```json … ``` ```) by default; the
-FakeProvider at [llm/fake_provider.py:61](../llm/fake_provider.py#L61)
+FakeProvider at [llm/fake_provider.py:61](../../llm/fake_provider.py#L61)
 returns hand-written clean JSON, which masked the gap until the
 first live meeting fired.
 
 The 10 concurrent `_collect_reports` calls dispatched for this
 meeting are unrecorded (the meeting's `MeetingArtifacts` are only
 written after `_manager.run()` returns successfully — see
-[orchestrator/game.py:292](../orchestrator/game.py#L292) and
-[orchestrator/game.py:302-306](../orchestrator/game.py#L302-L306)),
+[orchestrator/game.py:292](../../orchestrator/game.py#L292) and
+[orchestrator/game.py:302-306](../../orchestrator/game.py#L302-L306)),
 so their `LLMCallRecord` rows did not reach the replay log. They
 were however charged against the live API; see §4.
 
@@ -212,7 +212,7 @@ unrecorded for the reason given in §3.
 
 The crashed-meeting estimate is derived from: the meeting fired
 `_collect_reports` for ~10 living players concurrently
-([meetings/manager.py:499](../meetings/manager.py#L499)); per Anthropic
+([meetings/manager.py:499](../../meetings/manager.py#L499)); per Anthropic
 Sonnet 4.6 list pricing of $3.00 / Mtok input + $15.00 / Mtok output,
 a 3–5k input token + 200–600 output token meeting-report prompt costs
 roughly $0.02–$0.05 per call. The figure is an estimate, not a
@@ -223,8 +223,8 @@ Cost-per-game pass/fail on the $0.30 mean criterion: **Cannot
 evaluate.** Zero games completed a meeting cleanly, so there is no
 empirical distribution to compare against the cap. The
 per-game budget enforcement (`GameBudget(max_cost_usd=0.30)` from
-[llm/budget.py:32](../llm/budget.py#L32), wired by
-[eval/balance_eval.py:147](../eval/balance_eval.py#L147)) was active
+[llm/budget.py:32](../../llm/budget.py#L32), wired by
+[eval/balance_eval.py:147](../../eval/balance_eval.py#L147)) was active
 but never had a chance to charge a completed meeting.
 
 ---
@@ -233,7 +233,7 @@ but never had a chance to charge a completed meeting.
 
 **Cannot evaluate.** The tournament's aggregate `BalanceReport` was
 not produced (the script crashed before `print(_format_report(report))`
-at [scripts/run_tournament.py:104](../scripts/run_tournament.py#L104)).
+at [scripts/run_tournament.py:104](../../scripts/run_tournament.py#L104)).
 Per-seed outcomes are also not directly readable from the replay logs
 because they only contain `tick` entries (no `game-outcome` entry
 kind). The 3-game smoke independently showed 3/3 CREWMATES with no
@@ -277,7 +277,7 @@ Enumeration of `kind` values across all 23 written replay files:
 No `meeting`, `llm-call`, `game-outcome`, or any other entry kind
 appears in any file. The first meeting attempted was the one that
 crashed in seed 22; meeting artifacts are written by
-[orchestrator/game.py:302-306](../orchestrator/game.py#L302-L306) only
+[orchestrator/game.py:302-306](../../orchestrator/game.py#L302-L306) only
 after `meeting_runner.run_meeting()` returns successfully, so the
 crash in `_collect_reports` left zero meeting data persisted.
 
@@ -314,7 +314,7 @@ exactly the same crash trajectory and would not change this verdict.
 
 ## 9. Observations
 
-The defect is one line: [llm/provider.py:121](../llm/provider.py#L121)
+The defect is one line: [llm/provider.py:121](../../llm/provider.py#L121)
 calls `schema.model_validate_json(raw.text)` directly on SDK text.
 Anthropic models reliably wrap JSON in ``` ```json … ``` ``` fences;
 FakeProvider hand-writes clean JSON, masking this until the first
@@ -332,7 +332,7 @@ is materially below 10%, the 50-game design may be undersized for the
 
 `run_tournament.py` emits no per-game progress, making real-time cost
 monitoring awkward. The `GameBudget(max_cost_usd=0.30)` hard-cap at
-[llm/budget.py:32](../llm/budget.py#L32) makes the prompt's $1.00/game
+[llm/budget.py:32](../../llm/budget.py#L32) makes the prompt's $1.00/game
 and $0.60-mean-at-10 abort thresholds structurally unreachable — a
 design strength, but it means the *real* failure mode is a crash like
 this one, not runaway spend.
@@ -370,7 +370,7 @@ calls that were dispatched but not persisted.
 **Recommended follow-up task scope** (informational; out of this
 prompt's edit scope):
 
-1. In [llm/provider.py:207-258](../llm/provider.py#L207) `_default_send`
+1. In [llm/provider.py:207-258](../../llm/provider.py#L207) `_default_send`
    (or in `complete` at line 121 before `model_validate_json`),
    strip markdown code fences from `raw.text` when `schema` is non-None.
    The minimal, robust shape: strip a leading ` ```json\n` or ` ```\n`
@@ -378,7 +378,7 @@ prompt's edit scope):
    prompt instructions ("respond with raw JSON only") — they will
    silently break under future prompt edits or model upgrades.
 2. Add a real-provider integration test (e.g. `pytest.mark.real_provider`
-   in [tests/llm/test_real_provider.py](../tests/llm/test_real_provider.py))
+   in [tests/llm/test_real_provider.py](../../tests/llm/test_real_provider.py))
    that asks Sonnet to emit a `ReportDocument` for a trivial fixture
    meeting and asserts the adapter parses it. Without such a test
    the next provider-quirk regression will likewise be discovered

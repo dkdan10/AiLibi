@@ -3,7 +3,7 @@
 Choose the next change from evidence, verify it, and use the result to choose
 what follows. [AGENTS.md](../AGENTS.md) carries the standing rules and
 [architecture.md](architecture.md) defines the system boundaries. The
-[task index](../tasks/README.md) describes the current outcome and candidate
+[task index](../process/tasks/README.md) describes the current outcome and candidate
 work; only work ready to start receives a detailed card.
 
 ## Branch and delivery
@@ -56,7 +56,7 @@ material limitations. Keep cards concise; implementation detail belongs in the
 code and durable decisions belong in the appropriate architecture or decision
 document.
 
-Track delivery states separately in Results and the [review ledger](../tasks/review-ledger.md):
+Track delivery states separately in Results and the [review ledger](../process/tasks/review-ledger.md):
 
 | State | Evidence required |
 | --- | --- |

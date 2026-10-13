@@ -49,10 +49,10 @@ contract in this repository — the authoritative reading order is:
    verification, and treatment of records and experiments.
 4. The assigned `tasks/work/<slug>.md` card — its outcome, evidence, acceptance,
    constraints, expected scope, record impact, and validation. The
-   [task index](tasks/README.md) names current work. Dispatch by card path.
+   [task index](process/tasks/README.md) names current work. Dispatch by card path.
 
 Historical records (the `tasks/phase-*.md` contracts, past audits,
-[DESIGN.md](DESIGN.md) and [AGENT_IMPLEMENTATION.md](AGENT_IMPLEMENTATION.md))
+[DESIGN.md](process/DESIGN.md) and [AGENT_IMPLEMENTATION.md](process/AGENT_IMPLEMENTATION.md))
 are never rewritten, and they are not the current reading route.
 
 ## Working on a change locally

@@ -79,7 +79,7 @@ training and **never a training reward** (its SELECTION-ONLY DOCTRINE, owner-rat
 
 Nine arms on the hosted eval model, recorded once; the four impostor-side candidates and
 their comparator are below, quoted from
-[`audit-phase-18-close.md`](../audits/audit-phase-18-close.md) §1.1 and reproduced by
+[`audit-phase-18-close.md`](../process/audits/audit-phase-18-close.md) §1.1 and reproduced by
 `uv run python scripts/paired_stats.py training/reports/results-finalist-eval.jsonl`.
 
 | policy | impostor win | same-seed scripted comparator | paired exact McNemar p | referee |
@@ -96,7 +96,7 @@ the p column names
 ([`report-finalist-eval.md`](../training/reports/report-finalist-eval.md) §18 item 1). Phase
 17 ended the same way a recording earlier — `utility-es` 0.52 = 26/50 against the same-seed
 scripted 0.36, Δ +0.16, referee FAIL
-([`audit-phase-17-close.md`](../audits/audit-phase-17-close.md) §1.1). Every learned arm
+([`audit-phase-17-close.md`](../process/audits/audit-phase-17-close.md) §1.1). Every learned arm
 fails the referee on evidence supply: testimony-backed conversion on all four, flags per
 meeting on three (`bfd145cb…`'s flags gauge was ruled UNRESOLVABLE and excluded, so it fails
 on conversion alone). The scripted policy is the only PASS: the bar was *win edge AND a
@@ -105,7 +105,7 @@ still-watchable game*, and nothing met both, twice.
 ## What the search actually found
 
 Two behaviours separate the two policies
-([`audit-phase-18-flip-emergence.md`](../audits/audit-phase-18-flip-emergence.md) §8.3):
+([`audit-phase-18-flip-emergence.md`](../process/audits/audit-phase-18-flip-emergence.md) §8.3):
 
 - **N1 — it kills into witnesses at ~3.3× the scripted rate.** Crew-witnessed-kill rate
   30/197 = 0.15228 against 8/174 = 0.04598, z = +3.370, sign-reproduced 3/3.
@@ -115,7 +115,7 @@ Two behaviours separate the two policies
 That is specification gaming of a social-deduction referee, not better deception.
 Convictions here are near-perfect on engine-certified evidence and near-chance without it
 (310/310 = 1.000 with direct proof against 46/125 = 0.368 without, all four recorded sets;
-[`audit-phase-19-close.md`](../audits/audit-phase-19-close.md) §4.1), and a witnessed kill
+[`audit-phase-19-close.md`](../process/audits/audit-phase-19-close.md) §4.1), and a witnessed kill
 mints no certified flag: being *seen killing* is cheap where being *seen venting* is fatal.
 Both are nonetheless ruled **NOT-DEMONSTRATED under the pre-registered emergence
 discipline**, and this framing does not upgrade them: clause (c) wants a lever whose
@@ -159,18 +159,18 @@ campaign requires an owner decision; documentation cannot re-price these edges.
 The social layer these policies were searched against was rebuilt after the campaign closed,
 and the committed sets re-recorded three times,
 last at baseline 9 (36% (4p1i), 22% (9p2i) impostor wins); 9p2i now sits in a later era.
-[`audit-phase-20-baseline-7.md`](../audits/audit-phase-20-baseline-7.md) §3
+[`audit-phase-20-baseline-7.md`](../process/audits/audit-phase-20-baseline-7.md) §3
 read the first: two met, two missed — **a FINDING, not an adoption; canon by an owner
 override dated 2026-08-26 (§6.1)**. A later recording met three of four: innocent
 ejections fell from 46 to 20, and 11 of those 20 were the meeting's own reporter, against
 34 of 46, a share of 0.5500 against a registered 0.40 — **a finding again, nothing
-adopted** ([the record](../audits/audit-phase-21-adopting-record.md)). Neither re-prices a
+adopted** ([the record](../process/audits/audit-phase-21-adopting-record.md)). Neither re-prices a
 referee verdict.
 
 ## What the instruments now stand on
 
 The two models were re-fit, and their composed runner re-evaluated, on the corpus the
-[2026-09-22 re-recording](../audits/audit-2026-09-22-process-rerecord.md) left behind —
+[2026-09-22 re-recording](../process/audits/audit-2026-09-22-process-rerecord.md) left behind —
 `replays/ml_corpus/9p2i`, historical fingerprint `6536c68c…`. That fingerprint covers the
 replay, split and manifest bytes but not the roster or the fitting code, so it describes
 historical evidence and cannot certify a fit against current inputs. Every row below
@@ -220,7 +220,7 @@ compatibility rules executable.
 ## Limitations
 
 One model (`Qwen/Qwen3.6-27B`, locked 2026-07-12 —
-[`audit-phase-16-model-lock.md`](../audits/audit-phase-16-model-lock.md)), one prompt set,
+[`audit-phase-16-model-lock.md`](../process/audits/audit-phase-16-model-lock.md)), one prompt set,
 50 games per arm for three arms and 49 for `7f73929d…` after seed 35 was excluded. The
 bar's floors are population-relative, derived from one reference recording, so "FAIL" is a
 statement about this bar and re-pricing it is an owner decision. The raw recordings live

@@ -12,7 +12,7 @@ keeps all of it.
 
 **What stays.** The 24 `tasks/phase-*.md` contracts, unedited, as records. `scripts/validate_task_docs.py` keeps the
 work-card checks and the task index's card count, and now fails when it finds no cards. The prompt the
-[ownership case study](../docs/ownership-case-study.md) quoted is linked at its last commit instead.
+[ownership case study](../../docs/ownership-case-study.md) quoted is linked at its last commit instead.
 
 **What it reverses.** Recommendation 5 of the 2026-09-06 review ("Decline the deletion"), in the "Section 11 workflow
 recommendations" table of [docs/cleanup-dispositions.md](../docs/cleanup-dispositions.md). That row is kept as written;

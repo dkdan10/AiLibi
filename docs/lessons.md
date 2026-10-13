@@ -40,7 +40,7 @@ correctness against a specification, and nobody has tested the specification.
 
 ## What the gates could catch, and what they structurally could not
 
-On the day [the reviewer](../audits/review-2026-08-19/B/repo-health-architecture.md) measured
+On the day [the reviewer](../process/audits/review-2026-08-19/B/repo-health-architecture.md) measured
 it — 2026-08-18 — the default gate ran 4,621 tests and four import contracts, all green.
 On the same corpus, a fifth of what crewmates said about their own movements did not match
 where they had been. Three findings explain how both are true, and not one of them is a
@@ -62,7 +62,7 @@ missing test.
   independently and compares it against what was handed out.
 - **Contracts that covered a quarter of the tree.** The import contracts that enforce the rule
   at the centre of this project — agents may not import the engine — covered
-  [89 of 383 Python files](../audits/review-2026-08-19/B/collated-findings.md) when the review
+  [89 of 383 Python files](../process/audits/review-2026-08-19/B/collated-findings.md) when the review
   measured them. A file placed inside the agent package that imported
   the orchestrator, which imports the engine, passed all four. Fixed since: the contracts now
   run over every top-level package, and the test that plants a forbidden import plants it in a
@@ -71,7 +71,7 @@ missing test.
 The counterweight belongs in the same breath, because the lesson is not that tests are useless.
 One test re-runs the real meeting machinery over two hundred committed meetings, compares the
 bytes, and ships a deliberately corrupted copy whose only job is to prove the comparison can
-fail; and [the reviewer](../audits/review-2026-08-19/B/repo-health-architecture.md)
+fail; and [the reviewer](../process/audits/review-2026-08-19/B/repo-health-architecture.md)
 followed every audit and contract path cited from the code and found 43 of 44 still resolve on
 disk. A gate only sees the axis it was pointed at. The fix is another axis.
 
@@ -98,7 +98,7 @@ stated as an override rather than a pass. Two earlier phases of learned-policy s
 the measurement, and both closed having adopted nothing. The discipline is worth nothing
 unless the bar can say no, and the only proof that it can is a published miss.
 
-The [next reasoning experiment](../audits/audit-phase-21-adopting-record.md)
+The [next reasoning experiment](../process/audits/audit-phase-21-adopting-record.md)
 also returned FINDING, and this time there was no override. Three of four
 pre-registered checks passed; the reporter's share of innocent ejections missed.
 The default recording stayed unchanged and the candidate changes stayed off.
@@ -109,9 +109,9 @@ result; implementing a candidate was not enough to adopt it.
 ## The critique I am keeping
 
 The sharpest thing anyone said about this project is not a defect report. The review's
-[research-lead read](../audits/review-2026-08-19/C/p2-ml-research-lead.md) closed with:
+[research-lead read](../process/audits/review-2026-08-19/C/p2-ml-research-lead.md) closed with:
 *"strong on measurement, weak on knowing when to stop building measurement."* Nobody rebutted
-it, and [the code track](../audits/review-2026-08-19/B/repo-health-architecture.md) then handed
+it, and [the code track](../process/audits/review-2026-08-19/B/repo-health-architecture.md) then handed
 over the measurement that makes it concrete: **95,824 lines of process narration** — contracts,
 generated prompts, audits — against **57,776 lines of core product Python**, a ratio of 1.66
 to 1, against **3,358 lines of durable engineering documentation**.
@@ -130,4 +130,4 @@ independent review still finds, not by another count of documents produced.
 **The review that found most of this is published**, curated and indexed, each finding linked to
 the change that closed it or the record of why it did not, and titled by the four of its own
 headline claims it disproved:
-[the 2026-08-19 three-track review](../audits/review-2026-08-19/README.md).
+[the 2026-08-19 three-track review](../process/audits/review-2026-08-19/README.md).

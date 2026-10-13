@@ -128,7 +128,7 @@ projection. Audible entitlement remains the current global active alarm alone. T
 resolved the opening-trigger conflict by preserving OFF/historical bytes and
 projecting public handles only ON; default model privacy is explicitly unfinished
 until an adopting decision. The full matrix is in
-[the observation contract](../../docs/observation-contract.md).
+[the observation contract](../../../docs/observation-contract.md).
 
 ## Validation
 
@@ -151,7 +151,7 @@ maps and complete observation-ID sequences. Engine inputs permit one action per
 actor; there is no automatic vent-exit path that could silently collapse two
 same-actor vent actions into one source identity.
 
-The channel matrix is in [the observation contract](../../docs/observation-contract.md).
+The channel matrix is in [the observation contract](../../../docs/observation-contract.md).
 Event-local witnesses use deterministic engine state; serialized engine event
 projections and internal body IDs stay unchanged. Typed packets always use
 public handles. Record-byte mode controls reconstruction, including incomplete

@@ -2,7 +2,7 @@
 
 This backlog is complete and merged into `main` (`8161689a`, 2026-09-07). It is
 kept as the priority record for that cleanup; new work follows
-[the workflow](../docs/workflow.md) on a `work/<card-slug>` branch and one pull
+[the workflow](../../docs/workflow.md) on a `work/<card-slug>` branch and one pull
 request per card.
 
 This is the prioritized backlog from the 2026-09-05 review and owner discussion,

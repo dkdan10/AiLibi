@@ -25,7 +25,7 @@ immutable and nothing on this branch states or implies that those bars passed.
 
 **And this record supersedes it as the reference recording.** A numbered reference recording is
 "one recording of the sample sets under a stated set of behavioural settings" and the ladder tip is
-"the newest reference recording" ([`docs/glossary.md`](../docs/glossary.md)), so bytes recorded
+"the newest reference recording" ([`docs/glossary.md`](../../docs/glossary.md)), so bytes recorded
 under corrected code and a bumped prompt set are a new one. From this merge the ladder tip is
 **baseline 8**. Baseline 7 keeps its whole history — the FINDING, the two missed bars, the override
 that adopted it anyway — and loses only its claim to be the current recording. Those two paragraphs
@@ -263,7 +263,7 @@ the comment block that separated them is the source of truth:
 | `vent_single_mint` | REPAIR gate (21.5) | **GRADUATED — deleted outright.** |
 
 Each graduated gate was **deleted OUTRIGHT and promoted nowhere**, which deviates from
-[`AGENTS.md`](../AGENTS.md) "Graduation sweeps" on exactly one clause — that the snake_case key stays
+[`AGENTS.md`](../../AGENTS.md) "Graduation sweeps" on exactly one clause — that the snake_case key stays
 in `_RETIRED_ALWAYS_ON_LEVERS`. The deviation is the point: a repair is not a lever, no committed
 record ever ran one ON, and deleting rather than retiring is what leaves the stamp keys byte-identical
 across the flip. Stated so it is checkable:

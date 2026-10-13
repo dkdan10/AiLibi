@@ -267,7 +267,7 @@ skips and three expected failures. On the merge commit itself GitHub ran CI
 Pages run republished the demo bundle from the merged bytes.
 
 Every row above advances to **Merged**; none advances to **Adopted**. The
-delivery states are defined in [the workflow](../docs/workflow.md): the merge
+delivery states are defined in [the workflow](../../docs/workflow.md): the merge
 establishes that the implementation is on `main`, not that any experimental
 candidate is on. Every candidate remains default-OFF and the merge created no
 adopting record. PR 431 became merged by reachability when its head landed in

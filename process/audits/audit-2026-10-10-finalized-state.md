@@ -30,7 +30,7 @@ between meetings, and the model speaks and votes only at meetings. Every game
 is committed as a replay that the engine re-runs byte for byte.
 
 **What it asks.** Not whether the players vote the impostors out. The
-[owner](../docs/glossary.md#owner), the project's one human decision-maker, set
+[owner](../../docs/glossary.md#owner), the project's one human decision-maker, set
 its goal on 2026-09-19: an agent's vote or skip must rest on data the agent
 actually holds, true or false. A crewmate who ejects an innocent player on a
 believable but false statement made at the table is the game working, not a
@@ -67,13 +67,13 @@ set: the fifty games the public demo and the README show, recorded once on
   shown, not that it changed a vote.
 - General social deduction. The machine-learning program is on hold.
 
-**Where to look next.** [The README](../README.md) and its
-[reading guide](../docs/reading-guide.md); three pages generated from the
+**Where to look next.** [The README](../../README.md) and its
+[reading guide](../../docs/reading-guide.md); three pages generated from the
 replays, each with a check that recomputes it from them:
-[the process scorecard](../docs/process-scorecard.md) (whether each decision
-rested on data its voter held), [the gameplay census](../docs/gameplay-census.md)
-(what happened in the games) and [the game-shape profile](../docs/game-profile.md)
-(each game's moments, with no score); [the glossary](../docs/glossary.md);
+[the process scorecard](../../eval/reports/process-scorecard.md) (whether each decision
+rested on data its voter held), [the gameplay census](../../eval/reports/gameplay-census.md)
+(what happened in the games) and [the game-shape profile](../../eval/reports/game-profile.md)
+(each game's moments, with no score); [the glossary](../../docs/glossary.md);
 [the audits index](README.md); and the
 [recorded demo](https://dkdan10.github.io/AiLibi/). Sections 3 and 4 below give
 each claim its command, and sections 6 and 7 list the work that reached the main
@@ -116,7 +116,7 @@ recordings a default opening prompt reveals a hidden death tick through a body
 identifier, and on the shown set no report opening carries it (the census cell
 reads 0/115 by construction). (claim row `firewall`)
 
-The meeting layer writes a [grounding label](../docs/glossary.md#grounding-label-what-the-meeting-found-under-a-ballot)
+The meeting layer writes a [grounding label](../../docs/glossary.md#grounding-label-what-the-meeting-found-under-a-ballot)
 onto each ballot after the vote, and the tally never reads it: the outcome is
 the same under every label, and the tally's source names neither the field nor
 any of its values
@@ -139,7 +139,7 @@ and `uv run python scripts/publish_gameplay_census.py --check` recomputes the
 page from the replays. (claim row `shape`)
 
 The committed replays fall into recorded eras. An
-[era](../docs/glossary.md#era-recordings-that-share-one-recorded-identity) is the
+[era](../../docs/glossary.md#era-recordings-that-share-one-recorded-identity) is the
 recorded identity a group of games shares (its settings, temporal delivery,
 substrate stamp and prompt stamps), and `eval/eras.py` is the one place a
 committed set's era is named. The instruments its docstring names (the process
@@ -273,7 +273,7 @@ at H (section 8).
 How each row reads, from the page's own definitions: row 1 counts ballots whose
 citation resolves in the voter's own inputs and bears on its subject, and does
 not test the cited line's truth; row 2 is a departure from the arithmetic the
-engine handed the voter (its [top suspect](../docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest)),
+engine handed the voter (its [top suspect](../../docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest)),
 not a judgment of whether the departure was right; row 6 tests tokens, not
 propositions; row 8 counts eject ballots against a crewmate that row 1 calls
 grounded and that rest on no manufactured contradiction, without testing the
@@ -285,7 +285,7 @@ cited line's truth either.
 `uv run python scripts/publish_gameplay_census.py --check` (exit 0 at H). A stated pair that
 reconciles is a pair of places a player stated at the table that the station's
 doors allow within the ticks between, or that the public regroup (the full
-meeting reset, see the [glossary](../docs/glossary.md#regroup-the-full-meeting-reset))
+meeting reset, see the [glossary](../../docs/glossary.md#regroup-the-full-meeting-reset))
 falls between.
 
 | cell | baseline-9, pooled | stage-b-r2 | stage-b-r3 |
@@ -333,7 +333,7 @@ an outcome, reported beside the cells and gating nothing.
 `docs/game-profile.md`, checked by
 `uv run python scripts/publish_game_profile.py --check` (exit 0 at H); the
 4-player set ships no profile. The
-[profile](../docs/glossary.md#game-shape-profile-shelves-facets-and-the-tripwire)
+[profile](../../docs/glossary.md#game-shape-profile-shelves-facets-and-the-tripwire)
 describes each game by named moments (shelves) and plain facts (facets), with no
 score and no rank.
 
@@ -355,7 +355,7 @@ promotion regenerated it for round 3, and the figures above are those at H.
 
 ### 3.5 The route lines: offline reach, and round 3's reading of them
 
-A [route line](../docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places)
+A [route line](../../docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places)
 tells a voter, the same for every role, which of a candidate's stated changes of
 room the station's doors or the public regroup allow; a candidate with no such
 change has no line, so on round 3 671/702 (95.6%) of ballots carried one.

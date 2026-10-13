@@ -213,11 +213,11 @@ self-checks pass, and the three derived rubric files are regenerated on the
 unchanged baseline-9 bytes.
 
 **References.** The design sections are:
-- [`docs/architecture.md`](../../docs/architecture.md) "Packages": `eval/`
+- [`docs/architecture.md`](../../../docs/architecture.md) "Packages": `eval/`
   folds recordings strictly, and `experiments/` writes separate artifacts.
 - The same file's "Determinism and the substrate ladder": the recording is the
   reproducibility boundary, which is why the census is read off it.
-- [`experiments/lab/report-rubric-design.md`](../../experiments/lab/report-rubric-design.md)
+- [`experiments/lab/report-rubric-design.md`](../../../experiments/lab/report-rubric-design.md)
   §3 "Hard floors", the floor this card stops tripping wholesale.
 - The Task-21.7 definition in `eval/vote_correctness.py`.
 

@@ -84,7 +84,7 @@ completed-task memory. Reproduce these paths before changing them.
 
 ## Constraints
 
-Follow [architecture](../../docs/architecture.md), especially layering,
+Follow [architecture](../../../docs/architecture.md), especially layering,
 structured memory, observation entitlement and the substrate ladder. The
 maintenance gate is complete. Independent meeting work may run alongside the
 evaluation/clock repairs; end-to-end acceptance waits for their handovers.
@@ -147,7 +147,7 @@ new public projection receives focused frontend and live/static browser checks.
 
 ## Results (implementation awaiting combined verification)
 
-The meeting implementation follows [layering and the observation boundary](../../docs/architecture.md#layering):
+The meeting implementation follows [layering and the observation boundary](../../../docs/architecture.md#layering):
 the new public analyzer accepts only transcript, public roster and public walking
 topology. Account validation checks public identities, map/task names and clocks;
 it deliberately accepts potentially false but well-formed statements. No private

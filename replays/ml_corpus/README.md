@@ -117,8 +117,8 @@ meetings, 3,630 transcript turns and 3,630 ballots.
 
 > **S9 is history (2026-10-02).** `replays/samples/9p2i` now holds the shown
 > 9-player set, a later era (`eval/eras.py`): candidate round 3 since 2026-10-09
-> ([its record](../../audits/audit-2026-10-09-stage-b-r3.md) section 12), round 2
-> before it ([its record](../../audits/audit-2026-10-01-stage-b-r2.md) section 9). Here, S9
+> ([its record](../../process/audits/audit-2026-10-09-stage-b-r3.md) section 12), round 2
+> before it ([its record](../../process/audits/audit-2026-10-01-stage-b-r2.md) section 9). Here, S9
 > means that path's baseline-9 bytes as of `d41c9006`, the last commit that held
 > them, and every
 > figure under that label is a record of those bytes; fold (a) below re-derives

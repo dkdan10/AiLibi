@@ -671,7 +671,7 @@ served payload, fixture or registry row moved. The one production edit is docstr
 lines in `eval/evidence_honesty.py`. Record impact: none.
 
 **References.**
-- [`docs/architecture.md`](../../docs/architecture.md) "Determinism and the substrate
+- [`docs/architecture.md`](../../../docs/architecture.md) "Determinism and the substrate
   ladder": the recording is the reproducibility boundary. The gate is the test-side
   reading of that boundary: the detector, given what production gave it, reproduces the
   recorded flags byte for byte.

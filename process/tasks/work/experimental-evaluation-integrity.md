@@ -78,9 +78,9 @@ Plant inconsistent ballots and an experimental factory with absent config.
 
 ## Results (implementation in progress)
 
-Architecture: [layering and enforced boundaries](../../docs/architecture.md#layering),
-[substrate identity](../../docs/architecture.md#determinism-and-the-substrate-ladder)
-and [explicit cleanup experiments](../../docs/architecture.md#explicit-cleanup-experiments).
+Architecture: [layering and enforced boundaries](../../../docs/architecture.md#layering),
+[substrate identity](../../../docs/architecture.md#determinism-and-the-substrate-ladder)
+and [explicit cleanup experiments](../../../docs/architecture.md#explicit-cleanup-experiments).
 The engine still consumes recorded actions and meeting outcomes; these changes
 bind claims to their recorded inputs without changing tactical or model decisions.
 

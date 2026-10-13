@@ -126,7 +126,7 @@ code, the map, `pyproject.toml`, `uv.lock` and the Python, numpy and pydantic ve
 (`training/provenance.py:108-157`); `derivation_files()` measures that closure at 109 files.
 Current consumers require version two; the committed records are version one, read as
 historical (`scripts/verify_ml_evidence.py:1726`, `:1744-1746`, `:2010-2014`;
-`tests/training/test_model_evidence_provenance.py:98-116`). [`training/README.md`](../../training/README.md)`:48-49`
+`tests/training/test_model_evidence_provenance.py:98-116`). [`training/README.md`](../../../training/README.md)`:48-49`
 says a future fit "must write" version two, while `:42-43` has current use wait for "a
 separately authorized fit" and `docs/ml-program.md:210-216` requires a new independent-evidence
 profile before a newly adopted corpus supports a refit. The anchor and pool writers stamp

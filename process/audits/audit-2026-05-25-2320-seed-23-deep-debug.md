@@ -18,7 +18,7 @@ and validated cleanly; **all three accusation_round (`Statement`) calls
 truncated at exactly `max_tokens=512` and raised
 `JSONDecodeError: Unterminated string`** before Pydantic was reached — the
 identical defect class the 2026-05-25-1823 eval reported on the same code path
-([meetings/manager.py:576](../meetings/manager.py#L576), `_collect_statement`),
+([meetings/manager.py:576](../../meetings/manager.py#L576), `_collect_statement`),
 which Task 3.17 explicitly excluded from its scope on the (now-empirically-
 falsified) reasoning that "statement and vote outputs are inherently smaller."
 Total live spend: **$0.1233** (well under the $5 cap and the $3 soft cap). One
@@ -34,9 +34,9 @@ below.
 - `ANTHROPIC_API_KEY` prefix: `sk-ant-a` (8 chars only)
 - `bash scripts/check.sh`: 676 passed, 2 failed, 8 skipped. The 2 failures
   are the documented sharp edge from the 1823/2138 eval reports
-  ([tests/llm/test_budgeted_client.py](../tests/llm/test_budgeted_client.py)
+  ([tests/llm/test_budgeted_client.py](../../tests/llm/test_budgeted_client.py)
   `test_default_cap_admits_fake_provider_meeting` and
-  [tests/orchestrator/test_meeting_integration.py](../tests/orchestrator/test_meeting_integration.py)
+  [tests/orchestrator/test_meeting_integration.py](../../tests/orchestrator/test_meeting_integration.py)
   `test_meetings_fire_and_game_resumes_from_public_factory_path`) — both
   build `build_default_client()` which selects the live adapter when
   `AILIBI_LLM_PROVIDER=anthropic` is already in the shell. Per prior eval
@@ -114,7 +114,7 @@ Prompts were captured via an ad-hoc script
 `DefaultMeetingRunner.run_meeting` to intercept at meeting entry, capture
 each participant's `rendered_memory` + role + suspicion_graph, render the
 production Jinja prompts via
-[agents/strategic/prompts/loader.py](../agents/strategic/prompts/loader.py),
+[agents/strategic/prompts/loader.py](../../agents/strategic/prompts/loader.py),
 write them to disk, and raise to abort gameplay before any LLM call.
 Token estimates use whitespace-split word count as a rough proxy.
 
@@ -210,7 +210,7 @@ and per-call JSON metadata under `/tmp/seed-23-debug/responses/seed-22-*-*.json`
 ## 7. Pipeline failures
 
 Three failed calls, all in the accusation phase, all on the same code
-path ([meetings/manager.py:595](../meetings/manager.py#L595)
+path ([meetings/manager.py:595](../../meetings/manager.py#L595)
 `Statement.model_validate_json(response.text)`).
 
 | Phase | Agent | Failed layer | Specific error | Truncation evidence |
@@ -293,7 +293,7 @@ this investigation falsifies that assumption.
 **Recommended remediation:** Raise `DEFAULT_STATEMENT_MAX_TOKENS` from
 512 to 2048 (matching the Task 3.17 report cap), and add a
 `@real_provider` truncation regression test analogous to
-[tests/llm/test_real_provider.py](../tests/llm/test_real_provider.py)
+[tests/llm/test_real_provider.py](../../tests/llm/test_real_provider.py)
 `TestAnthropicTruncationFailureMode`. The cost impact is negligible
 (statement responses empirically run ~1K tokens, so the new cap will
 rarely be approached).
@@ -344,7 +344,7 @@ cleaner; (b) is defense-in-depth.
 override pattern is fragile.
 **Evidence:** p-4 emitted `agent_id="self"`, `tick=6` (not 7 / the
 meeting tick). Manager overrides via `parsed.model_copy(update={...})`
-at [meetings/manager.py:546](../meetings/manager.py#L546).
+at [meetings/manager.py:546](../../meetings/manager.py#L546).
 **Why it matters:** Any future downstream consumer that reads the
 LLM-emitted tick (instead of the manager-overridden tick) on a
 ReportDocument from before the override would see wrong values. The
@@ -468,9 +468,9 @@ and this investigation, with fix/open status.
 
 Scope (a single bundled task — same code path, same defect family):
 
-- Files in scope: [meetings/manager.py](../meetings/manager.py),
+- Files in scope: [meetings/manager.py](../../meetings/manager.py),
   [agents/strategic/prompts/impostor_report.j2](../agents/strategic/prompts/impostor_report.j2)
-  (or its loader wrapper), [tests/llm/test_real_provider.py](../tests/llm/test_real_provider.py).
+  (or its loader wrapper), [tests/llm/test_real_provider.py](../../tests/llm/test_real_provider.py).
 - Raise `DEFAULT_STATEMENT_MAX_TOKENS` from `512` to `2048` (matching
   the report cap from Task 3.17). Empirical justification: this
   investigation's 3/3 statement responses saturated at 512; raising to

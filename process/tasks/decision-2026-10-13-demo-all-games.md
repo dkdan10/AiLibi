@@ -11,7 +11,7 @@ Featured strip and the guided tour's first game, and the build fails if one of t
 
 **Why this needs a record.** A push to `main` rebuilds and publishes the demo bundle (`.github/workflows/pages.yml`), so
 under `AGENTS.md` a change to the featured games or the public-results payload is a publication decision
-([deployment](../docs/deployment.md)).
+([deployment](../../docs/deployment.md)).
 
 **What is published.** The same post-game view already served for the featured games (replay, belief frames, meetings,
 per-agent memories and rendered prompts, plus each set's picker metadata, compact results and game-shape profile), now

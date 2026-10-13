@@ -9,7 +9,7 @@ wave. Branch `work/process-rerecord`, one pull request into `main`.
 It decides nothing. It is the ONE combined re-record the standing cadence
 doctrine calls for after a substrate wave settles: the four committed sets are
 re-recorded at the same seeds on the wave's bytes, and
-[the process scorecard](../docs/process-scorecard.md)'s nine rows are published
+[the process scorecard](../../eval/reports/process-scorecard.md)'s nine rows are published
 before and after. There is no pre-registration, no bar and no verdict, and no
 cell here is attributed to one card of the wave — the three substrate cards
 ([the route claim](../tasks/work/alibi-as-route.md),

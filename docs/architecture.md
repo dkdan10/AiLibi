@@ -170,7 +170,7 @@ the 9p2i era's reply and reset.
 Experiment format 3 adds independent bounded investigation and contextual
 self-report, requiring temporal/evidence version 2. The search reducer uses owned
 sightings and public deaths; working memory retains intentions separately from
-evidence. [The investigation contract](../tasks/work/bounded-investigation.md)
+evidence. [The investigation contract](../process/tasks/work/bounded-investigation.md)
 defines bounds and urgent overrides. Both candidates remain OFF.
 
 Format 3 requires exact built-in agents and policies. Shared

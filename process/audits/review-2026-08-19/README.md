@@ -11,7 +11,7 @@ titled by, and it is why the tree is published at all: an unverified pile of sel
 noise. A pile that audits itself, in public, with every surviving finding linked either to the
 change that closed it or to the record of why it did not, is a measurement.
 
-The narrative half — what the review taught the author — is [docs/lessons.md](../../docs/lessons.md).
+The narrative half — what the review taught the author — is [docs/lessons.md](../../../docs/lessons.md).
 
 ---
 

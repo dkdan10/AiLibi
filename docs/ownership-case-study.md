@@ -15,13 +15,13 @@ needed to show that these repairs improved decisions, not merely that tests pass
 
 The owner had two consequential options after the measurement: retain the prior
 reference under the written decision rule, or explicitly adopt the repaired
-system despite a failed rule. The [record's decision section](../audits/audit-phase-20-baseline-7.md#6-the-verdict)
+system despite a failed rule. The [record's decision section](../process/audits/audit-phase-20-baseline-7.md#6-the-verdict)
 ruled out selectively adopting convenient pieces. The experiment therefore did
 not authorize an informal partial pass.
 
 ## What the evidence said
 
-The [pre-registered measurement](../audits/audit-phase-20-baseline-7.md#3-the-pre-registered-read-bar-by-bar)
+The [pre-registered measurement](../process/audits/audit-phase-20-baseline-7.md#3-the-pre-registered-read-bar-by-bar)
 missed two central criteria. Conviction accuracy without direct role proof was
 61/103 = 0.5922 against at least 0.60. Innocent ejections fell from 79 to 42,
 but the criterion required fewer than 35. A one-ejection gap to the first bar
@@ -38,7 +38,7 @@ improvement to an individual repair.
 ## The owner judgment
 
 On 2026-08-26, Daniel explicitly adopted the replacement as the reference while
-leaving the experiment's verdict **FINDING**. The [owner ruling](../audits/audit-phase-20-baseline-7.md#61-the-owners-adoption-ruling-2026-08-26),
+leaving the experiment's verdict **FINDING**. The [owner ruling](../process/audits/audit-phase-20-baseline-7.md#61-the-owners-adoption-ruling-2026-08-26),
 recorded on [PR #389](https://github.com/dkdan10/AiLibi/pull/389), cited the narrow
 accuracy miss, the reduction in innocent convictions, reduced fabrication, and
 the qualitative changes in the inspected meetings.
@@ -52,11 +52,11 @@ is the central ownership claim here.
 
 ## Implementation and review evidence
 
-The [execution record](../audits/audit-phase-20-baseline-7.md#62-what-the-ruling-executed-in-this-pr)
+The [execution record](../process/audits/audit-phase-20-baseline-7.md#62-what-the-ruling-executed-in-this-pr)
 lists what adoption actually changed: the reference, graduated behavior, and
 associated provenance. Agents implemented those changes and wrote substantial
-parts of the supporting material. The [close audit](../audits/audit-phase-20-close.md)
-and later [maintenance recording](../audits/audit-phase-21-rerecord.md) remain
+parts of the supporting material. The [close audit](../process/audits/audit-phase-20-close.md)
+and later [maintenance recording](../process/audits/audit-phase-21-rerecord.md) remain
 available to assess the implementation and its subsequent defects. The review
 process used separate AI reviewers; it is not evidence of external human assurance.
 
@@ -68,7 +68,7 @@ not claim that Daniel personally authored every source contract or generated fil
 
 <!-- EXHIBIT: the excerpt below is copied verbatim from its source; no test checks it since 2026-10-13. -->
 
-**1 — the historical contract**, from [`tasks/phase-19.md`](../tasks/phase-19.md). Two runs of it, verbatim:
+**1 — the historical contract**, from [`tasks/phase-19.md`](../process/tasks/phase-19.md). Two runs of it, verbatim:
 
 ```markdown
 ### Task 19.2 — The in-code truth sweep: docstrings match the bytes
@@ -107,7 +107,7 @@ unproven.
 
 A later experiment reduced innocent ejections to 20 but missed its reporter-share
 criterion: 11/20 = 0.5500 against 0.40. Its **FINDING** verdict was not overridden
-and it was not adopted ([record](../audits/audit-phase-21-adopting-record.md)).
+and it was not adopted ([record](../process/audits/audit-phase-21-adopting-record.md)).
 The [learned-policy program](ml-program.md) likewise adopted no default replacement
 after its candidates missed pre-registered evidence-quality gates. Those decisions
 must not be conflated with the earlier override.
@@ -125,7 +125,7 @@ to inspect the figures behind these judgments, set by set.
 comparison record that isolates one change to the 9-player game: round 1's the
 kill cooldown, round 2's the route field. The question was whether to delete
 each superseded round's candidate recordings once a newer one lands, or keep
-them. The [decision memo](../tasks/decision-2026-09-24-stage-b-wave.md) had
+them. The [decision memo](../process/tasks/decision-2026-09-24-stage-b-wave.md) had
 proposed deleting them: the card that lands round r+1 would remove round r's
 directory, its audit citing the commit that held the bytes.
 
@@ -140,9 +140,9 @@ records". The earlier proposal was declined: round 1's recordings stay, and a
 promotion of round 3 keeps round 2's bytes as their own candidate round.
 
 **Implementation and review evidence.** Round 3's
-[promotion](../tasks/work/promote-round-3.md) moved round 2's 54 files to
+[promotion](../process/tasks/work/promote-round-3.md) moved round 2's 54 files to
 `replays/candidates/stage-b-r2` with none differing, by the per-file sha256
-table in [the round-3 record](../audits/audit-2026-10-09-stage-b-r3.md). Its
+table in [the round-3 record](../process/audits/audit-2026-10-09-stage-b-r3.md). Its
 tests read rounds 1 and 2 and fail on one changed byte of the moved config, a
 declaration naming the wrong seeds, or a stray file in round 2's directory.
 

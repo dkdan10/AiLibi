@@ -95,7 +95,7 @@ source identity and clock foundation, not a private truth certificate for speech
 
 ## Constraints
 
-Read [architecture](../../docs/architecture.md), especially the observation
+Read [architecture](../../../docs/architecture.md), especially the observation
 boundary, deterministic tactics and recorded experiment ladder. Begin runtime
 changes only after the current evidence/account checkpoint and owner dispatch.
 No engine import in agents, new map/role/provider/dependency, historical

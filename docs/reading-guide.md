@@ -2,7 +2,7 @@
 
 Numbers, reproduction commands, findings, and starting points. Cited sources
 outrank summaries. See the [glossary](glossary.md) for terms and
-[history](history.md) for earlier phases.
+[history](../process/README.md) for earlier phases.
 
 ---
 
@@ -14,7 +14,7 @@ are in the results table of the [README](../README.md); two more follow.
 | What | Figure | Before | Where it lives |
 |---|---|---|---|
 | Impostor ballots cast against a partner (9p2i) | 0 of 198 (0%) | 0 of 200 (0%) | enforced by the meeting layer, not shown by the model — §3 |
-| Learned behaviours the ML program set out to show | 0 of 14 (0%) | 0 of 14 (0%) | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
+| Learned behaviours the ML program set out to show | 0 of 14 (0%) | 0 of 14 (0%) | [close audit](../process/audits/audit-phase-18-close.md), derived in [the emergence reading](../process/audits/audit-phase-18-flip-emergence.md) |
 
 ## 2. What to run, and what to watch
 
@@ -54,7 +54,7 @@ all 397 eject ballots in the 9p2i samples, every one cites a line the voter
 could really see.
 
 **Deception: demonstrated in earlier recordings**, as
-[the fresh-clone audit](../audits/audit-phase-19-input-claude.md#53-what-is-genuinely-good)
+[the fresh-clone audit](../process/audits/audit-phase-19-input-claude.md#53-what-is-genuinely-good)
 verified.
 Coordinated fabricated alibis built by reading the transcript, strategic
 truth-telling at parity, verbal betrayal of a caught partner while the ballot
@@ -77,23 +77,23 @@ Without it, ejection accuracy stays near a coin flip — 22 of 37 — still shor
 of the pre-registered bar for exactly this cell, 0.60 pooled across the four
 recorded sets, one of the two baseline 7 missed. The worst class of evidence,
 a single alibi-versus-sighting flag that once convicted 70 innocents, was empty
-on baseline 7 ([its record](../audits/audit-phase-20-baseline-7.md) §3) and
+on baseline 7 ([its record](../process/audits/audit-phase-20-baseline-7.md) §3) and
 convicted four again on baseline 8
-([its record](../audits/audit-phase-21-rerecord.md) §5.1.1); later records do
+([its record](../process/audits/audit-phase-21-rerecord.md) §5.1.1); later records do
 not re-read it.
 
 ## 4. Four audits, in this order
 
-1. [The finished-state audit of 2026-10-10](../audits/audit-2026-10-10-finalized-state.md).
+1. [The finished-state audit of 2026-10-10](../process/audits/audit-2026-10-10-finalized-state.md).
    **What it proves:** what the finished project shows and does not, each
    figure with its command.
-2. [The fresh-clone audit](../audits/audit-phase-19-input-claude.md). **What it
+2. [The fresh-clone audit](../process/audits/audit-phase-19-input-claude.md). **What it
    proves:** a stranger can reproduce every derived metric from the committed
    bytes.
-3. [Its reconciliation with a second model's audit](../audits/audit-phase-19-triage.md).
+3. [Its reconciliation with a second model's audit](../process/audits/audit-phase-19-triage.md).
    **What it proves:** disagreements are ruled on evidence; a source's headline
    term is refuted rather than absorbed.
-4. [The ML program's close](../audits/audit-phase-18-close.md). **What it
+4. [The ML program's close](../process/audits/audit-phase-18-close.md). **What it
    proves:** the machinery holds under a result nobody wanted: every learned arm
    beat the scripted comparator on wins and failed the selection gate.
 
@@ -106,6 +106,6 @@ The ML program's method, results and measurement flaws are in
 ## 5. Where to go next
 
 [Architecture](architecture.md) · [glossary](glossary.md) ·
-[history](history.md) · [audits index](../audits/README.md) ·
-[ownership decision](ownership-case-study.md) · [workflow protocol](../AGENTS.md) · [design history](../DESIGN.md) ·
+[history](../process/README.md) · [audits index](../process/audits/README.md) ·
+[ownership decision](ownership-case-study.md) · [workflow protocol](../AGENTS.md) · [design history](../process/DESIGN.md) ·
 [deployment](deployment.md) · [artifacts](artifacts.md).

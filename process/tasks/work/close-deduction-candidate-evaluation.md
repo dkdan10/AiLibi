@@ -360,11 +360,11 @@ Delivered on `work/close-deduction-candidate-evaluation`. The contract is
 [the direction memo of 2026-09-19](../direction-2026-09-19-process-over-outcome.md),
 whose decisions D1, D2 and D8 the owner accepted that date (rulings in its
 section 12). The architecture this sits inside is
-[explicit cleanup experiments](../../docs/architecture.md#explicit-cleanup-experiments):
+[explicit cleanup experiments](../../../docs/architecture.md#explicit-cleanup-experiments):
 `combined_accounts`'s three profile versions stay OFF and unadopted, and this
 card moves no lever, no default and no recorded byte. The delivery rule is
-[AGENTS.md](../../AGENTS.md) "Delivery" and
-[the workflow](../../docs/workflow.md#one-card-per-change).
+[AGENTS.md](../../../AGENTS.md) "Delivery" and
+[the workflow](../../../docs/workflow.md#one-card-per-change).
 
 ### What was decided, and why it reads this way
 
@@ -675,7 +675,7 @@ their own dated records are left alone for the same reason.
 
 **Record impact.** `audits/deduction-candidate/execution-manifest.md` moves by
 this one row, so the `audits/` inventory row in
-[docs/artifacts.md](../../docs/artifacts.md) is recomputed with the change
+[docs/artifacts.md](../../../docs/artifacts.md) is recomputed with the change
 staged: 26,534,947 → 26,535,502 tracked bytes, 328 files unchanged. No other
 `audits/` or `tests/fixtures/` byte moves.
 

@@ -491,7 +491,7 @@ published moves (the Verification block below).
 References: `docs/architecture.md` "Enforced boundaries" (the kind crosses from the orchestrator
 into `meetings/` as a plain `Literal`; no import contract changes and `lint-imports` stays green)
 and "Determinism and the substrate ladder" (baseline 9 is now named there);
-[the observation contract](../../docs/observation-contract.md) for the vent-witness and visibility
+[the observation contract](../../../docs/observation-contract.md) for the vent-witness and visibility
 facts; the decision memo `tasks/decision-2026-09-24-stage-b-wave.md` sections 0.1, 2.6 "A3", 3.1
 row 1, 3.2 and 3.4 brief 1; `tasks/investigations-2026-09-24/census_and_record.md` section 6.
 

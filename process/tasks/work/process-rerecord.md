@@ -26,7 +26,7 @@ section 12 records the owner's rulings. Every metric name below is defined by
 [the process scorecard](process-scorecard.md) and by nothing else; this card
 runs that tool, it does not redefine a row. `AGENTS.md:71-73` holds prompt-byte
 and detector changes to an adopting record, which
-[`docs/glossary.md`](../../docs/glossary.md)`:45-51` defines as the recording
+[`docs/glossary.md`](../../../docs/glossary.md)`:45-51` defines as the recording
 that adopts a change rather than a label applied afterwards.
 
 **What the committed recordings cost, from their own `llm_calls` rows** (games
