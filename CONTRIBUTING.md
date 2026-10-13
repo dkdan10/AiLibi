@@ -52,12 +52,9 @@ contract in this repository — the authoritative reading order is:
    [task index](tasks/README.md) names current work. Dispatch by card path;
    new cards have no generated prompt copies.
 
-`tasks/phase-*.md` and `agent_prompts/task-*.md` remain historical contracts and
-generated exports. Their checks continue to run. When explicitly resuming a
-phase task, follow its original contract; **never hand-edit its prompt** — edit
-the contract and regenerate. [DESIGN.md](DESIGN.md) and
-[AGENT_IMPLEMENTATION.md](AGENT_IMPLEMENTATION.md) provide design and workflow
-history, not the current reading route.
+Historical records (the `tasks/phase-*.md` contracts, past audits,
+[DESIGN.md](DESIGN.md) and [AGENT_IMPLEMENTATION.md](AGENT_IMPLEMENTATION.md))
+are never rewritten, and they are not the current reading route.
 
 ## Working on a change locally
 
@@ -67,8 +64,8 @@ bash scripts/check.sh       # the full gate: ruff, import-linter, mypy, pytest, 
 ```
 
 `scripts/check.sh` is the required gate and the one-command local truth: ruff,
-import-linter, mypy, task-card and historical-prompt checks, pytest, and the
-frontend lint, typecheck, unit-test and build legs.
+import-linter, mypy, task-card and link checks, pytest, and the frontend lint,
+typecheck, unit-test and build legs.
 
 CI runs those same checks and one more the script deliberately leaves out: a
 Playwright browser journey over the real app and the real API

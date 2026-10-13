@@ -116,7 +116,6 @@ manifest and the held-out freeze land. The retirement card closed unexecuted on
 2026-10-10, on the owner's word: the adopting record for evidence v2 it waited on
 has no source once round 3 took the route field instead (its Results).
 
-Historical `phase-*.md` contracts and their generated `agent_prompts/` exports
-remain unchanged and validated. Use them when resuming that historical work;
-new cards do not generate duplicate prompts. `compute_next_task.py` continues
-to serve phase contracts only.
+Historical `phase-*.md` contracts are records and are never rewritten; their
+generated prompts were retired on 2026-10-13
+([decision](decision-2026-10-13-retire-generated-prompts.md)).

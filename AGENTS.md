@@ -37,10 +37,8 @@ deployment or an experimental adoption.
 - Protected architecture, additional behavior, public compatibility,
   dependencies, spending, and experimental adoption need an owner decision
   unless already authorized. Continue independent work while a decision waits.
-- Historical `tasks/phase-*.md` and `agent_prompts/` retain their contracts and
-  checks. An explicitly resumed phase task keeps its exact scope; edit its
-  contract and regenerate with `scripts/generate_prompts.py`, never hand-edit
-  generated prompts. `AGENT_IMPLEMENTATION.md` is historical onboarding.
+- Historical records (`tasks/phase-*.md`, past audits and
+  `AGENT_IMPLEMENTATION.md`) are never rewritten.
 
 ## Load-bearing rules
 

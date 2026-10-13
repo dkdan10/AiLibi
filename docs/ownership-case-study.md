@@ -66,7 +66,7 @@ final review. The original phases used generated prompts. The historical example
 below makes that earlier contract-to-implementation path inspectable; it does
 not claim that Daniel personally authored every source contract or generated file.
 
-<!-- EXHIBIT: both excerpts below are byte-checked against their sources by tests/scripts/test_check_doc_facts.py. -->
+<!-- EXHIBIT: the excerpt below is byte-checked against its source by tests/scripts/test_check_doc_facts.py. -->
 
 **1 — the historical contract**, from [`tasks/phase-19.md`](../tasks/phase-19.md). Two runs of it, verbatim:
 
@@ -90,13 +90,7 @@ not claim that Daniel personally authored every source contract or generated fil
 …  and the checklist, ending in: bash scripts/check.sh passes locally
 ```
 
-**2 — the prompt the generator produced from it**, [`agent_prompts/task-19-2-in-code-truth.md`](../agent_prompts/task-19-2-in-code-truth.md). It carries the contract in verbatim, and `uv run python scripts/generate_prompts.py --check` fails the gate the moment the two disagree:
-
-```markdown
-# Agent Prompt — 19.2 The in-code truth sweep: docstrings match the bytes
-
-You are working on AiLibi. Before starting, read AGENTS.md, the architecture routing it names, and the task section in tasks/phase-19.md.
-```
+**2 — the prompt generated from it**, which copied the contract verbatim; the generated prompts were deleted on 2026-10-13, and [this one can still be read at its last commit](https://github.com/dkdan10/AiLibi/blob/4a7bd9c04e81df696098d6229737e86761d45e43/agent_prompts/task-19-2-in-code-truth.md).
 
 **3 — the pull request it produced**: [#328](https://github.com/dkdan10/AiLibi/pull/328), reviewed and merged; on `main` it is the squash commit whose subject ends `(#328)`.
 <!-- EXHIBIT-END -->

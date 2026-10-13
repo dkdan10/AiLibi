@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 import validate_task_docs
-from _task_parser import TASKS_DIR
 
 
 _CARD = """# Account for spent tokens
@@ -113,17 +112,31 @@ def test_done_card_declares_evidence_and_completed_checks(tmp_path: Path) -> Non
     )
 
 
-def test_missing_card_inventory_is_rejected(tmp_path: Path) -> None:
+@pytest.mark.parametrize("folder_exists", [False, True])
+def test_an_empty_card_set_raises(tmp_path: Path, folder_exists: bool) -> None:
+    # Planted: with no cards to read, the check must fail, not pass on nothing.
+    cards = tmp_path / "work"
+    if folder_exists:
+        cards.mkdir()
     errors: list[str] = []
-    assert validate_task_docs.validate_work_cards(tmp_path / "missing", errors) == 0
-    assert any("expected at least one work card" in error for error in errors)
+    with pytest.raises(FileNotFoundError, match="no work cards"):
+        validate_task_docs.validate_work_cards(cards, errors)
+    assert errors == []
 
 
-def test_main_validates_cards_alongside_historical_contracts(
+def test_main_summary_names_only_the_cards(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        validate_task_docs, "TASKS_DIR", _index_tree(tmp_path, "ready", "active")
+    )
+    assert validate_task_docs.main() == 0
+    assert capsys.readouterr().out == "Task docs validation passed: 2 work cards.\n"
+
+
+def test_main_rejects_a_planted_incomplete_card(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Keep the real historical contracts and prompt validation; redirect only
-    # the new card inventory to a planted incomplete card.
     cards = tmp_path / "work"
     cards.mkdir()
     (cards / "incomplete.md").write_text("# Missing contract\n")
@@ -259,5 +272,5 @@ def test_inventory_sentence_may_wrap_in_the_file(tmp_path: Path) -> None:
 
 def test_committed_task_index_matches_its_cards() -> None:
     errors: list[str] = []
-    validate_task_docs.validate_card_inventory(TASKS_DIR, errors)
+    validate_task_docs.validate_card_inventory(validate_task_docs.TASKS_DIR, errors)
     assert errors == []

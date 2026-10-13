@@ -108,8 +108,6 @@ scheduling concern: assign one writer per file at a time, with isolated
 worktrees where useful for independent investigation and review; each card's
 implementation stays on its own `work/<card-slug>` branch. Independent
 investigation, test design, and review can run alongside implementation.
-`scripts/compute_next_task.py` remains the
-historical phase scheduler; it does not dispatch these cards.
 
 A reviewer should attempt the adverse case and inspect relevant failure paths,
 not just repeat the implementer's summary. For gameplay experiments and release
@@ -149,11 +147,8 @@ comparison still needs it. Keep the recorded evidence and its provenance.
 
 ## Historical work and the pilot
 
-Phase contracts, their generated prompts, and past audits remain historical
-records. Existing phase validators and prompt synchronization checks continue
-to run; the card check adds validation for new work. Do not rewrite old plans
-to make them look like this workflow. An explicitly resumed phase task retains
-its original contract and exact file scope.
+Phase contracts and past audits remain historical records and are never
+rewritten; do not edit old plans to make them look like this workflow.
 
 The pilot has now run through the first parallel recording batch. Its recorded
 results justify keeping canonical cards and manual ownership; they do not

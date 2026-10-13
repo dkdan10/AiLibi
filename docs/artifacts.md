@@ -10,7 +10,7 @@ renders, harness outputs. It does not cover **source** (code, prompt templates,
 the tests themselves, hand-authored assets such as `frontend/src/assets/`),
 **configuration** (`pyproject.toml`, `frontend/package.json`, lockfiles,
 `tsconfig.json`, `.env.example`) or **prose** (`docs/`, `tasks/`,
-`agent_prompts/`, `audits/`, per-package `README.md`), none of which is produced
+`audits/`, per-package `README.md`), none of which is produced
 by running anything. The registry below is complete against that boundary — a
 family missing from it is a defect in this document, not an unclassified byte.
 
