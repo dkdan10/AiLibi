@@ -1,7 +1,7 @@
 # Reading guide — the outsider's five minutes
 
 Numbers, reproduction commands, findings, and starting points. Cited sources
-take precedence over summaries. See the [glossary](glossary.md) for terms and
+outrank summaries. See the [glossary](glossary.md) for terms and
 [history](history.md) for earlier phases.
 
 ---
@@ -10,11 +10,11 @@ take precedence over summaries. See the [glossary](glossary.md) for terms and
 
 The shown 9-player set was recorded 2026-10-09 under the adopted gameplay
 changes; the 4-player set and the ML training games were recorded 2026-09-22.
-Before is what each set's previously shown recording read.
+Before is each set's previously shown recording.
 
 | What | Figure | Before | Recorded on, and where it lives |
 |---|---|---|---|
-| Sample games that replay byte for byte | 100 of 100 (100%) | 100 of 100 (100%) | every commit — `bash scripts/verify_samples.sh` |
+| Sample games that replay byte for byte | 100 of 100 (100%) | 100 of 100 (100%) | `scripts/verify_samples.sh`; in CI, a [gate test](../tests/api/test_replay_loader.py) for the 9-player set |
 | Observation boundary checks | import rules and planted/recursive leak checks | import rules and planted/recursive leak checks | bounded mechanisms, described below |
 | Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394 of 397 (99%) | 407 of 410 (99%) | [process scorecard](process-scorecard.md); a floor: the ballot asks every eject to cite |
 | Crew eject ballots naming someone other than the voter's [top suspect](glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56 of 291 (19%) | 65 of 292 (22%) | [process scorecard](process-scorecard.md) |
@@ -43,9 +43,9 @@ registered none and read 43 of 85 = 0.5059 and 42 innocent ejections over its
 four recorded sets.
 
 **What the boundary checks cover.** The
-[import-linter contracts](../.importlinter), the planted-leak test in
-[tests/test_firewall.py](../tests/test_firewall.py), and the recursive packet
-sweep in [eval/leak_scan.py](../eval/leak_scan.py) test imports and entitled
+[import-linter contracts](../.importlinter), the
+[planted-leak test](../tests/test_firewall.py) and the recursive
+[packet sweep](../eval/leak_scan.py) test imports and entitled
 packets. They do not establish complete privacy: in the 2026-09-22 recordings,
 the opening prompts name each body by a label that reveals when it died; the
 shown 9-player set's report openings no longer carry it (0 of 115). The full
@@ -55,19 +55,19 @@ repair stays switched off. The
 ## 2. What to run, and what to watch
 
 Open the [recorded demo](https://dkdan10.github.io/AiLibi/) without installing.
-For local prerequisites and the offline verification path, follow the
+For prerequisites and the offline checks, follow the
 [README](../README.md#install-then-verify-offline).
 
 ```bash
 git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git && cd AiLibi
-bash scripts/setup_env.sh      # one-time: Python deps + npm ci in frontend/
+bash scripts/setup_env.sh      # one-time: Python deps + npm ci
 bash scripts/run_spectator.sh  # API + UI, opens http://localhost:5173
 ```
 
 The served default is the 9-player, 2-impostor set; the 4-player set is a
 fast fixture of short games. The games the guided tour can open are
-spoiler-free; the tour opens on a first meeting
-that ejects a player a reported vent sighting names.
+spoiler-free; the tour opens game 19 at its start, and Play stops at its
+first meeting, which ejects a player a reported vent sighting names.
 
 **Results** shows each set's figures, and source-bound cases from the
 first 9-player featured game. Start from the featured games: **9p2i seed 19**
@@ -134,7 +134,7 @@ not re-read it.
    beat the scripted comparator on wins and failed the selection gate.
 
 The commissioned audits are AI auditors, not third parties, and every gameplay
-and ML number here comes from one model on one prompt set at 50 games per set.
+and ML number here comes from one model and prompt set at 50 games per set.
 
 The ML program's method, results and measurement flaws are in
 [ml-program.md](ml-program.md).

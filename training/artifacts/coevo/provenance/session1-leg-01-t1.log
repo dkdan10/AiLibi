@@ -4,4 +4,4 @@
 [run-01-utility-champion] meeting_timeout_seconds=900.0 (override)
 [run-01-utility-champion] rank 1: run-01-utility-champion-alternating-freeze-champion-gen9-8ac3652a74f8 selection=62.6000 validity=True referee=False
 [run-01-utility-champion] rank 2: run-01-utility-champion-alternating-freeze-champion-gen3-6d327dcbde94 selection=41.2700 validity=True referee=False
-[run-01-utility-champion] LEG DONE ranking=/Users/danielkeinan/ailibi-campaign-1824/realpath/run-01-utility-champion/ranking.jsonl
+[run-01-utility-champion] LEG DONE ranking=~/ailibi-campaign-1824/realpath/run-01-utility-champion/ranking.jsonl

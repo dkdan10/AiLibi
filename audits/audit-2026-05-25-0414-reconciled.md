@@ -28,7 +28,7 @@ Total active findings: **0 Critical, 2 High, 0 Medium, 0 Low, 4 Concern.**
 
 ## 3. Commands Run and Evidence Sources
 
-All commands ran from `/Users/danielkeinan/projects/AiLibi`. Exit code zero unless noted; `git grep` exits `1` on empty match — that is the desired result for the must-be-empty guards.
+All commands ran from `~/projects/AiLibi`. Exit code zero unless noted; `git grep` exits `1` on empty match — that is the desired result for the must-be-empty guards.
 
 | Command | Result / evidence |
 |---|---|

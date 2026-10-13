@@ -335,14 +335,16 @@ describe("the Results tab's case links and prose", () => {
 
   it("says each recording was replayed and checked, naming the set through the set-name helper", () => {
     const text = textOf(renderToStaticMarkup(<PublicResultsView results={summary} />));
-    expect(text).toContain(`Results cover all 50 games with ${setOptionLabel("9p2i")};`);
+    expect(text).toContain(`Results cover all 50 games with ${setOptionLabel("9p2i")}.`);
     expect(text).toContain("Each recording was replayed and checked before counting.");
     expect(text).not.toContain("The engine reconstructed");
+    // The demo bundle serves every recorded game, so no smaller selection is announced.
+    expect(text).not.toContain("featured selection");
   });
 
   it("counts the games the set holds, whatever their number", () => {
     const text = textOf(renderToStaticMarkup(<PublicResultsView results={{ ...summary, games: 37 }} />));
-    expect(text).toContain(`Results cover all 37 games with ${setOptionLabel("9p2i")};`);
+    expect(text).toContain(`Results cover all 37 games with ${setOptionLabel("9p2i")}.`);
     expect(text).not.toContain("all 50 games");
   });
 });

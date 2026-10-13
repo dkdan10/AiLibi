@@ -125,3 +125,12 @@ merges last, so its stills and counts read the shown set as it is.
 What stays the owner's, unchanged by this document: the three viewer halves held since the baselines memo (the local
 dashboard's "gate" vocabulary and the "vote gate" badge; the belief panel's Error-layer words and the "correct /
 incorrect" ballot badge; how the local dashboard reads skips).
+
+## 4. Addendum, 2026-10-13: the README front door
+
+The owner asked for a README front door that leads with the game, the demo and who did what. The title line changed
+from "AiLibi — can agents reason from what they actually saw?" to "AiLibi — an Among Us-style game played by LLM
+agents, built by directing AI coding agents". The tagline, the byline, the missed-targets sentence and every checked
+fact stayed. `scripts/check_doc_facts.py` gained six README prose-figure checks and a wider as-of stamp pattern, each
+with a planted case, so the new prose figures are re-derived rather than transcribed; the wording pins in its tests
+follow the new text, and the historical front doors they rebuild start from `tests/scripts/_goldens/README-d1220ead.md`.

@@ -231,4 +231,4 @@ P10 [V] Crew idle at the hub for 8-30 ticks once tasks are done (s31 p-9 30 tick
 6. Ballot hygiene: strip husks from free_text before rendering to others; keep the LLM's stated target or show the redirect openly; ban stock rationale strings; fix persona to "impostors" when num_impostors > 1.
 7. Pacing: an impostor "pressure" rule when nothing has happened for N ticks (sabotage lights/reactor, or move toward the largest crew group), and an emergency-button prompt for crew who hold a vent sighting > 2 ticks.
 
-Files: dumps and scripts under /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/w4-9p2i-random-b/ (sNN.txt, sNN.verbose.txt, anNN.txt, repro_policy.py, analyze.py, s30_m1_prompts.txt).
+Files: dumps and scripts under /private/tmp/.../scratchpad/work/w4-9p2i-random-b/ (sNN.txt, sNN.verbose.txt, anNN.txt, repro_policy.py, analyze.py, s30_m1_prompts.txt).

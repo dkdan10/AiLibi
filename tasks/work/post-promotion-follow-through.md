@@ -32,7 +32,7 @@ that and changes no recorder code. Its merge republishes the public demo, so the
 Every `path:line` is at `59bbd1be` (labelled as such) and is re-anchored by its symbol at dispatch. Every count is
 count-only, measured at authoring at `59bbd1be` unless labelled otherwise, and re-measured at dispatch; the
 dispatch figure governs. The reviews' findings are listed outside the repository, at
-`/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad/followup-nonblocking-findings.md`;
+`/private/tmp/.../scratchpad/followup-nonblocking-findings.md`;
 each item below restates its evidence so the card stands without that file.
 
 **1. The before file is unregistered.** `eval/process_scorecard.py:1949` names `BEFORE_COLUMNS_PATH =

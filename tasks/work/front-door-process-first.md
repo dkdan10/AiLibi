@@ -50,7 +50,7 @@ printed.
 until then `check_doc_facts.py` keeps every checked README figure true) and 8.9 with its amendment of 2026-10-09
 (`tasks/decision-2026-09-24-stage-b-wave.md:1601-1622` at `335cbdc9`; the amendment keeps the comparison records and
 leaves both defaults as they were). The design is the baselines memo
-(`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/baselines-2026-10-03/baselines-memo.md`,
+(`~/.claude/projects/.../baselines-2026-10-03/baselines-memo.md`,
 advisory, outside the tree): Part 4 D8, whose recommendation (b) reads "the process rows first, leading with those
 that moved (Part 3.3 gives the order), then the citation row, then the pair under its existing 'not demonstrated'
 sentence, and the Phase-21 paragraph kept as history below; the public tab's heading changed in the same merge"; D7;

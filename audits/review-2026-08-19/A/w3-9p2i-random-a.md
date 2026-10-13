@@ -1,6 +1,6 @@
 # w3-9p2i-random-a — spectator review of replays/samples/9p2i seeds 10–15
 
-Method: `watch.py` (plain + `--verbose`) on all six seeds; `--memory` for crew+impostor in seeds 10, 11, 12, 13, 14, 15 (p-1/p-2/p-7 + p-3 in 10; p-6/p-9 + p-7 in 11; p-2/p-3/p-9 + p-7 in 12; p-2/p-5 + p-1 in 13; p-4/p-6 + p-1 in 14; p-1 in 15); raw JSONL for actions and full LLM prompts; two scratch scripts on the engine (`tasks_walk.py` re-walks the action stream and prints one player's task instances; `selfloc.py`/`stats.py` compare spoken observations to omniscient truth). Scratch dir: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/w3-9p2i-random-a/`.
+Method: `watch.py` (plain + `--verbose`) on all six seeds; `--memory` for crew+impostor in seeds 10, 11, 12, 13, 14, 15 (p-1/p-2/p-7 + p-3 in 10; p-6/p-9 + p-7 in 11; p-2/p-3/p-9 + p-7 in 12; p-2/p-5 + p-1 in 13; p-4/p-6 + p-1 in 14; p-1 in 15); raw JSONL for actions and full LLM prompts; two scratch scripts on the engine (`tasks_walk.py` re-walks the action stream and prints one player's task instances; `selfloc.py`/`stats.py` compare spoken observations to omniscient truth). Scratch dir: `/private/tmp/.../scratchpad/work/w3-9p2i-random-a/`.
 
 Convention used below: **memory/meeting "tick T" = watch.py log tick T-1** (the log prints post-resolution state; perception is stamped the next tick). E.g. seed 10 log `[t 3] p-2@ENGINEERING` ↔ p-2's memory `[tick 4] You saw p-3 task in ENGINEERING`. Every "wrong location" claim below was checked against both T and T-1.
 
@@ -133,4 +133,4 @@ Scoreboard: 18 meetings → 12 ejections (8 impostor, 4 crew) + 6 skips. **All 8
 7. **Meeting protocol/world**: clear all bodies and gather players in CAFETERIA at meeting end (or at least don't let a known-dead corpse open a fresh meeting); add a 2–3 tick post-meeting kill cooldown; forbid vent-enter on the meeting tick; give finished crew a follow/escort/patrol behaviour and enable sabotages + the emergency button so mid-game stretches have events.
 8. **Hygiene**: strip validator husks (`[invalid accusation target …]`, `[under-gate … redirected]`) from free_text; keep suspicion arithmetic out of rationales; pluralise the persona for 2-impostor games; fix `p-6 are your fellow saboteurs`.
 
-Report file: /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/reports/A/w3-9p2i-random-a.md
+Report file: /private/tmp/.../scratchpad/reports/A/w3-9p2i-random-a.md

@@ -205,7 +205,7 @@ orchestrator/replay.py, meetings/schemas.py.`,
     scope: `Compare every project documentation surface against reality. README.md (status table,
 load-bearing decisions, audit count, test count), AGENTS.md (conventions for dispatched agents),
 DESIGN.md (mostly covered by Class A; flag doc-only issues here), MEMORY.md contents at
-/Users/danielkeinan/.claude/projects/.../memory/, and any task contract addendums. Flag:
+~/.claude/projects/.../memory/, and any task contract addendums. Flag:
 stale numbers, broken file paths, removed code still referenced, conventions documented but
 not followed in recent tasks, missing documentation of decisions that affect future agents.
 

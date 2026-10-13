@@ -9,7 +9,7 @@ leg-log is the ordering evidence). meeting_timeout_seconds=900 (F7 kept).
 import os
 import sys
 
-_REPO = "/Users/danielkeinan/projects/AiLibi"
+_REPO = "~/projects/AiLibi"
 os.chdir(_REPO)
 sys.path.insert(0, _REPO)
 
@@ -21,7 +21,7 @@ from training.realpath import RealPathCandidate, RealPathRerankConfig, run_realp
 
 REPO = Path(_REPO)
 LEG = "leg-c2-t1"
-ROOT = Path("/Users/danielkeinan/ailibi-campaign-1825/realpath/run-c2-crew-general")
+ROOT = Path("~/ailibi-campaign-1825/realpath/run-c2-crew-general")
 SEEDS = (4000, 4001, 4002)
 TRANCHE = "4000-4002"
 OPPONENT = (

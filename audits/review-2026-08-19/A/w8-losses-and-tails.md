@@ -531,5 +531,5 @@ task that changed owner twice by death). Quiet 26/51.
    rewrite a ballot target silently (record and show "redirected"), fix the persona to the actual impostor count, and
    suppress "You heard a sabotage alarm" for the saboteur.
 
-Working files: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/w8-losses-and-tails/`
+Working files: `/private/tmp/.../scratchpad/work/w8-losses-and-tails/`
 (`s{12,21,8,39,36,42,7}.verbose.txt`, `stats.txt`, `stats.py`, `setwide.py`, `setwide2.py`, `imp_debug.py`, `cooldowns.py`, `s12_m1_prompts.txt`).

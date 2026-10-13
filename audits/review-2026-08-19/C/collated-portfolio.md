@@ -142,7 +142,7 @@ Ordered by how many audiences each blocks and how cheap the fix is.
   pause; optionally add an MP4/WebM (GitHub renders video; 640 px GIF is palette-crushed —
   P3, P4). Keep the meeting PNG as the hero still — every persona called it the money shot.
   Fix the two bundle warts before hosting: the Tournament tab dumping raw http.server 404 HTML
-  in-app, and the generated bundle README baking `/Users/danielkeinan/…` (P3, X1).
+  in-app, and the generated bundle README baking `~/…` (P3, X1).
 
 ### A4. Fill the GitHub About panel; add a CI badge, a license line, a byline — P3 M, P4 M, X1 M, X2 M
 

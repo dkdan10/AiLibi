@@ -490,5 +490,5 @@ never replace the structure.
 
 ## 4. Scripts
 
-`/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/ideas-game-designer/pacing.py`
+`/private/tmp/.../scratchpad/work/ideas-game-designer/pacing.py`
 — dead-air runs, idle-with-tasks-done, zero-flag meetings, solo-kill rate, over all 300 committed games.

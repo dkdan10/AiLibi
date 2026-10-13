@@ -611,7 +611,7 @@ unreasonably expensive.
 ## Appendix — scratch artifacts
 
 All under
-`/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/training-ml/`:
+`/private/tmp/.../scratchpad/work/training-ml/`:
 
 - `density.py` — docstring/comment density measurement (F12)
 - `dup.py`, `diffbody.py` — AST-normalised cross-firewall duplication measurement (F5)

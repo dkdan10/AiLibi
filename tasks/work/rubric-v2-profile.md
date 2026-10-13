@@ -37,7 +37,7 @@ and re-measured at dispatch through the production path; the dispatch figure gov
 text or seed-band prefix was printed.
 
 **The ruling and its design.** The memo is
-`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/rubric-design-2026-10-06/rubric-design-memo.md`;
+`~/.claude/projects/.../rubric-design-2026-10-06/rubric-design-memo.md`;
 Part 2 is this contract's design (principles P1-P7, tripwires 2.2, shelves and facets 2.3, the two rules 2.4, record
 impact 2.9, publication 2.10). The ruling takes its Part 4: the profile (item 1), the decisive quantifier (item 2), the
 wrong-on-what-it-held shelf shipped locally beside its twin (item 3), leaking shelves behind the reveal (item 4) and the

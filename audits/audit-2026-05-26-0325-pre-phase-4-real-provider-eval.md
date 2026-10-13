@@ -253,7 +253,7 @@ rubric. Phase 3 merges criteria are met; Phase 4 may begin.
 
 **Required closing fields:**
 
-- **Report path:** `/Users/danielkeinan/projects/AiLibi/audits/audit-2026-05-26-0325-pre-phase-4-real-provider-eval.md`
+- **Report path:** `~/projects/AiLibi/audits/audit-2026-05-26-0325-pre-phase-4-real-provider-eval.md`
 - **Verdict:** Phase 3 complete — Phase 4 may begin.
 - **Per-game mean cost:** $0.017719
 - **Decisive split:** CREWMATES=62.00% / IMPOSTORS=38.00%

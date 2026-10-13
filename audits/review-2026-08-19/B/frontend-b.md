@@ -1,6 +1,6 @@
 # Code review — frontend-b (stores, api client, types, shell, tests, config, build, demo bundle)
 
-Reviewer label: frontend-b. Read-only. Repo: /Users/danielkeinan/projects/AiLibi @ main (b809b19c). Node v26.0.0 locally (CI pins Node 22), npm 12.0.1.
+Reviewer label: frontend-b. Read-only. Repo: ~/projects/AiLibi @ main (b809b19c). Node v26.0.0 locally (CI pins Node 22), npm 12.0.1.
 Machine load during timings: `uptime` load averages 4.4–8.5 on a 10-core box shared with other reviewers — timings are indicative only.
 
 ## 1. Executive read (10 lines)

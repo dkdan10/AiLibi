@@ -42,7 +42,7 @@ Grounding: watched `samples/9p2i` seeds 2 & 17 (ticks + all meetings + p-9's ren
 
 Repo note: `git status` shows one untracked `.coverage` file (mtime 03:09 today, likely a pytest-cov side effect of `uv run` in this or a sibling Track-A session). I did not delete it, per the read-only rule — flagging so you can remove it.
 
-`/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/reports/A/ideas-game-designer.md`
+`/private/tmp/.../scratchpad/reports/A/ideas-game-designer.md`
 
 ---
 
@@ -84,7 +84,7 @@ Wave order [JUDGMENT]: R15 → substrate wave (R1+R7+R8+R4+R5, no balance levers
 
 Note: a `.coverage` file appeared untracked in the repo root as a side effect of `uv run python`; I left it in place rather than deleting anything.
 
-Report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/reports/A/ideas-multi-agent-researcher.md`
+Report: `/private/tmp/.../scratchpad/reports/A/ideas-multi-agent-researcher.md`
 
 ---
 
@@ -117,4 +117,4 @@ Grounded in spectator walks of 9p2i seeds 2 & 17 and 4p1i seed 29, plus 7 measur
 
 Note: repo untouched except an untracked `.coverage` file emitted by `uv run` (I did not create or delete any repo file).
 
-/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/reports/A/ideas-among-us-veteran.md
+/private/tmp/.../scratchpad/reports/A/ideas-among-us-veteran.md

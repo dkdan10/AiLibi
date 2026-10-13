@@ -58,8 +58,8 @@ MAX_PUBLIC_RESULTS_BYTES = 50 * 1024
 def _curated_cases() -> tuple[PublicCaseView, ...]:
     """Editorial examples; source identity and semantic checks qualify publication.
 
-    Both sit on the featured strip's 9-player head, so the demo bundle, which
-    bakes only featured games, carries them.
+    Both sit on the featured strip's 9-player head. The demo bundle bakes every
+    committed game, so it carries them.
     """
     return (
         PublicCaseView(

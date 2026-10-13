@@ -13,33 +13,33 @@
 > for them.
 
 Every committed ranking row (`ranking-*.jsonl`) and instrument sweep (`sweep-*.json`)
-carries a `replay_set_dir` / `sample_dir` field **exactly as the recording process wrote
-it** — an operator-machine absolute path under
-`/Users/danielkeinan/ailibi-campaign-1824/`. Those fields are
-verbatim library output and are deliberately NOT rewritten: they are the as-recorded
-provenance of the run, and editing them would make the committed extract disagree with
-the process that produced it.
+carries a `replay_set_dir` / `sample_dir` field as the recording process wrote it, an
+operator-machine path under the campaign root `~/ailibi-campaign-1824/`. The in-tree rows
+spell the operator's home directory `~` since the 2026-10-13 personal-data scrub, which
+changed nothing else in them; the bytes on the pinned evidence commit still carry the
+absolute home path. The fields are otherwise verbatim library output, never rewritten to
+look repository-relative.
 
 The recordings themselves are PRESERVED, at paths that mirror the operator tree 1:1 —
 in-tree until Task 19.22, on the pinned evidence commit since (see the note above).
 To follow any `replay_set_dir` field from a fresh checkout, apply this prefix map.
-The recorded fields carry the operator's ABSOLUTE home path — literally
-`/Users/danielkeinan/ailibi-campaign-1824/...` — so match on that prefix, not on a
-tilde form:
+The in-tree fields carry `~/ailibi-campaign-1824/...`; the restored evidence bytes carry
+the operator's absolute home directory in place of `~`. Match either spelling of that
+prefix:
 
-| as-recorded absolute prefix | repository-relative prefix |
+| as-recorded prefix | repository-relative prefix |
 |---|---|
-| `/Users/danielkeinan/ailibi-campaign-1824/realpath/<run>/` | `training/artifacts/coevo/realpath/<run>/` |
-| `/Users/danielkeinan/ailibi-campaign-1824/realpath-backfill/<run>/` | `training/artifacts/coevo/realpath-backfill/<run>/` |
-| `/Users/danielkeinan/ailibi-campaign-1824/realpath-runnerups/<run>/` | `training/artifacts/coevo/realpath-runnerups/<run>/` |
-| `/Users/danielkeinan/ailibi-campaign-1824/realpath-runnerups-gen3/<run>/` | `training/artifacts/coevo/realpath-runnerups-gen3/<run>/` |
-| `/Users/danielkeinan/ailibi-campaign-1824/realpath-ablation/<name>/` | `training/artifacts/coevo/realpath-ablation/<name>/` |
-| `/Users/danielkeinan/ailibi-campaign-1824/realpath-comparator/` | `training/artifacts/coevo/realpath-comparator/` |
+| `~/ailibi-campaign-1824/realpath/<run>/` | `training/artifacts/coevo/realpath/<run>/` |
+| `~/ailibi-campaign-1824/realpath-backfill/<run>/` | `training/artifacts/coevo/realpath-backfill/<run>/` |
+| `~/ailibi-campaign-1824/realpath-runnerups/<run>/` | `training/artifacts/coevo/realpath-runnerups/<run>/` |
+| `~/ailibi-campaign-1824/realpath-runnerups-gen3/<run>/` | `training/artifacts/coevo/realpath-runnerups-gen3/<run>/` |
+| `~/ailibi-campaign-1824/realpath-ablation/<name>/` | `training/artifacts/coevo/realpath-ablation/<name>/` |
+| `~/ailibi-campaign-1824/realpath-comparator/` | `training/artifacts/coevo/realpath-comparator/` |
 
 A one-line translation, if you are scripting it:
 
 ```bash
-sed 's#/Users/danielkeinan/ailibi-campaign-1824/#training/artifacts/coevo/#'
+sed -E 's#(/Users/[^/]+|~)/ailibi-campaign-1824/#training/artifacts/coevo/#'
 ```
 
 Everything below those prefixes (`recordings-<tranche>/<NNN>-<label>/replay-seed-<seed>.jsonl`)
@@ -67,13 +67,13 @@ state-hash fence refuses at tick 0.
 Audit sidecars (`*.audit.jsonl`) are excluded from the committed tree: no instrument or
 gate reads them, and they are ~10× the size of the replays they accompany.
 
-## The 18.25 crew campaign (operator root `/Users/danielkeinan/ailibi-campaign-1825/`)
+## The 18.25 crew campaign (operator root `~/ailibi-campaign-1825/`)
 
-| as-recorded absolute prefix | repository-relative prefix |
+| as-recorded prefix | repository-relative prefix |
 |---|---|
-| `/Users/danielkeinan/ailibi-campaign-1825/realpath/<run>/` | `training/artifacts/coevo/realpath-crew/<run>/` |
+| `~/ailibi-campaign-1825/realpath/<run>/` | `training/artifacts/coevo/realpath-crew/<run>/` |
 
-The fake-path work directories under `/Users/danielkeinan/ailibi-campaign-1825/<run>/work/`
+The fake-path work directories under `~/ailibi-campaign-1825/<run>/work/`
 (named in the session logs and harnesses) were CONSOLIDATED, not mirrored 1:1 — the
 per-artifact map:
 
@@ -91,4 +91,4 @@ paths applies to RANKING rows and the 18.24 sweeps. The four 18.25 crew sweeps
 their committed locations after the CF4 relocation (disclosed in report-crew-campaign.md
 §5 + PR #316 review round 2/3), so their `sample_dir`/`replay_set_dir` fields are
 repository-relative and need no prefix map. The 18.25 ranking rows keep as-recorded
-operator-absolute paths covered by the `ailibi-campaign-1825` map above.
+operator paths, home directory spelled `~`, covered by the `ailibi-campaign-1825` map above.

@@ -664,8 +664,9 @@ export const SPECTATOR_COPY = Object.freeze({
   picker: Object.freeze({
     // Game order is seed order: a game is named by its seed.
     highlightsIntro: "Games grouped by the moments they hold, each list in game order.",
-    // True in both the live build and the static demo bundle, which serves a
-    // SUBSET of the recorded set, so it claims no completeness.
+    // True in both the live build and the static demo bundle, which serve the
+    // same recorded games. It claims no completeness: the live list skips a
+    // recording that fails its checks.
     replaysIntro: "Recorded games for this set. Open one to watch it.",
     featuredHeading: "Featured",
     revealOutcomes: "Reveal outcomes",
@@ -777,7 +778,7 @@ export const SPECTATOR_COPY = Object.freeze({
   /** The public results page: its ejection tile and its recorded-behavior groups. */
   publicResults: Object.freeze({
     intro:
-      "These are recorded games, not live AI responses. Results cover all {games} games with {set}; the replay browser may offer a smaller featured selection. Each recording was replayed and checked before counting.",
+      "These are recorded games, not live AI responses. Results cover all {games} games with {set}. Each recording was replayed and checked before counting.",
     // The curated cases: two, both on the 9-player set, so the other set's
     // empty state points there (`tests/api/test_public_results.py` holds the
     // count word to the published cases).

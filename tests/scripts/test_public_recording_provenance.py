@@ -6,6 +6,8 @@ import hashlib
 import json
 import re
 import shutil
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +16,14 @@ import pytest
 import build_demo_bundle as bdb
 import publish_game_profile
 from api.replay_loader import ReplayLoader
-from api.schemas import AccusationClaimView, GameProfileView, ReplayView
+from api.schemas import (
+    AccusationClaimView,
+    AgentMemoryView,
+    GameProfileView,
+    ReplayView,
+    SawPlayerView,
+    TurnView,
+)
 from orchestrator.recording_fingerprint import recording_fingerprint
 
 
@@ -688,6 +697,255 @@ def test_the_59bbd1be_caption_names_no_scene(hero_replay: ReplayView) -> None:
     assert _caption_scene_problems(_CAPTION_AT_59BBD1BE, hero_replay, 9) == [
         "the caption names no scene"
     ]
+
+
+#: The plain line under the caption: whom the fog subject accuses, that the
+#: accusation rests on a sighting, and the accused player's role.
+_HERO_GLOSS = re.compile(
+    r"\A(?P<accuser>p-\d+) accuses (?P<accused>p-\d+) on something it really "
+    r"saw, yet (?P=accused) is (?P<kind>an? (?P<role>crewmate|impostor))\.\Z"
+)
+
+#: One player's memory at one meeting boundary, by meeting id and player id.
+_MemoryOf = Callable[[str, str], AgentMemoryView]
+
+
+def _readme_gloss(readme: str) -> str:
+    """The first non-blank line under the hero caption."""
+
+    lines = readme.splitlines()
+    caption = _readme_caption(readme)
+    following = [line for line in lines[lines.index(caption) + 1 :] if line.strip()]
+    assert following, "no line under the hero caption"
+    return following[0]
+
+
+def _gloss_problems(
+    gloss: str, replay: ReplayView, memory_of: _MemoryOf, picture_tick: int
+) -> list[str]:
+    """Why the gloss under the caption is not what the served replay records.
+
+    The accused player's role, from the replay's roster; the accuser's
+    accusation of that player at the first meeting after the pictured tick; and
+    a sighting of the accused, spoken in the accusing turn, that the accuser's
+    own memory holds at that meeting, which is what "something it really saw"
+    claims.
+    """
+
+    stated = _HERO_GLOSS.match(gloss)
+    if stated is None:
+        return ["the gloss names no accusation"]
+    accuser, accused = stated["accuser"], stated["accused"]
+    problems = []
+    role = {player.agent_id: player.role for player in replay.players}.get(accused)
+    if role != stated["role"].upper():
+        problems.append(f"says {accused} is {stated['kind']}, the replay has {role}")
+    following = [meeting for meeting in replay.meetings if meeting.tick > picture_tick]
+    if not following:
+        return [*problems, f"the replay has no meeting after tick {picture_tick}"]
+    meeting = min(following, key=lambda meeting: meeting.tick)
+    turns = [turn for turn in meeting.turns if turn.speaker == accuser]
+    against = [
+        claim.against
+        for turn in turns
+        for claim in turn.claims
+        if isinstance(claim, AccusationClaimView)
+    ]
+    if accused not in against:
+        return [
+            *problems,
+            f"says {accuser} accuses {accused} at the tick-{meeting.tick} meeting, "
+            f"the replay has {against}",
+        ]
+    spoken = {
+        (observation.tick, observation.room)
+        for turn in turns
+        if any(
+            isinstance(claim, AccusationClaimView) and claim.against == accused
+            for claim in turn.claims
+        )
+        for observation in turn.observations
+        if isinstance(observation, SawPlayerView) and observation.subject == accused
+    }
+    held = {
+        (observation.tick, observation.room)
+        for observation in memory_of(meeting.meeting_id, accuser).observations
+        if isinstance(observation, SawPlayerView) and observation.subject == accused
+    }
+    if not spoken:
+        problems.append(
+            f"says {accuser} accuses {accused} on a sighting, the accusing turn "
+            f"cites none of {accused}"
+        )
+    elif not spoken & held:
+        problems.append(
+            f"says {accuser} really saw {accused}, its memory at the tick-"
+            f"{meeting.tick} meeting holds none of {sorted(spoken)}"
+        )
+    return problems
+
+
+@pytest.fixture(scope="module")
+def hero_memory_of() -> _MemoryOf:
+    root = Path(__file__).resolve().parents[2]
+    loader = ReplayLoader(root / "replays/samples/9p2i")
+    return partial(loader.get_meeting_memory, _HERO_GAME)
+
+
+def _with_meeting_turns(
+    replay: ReplayView, meeting_tick: int, edit: Callable[[TurnView], TurnView]
+) -> ReplayView:
+    """The replay with every turn of the meeting at ``meeting_tick`` edited."""
+
+    meetings = tuple(
+        meeting.model_copy(
+            update={"turns": tuple(edit(turn) for turn in meeting.turns)}
+        )
+        if meeting.tick == meeting_tick
+        else meeting
+        for meeting in replay.meetings
+    )
+    return replay.model_copy(update={"meetings": meetings})
+
+
+def test_the_gloss_under_the_caption_is_the_recorded_accusation(
+    hero_replay: ReplayView, hero_memory_of: _MemoryOf
+) -> None:
+    # The line under the caption says p-5 accuses p-4 on something p-5 really
+    # saw, and that p-4 is a crewmate. Held to the served bytes: p-4's role in
+    # the roster, p-5's accusation of p-4 at the meeting that follows the
+    # pictured tick (tick 12), and a sighting of p-4 in that accusing turn which
+    # p-5's own memory holds at that meeting.
+    root = Path(__file__).resolve().parents[2]
+    readme = (root / "README.md").read_text()
+    gloss = _readme_gloss(readme)
+    tick = _picture_tick((root / _MEDIA_SPEC).read_text())
+    assert gloss == "p-5 accuses p-4 on something it really saw, yet p-4 is a crewmate."
+    assert _gloss_problems(gloss, hero_replay, hero_memory_of, tick) == []
+    meeting = min(
+        (meeting for meeting in hero_replay.meetings if meeting.tick > tick),
+        key=lambda meeting: meeting.tick,
+    )
+    assert meeting.tick == 12
+
+    # Planted: p-4 an impostor in the roster, under the same gloss.
+    impostor = hero_replay.model_copy(
+        update={
+            "players": tuple(
+                player.model_copy(update={"role": "IMPOSTOR"})
+                if player.agent_id == "p-4"
+                else player
+                for player in hero_replay.players
+            )
+        }
+    )
+    assert _gloss_problems(gloss, impostor, hero_memory_of, tick) == [
+        "says p-4 is a crewmate, the replay has IMPOSTOR"
+    ]
+
+    # Planted: p-5's accusation turned on p-3.
+    retargeted = _with_meeting_turns(
+        hero_replay,
+        12,
+        lambda turn: turn.model_copy(
+            update={
+                "claims": tuple(
+                    claim.model_copy(update={"against": "p-3"})
+                    if isinstance(claim, AccusationClaimView) and turn.speaker == "p-5"
+                    else claim
+                    for claim in turn.claims
+                )
+            }
+        ),
+    )
+    assert _gloss_problems(gloss, retargeted, hero_memory_of, tick) == [
+        "says p-5 accuses p-4 at the tick-12 meeting, the replay has ['p-3']"
+    ]
+
+    # Planted: the accusing turn without its sighting of p-4.
+    unsighted = _with_meeting_turns(
+        hero_replay,
+        12,
+        lambda turn: turn.model_copy(
+            update={
+                "observations": tuple(
+                    observation
+                    for observation in turn.observations
+                    if not isinstance(observation, SawPlayerView)
+                )
+            }
+        ),
+    )
+    assert _gloss_problems(gloss, unsighted, hero_memory_of, tick) == [
+        "says p-5 accuses p-4 on a sighting, the accusing turn cites none of p-4"
+    ]
+
+    # Planted: p-5's memory without its sightings of p-4, so what the turn
+    # cites is not something p-5 saw.
+    def forgetful(meeting_id: str, agent_id: str) -> AgentMemoryView:
+        memory = hero_memory_of(meeting_id, agent_id)
+        return memory.model_copy(
+            update={
+                "observations": tuple(
+                    observation
+                    for observation in memory.observations
+                    if not (
+                        isinstance(observation, SawPlayerView)
+                        and observation.subject == "p-4"
+                    )
+                )
+            }
+        )
+
+    assert _gloss_problems(gloss, hero_replay, forgetful, tick) == [
+        "says p-5 really saw p-4, its memory at the tick-12 meeting holds none "
+        "of [(11, 'LABS')]"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "problems"),
+    [
+        pytest.param(
+            "yet p-4 is a crewmate",
+            "yet p-4 is an impostor",
+            ["says p-4 is an impostor, the replay has CREWMATE"],
+            id="another-role",
+        ),
+        pytest.param(
+            "p-5 accuses p-4 on something it really saw, yet p-4",
+            "p-5 accuses p-3 on something it really saw, yet p-3",
+            ["says p-5 accuses p-3 at the tick-12 meeting, the replay has ['p-4']"],
+            id="another-accused",
+        ),
+        pytest.param(
+            "p-5 accuses",
+            "p-6 accuses",
+            ["says p-6 accuses p-4 at the tick-12 meeting, the replay has ['p-1']"],
+            id="another-accuser",
+        ),
+        pytest.param(
+            "yet p-4 is a crewmate",
+            "yet p-3 is a crewmate",
+            ["the gloss names no accusation"],
+            id="another-subject",
+        ),
+    ],
+)
+def test_a_gloss_naming_another_accusation_fails_by_name(
+    hero_replay: ReplayView,
+    hero_memory_of: _MemoryOf,
+    old: str,
+    new: str,
+    problems: list[str],
+) -> None:
+    # Each planted gloss is the README's own with one word changed.
+    root = Path(__file__).resolve().parents[2]
+    gloss = _readme_gloss((root / "README.md").read_text())
+    assert gloss.count(old) == 1, old
+    tick = _picture_tick((root / _MEDIA_SPEC).read_text())
+    planted = gloss.replace(old, new)
+    assert _gloss_problems(planted, hero_replay, hero_memory_of, tick) == problems
 
 
 _MEDIA_SPEC = "frontend/e2e/media.spec.ts"

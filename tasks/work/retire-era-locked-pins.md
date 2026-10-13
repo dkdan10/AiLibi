@@ -41,7 +41,7 @@ correctness reported, never a gate); `docs/game-shape.md`; AGENTS.md craft rules
 `docs/architecture.md`; `docs/artifacts.md`; the decision memo `tasks/decision-2026-09-24-stage-b-wave.md` sections
 8.5, 8.7, 8.8 and 8.9 (`:1601-1622` at `335cbdc9`, its amendment of 2026-10-09 at `:1612-1622`), and section 1's
 proposal at `:246-248`, which the amendment declines; the baselines memo
-(`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/baselines-2026-10-03/baselines-memo.md`,
+(`~/.claude/projects/.../baselines-2026-10-03/baselines-memo.md`,
 an advisory memo outside the tree): Part 2 rows G21, G24, G26, G27, G29, G52, G58, S17, L6, L9, V7, W45 and T3-T6,
 Part 3.1's RETIRE, DEMOTE and REBASE rows for them, and Part 4 D14 with D14-T1 to T3. Templates:
 `tasks/work/promote-round-2.md` (Evidence item 10, the re-pin sweep) and `tasks/work/post-promotion-follow-through.md`

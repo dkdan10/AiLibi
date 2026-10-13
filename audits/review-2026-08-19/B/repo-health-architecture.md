@@ -1,7 +1,7 @@
 # AiLibi — repo-level architecture & health review
 
 Track: **repo-health-architecture** (code-up, read-only)
-Repo: `/Users/danielkeinan/projects/AiLibi` @ `main` `b809b19c`
+Repo: `~/projects/AiLibi` @ `main` `b809b19c`
 Date: 2026-08-19. Machine load during measurements: `load average 4.5–8.9` (other reviewers concurrent; all timings noted with load).
 All commands run as `uv run …`. Nothing in the repo was edited. One environment mutation (`uv run --no-dev --exact`, to verify a pyproject claim) was reverted with `uv sync`.
 

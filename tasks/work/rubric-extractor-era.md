@@ -14,7 +14,7 @@ record of what was proposed; the Results say what closed and what stays.
 
 On 2026-10-06 the owner ruled on the shown set's rubric, verbatim: "Profile as recommended, decisive, and ship the
 shelf". Rubric version 2 is the role-blind game-shape profile of the design memo
-(`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/rubric-design-2026-10-06/rubric-design-memo.md`,
+(`~/.claude/projects/.../rubric-design-2026-10-06/rubric-design-memo.md`,
 Part 2), published by `rubric-v2-profile` from the census carrier. Version 1 (R1-R7, the weighted geomean, the
 scalar railroad floor and `experiments/lab/rubric_score.py --set-dir`) is retired for the `stage-b-r2` era and kept
 as baseline-9 lab history. This card used to widen the extractor so that version 1 could be served for the era. That
@@ -180,7 +180,7 @@ recording (Acceptance, the first item and the arm item).
 (`scripts/validate_task_docs.py:45`, `_CARD_STATUSES`). Until 2026-10-09 this card was `ready`, meaning the contract
 was complete, not that dispatch was authorized: it was to dispatch only on the owner's word under D14 (Part 4, D14,
 the G27 item, of the baselines memo,
-`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/baselines-2026-10-03/baselines-memo.md`),
+`~/.claude/projects/.../baselines-2026-10-03/baselines-memo.md`),
 and otherwise to close as superseded with one history line, D14's G27 card deleting `_cross_era_trajectory` itself.
 The word was "retire the memo's D14 list" (decision memo 8.9), so it closed that way on 2026-10-09: `done`, with a
 title and Results that say it closed unexecuted, the form the house used for `held-out-prefix-freeze-6` (`034cad1d`).

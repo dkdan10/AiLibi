@@ -32,7 +32,7 @@ experiment field, no lever and no prompt byte; the record impact is nothing.
 ## Evidence
 
 **Sources.** The decision memo and the investigation memos are under
-`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/stage-b-2026-09-24/`:
+`~/.claude/projects/.../stage-b-2026-09-24/`:
 `decision-memo.md` sections 0.1, 2.6 ("A3"), 3.1 row 1, 3.2 and 3.4 brief 1; `census_and_record.md`
 section 6 (this card's investigation). The stale-text list is Part 2, Q7, "Real gaps" items 4 and 6
 of `../analysis-2026-09-24/analysis-memo.md` in that same parent directory, detailed in

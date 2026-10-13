@@ -268,7 +268,7 @@ NOT A RE-REPORT: `grep -rn 'IMPOSTOR_PARITY|win check|victory check'` over audit
 ```
 eval/leak_scan.py:710-715 builds the allowance from the events themselves: `witness_allowance = {event.actor for event in events if isinstance(event, (KilledEvent, VentEnteredEvent, VentExitedEvent)) and agent in event.witnesses} - {agent}`; :718 then asserts `seen_players == entitled_players | witness_allowance`, and the room half (:749-759) uses `_witnessed_action_rooms` (eval/leak_scan.py:111-144), which reads the same tuples. Nothing re-derives WHO could have witnessed. The producing rule is engine/rules.py:29-44 `_witnesses_in_room` (co-located + alive + not in_vent), called at :102-107 (kill) and :146-156 (vent).
 
-PROBE A (room clause dropped). Script /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/8c686913-6a30-43ad-8ed2-a35d8125a233/scratchpad/wave0/B/witness_probe.py; `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../witness_probe.py`:
+PROBE A (room clause dropped). Script /private/tmp/.../scratchpad/wave0/B/witness_probe.py; `PYTHONPATH=~/projects/AiLibi uv run python .../witness_probe.py`:
 ```
 --- BASELINE ---
 kill/vent sightings: none
@@ -349,7 +349,7 @@ NOT A RE-REPORT: audits/review-2026-08-19/B/observation-firewall.md §2 F1's mut
 ```
 Call sites: `grep -n "_assert_owned_tasks_match_engine_truth" eval/leak_test.py` -> `41: _assert_owned_tasks_match_engine_truth,` and `157: _assert_owned_tasks_match_engine_truth(` (inside `_run_scripted_game`, eval/leak_test.py:119-170, which walks only `_SCRIPTED_GAMES` at :86-90). `assert_packet_is_leak_clean` (eval/leak_scan.py:958-1030) runs `_assert_owned_task_discipline(packet)` (:1012, shape/sort/no-':'/pending-in-owned only) and `assert_visible_entities_match_engine_truth` (:1013, players+bodies only) — the engine-truth task check at :503 is never invoked. `scan_factory_packets` (:1040) -> `assert_no_factory_packet_leaks` (:1033) -> the same function is what training/bakeoff/harness.py:1833 and training/crew/scorer.py:1748 call.
 
-MUTATION PROBE. Script .../wave0/B/owned_task_probe.py widens `ObservationService._owned_task_ids_for_agent` to `own set | every player's unfinished map ids` (keeping pending a member so the shape invariant still holds). `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../owned_task_probe.py`:
+MUTATION PROBE. Script .../wave0/B/owned_task_probe.py widens `ObservationService._owned_task_ids_for_agent` to `own set | every player's unfinished map ids` (keeping pending a member so the shape invariant still holds). `PYTHONPATH=~/projects/AiLibi uv run python .../owned_task_probe.py`:
 ```
 --- BASELINE ---
 assert_packet_is_leak_clean (champion-gate path) failures: 0 NONE
@@ -635,7 +635,7 @@ NOT A RE-REPORT: no listed known-open id covers testimony-as-content coverage.
 ```
 CODE. agents/memory/store.py:2036-2038 — `for event in episodic.recent(since_tick=0):` / `if event.type != EVENT_SAW_PLAYER_MOVE:` / `continue` (ordinary `saw_player` rows never reach `working.record_sighting`). agents/memory/store.py:2126 — `last_seen_suffix = _format_last_seen_suffix(working.last_seen(player_id))`; store.py:2198-2201 renders `f"last seen in {last_seen.room} at tick {last_seen.tick}"`. agents/memory/working.py:11-20 confirms the single writer: "``record_sighting`` is called by ``agents/memory/store.py`` (``_record_movement_sightings``, at render time) for every witnessed room->room transition". `grep -rn "record_sighting" --include="*.py" . | grep -v tests` returns only that call site.
 
-REPRO (scratchpad/wave0/B/repro_lastseen.py; `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../repro_lastseen.py`) — one witnessed move at tick 2 into ADMIN, then ordinary sightings in LABS at ticks 3-5:
+REPRO (scratchpad/wave0/B/repro_lastseen.py; `PYTHONPATH=~/projects/AiLibi uv run python .../repro_lastseen.py`) — one witnessed move at tick 2 into ADMIN, then ordinary sightings in LABS at ticks 3-5:
 ```
 ## Recent observations (most salient first):
 - [obs p-1:2:1] [tick 2] You saw p-3 move from CAFETERIA to ADMIN.
@@ -1979,7 +1979,7 @@ CODE. agents/memory/store.py:950-953 —
 ```
 and store.py:971-984 then takes `ordered[-1]` as the current sighting and the most-recent DIFFERENT-room entry as `prior`, which the suffix renders at store.py:1011-1014.
 
-REPRO (scratchpad/wave0/B/repro_breadcrumb.py; `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../repro_breadcrumb.py`):
+REPRO (scratchpad/wave0/B/repro_breadcrumb.py; `PYTHONPATH=~/projects/AiLibi uv run python .../repro_breadcrumb.py`):
 ```
 - [obs p-1:2:1] [tick 2] You witnessed p-3 vent in LABS.
 - [obs p-1:3:1] [tick 3] You saw p-3 in MEDBAY (moved from LABS, last seen there at tick 1).
@@ -2016,7 +2016,7 @@ CODE re-read at HEAD: agents/memory/store.py:948-953 skips `action_str in ('vent
 ```
 CODE. agents/memory/store.py:1343-1353 applies `_sighting_is_suppressed` when BUILDING `seen_in_own_room`; store.py:1368-1394 then emits `entered` on `now_seen - prev_seen` and `left` on `prev_seen - now_seen`. The suppression predicate (store.py:1076-1081 with store.py:1039-1042) fires exactly on the tick window `0 <= body_tick - tick <= BODY_PROXIMITY_WINDOW_TICKS` (=3, agents/memory/beliefs.py:100), so a teammate standing still across that window disappears at its first tick and reappears after its last.
 
-REPRO (scratchpad/wave0/B/repro_transitions.py; `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../repro_transitions.py`). Impostor p-1 and teammate p-2 both stand in ROOM_A for ticks 0-6; p-1 sees a body there at tick 4:
+REPRO (scratchpad/wave0/B/repro_transitions.py; `PYTHONPATH=~/projects/AiLibi uv run python .../repro_transitions.py`). Impostor p-1 and teammate p-2 both stand in ROOM_A for ticks 0-6; p-1 sees a body there at tick 4:
 ```
 ## Recent observations (most salient first):
 - [obs p-1:4:2] [tick 4] You discovered p-3's body in ROOM_A.
@@ -2141,7 +2141,7 @@ CODE. agents/perception.py:313-317 —
 ```
 agents/memory/beliefs.py:1162-1178 then pins only players in that map, and skips any body already in `previous_visible_bodies` (perception.py:273-286), so the next tick — when the standing subject IS in the prior window — the body is no longer fresh and the rule never fires.
 
-REPRO (scratchpad/wave0/B/repro_rule1.py; `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../repro_rule1.py`), driving the real `ingest_packet`:
+REPRO (scratchpad/wave0/B/repro_rule1.py; `PYTHONPATH=~/projects/AiLibi uv run python .../repro_rule1.py`), driving the real `ingest_packet`:
 ```
 standing-over-the-body p-2 suspicion: 0.5 SuspicionProvenance(... body_proximity=0.0 ...)
 prior-tick co-presence p-2 suspicion: 0.7 SuspicionProvenance(... body_proximity=0.19999999999999996 ...)
@@ -2993,7 +2993,7 @@ NOT COVERED (time/scope): the render side of the flag surface (meetings/render_c
 ===== COVERAGE NOTES FROM finder-memory-render.json (6 findings) =====
 SCOPE WALKED. agents/memory/store.py (2442 lines, read in full across the render, coalescer, breadcrumb/co-presence/transition collectors, trail, belief/contradiction line builders, budget assembler, and the three absorb wrappers), agents/memory/episodic.py, agents/memory/working.py, agents/memory/beliefs.py (constants, SuspicionProvenance, BeliefState, apply_observation_rules, apply_contradiction_rule, apply_meeting_evidence_rules), agents/perception.py::ingest_packet and its two Rule-1 input builders, plus the consumers that read the same stores: orchestrator/game.py (TacticalAgent's suspicion_graph_for_meeting / absorb / note_meeting_concluded and _absorb_meeting_beliefs), meetings/manager.py::_suspicion_graph_with_contradictions and the ballot re-render, agents/tactical/features.py's last-seen and meeting-history reads, training/surrogate/dataset.py's hand-mirrored fold, orchestrator/replay.py::fold_meeting_outcome_into_memories, and eval/evidence_honesty.py + eval/leak_scan.py as the audit machinery.
 
-EVIDENCE BASE. Corpus scans ran over all 200 committed replays in replays/ml_corpus (154 x 9p2i + 46 x 4p1i), 5225 rendered memories inside recorded prompts. All scan scripts and the four repro scripts are under /private/tmp/claude-501/.../scratchpad/wave0/B/. Three findings carry a runnable repro against the real `render_for_prompt` / `ingest_packet`; no tracked file was modified and the full suite / campaign tier were not run.
+EVIDENCE BASE. Corpus scans ran over all 200 committed replays in replays/ml_corpus (154 x 9p2i + 46 x 4p1i), 5225 rendered memories inside recorded prompts. All scan scripts and the four repro scripts are under /private/tmp/.../scratchpad/wave0/B/. Three findings carry a runnable repro against the real `render_for_prompt` / `ingest_packet`; no tracked file was modified and the full suite / campaign tier were not run.
 
 CHECKED AND CLEARED (no finding). (1) Token-budget arithmetic: `_assemble_view` charges every separator piecewise with ceiling estimates, so the sum over-counts and the render cannot overrun `token_budget` except when the non-elastic block alone exceeds it (documented, deliberate). (2) Coalescing never DROPS a row: only rows covered by the spawn-group summary are elided, and `spawn_end = min(last ticks)` guarantees the summary's range is covered by every member (store.py:1673-1688). (3) Render determinism: `grouped` iteration is episodic-append-ordered and the final sort key `(-salience, -tick, line)` is total. (4) The `[obs ...]` id universe: `observation_ids_for_meeting` (game.py:3176-3182) returns every stamped row, so a span citing its FIRST row's id is always resolvable. (5) The packet-clock +1 offset on completed-task and witnessed-kill lines is a real, systematic convention, but it is DECLARED and calibrated (`AGENT_CLOCK_OFFSET`, eval/evidence_honesty.py:215) and mirrored in training/surrogate/dataset.py:909-912 — not a defect. (6) Task redistribution cannot give one crewmate two instances of the same `map_task_id` (engine/tick.py:349-353), so the frozenset-based completion diff at store.py:1502-1512 cannot silently swallow a completion. (7) `derive_observation_id` seq continuation and the duplicate-id guard (episodic.py:36-50, 109-136) are sound. (8) The role-disclosure entitlement of the `## Meetings so far:` block is independently asserted by eval/leak_scan.py:263-321 and is wired into eval/leak_test.py. (9) The meeting-index tag and the `## Meetings so far:` numbering agree because the orchestrator folds evidence before testimony (orchestrator/game.py:2365-2380) — verified against a recorded prompt. (10) The persistent absorb bumps each accused subject exactly once: the pre-vote fold runs on a manager-local seeded copy (meetings/manager.py:2448-2489), never on the stored state, so there is no double count.
 

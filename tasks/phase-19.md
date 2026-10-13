@@ -1609,7 +1609,7 @@ only the moved bytes + a README naming the manifest commit.
 ### Task 19.23 — `verify-ml-evidence`: one command
 **Branch:** `phase-19-verify-ml-evidence`
 **Depends on:** 19.19, 19.20, 19.22 (the raw-slate ruling arrives transitively — the availability report consumes it via the evidence commit)
-**Section refs:** audits/audit-phase-19-triage.md §7 item 24 [S-Codex/S-Claude]; the Codex audit's executed-evidence table (each recomputation exists piecemeal today: sidecar/sha verification, corpus reconstruction, surrogate 0.7667/0.375, conviction 0.9375, composed 0.8646/0.7917); training/artifacts/coevo/provenance/harnesses/harness_run_c1.py.txt:11 (`_REPO = "/Users/danielkeinan/projects/AiLibi"` — the invocation folklore); scripts/paired_stats.py (19.20)
+**Section refs:** audits/audit-phase-19-triage.md §7 item 24 [S-Codex/S-Claude]; the Codex audit's executed-evidence table (each recomputation exists piecemeal today: sidecar/sha verification, corpus reconstruction, surrogate 0.7667/0.375, conviction 0.9375, composed 0.8646/0.7917); training/artifacts/coevo/provenance/harnesses/harness_run_c1.py.txt:11 (`_REPO = "~/projects/AiLibi"` — the invocation folklore); scripts/paired_stats.py (19.20)
 **Complexity:** Medium
 
 One read-only command for the whole ML evidence story: `scripts/verify_ml_evidence.py`

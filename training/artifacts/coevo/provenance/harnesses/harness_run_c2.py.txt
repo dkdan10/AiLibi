@@ -8,7 +8,7 @@ import os
 import sys
 from pathlib import Path
 
-_REPO = "/Users/danielkeinan/projects/AiLibi"
+_REPO = "~/projects/AiLibi"
 os.chdir(_REPO)
 sys.path.insert(0, _REPO)
 
@@ -19,7 +19,7 @@ from training.coevo.driver import CoevoCampaignConfig, CoevoSideConfig, run_alte
 from training.crew.scorer import build_crew_scorer
 
 REPO = Path(_REPO)
-CAMPAIGN_ROOT = Path("/Users/danielkeinan/ailibi-campaign-1825")
+CAMPAIGN_ROOT = Path("~/ailibi-campaign-1825")
 RUN_NAME = "run-c2-crew-general"
 
 SEED_ARTIFACT = (

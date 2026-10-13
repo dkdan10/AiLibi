@@ -13,7 +13,7 @@ observed behaviour.
 | `replays/samples/4p1i` | 50 | 39 | 156 | 117 | 234 |
 | `replays/ml_corpus/4p1i` | 50 | 40 | 160 | 120 | 240 |
 
-Scripts: `/private/tmp/claude-501/.../scratchpad/work/s4-info-economy-beliefs/`
+Scripts: `/private/tmp/.../scratchpad/work/s4-info-economy-beliefs/`
 (`sweep.py`, `analyze.py`…`analyze7.py`, `lines.py`, `movecheck.py`, `movecheck2.py`).
 
 **Parser validation (2 games by hand, as required).**

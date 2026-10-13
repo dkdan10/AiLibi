@@ -174,8 +174,8 @@ KNOWN-OPEN OVERLAP: none -- checked against the balance-wave seven (G-5/G-8/G-13
 ```
 QUANTIFYING A KNOWN-OPEN ITEM (G-22 roll-call asymmetry) with new baseline-7 numbers; the mechanism is disclosed in replays/ml_corpus/README.md item 8, the classifier strength below is not.
 
-COMMAND (standalone stdlib, run from /Users/danielkeinan/projects/AiLibi):
-  python3 /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/8c686913-6a30-43ad-8ed2-a35d8125a233/scratchpad/wave0/A/repro_tell.py
+COMMAND (standalone stdlib, run from ~/projects/AiLibi):
+  python3 /private/tmp/.../scratchpad/wave0/A/repro_tell.py
 
 OUTPUT (verbatim):
   S9: crew turns 652 whereabouts 652 zero-obs 0 | imp turns 219 whereabouts 104 zero-obs 115 (all impostor replies: 115/115)
@@ -264,7 +264,7 @@ title: Guard-redirected ballots: the rationale names one player, the target name
 ==============================================================================
 
 REPRO (read-only; all four sets):
-  PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python <scratchpad>/wave0/A/repro.py
+  PYTHONPATH=~/projects/AiLibi uv run python <scratchpad>/wave0/A/repro.py
 That script unwinds meetings/manager.py:200/211/274/354 markers to the AUTHORED target and re-tallies with meetings/voting.py:218-238 rules (thr = DEFAULT_SKIP_CONFIDENCE_THRESHOLD 0.6, meetings/constants.py:28).
 
 VALIDATION that the join is correct — the reconstruction reproduces the published cells exactly:
@@ -305,7 +305,7 @@ title: 120 recorded ballots carry a (target, confidence, rationale) triple no ag
 ==============================================================================
 
 COMMAND:
-  cd /Users/danielkeinan/projects/AiLibi && uv run python <scratch>/wave0/A/f4_redirect.py
+  cd ~/projects/AiLibi && uv run python <scratch>/wave0/A/f4_redirect.py
 OUTPUT:
   ('samples/9p2i','redirected_ballots') 36        (matches the committed report cell: replays/samples/9p2i/tournament-eval-report.json -> deduction.redirected_ballots.redirected_ballots == 36)
   ('ml_corpus/9p2i','redirected_ballots') 81
@@ -848,7 +848,7 @@ games and found zero occurrences of "the engine", "flag" or "detector" -- only t
 
 ```
 COMMAND (verify every spoken hard-evidence claim against the tick record):
-  cd /Users/danielkeinan/projects/AiLibi && uv run python - <<'PY'
+  cd ~/projects/AiLibi && uv run python - <<'PY'
   ... for each set: build ground-truth {(actor,tick)} from tick actions of type 'vent'/'kill';
       for each spoken observation of type saw_vent/saw_kill check subject role and tick match ... PY
 OUTPUT:
@@ -944,7 +944,7 @@ ANCHORS: worked example headless-seed-0:meeting-0 (samples/9p2i) -- p-5's single
 
 ```
 COMMAND:
-  cd /Users/danielkeinan/projects/AiLibi && uv run python <scratch>/wave0/A/f1_ece_split.py
+  cd ~/projects/AiLibi && uv run python <scratch>/wave0/A/f1_ece_split.py
 OUTPUT:
   ===== samples/9p2i
     accusation ALL       ECE=0.3003 bins=6 n=752      <-- reproduces the committed 0.30033244680851046 exactly
@@ -1228,7 +1228,7 @@ title: How the 42 innocent ejections happened: flagless hearsay pile-ons at ~0.8
 ==============================================================================
 
 COMMAND:
-  cd /Users/danielkeinan/projects/AiLibi && uv run python - <<'PY'
+  cd ~/projects/AiLibi && uv run python - <<'PY'
   ... for every meeting whose ejected_player_id is not in roles(recs): classify each ballot naming them by
       citation channel (own observation id / another player's turn / own turn / none), collect the flags naming them,
       and find the modal cited turn's speaker ... PY
@@ -1766,7 +1766,7 @@ eval/replay_walk.py and visible only to a consumer that reads `actions` as
 "what happened".
 
 DETERMINISTIC PROOF (scratch script, engine only, no LLM)
-$ PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../proof1.py
+$ PYTHONPATH=~/projects/AiLibi uv run python .../proof1.py
     submitted order: [('p-1', 'report'), ('p-2', 'move'), ('p-3', 'move')]
     events: [('MeetingTriggered', 'p-1')]
     phase: MEETING tick: 0 (input tick was 0 )
@@ -2262,7 +2262,7 @@ CMD 4 (specification):
 
 ```
 COMMAND:
-  cd /Users/danielkeinan/projects/AiLibi && uv run python <scratch>/wave0/A/f2_soft_channel.py
+  cd ~/projects/AiLibi && uv run python <scratch>/wave0/A/f2_soft_channel.py
   (filters to meetings with NO vent_sighting/witnessed_kill flag AND no spoken saw_vent/saw_kill row; crew speakers only;
    'chance' = |living impostors excluding self| / |living others| computed per accusation)
 OUTPUT:
@@ -2731,7 +2731,7 @@ title: Witnessed-kill memories are laundered through the saw_vent shape and the 
 ==============================================================================
 
 COMMAND (spoken vent claims whose subject never vented at all):
-  cd /Users/danielkeinan/projects/AiLibi && uv run python - <<'PY'
+  cd ~/projects/AiLibi && uv run python - <<'PY'
   ... for each spoken saw_vent, look up the subject's vent ticks in the tick record; report those with none, plus flag status ... PY
 OUTPUT:
   ml_corpus/9p2i headless-seed-1000:meeting-0 speaker p-2 turn 0 claims p-8 MEDBAY tick 8   | subject vent-ticks: None | FLAGGED: False | ejected: p-8
@@ -4154,7 +4154,7 @@ TEMPLATE ANCHORS:
     '... ~0.7 for a corroborated case; ~0.5 for a movement hunch -- a modest number reads as more credible.'
 
 COMMAND (value histogram, 9p2i pooled across samples+ml_corpus):
-  cd /Users/danielkeinan/projects/AiLibi && uv run python - <<'PY' ... collect ballot + accusation confidences ... PY
+  cd ~/projects/AiLibi && uv run python - <<'PY' ... collect ballot + accusation confidences ... PY
 OUTPUT (ballots, 3350 total):
   0.6:662  0.65:202  0.75:214  0.85:271  0.9:276  0.95:1292  1.0:188  (+16 stragglers at 0.61/0.62/0.66/0.67/0.73/0.97/0.98/0.99)
   distinct values: 23   top-4 share: 0.747   modal value 0.95 alone = 39% of all ballots
@@ -4876,7 +4876,7 @@ KNOWN-OPEN ITEMS TOUCHED. Findings 1, 2, 5 and 6 are new baseline-7 quantificati
 
 STANDING CONTEXT I RELIED ON. Baseline 7 is canon by explicit owner override of a FINDING verdict (pre-registered bars 1 and 2 missed -- bar 1 by 0.0078). 22 substrate flags, 21 unconditional, impostor_roll_call the only live toggle and OFF; every game_over record in the four sets carries reporter_exculpation: true. Prompt set qwen3_6_27b v4, recorded model Qwen/Qwen3.6-27B.
 
-SCRATCH. All working scripts under /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/8c686913-6a30-43ad-8ed2-a35d8125a233/scratchpad/wave0/A/rj/ (namespaced; the shared wave0/A directory had filename collisions with other finders, which is why my files carry the rj_ prefix). No tracked file was created or modified.
+SCRATCH. All working scripts under /private/tmp/.../scratchpad/wave0/A/rj/ (namespaced; the shared wave0/A directory had filename collisions with other finders, which is why my files carry the rj_ prefix). No tracked file was created or modified.
 
 ==============================================================================
 COVERAGE NOTES AS FILED BY FINDER: herding-calibration
@@ -4964,7 +4964,7 @@ eval.replay_walk.walk_replay with verify_tick_hashes=True and
 verify_meeting_post_hashes=True; every walk reconstructed byte-identically, so all
 per-tick numbers here are engine truth, not JSONL inference. 35,350 recorded actions
 and 668 meetings / 3,602 ballots were classified. Scratch scripts live under
-/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/8c686913-6a30-43ad-8ed2-a35d8125a233/scratchpad/wave0/A/
+/private/tmp/.../scratchpad/wave0/A/
 (scan.py, scan2.py, scan3.py, scan4.py, votes.py, conf.py, sab.py, margin.py,
 case1.py, proof1.py, proof2.py, proof3.py). Three findings additionally carry a
 deterministic engine-only construction (proof1/2/3) rather than only corpus counts.
@@ -5013,7 +5013,7 @@ vote_correctness, tournament-eval-report.json) was not audited.
 COVERAGE NOTES AS FILED BY FINDER: evidence-economy
 ==============================================================================
 
-EXAMINED. All four committed sets (replays/samples/9p2i 50 games, replays/ml_corpus/9p2i 150, replays/samples/4p1i 50, replays/ml_corpus/4p1i 50 = 300 games, 668 meetings, 429 ejections, 3602 ballots), read through each set's tournament-eval-report.json (which carries roles ground truth, full transcripts, ballots, contradictions and llm_calls) and cross-checked against the raw replay-*.jsonl tick stream for ground-truth movement/vent reconstruction. Specifically: (a) recomputed the conviction-channel distribution behind all 429 ejections, split by ejectee role and by set; (b) read all 42 innocent ejections individually -- full transcript turns, observations, and every ballot rationale -- and produced the classified ledger in finding 7 (working dossier at /private/tmp/claude-501/.../scratchpad/wave0/A/innocent42.txt, per-ejection JSON at ejections.json, classified table at table42.txt); (c) tested whether deduction decides by comparing role_proof-flag subjects, weak-flag subjects, modal accusation target, first accusation target and reporter identity against the actual ejectee across all 668 meetings. Also verified the impostor no-report invariant against agents/tactical/impostor_policy.py, the vent-flag grounding contract against meetings/schemas.py, the redirect guard against meetings/manager.py, the reporter-exculpation lever against agents/memory/beliefs.py and agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2, and map adjacency against engine/maps/canonical_1.yaml plus the <map> card actually rendered into recorded prompts. Baseline 7 is canon by explicit owner override of a FINDING verdict (pre-registered bars 1 and 2 missed -- bar 1 by 0.0078); nothing in this audit reopens that. NOT EXAMINED. I did not run the eval instruments themselves (eval/evidence_honesty.py, solvability.py, watchability.py, replay_walk.py, vote_correctness.py) as programs -- per instructions I read their recorded folds out of the committed tournament-eval-report.json and only read the module source where I needed a definition (the role_proof/weak_signal taxonomy in eval/deduction_metrics.py, the roles contract in eval/vote_correctness.py and eval/report_schema.py); no test suite, no campaign marker, no check.sh. I did not analyse the 239 SKIPPED no-flag meetings for missed convictions (the 96 'missed skip' ballots the instrument fold records) -- that is the mirror-image question of what I was asked. I did not touch kill craft, task/clock economy, sabotage, watchability/voice, or the 4p1i second act beyond noting that its 2 innocent ejections fit the same reporter/boomerang shape; the 4p1i thinness itself is the known-open G-43. I deliberately did not re-report the known-open backlog items (G-5, G-8, G-13, G-15, G-22, G-29, G-37, G-40, G-43, C-88, the duplicate alibi_vs_sighting mint) as new; where the duplicate mint appears in my byte evidence (C9 1044 meeting-0 shows the same alibi_vs_sighting flag twice) I treated it as declared and did not count it as a separate flag instance in any rate. READ-ONLY: no tracked file was created or modified; all scratch output is under /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/8c686913-6a30-43ad-8ed2-a35d8125a233/scratchpad/wave0/A/.
+EXAMINED. All four committed sets (replays/samples/9p2i 50 games, replays/ml_corpus/9p2i 150, replays/samples/4p1i 50, replays/ml_corpus/4p1i 50 = 300 games, 668 meetings, 429 ejections, 3602 ballots), read through each set's tournament-eval-report.json (which carries roles ground truth, full transcripts, ballots, contradictions and llm_calls) and cross-checked against the raw replay-*.jsonl tick stream for ground-truth movement/vent reconstruction. Specifically: (a) recomputed the conviction-channel distribution behind all 429 ejections, split by ejectee role and by set; (b) read all 42 innocent ejections individually -- full transcript turns, observations, and every ballot rationale -- and produced the classified ledger in finding 7 (working dossier at /private/tmp/.../scratchpad/wave0/A/innocent42.txt, per-ejection JSON at ejections.json, classified table at table42.txt); (c) tested whether deduction decides by comparing role_proof-flag subjects, weak-flag subjects, modal accusation target, first accusation target and reporter identity against the actual ejectee across all 668 meetings. Also verified the impostor no-report invariant against agents/tactical/impostor_policy.py, the vent-flag grounding contract against meetings/schemas.py, the redirect guard against meetings/manager.py, the reporter-exculpation lever against agents/memory/beliefs.py and agents/strategic/prompts/qwen3_6_27b/vote_ballot.j2, and map adjacency against engine/maps/canonical_1.yaml plus the <map> card actually rendered into recorded prompts. Baseline 7 is canon by explicit owner override of a FINDING verdict (pre-registered bars 1 and 2 missed -- bar 1 by 0.0078); nothing in this audit reopens that. NOT EXAMINED. I did not run the eval instruments themselves (eval/evidence_honesty.py, solvability.py, watchability.py, replay_walk.py, vote_correctness.py) as programs -- per instructions I read their recorded folds out of the committed tournament-eval-report.json and only read the module source where I needed a definition (the role_proof/weak_signal taxonomy in eval/deduction_metrics.py, the roles contract in eval/vote_correctness.py and eval/report_schema.py); no test suite, no campaign marker, no check.sh. I did not analyse the 239 SKIPPED no-flag meetings for missed convictions (the 96 'missed skip' ballots the instrument fold records) -- that is the mirror-image question of what I was asked. I did not touch kill craft, task/clock economy, sabotage, watchability/voice, or the 4p1i second act beyond noting that its 2 innocent ejections fit the same reporter/boomerang shape; the 4p1i thinness itself is the known-open G-43. I deliberately did not re-report the known-open backlog items (G-5, G-8, G-13, G-15, G-22, G-29, G-37, G-40, G-43, C-88, the duplicate alibi_vs_sighting mint) as new; where the duplicate mint appears in my byte evidence (C9 1044 meeting-0 shows the same alibi_vs_sighting flag twice) I treated it as declared and did not count it as a separate flag instance in any rate. READ-ONLY: no tracked file was created or modified; all scratch output is under /private/tmp/.../scratchpad/wave0/A/.
 
 ==============================================================================
 COVERAGE NOTES AS FILED BY FINDER: legibility-pacing

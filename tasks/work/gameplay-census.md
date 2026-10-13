@@ -24,7 +24,7 @@ feeds nothing back to any agent. Wave 0, card 2 of the decision memo's section 3
 
 Line numbers below are at `e886b663`; the implementer re-anchors each by the symbol named with it
 before editing. The memo paths are under
-`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/stage-b-2026-09-24/`:
+`~/.claude/projects/.../stage-b-2026-09-24/`:
 `decision-memo.md` sections 0, 2.6, 3.2, 3.4 card 2 and 4, and `census_and_record.md` sections 1
 and 4 (this card's investigation).
 

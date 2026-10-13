@@ -48,7 +48,7 @@ change republishes on merge. `tasks/investigations-2026-09-24/partial_record.md`
 and 17, names this card's surfaces and the minimal truthful handling for each. Row 16 (the s9 digests in
 `bodies.test.ts` and `contradictions.test.ts`) is the promotion card's; only the `bodies.test.ts` census leg
 below is this card's. The scope is item A2 of the opening analysis memo, Part 3 (outside the repository, at
-`~/.claude/projects/-Users-danielkeinan-projects-AiLibi/analysis-2026-09-24/analysis-memo.md`):
+`~/.claude/projects/.../analysis-2026-09-24/analysis-memo.md`):
 1. re-pick the tour from `replays/samples` only: a vent game, a non-vent impostor ejection chosen by a
    measured criterion, and optionally a game labelled wrong but believable;
 2. add omniscient-only annotations for corpse age, the accused player's true route, and "the opener got no

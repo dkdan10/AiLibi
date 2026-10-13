@@ -132,7 +132,7 @@ Labels: **[VERIFIED]** = I ran/observed it; **[JUDGMENT]** = assessment from rea
 
 ---
 
-### Appendix — evidence commands (scratch: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/eval-and-scripts/`)
+### Appendix — evidence commands (scratch: `/private/tmp/.../scratchpad/work/eval-and-scripts/`)
 - `pytest_area.txt` — full area run with `--durations=40` (1257 passed, 1 skipped, 139.65 s).
 - `bench_verify.py` — verify_samples (loader) vs bare walk timings.
 - `probe_empty.py` — 18 analyzers on empty / no-meeting reports (all OK).

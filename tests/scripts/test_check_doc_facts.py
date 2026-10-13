@@ -148,6 +148,8 @@ _COPIED = (
     # document one directory down.
     "audits/review-2026-09-06/README.md",
     "audits/review-2026-09-06/correction-record.md",
+    # The import-linter config, whose contract sections the README counts.
+    ".importlinter",
 )
 
 # The front-door checks also ENUMERATE paths whose contents they never open:
@@ -162,6 +164,9 @@ _ENUMERATED_GLOBS = (
     # 100 of 100 reconstruct is re-derived from how many there are.
     ("replays/samples/4p1i", "*.jsonl"),
     ("replays/samples/9p2i", "*.jsonl"),
+    # ...and so are the candidate rounds' replays, which the README's install
+    # block counts with the samples as what the verifier re-runs.
+    ("replays/candidates", "*/*/*.jsonl"),
 )
 
 # Above this size a fixture entry is symlinked rather than copied: the four
@@ -345,7 +350,7 @@ def _stand_in_enumerated_paths(root: Path) -> None:
     wanted: set[str] = set()
     for directory, pattern in _ENUMERATED_GLOBS:
         wanted.update(
-            f"{directory}/{path.name}"
+            path.relative_to(_REPO_ROOT).as_posix()
             for path in (_REPO_ROOT / directory).glob(pattern)
         )
     wanted.update(
@@ -1663,8 +1668,11 @@ def test_empty_replay_corpus_fails_loud(doc_tree: Path) -> None:
         for replay in (doc_tree / "replays" / "samples" / name).glob("*.jsonl"):
             replay.unlink()
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
+    assert len(errors) == 2
     assert "no committed replays found" in errors[0]
+    # The install block still counts the 100 candidate replays left beside them.
+    assert "'200 sample and candidate recordings'" in errors[1]
+    assert "makes it '100 sample and candidate recordings'" in errors[1]
 
 
 def test_citation_figure_derived_from_the_committed_instrument(
@@ -1838,9 +1846,13 @@ def test_previous_set_row_reaches_the_before_column(doc_tree: Path) -> None:
     )
 
 
+# The README as it stood at d1220ead, frozen: the base the historical front
+# doors below are rebuilt from, so rewording the live page leaves them intact.
+_FROZEN_README = Path(__file__).parent / "_goldens" / "README-d1220ead.md"
+
 # The README as it stood at 2eed2e92, the last commit before round 3's
-# promotion, kept as the hunks that differ from the committed page: each pair
-# is (the committed text, the 2eed2e92 text). Applied in order, they rebuild
+# promotion, kept as the hunks that differ from the frozen d1220ead page: each
+# pair is (the d1220ead text, the 2eed2e92 text). Applied in order, they rebuild
 # the whole round-2 front door inside the promoted tree.
 _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
     (
@@ -2109,7 +2121,7 @@ experiment; it is not adopted. [Observation contract and limitations](docs/obser
 
 
 def _readme_rebuilt(doc_tree: Path, *steps: tuple[tuple[str, str], ...]) -> list[str]:
-    readme = _read(doc_tree, _README)
+    readme = _FROZEN_README.read_text(encoding="utf-8")
     for hunks in steps:
         for current, previous in hunks:
             assert readme.count(current) == 1, current[:60]
@@ -3275,9 +3287,12 @@ def test_guide_crosstab_row_label_held_to_the_pins(doc_tree: Path) -> None:
         doc_tree, _READING_GUIDE, _FLAGGED_ROW, "| yes (26 meetings) | 24 | 0 |"
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert len(errors) == 1
-    assert "row is labelled 26 meetings" in errors[0]
-    assert "pins 24" in errors[0]
+    assert len(errors) == 2
+    # The README's vent sentence retells the label, so it is named too.
+    assert "'In the 24 meetings with one'" in errors[0]
+    assert "makes it 'In the 26 meetings with one'" in errors[0]
+    assert "row is labelled 26 meetings" in errors[1]
+    assert "pins 24" in errors[1]
 
 
 def test_unpinned_crosstab_fails_loud(doc_tree: Path) -> None:
@@ -4776,7 +4791,7 @@ def test_unstamped_volatile_count_detected(doc_tree: Path) -> None:
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert "merged pull requests count '364 merged pull requests'" in errors[0]
+    assert "the pull requests count '364 merged pull requests'" in errors[0]
     assert "as of YYYY-MM-DD" in errors[0]
 
 
@@ -4788,14 +4803,402 @@ def test_malformed_volatile_stamp_detected(doc_tree: Path) -> None:
     assert "is not a calendar date" in errors[0]
 
 
+# Each as-of stamp the live README carries, and every count its sentence dates.
+# The pull-request count and the frontend-test count each carry a word between
+# the number and the noun; the stamp check sees both.
+_VOLATILE_STAMPS = (
+    pytest.param(
+        "pull requests, as of 2026-10-12;",
+        "pull requests;",
+        ["the pull requests count '514 pull requests'"],
+        id="pull-requests",
+    ),
+    pytest.param(
+        "2,131 commits as of 2026-10-12.",
+        "2,131 commits.",
+        ["the commits count '2,131 commits'"],
+        id="commits",
+    ),
+    pytest.param(
+        "1,327 frontend tests as of 2026-10-12,",
+        "1,327 frontend tests,",
+        ["the tests count '10,954 tests'", "the tests count '1,327 frontend tests'"],
+        id="tests",
+    ),
+)
+
+
+@pytest.mark.parametrize(("stamped", "stripped", "counts"), _VOLATILE_STAMPS)
+def test_every_stamp_the_readme_carries_is_required(
+    doc_tree: Path, stamped: str, stripped: str, counts: list[str]
+) -> None:
+    # Planted: one as-of stamp struck from the live README; every count its
+    # sentence states is then named, the qualified ones included.
+    _substitute(doc_tree, _README, stamped, stripped)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == len(counts)
+    for error, count in zip(errors, counts, strict=True):
+        assert count in error
+        assert "as of YYYY-MM-DD" in error
+
+
+# The README's prose figures, each perturbed in the live page: (the text, its
+# perturbation, the claim the error names, the claim the source makes it).
+_PROSE_PERTURBATIONS = (
+    pytest.param(
+        "[215 of 235 times]",
+        "[214 of 235 times]",
+        "hit an impostor 214 of 235 times (91%)",
+        "hit an impostor 215 of 235 times (91%)",
+        id="followers-hit",
+    ),
+    pytest.param(
+        "times](docs/process-scorecard.md) (91%)",
+        "times](docs/process-scorecard.md) (92%)",
+        "hit an impostor 215 of 235 times (92%)",
+        "hit an impostor 215 of 235 times (91%)",
+        id="followers-percent",
+    ),
+    pytest.param(
+        "the 56 against it hit one twice (4%)",
+        "the 56 against it hit one once (4%)",
+        "the 56 against it hit one once (4%)",
+        "the 56 against it hit one twice (4%)",
+        id="deviators-hit",
+    ),
+    pytest.param(
+        "the 56 against it",
+        "the 55 against it",
+        "the 55 against it hit one twice (4%)",
+        "the 56 against it hit one twice (4%)",
+        id="deviators",
+    ),
+    pytest.param(
+        "chance is about one in three",
+        "chance is about one in four",
+        "chance is about one in four",
+        "chance is about one in three",
+        id="chance",
+    ),
+    pytest.param(
+        "In the 24 meetings with one",
+        "In the 23 meetings with one",
+        "In the 23 meetings with one",
+        "In the 24 meetings with one",
+        id="vent-flagged-meetings",
+    ),
+    pytest.param(
+        "in the 95 without",
+        "in the 96 without",
+        "in the 96 without, 22 of 37 did and 15 removed crewmates",
+        "in the 95 without, 22 of 37 did and 15 removed crewmates",
+        id="vent-unflagged-meetings",
+    ),
+    pytest.param(
+        "[22 of 37](docs/reading-guide.md) did",
+        "[21 of 37](docs/reading-guide.md) did",
+        "in the 95 without, 21 of 37 did and 15 removed crewmates",
+        "in the 95 without, 22 of 37 did and 15 removed crewmates",
+        id="vent-unflagged-share",
+    ),
+    pytest.param(
+        "15 removed crewmates",
+        "14 removed crewmates",
+        "in the 95 without, 22 of 37 did and 14 removed crewmates",
+        "in the 95 without, 22 of 37 did and 15 removed crewmates",
+        id="vent-unflagged-innocent",
+    ),
+    pytest.param(
+        "[394 of 397](docs/process-scorecard.md) votes to eject",
+        "[393 of 397](docs/process-scorecard.md) votes to eject",
+        "393 of 397 votes to eject",
+        "394 of 397 votes to eject",
+        id="cited-votes",
+    ),
+    pytest.param(
+        "carries all 100 games",
+        "carries all 96 games",
+        "carries all 96 games",
+        "carries all 100 games",
+        id="demo-games",
+    ),
+    pytest.param(
+        "One of five import contracts",
+        "One of four import contracts",
+        "of four import contracts",
+        "of five import contracts",
+        id="import-contracts",
+    ),
+    pytest.param(
+        "Re-run the 200 sample and candidate recordings",
+        "Re-run the 199 sample and candidate recordings",
+        "199 sample and candidate recordings",
+        "200 sample and candidate recordings",
+        id="verified-recordings",
+    ),
+)
+
+
+@pytest.mark.parametrize(("old", "new", "stated", "derived"), _PROSE_PERTURBATIONS)
+def test_a_drifted_prose_figure_fails_by_name(
+    doc_tree: Path, old: str, new: str, stated: str, derived: str
+) -> None:
+    # Planted: one figure of the live README's prose moved off its source. Each
+    # is named once, with the claim as stated and as its source makes it.
+    _substitute(doc_tree, _README, old, new)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1, errors
+    assert f"the claim {stated!r} disagrees" in errors[0]
+    assert f"which makes it {derived!r}" in errors[0]
+
+
+# Each prose claim reworded out of its shape: the sentence stops stating the
+# figure, which fails rather than leaving the source bound to nothing.
+_PROSE_REWORDINGS = (
+    pytest.param("hit an impostor [215", "found an impostor [215", id="followers"),
+    pytest.param("hit one twice", "hit one rarely, twice", id="deviators"),
+    pytest.param("about one in three", "about a third", id="chance"),
+    pytest.param("meetings with one,", "meetings with such a sighting,", id="flagged"),
+    pytest.param("95 without,", "95 others,", id="unflagged"),
+    pytest.param("every ejection removed", "each ejection removed", id="clean-record"),
+    pytest.param("never ejected a crewmate", "ejected no crewmate", id="headline"),
+    pytest.param("votes to eject cite", "eject votes cite", id="cited-votes"),
+    pytest.param("carries all 100 games", "carries every game", id="demo-games"),
+    pytest.param("One of five import", "One import", id="import-contracts"),
+    pytest.param("sample and candidate recordings", "recordings", id="verified"),
+)
+
+
+@pytest.mark.parametrize(("old", "new"), _PROSE_REWORDINGS)
+def test_a_prose_figure_reworded_away_fails_loud(
+    doc_tree: Path, old: str, new: str
+) -> None:
+    _substitute(doc_tree, _README, old, new)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1, errors
+    assert "no sentence matching" in errors[0]
+    assert "no longer stated" in errors[0]
+
+
+def test_the_demo_count_enumerates_the_games_the_bundle_bakes() -> None:
+    # The checker restates the builder's rule rather than importing it, so the
+    # two listings are held equal over the committed samples.
+    import build_demo_bundle
+
+    assert check_doc_facts.demo_bundle_games(_REPO_ROOT) == tuple(
+        (game.set_name, game.seed) for game in build_demo_bundle.games_to_bake()
+    )
+
+
+def test_a_new_sample_set_moves_the_demo_count(doc_tree: Path) -> None:
+    # Planted: a third set directory holding one recording. The bundle bakes it,
+    # so the README's demo count fails by name, as does the verifier count that
+    # walks the same root; a count over the two named sets alone would pass.
+    recording = doc_tree / "replays" / "samples" / "5p1i" / "replay-seed-1.jsonl"
+    recording.parent.mkdir()
+    recording.touch()
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2, errors
+    demo = [error for error in errors if "'carries all 100 games' disagrees" in error]
+    assert len(demo) == 1, errors
+    assert "which makes it 'carries all 101 games'" in demo[0]
+    assert any(
+        "'200 sample and candidate recordings' disagrees" in error for error in errors
+    ), errors
+
+
+@pytest.mark.parametrize(
+    ("sentence", "stated", "derived"),
+    [
+        pytest.param(
+            "Followers were right 214 of 235 times.",
+            "214 of 235",
+            "215 of 235",
+            id="another-follower-claim",
+        ),
+        pytest.param(
+            "Without one, 20 of 37 ejections removed an impostor.",
+            "20 of 37",
+            "22 of 37",
+            id="another-unflagged-share",
+        ),
+        pytest.param(
+            "Elsewhere 16 removed crewmates.",
+            "16 removed crewmates",
+            "15 removed crewmates",
+            id="another-innocent-count",
+        ),
+    ],
+)
+def test_a_second_copy_of_a_prose_figure_is_held_too(
+    doc_tree: Path, sentence: str, stated: str, derived: str
+) -> None:
+    # Planted: a correct sentence kept and a stale retelling appended beside it.
+    # The copy is refused rather than left to drift on its own.
+    _write(doc_tree, _README, _read(doc_tree, _README) + f"\n{sentence}\n")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1, errors
+    assert f"the claim {stated!r} disagrees" in errors[0]
+    assert f"which makes it {derived!r}" in errors[0]
+
+
+_ROLE_CORRECT_CELL = "215/235 = 91.5% vs 2/56 = 3.6% (chance 32.8%)"
+
+
+def test_a_re_recorded_role_correct_cell_moves_the_prose(doc_tree: Path) -> None:
+    # Planted: the scorecard re-recorded under the README; the sentence that
+    # retells the old cell fails rather than standing beside the new one.
+    _substitute(
+        doc_tree,
+        "docs/process-scorecard.md",
+        f"| {_ROLE_CORRECT_CELL} |",
+        "| 220/240 = 91.7% vs 1/51 = 2.0% (chance 24.6%) |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 3, errors
+    assert "makes it 'hit an impostor 220 of 240 times (92%)'" in errors[0]
+    assert "makes it 'the 51 against it hit one once (2%)'" in errors[1]
+    assert "makes it 'chance is about one in four'" in errors[2]
+
+
+def test_a_deviator_count_past_twice_reads_as_times() -> None:
+    # A re-record whose deviators hit three times reads "hit one three times",
+    # and the claim shape still reads that sentence.
+    assert [check_doc_facts.repeat_word(count) for count in (1, 2, 3)] == [
+        "once",
+        "twice",
+        "three times",
+    ]
+    match = check_doc_facts._DEVIATOR_PROSE.search(
+        "the 56 against it hit one three times (5%)"
+    )
+    assert match is not None
+    assert match.groups() == ("56", "three times", "5")
+
+
+def test_a_misshapen_role_correct_cell_fails_loud(doc_tree: Path) -> None:
+    _substitute(
+        doc_tree,
+        "docs/process-scorecard.md",
+        f"| {_ROLE_CORRECT_CELL} |",
+        "| 215/235 = 91.5% vs 2/56 = 3.6% |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1, errors
+    assert "role-correct, followers vs deviators" in errors[0]
+    assert "cannot be derived from it" in errors[0]
+
+
+def test_a_scorecard_without_the_role_correct_row_fails_loud(doc_tree: Path) -> None:
+    # Planted: the row the sentence retells dropped from the shown set's table.
+    # No other check reads it, so this one names it.
+    page = _read(doc_tree, "docs/process-scorecard.md")
+    row = next(
+        line
+        for line in page.splitlines(keepends=True)
+        if line.endswith(f"| {_ROLE_CORRECT_CELL} |\n")
+    )
+    _write(doc_tree, "docs/process-scorecard.md", page.replace(row, ""))
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1, errors
+    assert (
+        "has no 'argmax-independence: role-correct, followers vs deviators' row"
+        in errors[0]
+    )
+
+
+def test_a_re_recorded_grounded_cell_moves_the_cited_vote_sentence(
+    doc_tree: Path,
+) -> None:
+    # Planted: the scorecard's grounded EJECT cell re-recorded under the front
+    # door. Both tables' rows are named by the process-row check, and the prose
+    # that retells the same cell is named with them rather than left behind.
+    _substitute(
+        doc_tree,
+        "docs/process-scorecard.md",
+        "| 394/397 = 0.9924 |",
+        "| 393/397 = 0.9899 |",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 3, errors
+    rows = [error for error in errors if "recomputes to '393 of 397 (99%)'" in error]
+    assert [error.split(":", 1)[0] for error in rows] == [_README, _READING_GUIDE]
+    (prose,) = [error for error in errors if error not in rows]
+    assert "the claim '394 of 397 votes to eject' disagrees" in prose
+    assert "which makes it '393 of 397 votes to eject'" in prose
+
+
+def test_an_innocent_ejection_in_the_flagged_row_refutes_the_clean_record(
+    doc_tree: Path,
+) -> None:
+    # Planted: the cross-tab's flagged row records one crewmate ejected. The
+    # instrument's pin names the drifted cell, and both README sentences that
+    # say no such meeting ejected a crewmate are refused by name.
+    _substitute(
+        doc_tree, _READING_GUIDE, _FLAGGED_ROW, "| yes (24 meetings) | 24 | 1 |"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 3, errors
+    assert "'never ejected a crewmate' is refuted" in errors[0]
+    assert "'every ejection removed an impostor' is refuted" in errors[1]
+    assert "cross-tab's 'yes' row reads 24 impostor / 1 innocent" in errors[2]
+
+
+def test_a_moved_unflagged_row_moves_the_vent_sentence(doc_tree: Path) -> None:
+    _substitute(
+        doc_tree, _READING_GUIDE, _UNFLAGGED_ROW, "| no (95 meetings) | 22 | 16 |"
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2, errors
+    assert (
+        "makes it 'in the 95 without, 22 of 38 did and 16 removed crewmates'"
+        in errors[0]
+    )
+    assert "cross-tab's 'no' row reads 22 impostor / 16 innocent" in errors[1]
+
+
+def test_a_sixth_import_contract_moves_the_count(doc_tree: Path) -> None:
+    config = _read(doc_tree, ".importlinter")
+    sixth = (
+        "\n[importlinter:llm_must_not_import_engine]\n"
+        "name = LLM must not import engine\n"
+        "type = forbidden\n"
+        "source_modules =\n    llm\n"
+        "forbidden_modules =\n    engine\n"
+    )
+    _write(doc_tree, ".importlinter", config + sixth)
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1, errors
+    assert "makes it 'of six import contracts'" in errors[0]
+    assert "6 contract sections of .importlinter" in errors[0]
+
+
+def test_a_config_without_contracts_fails_loud(doc_tree: Path) -> None:
+    _write(doc_tree, ".importlinter", "[importlinter]\nroot_packages =\n    agents\n")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1, errors
+    assert "no '[importlinter:<name>]' contract section" in errors[0]
+
+
+def test_a_removed_candidate_replay_moves_the_verified_count(doc_tree: Path) -> None:
+    # The install block counts every replay the bare verifier re-runs, the
+    # candidate rounds' with the samples'; the demo serves the samples alone.
+    replays = sorted((doc_tree / "replays" / "candidates").glob("*/*/*.jsonl"))
+    assert len(replays) == 100
+    replays[0].unlink()
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1, errors
+    assert "makes it '199 sample and candidate recordings'" in errors[0]
+
+
 def test_line_citation_in_the_reading_guide_detected(doc_tree: Path) -> None:
     # A file:line citation is correct until the next edit of the file it names;
     # the guide carried two dozen of them and now pins the zero.
     _substitute(
         doc_tree,
         _READING_GUIDE,
-        "the recursive packet\nsweep in [eval/leak_scan.py](../eval/leak_scan.py)",
-        "the recursive packet\nsweep in eval/leak_scan.py:214",
+        "the recursive\n[packet sweep](../eval/leak_scan.py)",
+        "the recursive\npacket sweep in eval/leak_scan.py:214",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
@@ -6583,7 +6986,11 @@ _WORDING_PAGES = (
     "SECURITY.md",
     "CONTRIBUTING.md",
 )
-_README_TITLE = "# AiLibi — can agents reason from what they actually saw?"
+# The title leads with the game and who built it (the 2026-10-13 addendum).
+_README_TITLE = (
+    "# AiLibi — an Among Us-style game played by LLM agents, built by directing "
+    "AI coding agents"
+)
 _TAGLINE = "Recorded AI social deduction"
 # The byline, byte for byte: kept as it is and linked to nothing new.
 _BYLINE = (
@@ -6868,10 +7275,9 @@ def _planted(tmp_path: Path, page: str, old: str, new: str) -> dict[str, list[st
     return _wording_problems(tree)
 
 
-_ERA_SENTENCE_NOW = (
-    "The shown 9-player set was recorded 2026-10-09 under the adopted gameplay "
-    "changes; the 4-player set and the ML training games were recorded 2026-09-22."
-)
+# The sentence that now stands where the era sentence stood: the README defines
+# the Before column rather than dating each set.
+_BEFORE_SENTENCE_NOW = "*Before* is each set's previously shown recording."
 
 
 @pytest.mark.parametrize(
@@ -6879,7 +7285,7 @@ _ERA_SENTENCE_NOW = (
     [
         pytest.param(
             _README,
-            _ERA_SENTENCE_NOW,
+            _BEFORE_SENTENCE_NOW,
             _ERA_SENTENCE_AT_BASE,
             ["README.md: carries 'in its own era'", "README.md: carries 'ML corpus'"],
             id="era-link-restored",

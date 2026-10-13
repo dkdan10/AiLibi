@@ -40,7 +40,7 @@ and nothing is re-recorded.
 
 The orchestrator's rulings, made under the owner's delegation of 2026-09-24 (rulings 6 to 10 and
 13, "What do you think is best?"), in the Stage-B decision memo
-(`~/.claude/projects/-Users-danielkeinan-projects-AiLibi/stage-b-2026-09-24/decision-memo.md`):
+(`~/.claude/projects/.../stage-b-2026-09-24/decision-memo.md`):
 - R7: "a vent action is witnessed by the living non-vented occupants of the room where it
   physically happens, the entry by the room entered from and the exit by the room surfaced into".
 - The B3 rider: "B3 adopts bounded_rebuttal_version=1 ALONE, reporter_reasoning does NOT ride

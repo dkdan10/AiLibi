@@ -70,7 +70,7 @@ whereabouts-coverage cell. The role-blind re-pricing of `correct_reports` and `p
 `training/README.md` section 7 and the `rewards.py` comment as a comment-only edit (precedent `d1ea113a`). The
 seed-0 pin stays until a reopening. The conviction GO's override folds into the re-pricing note. The rubric and the
 README are not this card's (reading 5). The advisory baselines memo is off-tree
-(`~/.claude/projects/-Users-danielkeinan-projects-AiLibi/baselines-2026-10-03/baselines-memo.md`). Its D10 (options
+(`~/.claude/projects/.../baselines-2026-10-03/baselines-memo.md`). Its D10 (options
 R1 (a), R2 keep, R4 fold) and its Part 3.4 item 11 frame the work. Every number this card takes from it is re-cited
 here to the tree.
 

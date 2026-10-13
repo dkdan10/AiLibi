@@ -50,7 +50,7 @@ Every `path:line` is a citation at `76270d6c`, labelled by its symbol, and is re
 dispatch. Every count is re-measured at dispatch through the production path; nothing here is copied into a test.
 
 **The measures asked for.** The baselines memo
-(`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/baselines-2026-10-03/baselines-memo.md`)
+(`~/.claude/projects/.../baselines-2026-10-03/baselines-memo.md`)
 covers them in Part 3.4, items 1 to 3 (`:703-723`): "Items 1, 2 and 3 are the ones a round-3 pre-registration should
 name" (`:749`). Items 6 to 11 (`:730-747`) are the genre-shape tables. On 2026-10-06 the owner answered the memo's
 Part 4 D2 (`:832-871`) with "What is your recommendation? I slightly lean to spend with narrow field, but would go

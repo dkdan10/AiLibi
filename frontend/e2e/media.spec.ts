@@ -57,7 +57,7 @@ const MEDIA_DIR = join(REPO_ROOT, "docs", "media");
 /** The first-run tour's "seen" key (frontend/src/components/GuidedTour.tsx). */
 const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
 
-/** Enough for `npm run build` plus the engine re-walk of the featured games. */
+/** Enough for `npm run build` plus the engine re-walk of every committed recording. */
 const BUILD_TIMEOUT_MS = 300_000;
 
 /**

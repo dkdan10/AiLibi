@@ -219,7 +219,7 @@ prompt's edit scope):
 
 ## Final summary lines (per prompt §5 closing requirements)
 
-- **Report path:** `/Users/danielkeinan/projects/AiLibi/audits/audit-2026-05-25-0547-pre-phase-4-real-provider-eval.md`
+- **Report path:** `~/projects/AiLibi/audits/audit-2026-05-25-0547-pre-phase-4-real-provider-eval.md`
 - **Verdict:** Pre-flight failed — live provider unreachable. Eval not run.
 - **Per-game mean cost:** n/a (no games run)
 - **Decisive split:** n/a (no games run)
