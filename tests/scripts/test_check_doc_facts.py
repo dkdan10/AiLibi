@@ -4980,6 +4980,33 @@ def test_a_prose_figure_reworded_away_fails_loud(
     assert "no longer stated" in errors[0]
 
 
+def test_the_demo_count_enumerates_the_games_the_bundle_bakes() -> None:
+    # The checker restates the builder's rule rather than importing it, so the
+    # two listings are held equal over the committed samples.
+    import build_demo_bundle
+
+    assert check_doc_facts.demo_bundle_games(_REPO_ROOT) == tuple(
+        (game.set_name, game.seed) for game in build_demo_bundle.games_to_bake()
+    )
+
+
+def test_a_new_sample_set_moves_the_demo_count(doc_tree: Path) -> None:
+    # Planted: a third set directory holding one recording. The bundle bakes it,
+    # so the README's demo count fails by name, as does the verifier count that
+    # walks the same root; a count over the two named sets alone would pass.
+    recording = doc_tree / "replays" / "samples" / "5p1i" / "replay-seed-1.jsonl"
+    recording.parent.mkdir()
+    recording.touch()
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 2, errors
+    demo = [error for error in errors if "'carries all 100 games' disagrees" in error]
+    assert len(demo) == 1, errors
+    assert "which makes it 'carries all 101 games'" in demo[0]
+    assert any(
+        "'200 sample and candidate recordings' disagrees" in error for error in errors
+    ), errors
+
+
 @pytest.mark.parametrize(
     ("sentence", "stated", "derived"),
     [

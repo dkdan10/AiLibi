@@ -263,6 +263,7 @@ from _manifest_writer import parse_manifest  # noqa: E402
 from _verify_samples import sample_paths  # noqa: E402
 from paired_stats import compute_paired_stats  # noqa: E402
 
+from api.replay_loader import SetLoaderRegistry  # noqa: E402
 from eval.eras import LADDER_TIP_ERA, STAGE_B_R2, Era, era_of  # noqa: E402
 from eval.process_scorecard import (  # noqa: E402
     BeforeColumnsError,
@@ -273,6 +274,10 @@ from eval.report_io import REPORT_FILENAME, open_report_text  # noqa: E402
 from meetings.evidence_profile import (  # noqa: E402
     EXPERIMENT_ENV_NAMES,
     MeetingEvidenceProfile,
+)
+from orchestrator.recording_fingerprint import (  # noqa: E402
+    REPLAY_FILENAME_GLOB,
+    replay_seed_from_filename,
 )
 from orchestrator.replay import (  # noqa: E402
     SUBSTRATE_FLAG_KEYS,
@@ -827,8 +832,10 @@ _VENT_CLEAN_RECORD_PROSE: Final[tuple[re.Pattern[str], ...]] = (
 # The cited-vote figure retold in prose, held to the scorecard cell its results
 # row restates.
 _GROUNDED_EJECT_PROSE: Final = re.compile(r"\b(\d+) of (\d+) votes to eject\b")
-# The demo's game count, held to the committed sample replays.
+# The demo's game count, held to the games the bundle builder bakes: every set
+# directory under the samples root, not only the sets this checker names.
 _DEMO_GAMES_PROSE: Final = re.compile(r"\bcarries all (\d+) games\b")
+_DEMO_SAMPLES_ROOT: Final = "replays/samples"
 # The import contracts, counted as the contract sections of the linter's config.
 _IMPORT_LINTER: Final = ".importlinter"
 _IMPORT_CONTRACT_SECTION: Final = re.compile(
@@ -4665,16 +4672,41 @@ def check_grounded_prose(repo_root: Path, readme: str, errors: list[str]) -> Non
     )
 
 
-def check_demo_game_count(repo_root: Path, readme: str, errors: list[str]) -> None:
-    """The demo's game count, held to the committed sample replays it serves."""
+def demo_bundle_games(repo_root: Path) -> tuple[tuple[str, int], ...]:
+    """Every ``(set, seed)`` the demo bundle bakes, ordered by set, then seed.
 
-    replays = committed_sample_replays(repo_root)
-    if not replays:
+    The same rule as ``recorded_games`` in scripts/build_demo_bundle.py, which
+    is restated rather than imported so this checker does not load the
+    builder's results module: each set the live API lists under the samples
+    root, and one game per seed among its recording files. The two must agree
+    on every tree the builder accepts (the builder also refuses a respelled
+    file name); tests/scripts/test_check_doc_facts.py holds them equal over the
+    committed samples.
+    """
+
+    root = repo_root / _DEMO_SAMPLES_ROOT
+    games: list[tuple[str, int]] = []
+    for set_name in SetLoaderRegistry(root).available_sets():
+        seeds = {
+            seed
+            for path in (root / set_name).glob(REPLAY_FILENAME_GLOB)
+            if path.is_file()
+            and (seed := replay_seed_from_filename(path.name)) is not None
+        }
+        games.extend((set_name, seed) for seed in sorted(seeds))
+    return tuple(games)
+
+
+def check_demo_game_count(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """The demo's game count, held to the games the bundle builder bakes."""
+
+    games = len(demo_bundle_games(repo_root))
+    if not games:
         return  # check_result_sources reports the empty corpus
     check_prose_claims(
         list(prose_blocks(readme)),
-        (_ProseClaim(_DEMO_GAMES_PROSE, (str(replays),)),),
-        f"the {replays} committed replays under replays/samples/",
+        (_ProseClaim(_DEMO_GAMES_PROSE, (str(games),)),),
+        f"the {games} games under {_DEMO_SAMPLES_ROOT}/ the demo bundle bakes",
         errors,
     )
 

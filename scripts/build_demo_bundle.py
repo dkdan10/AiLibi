@@ -67,6 +67,8 @@ Then serve it with anything::
 The default ``--out`` lands inside ``frontend/dist/``, which ``frontend/.gitignore``
 already excludes, so a built bundle never shows up in the index. Note that a plain
 ``npm run build`` empties ``frontend/dist/`` — rebuild the bundle after one.
+
+Baking every game is a publication decision: tasks/decision-2026-10-13-demo-all-games.md
 """
 
 from __future__ import annotations
@@ -190,6 +192,10 @@ class BakedGame:
     seed: int
 
 
+# Old name; tasks/work/report-fog-and-counterfactual-freeze.md's reproduction builds it.
+FeaturedGame = BakedGame
+
+
 @dataclass(frozen=True)
 class BundlePlan:
     """What one build bakes, and the default set its frontend compiles in."""
@@ -262,13 +268,17 @@ def recorded_games(samples_dir: Path = _SAMPLES_DIR) -> tuple[BakedGame, ...]:
     """Every recorded game under ``samples_dir``, ordered by set, then seed.
 
     A set is what the live API serves (:meth:`SetLoaderRegistry.available_sets`)
-    and a game is every recording file the loader reads there, one per seed
-    (``replay-seed-1`` and ``replay-seed-01`` are one game, as the loader
-    serves them). Games are listed by FILE rather than by the loader's validated
-    listing, so a recording that fails validation reaches :func:`_bake_set` as
-    a missing seed and fails the build instead of leaving the bundle quietly.
+    and a game is every recording file the loader reads there. Each must carry
+    its canonical name, ``replay-seed-<seed>.jsonl``: the live loader also
+    serves a zero-padded ``replay-seed-01.jsonl`` as seed 1, but the bundle's
+    published results accept only the canonical spelling, so any other one is
+    refused here, before anything is written. Games are listed by FILE rather
+    than by the loader's validated listing, so a recording that fails
+    validation reaches :func:`_bake_set` as a missing seed and fails the build
+    instead of leaving the bundle quietly.
 
-    Raises :class:`ValueError` when there is no set.
+    Raises :class:`ValueError` when there is no set, or naming the file when a
+    recording's name is not canonical.
     """
 
     sets = SetLoaderRegistry(samples_dir).available_sets()
@@ -276,12 +286,21 @@ def recorded_games(samples_dir: Path = _SAMPLES_DIR) -> tuple[BakedGame, ...]:
         raise ValueError(f"no recorded set under {samples_dir}: nothing to bake")
     games: list[BakedGame] = []
     for set_name in sets:
-        seeds = {
-            seed
-            for path in (samples_dir / set_name).glob(REPLAY_FILENAME_GLOB)
-            if path.is_file()
-            and (seed := replay_seed_from_filename(path.name)) is not None
-        }
+        seeds: list[int] = []
+        for path in sorted((samples_dir / set_name).glob(REPLAY_FILENAME_GLOB)):
+            seed = replay_seed_from_filename(path.name)
+            if not path.is_file() or seed is None:
+                continue
+            # _build_public_results (api/public_results.py:308) refuses any
+            # other spelling too, but only mid-bake, after the frontend build.
+            if path.name != f"replay-seed-{seed}.jsonl":
+                raise ValueError(
+                    f"{path} is not named replay-seed-{seed}.jsonl. The live "
+                    "loader tolerates a zero-padded or otherwise respelled "
+                    "recording name, but the bundle does not: its published "
+                    "results accept only the canonical name. Rename the file."
+                )
+            seeds.append(seed)
         games.extend(BakedGame(set_name=set_name, seed=s) for s in sorted(seeds))
     return tuple(games)
 
@@ -291,7 +310,8 @@ def games_to_bake(
 ) -> tuple[BakedGame, ...]:
     """:func:`recorded_games`, once every curated featured game is among them.
 
-    Raises :class:`ValueError` when there is no set, or when a curated
+    Raises :class:`ValueError` when there is no set, when a recording's file
+    name is not canonical (:func:`recorded_games`), or when a curated
     ``FEATURED_GAMES`` entry is not among the games: the picker joins its
     Featured strip to the baked list by seed and drops an entry it cannot find
     without a word.

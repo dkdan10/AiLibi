@@ -1090,3 +1090,32 @@ def test_a_recording_the_loader_refuses_fails_the_bake(tmp_path: Path) -> None:
     assert [meta.seed for meta in ReplayLoader(samples / "4p1i").list_replays()] == [29]
     with pytest.raises(FileNotFoundError, match=r"seeds absent from .*: \[7\]"):
         bdb.bake_data(tmp_path / "out", games=games, samples_dir=samples)
+
+
+def test_a_recording_name_the_published_results_refuse_fails_the_listing(
+    tmp_path: Path,
+) -> None:
+    """A respelled recording name is refused before anything is built.
+
+    The live loader serves ``replay-seed-01.jsonl`` as seed 1, but each baked
+    set's published results accept only ``replay-seed-1.jsonl``, so a listing
+    that took the padded name would abort the build mid-bake instead.
+    """
+
+    samples = tmp_path / "samples"
+    (samples / "4p1i").mkdir(parents=True)
+    source = _SAMPLES / "4p1i" / "replay-seed-29.jsonl"
+    (samples / "4p1i" / source.name).write_bytes(source.read_bytes())
+    (samples / "4p1i" / "replay-seed-01.jsonl").write_bytes(source.read_bytes())
+    picker = tmp_path / "ReplayPicker.tsx"
+    picker.write_text(
+        _picker_source('  {\n    set: "4p1i",\n    seed: 29,\n    label: "a",\n  },'),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"replay-seed-01\.jsonl is not named"):
+        bdb.games_to_bake(samples, picker)
+
+
+def test_the_former_game_name_is_the_same_class() -> None:
+    assert bdb.FeaturedGame is bdb.BakedGame

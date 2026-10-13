@@ -8,15 +8,23 @@ every match that is not on the allow-lists below.
 A home path is ``/Users/<name>`` or ``/home/<name>`` (which also covers the
 ``C:/Users/<name>`` spelling), the backslash form ``C:\\Users\\<name>`` with or
 without its drive letter and with single or doubled backslashes, or the dashed
-``-Users-<name>-`` a tool derives from a working path. ``Users`` matches in any
-case, as the macOS and Windows file systems resolve it; ``home`` matches in any
-case only in the backslash form, since on Linux ``/Home/`` is not the home root
-(``Arrow/Home/End`` names keys). The account passes only when it is one of
+form a tool derives from a working path by turning each ``/`` into ``-``.
+``Users`` matches in any case, as the macOS and Windows file systems resolve it;
+``home`` matches in any case only in the backslash form, since on Linux
+``/Home/`` is not the home root (``Arrow/Home/End`` names keys). In the slash
+and backslash forms the account passes only when it is one of
 :data:`_GENERIC_ACCOUNTS`, compared without case: the cloud container's
 ``user``, the CI and infrastructure accounts ``runner``, ``ci``, ``node`` and
 ``linuxbrew``, macOS's ``Shared``, the fixtures' ``nobody`` and ``someone``, and
 an elided ``...``. A home directory written as ``~`` never matches, which is how
 the recorded run output and the review archive spell the operator's.
+
+The dashed form cannot say where the account ends, since an account may hold a
+``-`` itself (``user-john``), so it is judged whole: its tail runs from after
+the ``Users-`` or ``home-`` to the first character that is not a word
+character, ``.`` or ``-`` (a ``/``, a space, a quote, the end of the line), and
+it passes only when that entire tail is one of :data:`_GENERIC_DASHED_TAILS`.
+The per-account list never applies to it.
 
 An address passes only when it is one of :data:`_GENERIC_ADDRESSES` exactly
 (the commit trailer's ``noreply@anthropic.com`` and GitHub's
@@ -46,11 +54,12 @@ _REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 _CANDIDATES: Final = (
     r"/(users|home)/|\\+(users|home)\\+|-(users|home)-|@([a-z0-9-]+\.)+[a-z]{2,}"
 )
-#: The three home-path spellings; whichever group matched holds the account.
+#: The three home-path spellings. The first two groups hold an account; the
+#: third holds a dashed form's whole tail.
 _HOME: Final = re.compile(
     r"/(?:(?i:users)|home)/([\w.-]+)"
     r"|(?i:(?:[a-z]:)?\\+(?:users|home)\\+)([\w.-]+)"
-    r"|-(?:(?i:users)|home)-([\w.]+)-"
+    r"|-(?:(?i:users)|home)-([\w.-]+)"
 )
 #: An address: a local part directly before the ``@``, so a decorator never matches.
 _MAIL: Final = re.compile(r"[\w.%+-]+@((?:[a-z0-9-]+\.)+[a-z]{2,})", re.IGNORECASE)
@@ -58,6 +67,9 @@ _MAIL: Final = re.compile(r"[\w.%+-]+@((?:[a-z0-9-]+\.)+[a-z]{2,})", re.IGNORECA
 _GENERIC_ACCOUNTS: Final = frozenset(
     {"user", "runner", "ci", "node", "linuxbrew", "shared", "nobody", "someone", "..."}
 )
+#: Dashed tails that belong to no person, lower-cased: the cloud sandbox's
+#: scratch directory, ``/tmp/claude-0/-home-user-AiLibi/``.
+_GENERIC_DASHED_TAILS: Final = frozenset({"user-ailibi"})
 #: Addresses that reach no person, matched whole and without case.
 _GENERIC_ADDRESSES: Final = frozenset({"noreply@anthropic.com", "noreply@github.com"})
 #: Domains on which no address reaches a person, matched whole and without case.
@@ -84,8 +96,13 @@ def personal_data_hits(rows: Iterable[GrepRow]) -> list[str]:
     hits: list[str] = []
     for path, line, text in rows:
         for match in _HOME.finditer(text):
-            account = next(group for group in match.groups() if group is not None)
-            if account.lower() not in _GENERIC_ACCOUNTS:
+            slashed, backslashed, dashed = match.groups()
+            if dashed is not None:
+                generic = dashed.lower() in _GENERIC_DASHED_TAILS
+            else:
+                account = slashed if slashed is not None else backslashed
+                generic = account.lower() in _GENERIC_ACCOUNTS
+            if not generic:
                 hits.append(f"{path}:{line}: {match.group(0)}")
         for match in _MAIL.finditer(text):
             if (
@@ -155,8 +172,15 @@ def test_a_planted_home_path_and_address_in_a_tracked_file_are_reported(
     # Split so this file's own bytes never hold a match.
     home, dashed, mail = (
         "/Users/" + "alice",
-        "-Users-" + "alice-",
+        "-Users-" + "alice-projects-AiLibi",
         "alice" + "@icloud.com",
+    )
+    # A hyphenated account, a CI account's dashed path, and a non-ASCII one: each
+    # dashed tail is judged whole, so a generic first component does not pass it.
+    hyphenated, runner, accented_dashed = (
+        "-Users-" + "user-john-projects-x",
+        "-home-" + "runner-work-x",
+        "-home-" + "émile-x",
     )
     staff = "alice" + "@anthropic.com"
     windows, doubled = "C:\\" + "Users\\alice", "C:\\\\" + "Users\\\\alice"
@@ -169,7 +193,7 @@ def test_a_planted_home_path_and_address_in_a_tracked_file_are_reported(
             "# Notes\n"
             "\n"
             f"ran from {home}/projects/AiLibi\n"
-            f"scratch at /private/tmp/claude-501/{dashed}projects-AiLibi/s\n"
+            f"scratch at /private/tmp/claude-501/{dashed}/s\n"
             f"authored as {mail}\n"
             "/home/user/AiLibi, /Users/someone/x and noreply@anthropic.com\n"
             "~/projects/AiLibi, ~/.claude/projects/.../memory and /private/tmp/.../scratchpad\n"
@@ -181,6 +205,8 @@ def test_a_planted_home_path_and_address_in_a_tracked_file_are_reported(
             f"ran from {shouted}, {lowered} and {accented}; Arrow/Home/End seek\n"
             f"progress 10%\rprogress 100% in {home}/scratch\n"
             f"after the carriage return, {mail}\n"
+            f"scratch at /tmp/{hyphenated}/s, '{runner}' and {accented_dashed}\n"
+            "scratch at /tmp/claude-0/-home-user-AiLibi/abc\n"
         ).encode("utf-8")
     )
     (tmp_path / "untracked.md").write_text(f"{home}/scratch\n", encoding="utf-8")
@@ -199,6 +225,9 @@ def test_a_planted_home_path_and_address_in_a_tracked_file_are_reported(
         f"docs/x.md:13: {accented}",
         f"docs/x.md:14: {home}",
         f"docs/x.md:15: {mail}",
+        f"docs/x.md:16: {hyphenated}",
+        f"docs/x.md:16: {runner}",
+        f"docs/x.md:16: {accented_dashed}",
     ]
 
 

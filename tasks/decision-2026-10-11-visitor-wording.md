@@ -131,6 +131,6 @@ incorrect" ballot badge; how the local dashboard reads skips).
 The owner asked for a README front door that leads with the game, the demo and who did what. The title line changed
 from "AiLibi — can agents reason from what they actually saw?" to "AiLibi — an Among Us-style game played by LLM
 agents, built by directing AI coding agents". The tagline, the byline, the missed-targets sentence and every checked
-fact stayed. `scripts/check_doc_facts.py` is unchanged; the wording pins in `tests/scripts/test_check_doc_facts.py`
-follow the new text, and the historical front doors those tests rebuild start from the README frozen at `d1220ead`
-(`tests/scripts/_goldens/README-d1220ead.md`).
+fact stayed. `scripts/check_doc_facts.py` gained six README prose-figure checks and a wider as-of stamp pattern, each
+with a planted case, so the new prose figures are re-derived rather than transcribed; the wording pins in its tests
+follow the new text, and the historical front doors they rebuild start from `tests/scripts/_goldens/README-d1220ead.md`.

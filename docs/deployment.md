@@ -144,6 +144,8 @@ roles, kill attribution, vent usage — for every committed game, because that i
 what the spectator IS (`docs/architecture.md`, `api/` — privileged by design).
 Publishing the bundle therefore publishes the recorded outcomes of all of those
 games, which are already committed to this repository in `replays/samples/`.
+Carrying every game rather than the featured five is a publication decision,
+recorded in [its decision record](../tasks/decision-2026-10-13-demo-all-games.md).
 What it does NOT publish is a live, unauthenticated, unbounded-work endpoint
 over whatever the host happens to have on disk. That distinction — a fixed set
 of already-public bytes vs. an open query surface into the operator's
