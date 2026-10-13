@@ -33,7 +33,7 @@ as the deliberate tell), dated in the 2026-09-24 addendum to the direction's sec
 
 Every `path:line` here is a citation at `e886b663`, labelled as such. Wave 1 and 2 cards move
 lines, so the implementer re-anchors each by the named symbol at dispatch. The Stage-B memos are
-in `~/.claude/projects/-Users-danielkeinan-projects-AiLibi/stage-b-2026-09-24/`:
+in `~/.claude/projects/.../stage-b-2026-09-24/`:
 `decision-memo.md`, `vent_witness_and_exit.md`, `vent_movement_options.md` and
 `orchestrator-vent-ruling.md`.
 
@@ -140,7 +140,7 @@ recorded seen exit caused. `s9` is `replays/samples/9p2i`, 50 games.
 - Reproduction, from the repo root with outputs outside the tree:
 
 ```sh
-S=/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad
+S=/private/tmp/.../scratchpad
 PYTHONPATH=. uv run --frozen python $S/ventopts/walk2.py $S/card_vlw/walk2.json
 python3 $S/card_vlw/s9_ruled.py $S/card_vlw/walk2.json   # ruled wait and entry gate, s9 and pooled
 python3 $S/refute_vent/r4.py $S/card_vlw/walk2.json      # hidden travel and the stricter wait, s9
@@ -713,7 +713,7 @@ policy), and G fails at collection (its module-level config is refused).
 **The projection, re-measured at `f98bfae9`** (outputs in the scratch directory, never the tree):
 
 ```sh
-S=/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad
+S=/private/tmp/.../scratchpad
 PYTHONPATH=. uv run --frozen python $S/ventopts/walk2.py $S/vlw-b1-impl/walk2.json
 python3 $S/card_vlw/s9_ruled.py $S/vlw-b1-impl/walk2.json
 python3 $S/refute_vent/r4.py $S/vlw-b1-impl/walk2.json
@@ -1026,7 +1026,7 @@ copy-timing medians of `world_copy_control`. The README section names the new fi
 **Re-measured at `de376a5b`** (count-only, outputs in the scratch directory, never the tree):
 
 ```sh
-S=/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad
+S=/private/tmp/.../scratchpad
 uv run python $S/vlw-fix-r1/reentry_count.py     # arms: stage_b_full, stage_b_full_minus_own_fresh_kill, vent_look_and_wait
 uv run python $S/vlw-fix-r1/b1_numbers.py        # the seed-1003 B1 recording
 PYTHONPATH=. uv run --frozen python $S/ventopts/walk2.py $S/vlw-fix-r1/walk2-de376a5b.json
@@ -1224,7 +1224,7 @@ copy put another worktree's checkout first on that path; the numbers from this w
 round 1's:
 
 ```sh
-S=/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad
+S=/private/tmp/.../scratchpad
 uv run python $S/vlw-fix-r2/reentry_count.py
 uv run python $S/vlw-fix-r2/b1_numbers.py
 PYTHONPATH=. uv run --frozen python $S/ventopts/walk2.py $S/vlw-fix-r2/walk2-3d3240fc.json

@@ -24,7 +24,7 @@ Both source audits agreed the prior reconciled audit's R-1..R-14 are closed or c
 
 ## 3. Commands Run and Evidence Sources
 
-All commands ran from `/Users/danielkeinan/projects/AiLibi`. Exit codes are zero except where noted; `git grep` exits `1` when no match is found (the desired result for the post-2.11 guards).
+All commands ran from `~/projects/AiLibi`. Exit codes are zero except where noted; `git grep` exits `1` when no match is found (the desired result for the post-2.11 guards).
 
 | Command | Result / evidence |
 |---|---|

@@ -2727,11 +2727,11 @@ above it moves, and nothing was re-recorded.
    §2's provenance separation (:115-118) — "the raw recordings … live **outside**
    the repo tree"; §16's source line (:1066-1070), which reads every recorded cell
    from a `~/ailibi-campaign-1826/scoring/<arm>/` JSON; and the
-   `/Users/danielkeinan/ailibi-campaign-1826/…` `replay_set_dir` values kept
+   `~/ailibi-campaign-1826/…` `replay_set_dir` values kept
    **verbatim** in `training/reports/results-finalist-eval.jsonl` under §9.2's
    as-recorded rule — **63 occurrences of 11 distinct paths**, the nine arm
    directories plus two `scoring/<arm>/instruments-view` paths, counted with
-   `grep -o '"replay_set_dir": *"/Users/[^"]*"' training/reports/results-finalist-eval.jsonl`
+   `grep -o '"replay_set_dir": *"~/[^"]*"' training/reports/results-finalist-eval.jsonl`
    (add `| sort -u` for the distinct count). All three name the working root this campaign ran
    in, and the bytes that root held are the bytes on the pinned commit in item 1 —
    so a reader who wants the event-level lineage under any §16 cell runs item 2's
@@ -2745,3 +2745,21 @@ above it moves, and nothing was re-recorded.
    boundary. Auditability is what the pin buys. Separately and as before, every
    derived statistic here was already reproducible without the slate — §18 item 1
    recomputed the paired tests from `results-finalist-eval.jsonl` alone.
+
+## 21. Home-directory erratum (2026-10-13 — the personal-data scrub; two lines of §20 edited in place)
+
+On 2026-10-13 the operator's home directory was removed from every tracked file.
+In `training/reports/results-finalist-eval.jsonl`, rows 3-11, every
+`replay_set_dir` value now begins `~/ailibi-campaign-1826/` where the recording
+wrote the operator's absolute home path. Nothing else in those rows changed, and
+rows 1-2, whose digest `tests/training/test_finalist_eval_pins.py` pins, carry no
+home path and were not touched. The bytes on the pinned evidence commit in §20
+item 1 still carry the absolute path.
+
+So the "verbatim" of §9.2 (:569-571), of §16's source line (:1070) and of §20
+item 3 now holds for every byte of those values except the home directory, which
+is spelled `~`. This is the one exception to the additive rule §18-§20 follow:
+two lines of §20 item 3 were edited in place, :2730 to spell the root
+`~/ailibi-campaign-1826/…` and :2734 so its count command matches that spelling.
+The command still counts **63 occurrences of 11 distinct paths**. No cell, table,
+statistic or verdict moved, and no line above this section changed its number.

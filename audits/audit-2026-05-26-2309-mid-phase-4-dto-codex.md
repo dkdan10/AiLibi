@@ -16,7 +16,7 @@ frontend-store/component leak, or replay-loader determinism defect was found.
   dependencies (`rolldown` optional native binding missing). Per `AGENTS.md`, I
   ran `bash scripts/setup_env.sh` with the bundled Node runtime, which restored
   ignored dependency files only; `git status --short` remained clean.
-- **Full gate:** `env PATH=/Users/danielkeinan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH bash scripts/check.sh`
+- **Full gate:** `env PATH=~/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH bash scripts/check.sh`
   passed: `768 passed, 12 skipped`; frontend `tsc:check` and Vite production
   build passed.
 - **API slice:** `uv run pytest tests/api/ -v` passed: `63 passed`.

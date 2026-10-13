@@ -1300,7 +1300,7 @@ Same seed-5 4p1i default game run in fu-main (cfde4c89), fu-prev (9b333a76) and 
 - **Evidence (trimmed):**
 
 ```text
-cd fu-head && git diff --stat 9b333a76..HEAD -- scripts/check_doc_facts.py scripts/validate_task_docs.py docs/workflow.md AGENTS.md CONTRIBUTING.md .github/workflows/ci.yml scripts/compute_next_task.py agent_prompts/ -> (no output: all unchanged). git ls-files agent_prompts | wc -l -> 390. .venv/bin/python scripts/compute_next_task.py -> 'dispatchable now (4): ... task-0-6-empty-fastapi-scaffolding.md ...'. Files containing 'codex/cleanup': 16 (fu-prev) -> 24 (fu-head). git log 9b333a76..HEAD --format=%b | grep -ci Co-Authored-By -> 0; all 37 branch commits are 'Daniel Keinan <danielkeinan@icloud.com>' sole-author. grep -rn 'section 11|workflow recommendation|declined|not adopted' tasks/post-review-plan.md tasks/review-ledger.md tasks/README.md audits/review-2026-09-06/correction-record.md -> one unrelated hit ('accompaniment option was deferred because ...').
+cd fu-head && git diff --stat 9b333a76..HEAD -- scripts/check_doc_facts.py scripts/validate_task_docs.py docs/workflow.md AGENTS.md CONTRIBUTING.md .github/workflows/ci.yml scripts/compute_next_task.py agent_prompts/ -> (no output: all unchanged). git ls-files agent_prompts | wc -l -> 390. .venv/bin/python scripts/compute_next_task.py -> 'dispatchable now (4): ... task-0-6-empty-fastapi-scaffolding.md ...'. Files containing 'codex/cleanup': 16 (fu-prev) -> 24 (fu-head). git log 9b333a76..HEAD --format=%b | grep -ci Co-Authored-By -> 0; all 37 branch commits are 'Daniel Keinan <address redacted>' sole-author. grep -rn 'section 11|workflow recommendation|declined|not adopted' tasks/post-review-plan.md tasks/review-ledger.md tasks/README.md audits/review-2026-09-06/correction-record.md -> one unrelated hit ('accompaniment option was deferred because ...').
 ```
 - **Smallest fix:** Add a short 'Workflow recommendations' subsection to tasks/post-review-plan.md listing the seven items with adopted / deferred-to-<card> / declined-because-<reason>, and name the two committed candidate review directories as the partial adoption of item 3.
 - **Verify:** Read tasks/post-review-plan.md and confirm each of the seven has a disposition word; re-run the byte diffs above to confirm which are code changes versus recorded deferrals.
@@ -2904,7 +2904,7 @@ Totals: 58 findings, 40 survived, 18 refuted.
 
 **Probe notes (frozen):**
 
-SCOPE AND EPISTEMIC LABEL (read first). Everything below was produced by a SCRIPTED, prompt-text-only voter I wrote (/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad/gap-reach/voter.py). It establishes MECHANICAL REACHABILITY ONLY — whether a rendered evidence line exists that some decision procedure could follow. It is NEVER model judgment, never a quality measurement, and never evidence that any model would follow those lines. No provider was contacted (AILIBI_LLM_PROVIDER=fake everywhere; the shim replaces the provider in-process). Read-only: no tracked file in any checkout was edited; all outputs live under scratchpad/gap-reach/.
+SCOPE AND EPISTEMIC LABEL (read first). Everything below was produced by a SCRIPTED, prompt-text-only voter I wrote (/private/tmp/.../scratchpad/gap-reach/voter.py). It establishes MECHANICAL REACHABILITY ONLY — whether a rendered evidence line exists that some decision procedure could follow. It is NEVER model judgment, never a quality measurement, and never evidence that any model would follow those lines. No provider was contacted (AILIBI_LLM_PROVIDER=fake everywhere; the shim replaces the provider in-process). Read-only: no tracked file in any checkout was edited; all outputs live under scratchpad/gap-reach/.
 
 VOTER CONTRACT. voter.py parses the rendered prompt STRING only; `_assert_prompt_only` (voter.py:151-157 of my file) refuses to run if the object ever grows state beyond {shuffle_evidence, speech, force_skip, ballots, ballot_prompts, turn_calls, spoken}, and every ballot cross-checks the prompt-parsed voter id against the call's agent_id and raises ProbeContractError on mismatch (0 raises across all runs). Rule, in order: (1) a subject named by a NEGATIVE travel check in the voter's own rendered memory — v1 wording agents/memory/evidence_context.py:245 "cannot be reconciled by walking", v2 wording agents/memory/evidence_context.py:431 "walking cannot reconcile these placements"; (2) else the valid ejection target named on the most contradiction/account-conflict lines; (3) else SKIP. Targets are restricted to the prompt's own "Valid ejection targets"/"Living candidates" list minus self and minus prompt-declared teammates (0 guard rewrites recorded in any run, so no ballot was ever struck to SKIP by the manager).
 
@@ -3283,7 +3283,7 @@ real_output / (chars/4): mean 1.4818 median 1.4737 p90 1.6522
 $ (real 4p1i per-call, n=234) meeting in mean 2680 p90 3181 | out mean 188 sd 105 p90 347 p99 448 max 502
 ```
 - **Smallest fix:** Add one sentence to each checkpoint: 'these counts are len(text)//4 over scripted text; the real Qwen3.6-27B tokenizer runs ~1.27x on input, and a real model emits ~188 output tokens per call at this roster (measured from replays/samples/4p1i), so multiply by ~1.27 on input and ~3.7 on output before budgeting.'
-- **Verify:** python3 /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad/gap-eval/tokens.py
+- **Verify:** python3 /private/tmp/.../scratchpad/gap-eval/tokens.py
 - **Refuter votes:** reproduce: CONFIRMED → info / accepted-limitation; pre-existing on main: no
 
 #### GEV-8 — The 'seven scenario cases' are six distinct definitions over five distinct action schedules: honest and late_accusation are byte-identical apart from the case label
@@ -3319,7 +3319,7 @@ honest vs impossible_account differing fields: {'case', 'claimed_room'}
 - **Where:** `None` · introducing commit: 
 - **Trigger:** The preregistration reaches stage 2 ('prepare a separate execution manifest', lines 97-123) and stops. Nothing in the repo says which comparison, how many units, what margin, or what it costs.
 - **Expected:** A concrete manifest an owner can approve or refuse in one reading.
-- **Actual:** Proposed below and saved verbatim at /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad/gap-eval/manifest-D1.json.
+- **Actual:** Proposed below and saved verbatim at /private/tmp/.../scratchpad/gap-eval/manifest-D1.json.
 
 STAGE: preregistration stage 3 (controlled meeting units), NOT stage 4. Rationale: (a) the adoption question is whether a fresh model DECIDES better on entitled evidence, and lines 140-141 already exclude controlled units from win-rate denominators, so stage 4 answers a different question; (b) stage 4 dilutes the meeting signal through tactical divergence — the committed capture shows search changes 5/5 engine trajectories, so paired seeds stop being comparable after the first divergence; (c) stage 4 costs 13.6 calls/game (476/35, measured) for one outcome per game, vs 6 calls for one decision per stage-3 unit.
 
@@ -3331,7 +3331,7 @@ COMPARISON (exactly two arms): reference = repaired_clock (temporal v2 + evidenc
 Design saved at .../gap-eval/manifest-D1.json. Power numbers from an inline computation (Acklam inverse normal, za=1.96, zb=0.8416) printed: unpaired_per_arm 25/29/39/31 for the four effect sizes; 'McNemar pairs, delta=0.35: {psi=0.35: 20, psi=0.45: 27, psi=0.55: 33}'. Cost inputs from .../gap-eval/projection.json: calibration_real_over_charsdiv4_input 1.2674 (n=1974); real_4p1i_output_tokens {n:234, mean:188.0, p90:347, max:502}; projected_real_input_per_call {repaired_clock: 3601, combined_accounts: 2416}. Executability evidence in GEV-2/GEV-3.
 ```
 - **Smallest fix:** Adopt or amend manifest-D1.json as the stage-3 execution manifest, then have an independent reviewer build the 62 held-out prefixes before anything is run.
-- **Verify:** cat /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad/gap-eval/manifest-D1.json; python3 .../gap-eval/projection.py
+- **Verify:** cat /private/tmp/.../scratchpad/gap-eval/manifest-D1.json; python3 .../gap-eval/projection.py
 - **Refuter votes:** reproduce: CONFIRMED → info / optional-improvement; pre-existing on main: not-applicable
 
 #### GEV-10 — source_hashes() lists a 'maps' package that does not exist; the map is still bound, via engine/
@@ -3372,7 +3372,7 @@ deduction totals: {'ballots': 144, 'voluntary_skips': 144, 'wrongful_ejections':
 normal-policies totals {'ballots': 238, 'voluntary_skips': 238, 'wrongful_accusations': 0, 'meetings': 67, 'calls': 476}
 ```
 - **Smallest fix:** Require the execution manifest to state explicitly that n is derived from a declared minimum-actionable effect plus a pilot-estimated base rate and discordance, and to run the pilot as a separate frozen leg whose prefixes are then burned as development.
-- **Verify:** python3 /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad/gap-eval/tokens.py and the totals command above
+- **Verify:** python3 /private/tmp/.../scratchpad/gap-eval/tokens.py and the totals command above
 - **Refuter votes:** reproduce: CONFIRMED → info / accepted-limitation; pre-existing on main: no
 
 
@@ -4314,7 +4314,7 @@ Code path: meetings/manager.py:1076-1082 returns detect_public_account_conflicts
 
 **Probe notes (frozen):**
 
-SCOPE: oracle-independence inventory for the six verification claims named in the probe, plus defect-injection proofs. All work in a scratch COPY (scratchpad/gap-oracle/tree, rsync of fu-head minus .venv/.git/replays/frontend/audits); fu-head and /Users/danielkeinan/projects/AiLibi both verified `git status --porcelain` EMPTY at the end. No live provider, no committed artifact regenerated, all outputs under scratchpad/gap-oracle/.
+SCOPE: oracle-independence inventory for the six verification claims named in the probe, plus defect-injection proofs. All work in a scratch COPY (scratchpad/gap-oracle/tree, rsync of fu-head minus .venv/.git/replays/frontend/audits); fu-head and ~/projects/AiLibi both verified `git status --porcelain` EMPTY at the end. No live provider, no committed artifact regenerated, all outputs under scratchpad/gap-oracle/.
 
 INVENTORY (producer -> checker, file:line at HEAD fd1f923c):
 (a) MEMORY RENDER — SHARED. Producer `agents/memory/store.py:301 render_for_prompt`. Live consumer `orchestrator/game.py:62` (import) -> `orchestrator/game.py:3651` (call). Reader consumer `api/replay_loader.py:51` (import) -> `api/replay_loader.py:2301` (call, `rendered_memory_text=`). The two experiment guards (`experiments/deduction_evaluation.py:240-247`, `experiments/investigation_evaluation.py:465-472`) compare the reader's `rendered_memory_text` to the live captured prompt — i.e. they compare f(x_reader) to f(x_live) using the SAME f. Scope = reconstructed memory STATE only; the render function itself is unchecked.

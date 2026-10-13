@@ -85,7 +85,7 @@ Pre-Phase-4 audit.
 
 ---
 
-- **Report path:** `/Users/danielkeinan/projects/AiLibi/audits/audit-2026-05-25-0345-pre-phase-4-verification.md`
+- **Report path:** `~/projects/AiLibi/audits/audit-2026-05-25-0345-pre-phase-4-verification.md`
 - **Verdict:** Verification passed — Pre-Phase-4 audit may proceed.
 - **Counts:** Closed = 8, Partial = 0, Not closed = 0.
 - **Failed commands:** none.

@@ -134,7 +134,7 @@ amendment keeps (L6). Among the retired items are the transcription half of the 
 card has already turned into a registry-derived read needs no re-pin here; the sweep re-counts at dispatch. Its swap
 rehearsal moved round 2 to the candidate copy as this card does, and its Results list the failures it left for this
 card by test id. The baselines memo is
-`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/baselines-2026-10-03/baselines-memo.md`; its
+`~/.claude/projects/.../baselines-2026-10-03/baselines-memo.md`; its
 Part 3.1 row W35 keeps the role clause of the second card's criterion while D7 reads "never".
 
 ## Acceptance

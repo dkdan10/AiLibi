@@ -2,7 +2,7 @@
 
 Reviewer label: `meetings-manager`. Read-only. Repo at `main` (b809b19c). Machine load during timings: `uptime` 5.6–6.7 (1-min), 10-core.
 
-Scratch artefacts (all under `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/meetings-manager/`):
+Scratch artefacts (all under `/private/tmp/.../scratchpad/work/meetings-manager/`):
 `density.py` (comment/docstring measurement), `fuzz_ballot_chain.py` (hypothesis probe, 3000 examples), `profile_run.py` (cProfile of `MeetingManager.run`), `repro_identity_fields.py` (identity-field default repro), `vacuous_tie_test.py`, `edge_small.py`.
 
 ---
@@ -165,4 +165,4 @@ Scratch artefacts (all under `/private/tmp/claude-501/-Users-danielkeinan-projec
 
 ---
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/reports/B/meetings-manager.md`
+Full report: `/private/tmp/.../scratchpad/reports/B/meetings-manager.md`

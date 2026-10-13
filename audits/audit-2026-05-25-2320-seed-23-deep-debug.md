@@ -550,7 +550,7 @@ even at the first meeting; doubling headroom is conservative).
 
 ## Investigation deliverables
 
-- **Report:** `/Users/danielkeinan/projects/AiLibi/audits/audit-2026-05-25-2320-seed-23-deep-debug.md`
+- **Report:** `~/projects/AiLibi/audits/audit-2026-05-25-2320-seed-23-deep-debug.md`
   (this file).
 - **Ephemeral artifacts** (NOT committed) under `/tmp/seed-23-debug/`:
   - `sweep.py`, `sweep-seed-{0..22}.jsonl` — fake-provider seed sweep
@@ -565,7 +565,7 @@ even at the first meeting; doubling headroom is conservative).
 
 ## Final summary
 
-- **Report path:** `/Users/danielkeinan/projects/AiLibi/audits/audit-2026-05-25-2320-seed-23-deep-debug.md`
+- **Report path:** `~/projects/AiLibi/audits/audit-2026-05-25-2320-seed-23-deep-debug.md`
 - **Total live spend:** $0.1233 USD
 - **NEW defect classes (not in 3.15/3.16/3.17):** **1 critical** (Statement
   truncation at 512 tokens — production crash path; surfaced briefly in

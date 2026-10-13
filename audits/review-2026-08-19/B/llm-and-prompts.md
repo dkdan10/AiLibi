@@ -140,4 +140,4 @@ On the Anthropic/Ollama paths (no think-strip, no preamble guard) each of these 
 - Extractor perf: 2,000 unmatched `{` = 80 ms; 8,000 = 1,247 ms; clean 7 KB object 0.3 ms; 800 stray `{x}` + truncated tail (7.2 KB) 1 ms.
 - Bare-env notice count for `build_default_meeting_runner()`: 2.
 - `mypy --strict llm agents/strategic/prompts`: Success (11 files). `ruff check`: All checks passed.
-- Repro scripts kept under `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/llm-and-prompts/` (inline heredocs; nothing written into the repo).
+- Repro scripts kept under `/private/tmp/.../scratchpad/work/llm-and-prompts/` (inline heredocs; nothing written into the repo).

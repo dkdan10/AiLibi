@@ -407,13 +407,13 @@ of recording the fork instead of resolving it.
 ## 8. APPENDIX — the recorded campaign invocations, repo-relative (Task 19.23)
 
 The 18.25 crew campaign was launched from eight operator-authored harness
-scripts, preserved verbatim as provenance under
+scripts, preserved as provenance (home directory shortened to `~`) under
 `training/artifacts/coevo/provenance/harnesses/`. They are the record of what
 actually ran, and they are **not runnable as written**: every one of them opens
 with the same three lines —
 
 ```python
-_REPO = "/Users/danielkeinan/projects/AiLibi"
+_REPO = "~/projects/AiLibi"
 os.chdir(_REPO)
 sys.path.insert(0, _REPO)
 ```
@@ -490,11 +490,11 @@ from training.coevo.driver import CoevoCampaignConfig, CoevoSideConfig, run_alte
 from training.crew.options import OwnedTaskOptionBasis
 from training.crew.scorer import build_crew_scorer
 
-REPO = Path.cwd()                       # was "/Users/danielkeinan/projects/AiLibi"
+REPO = Path.cwd()                       # was "~/projects/AiLibi"
 CAMPAIGN_ROOT = Path("/tmp/ailibi-campaign-1825")   # operator scratch root, outside
                                         # the tree by convention (docs/artifacts.md,
                                         # class REPO-EXTERNAL) — was
-                                        # "/Users/danielkeinan/ailibi-campaign-1825"
+                                        # "~/ailibi-campaign-1825"
 
 # --- the row from the table below -----------------------------------------
 RUN_NAME = "run-c1-crew-owned-tasks"
@@ -602,7 +602,7 @@ from training.bakeoff.harness import load_candidate_weights
 from training.coevo.hall_of_fame import read_loadable_artifact
 from training.realpath import RealPathCandidate, RealPathRerankConfig, run_realpath_rerank
 
-REPO = Path.cwd()                       # was "/Users/danielkeinan/projects/AiLibi"
+REPO = Path.cwd()                       # was "~/projects/AiLibi"
 
 # --- the row from the table below -----------------------------------------
 LEG = "leg-c1-t1"
@@ -618,7 +618,7 @@ SWAP2 = ("c1-swap2-champ-gen9", 9, "0bf179b719a67c1b40f97377ba49bad6512d08932e0d
 # ---------------------------------------------------------------------------
 
 # WHERE THE ARCHIVED BYTES LIVE (read-only). As-recorded, this leg wrote to
-# "/Users/danielkeinan/ailibi-campaign-1825/realpath/<run>/"; PATHS.md maps that
+# "~/ailibi-campaign-1825/realpath/<run>/"; PATHS.md maps that
 # prefix here, which is where the recordings and their manifest were archived
 # (on the evidence commit since 19.22, restored by scripts/fetch_evidence.sh).
 ARCHIVE = REPO / "training/artifacts/coevo/realpath-crew" / RUN

@@ -97,7 +97,7 @@ AILIBI_LLM_PROVIDER=featherless
 AILIBI_PROMPT_SET=qwen3_6_27b
 AILIBI_LLM_MEETING_MODEL=Qwen/Qwen3.6-27B
 AILIBI_NUM_PLAYERS=9  AILIBI_NUM_IMPOSTORS=2  AILIBI_TASKS_PER_CREWMATE=2
-AILIBI_SAMPLE_DIR=/Users/danielkeinan/ailibi-smoke-21-23/9p2i     # absolute, OUTSIDE the repo
+AILIBI_SAMPLE_DIR=~/ailibi-smoke-21-23/9p2i     # absolute, OUTSIDE the repo
 AILIBI_REFRESH_WORKERS=2
 AILIBI_SEED_MAX_ATTEMPTS=8
 AILIBI_REPORTER_REASONING=1
@@ -148,8 +148,8 @@ second run only.** Not one cell below comes from the first attempt. Both are pre
 
 | attempt | retry budget | path | status |
 |---|---|---|---|
-| 1 | 4 (the wrapper default) | `/Users/danielkeinan/ailibi-smoke-21-23/9p2i-attempt-1-default-retry-budget` | superseded; quoted nowhere AS A CELL (five labelled context mentions, enumerated below) |
-| **2** | **8 (the contracted export)** | `/Users/danielkeinan/ailibi-smoke-21-23/9p2i` | **the run this report certifies** |
+| 1 | 4 (the wrapper default) | `~/ailibi-smoke-21-23/9p2i-attempt-1-default-retry-budget` | superseded; quoted nowhere AS A CELL (five labelled context mentions, enumerated below) |
+| **2** | **8 (the contracted export)** | `~/ailibi-smoke-21-23/9p2i` | **the run this report certifies** |
 
 A live model is sampled per call, so the two attempts are different bytes, not a re-derivation of
 the same ones. **The first attempt is kept and named rather than deleted** — an operator who wants
@@ -189,7 +189,7 @@ mechanism, and it is why the shell discipline is proven rather than asserted.
 The wrapper's substrate-lever preflight (`scripts/refresh_samples.sh`:303, delegating to
 `orchestrator.replay.substrate_slate_mismatches`) runs on the DRY-RUN path (:524) as well as the
 real one (:650). Four refusals and one sanctioned preview were run before any seed staged, and
-`/Users/danielkeinan/ailibi-smoke-21-23` held nothing after any of them.
+`~/ailibi-smoke-21-23` held nothing after any of them.
 
 **(a) an export nobody declared** — the slate exported, `--expect-levers` omitted:
 
@@ -231,7 +231,7 @@ Error: the live substrate-lever slate does not match --expect-levers.
 [dry-run] mode: seeds
 [dry-run] seeds: 4,17,19,26,46
 [dry-run] roster: num_players=9 num_impostors=2 tasks_per_crewmate=2
-[dry-run] sample dir: /Users/danielkeinan/ailibi-smoke-21-23/9p2i
+[dry-run] sample dir: ~/ailibi-smoke-21-23/9p2i
 [dry-run] provider: featherless
 [dry-run] meeting model: Qwen/Qwen3.6-27B
 [dry-run] prompt set: qwen3_6_27b
@@ -551,7 +551,7 @@ uv run python scripts/validity_gate.py "$SMOKE_DIR" \
 ```
 
 ```
-Validity gate over /Users/danielkeinan/ailibi-smoke-21-23/9p2i (5 games):
+Validity gate over ~/ailibi-smoke-21-23/9p2i (5 games):
   [PASS] all_games_reach_game_over: 5/5 games reached a reconstructed game_over with a consistent win condition
   [PASS] meeting_rate_and_resolution: meeting_rate 1.0 (floor 0.60); 18 resolved meetings; 0 unresolved
   [PASS] no_duplicate_meeting_rows: 0 duplicate meeting rows over 18 (want 0)
@@ -924,7 +924,7 @@ the remaining four queued, and the whole set — so both columns are here.
 
 **The first-seed column is a `$0` OFFLINE RE-RUN of the same invocation on the PRESERVED bytes**, not
 a transcription of the live console: seed 19 was copied out of the certified run into
-`/Users/danielkeinan/ailibi-smoke-21-23/first-seed-19` and
+`~/ailibi-smoke-21-23/first-seed-19` and
 `uv run python scripts/measure_baseline.py --honesty <that dir>` was run in the same lever-ON shell
 the Measurement line used. It reproduces the live probe's own header and render budget to the digit
 (`1 games, 5 meetings; +1 agent clock proved on 69 discriminating sightings`;
@@ -1379,15 +1379,15 @@ is the owner's**; this report neither makes it nor prices it, and it applies equ
 **The bytes are PRESERVED, not deleted** — both attempts, at stable absolute paths:
 
 ```
-/Users/danielkeinan/ailibi-smoke-21-23/9p2i                              7,330,736 bytes over 8 files
+~/ailibi-smoke-21-23/9p2i                              7,330,736 bytes over 8 files
   — the CONTRACTED run, and the only one this report reads
-/Users/danielkeinan/ailibi-smoke-21-23/9p2i-attempt-1-default-retry-budget   6,305,418 bytes over 8 files
+~/ailibi-smoke-21-23/9p2i-attempt-1-default-retry-budget   6,305,418 bytes over 8 files
   — superseded (§2.0); quoted nowhere as a cell
 ```
 
 so a routed repair can be re-measured on the same bytes at `$0` without re-recording a seed. The
 like-for-like OFF reference this report reads against is preserved beside them at
-`/Users/danielkeinan/ailibi-smoke-21-23/committed-same-five` (five copies of committed replays,
+`~/ailibi-smoke-21-23/committed-same-five` (five copies of committed replays,
 read-only; nothing under `replays/` moved).
 
 **Six items the record inherits** — the first two ROUTED with homes, the rest observed, none of them a STOP and none of them blocking:
@@ -1734,7 +1734,7 @@ for arg in sys.argv[1:]:
 Stdlib only. Reproduces §5's per-seed table, §11.2's watch-item scan and §12's token figures:
 
 ```bash
-AILIBI_OPDATA_DIR=/Users/danielkeinan/ailibi-smoke-21-23/9p2i uv run python opdata.py
+AILIBI_OPDATA_DIR=~/ailibi-smoke-21-23/9p2i uv run python opdata.py
 # the like-for-like OFF column of §12.1:
 AILIBI_OPDATA_DIR=replays/samples/9p2i AILIBI_OPDATA_SEEDS=4,17,19,26,46 uv run python opdata.py
 ```
@@ -1968,7 +1968,7 @@ roles are firewalled out of the JSONL — so "the account was true" is checked a
 rather than against the transcript that made the claim. Run under Shell A:
 
 ```bash
-SMOKE_DIR=/Users/danielkeinan/ailibi-smoke-21-23/9p2i uv run python kill_outcomes.py
+SMOKE_DIR=~/ailibi-smoke-21-23/9p2i uv run python kill_outcomes.py
 ```
 
 ```python
@@ -2029,7 +2029,7 @@ truth, and it is what makes §9.2's watch reading a measurement rather than an i
 Shell A:
 
 ```bash
-SMOKE_DIR=/Users/danielkeinan/ailibi-smoke-21-23/9p2i uv run python at_body.py
+SMOKE_DIR=~/ailibi-smoke-21-23/9p2i uv run python at_body.py
 ```
 
 ```python
@@ -2164,7 +2164,7 @@ AILIBI_LLM_PROVIDER=featherless
 AILIBI_PROMPT_SET=qwen3_6_27b
 AILIBI_LLM_MEETING_MODEL=Qwen/Qwen3.6-27B
 AILIBI_NUM_PLAYERS=9  AILIBI_NUM_IMPOSTORS=2  AILIBI_TASKS_PER_CREWMATE=2
-AILIBI_SAMPLE_DIR=/Users/danielkeinan/ailibi-smoke-21-23/post-424-9p2i   # absolute, OUTSIDE the repo
+AILIBI_SAMPLE_DIR=~/ailibi-smoke-21-23/post-424-9p2i   # absolute, OUTSIDE the repo
 AILIBI_REFRESH_WORKERS=2
 AILIBI_SEED_MAX_ATTEMPTS=8
 AILIBI_REPORTER_REASONING=1
@@ -2179,13 +2179,13 @@ tripwire reader. Shell B carries no lever export at all and is the only shell th
 committed-set gate. `api/replay_loader.py`:655 is still the mechanism that makes crossing them a
 refusal rather than a wrong number, and §18.4 records the crossing that was actually run.
 
-**Two wrapper preflights were run before any seed staged**, and `/Users/danielkeinan/ailibi-smoke-21-23`
+**Two wrapper preflights were run before any seed staged**, and `~/ailibi-smoke-21-23`
 gained nothing from either. The sanctioned preview — exported AND declared — echoed the two overridden
 knobs, which is what attests them (no recorded byte carries either; §12's basis note applies unchanged):
 
 ```
 [dry-run] seeds: 17,46
-[dry-run] sample dir: /Users/danielkeinan/ailibi-smoke-21-23/post-424-9p2i
+[dry-run] sample dir: ~/ailibi-smoke-21-23/post-424-9p2i
 [dry-run] substrate flags: expected levers ON = reporter_reasoning,corroboration_discipline,
           testimony_shapes; every other live toggle OFF; the graduated levers unconditional ON
 [dry-run] seed workers: 2 parallel …
@@ -2292,7 +2292,7 @@ uv run python scripts/validity_gate.py "$SMOKE_DIR" --expected-model Qwen/Qwen3.
 ```
 
 ```
-Validity gate over /Users/danielkeinan/ailibi-smoke-21-23/post-424-9p2i (2 games):
+Validity gate over ~/ailibi-smoke-21-23/post-424-9p2i (2 games):
   [PASS] all_games_reach_game_over: 2/2 games reached a reconstructed game_over with a consistent win condition
   [PASS] meeting_rate_and_resolution: meeting_rate 1.0 (floor 0.60); 9 resolved meetings; 0 unresolved
   [PASS] no_duplicate_meeting_rows: 0 duplicate meeting rows over 9 (want 0)
@@ -2453,7 +2453,7 @@ names any of these, and this section invents none.** The precedent for saying so
 
 **The preserved five-seed bytes still validate.** The OFF-side tools reach them unchanged: run in the
 lever-ON shell at this head, `scripts/validity_gate.py` over
-`/Users/danielkeinan/ailibi-smoke-21-23/9p2i` PASSES all ten checks over its 5 games, 18 meetings and
+`~/ailibi-smoke-21-23/9p2i` PASSES all ten checks over its 5 games, 18 meetings and
 102 ballots, `byte_identical_reconstruction` included. **The recording is intact; #424 did not corrupt
 it.**
 
@@ -2522,7 +2522,7 @@ gaining the third case §18.3 records.
 **The bytes are PRESERVED, not deleted**, beside the four sets §16 names:
 
 ```
-/Users/danielkeinan/ailibi-smoke-21-23/post-424-9p2i    3,115,956 bytes over 5 files
+~/ailibi-smoke-21-23/post-424-9p2i    3,115,956 bytes over 5 files
   — THIS section's run, seeds 17 and 46 at 44f0a28c
 ```
 

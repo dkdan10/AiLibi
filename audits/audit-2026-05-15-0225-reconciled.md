@@ -26,11 +26,11 @@ The Phase 3.3 memory-store gap is demoted to Concern. `agents/memory/store.py` i
 
 ## 3. Commands Run and Evidence Sources
 
-All commands ran from `/Users/danielkeinan/projects/AiLibi`.
+All commands ran from `~/projects/AiLibi`.
 
 | Command | Result / evidence |
 |---|---|
-| `pwd` | `/Users/danielkeinan/projects/AiLibi` |
+| `pwd` | `~/projects/AiLibi` |
 | `git status --short --branch` | `## main...origin/main`, source audit files and `audits/prompts/` were untracked before this report |
 | `git rev-parse --short HEAD`; `git log -1 --oneline` | `0610b72`; merge commit for Task 2.9 |
 | `date '+%Y-%m-%d-%H%M'` | `2026-05-15-0220`, then `2026-05-15-0225` before writing |

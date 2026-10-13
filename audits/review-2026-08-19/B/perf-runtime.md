@@ -1,7 +1,7 @@
 # AiLibi code review — track B, area `perf-runtime`
 
 **Scope:** runtime performance of the core loop, measured from the code up.
-**Repo:** `/Users/danielkeinan/projects/AiLibi` @ `main` (b809b19c), read-only. Python 3.11 via `uv`, macOS arm64 (10 cores).
+**Repo:** `~/projects/AiLibi` @ `main` (b809b19c), read-only. Python 3.11 via `uv`, macOS arm64 (10 cores).
 **Machine caveat:** other reviewers ran concurrently. `uptime` load average is recorded beside every timing; it ranged **4.3 – 9.8** through the session. All comparative numbers (A/B experiments) were taken back-to-back in one process so the load applies equally to both arms.
 
 ---
@@ -471,7 +471,7 @@ This is **documented as deliberate** and the reasoning is sound (the §3.5 dead-
 ## 7. Reproduction
 
 Scratch scripts (read-only, outside the repo) at
-`/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/perf-runtime/`:
+`/private/tmp/.../scratchpad/work/perf-runtime/`:
 
 - `prof_game.py` — in-process game timing + cProfile → `game9p2i.prof`
 - `prof_tour.py` — 10-game tournament cProfile → `tourprof/tour.prof`
@@ -484,4 +484,4 @@ Scratch scripts (read-only, outside the repo) at
 - `bench_hash.py` — F5 state-hash / RNG decomposition
 - `bench_loader3.py`, `bench_api.py`, `bench_unrec.py`, `mem_tour.py` — §2.6–2.8
 
-Nothing in `/Users/danielkeinan/projects/AiLibi` was created, edited, staged or committed. All experiments wrote to the scratch directory; both A/B optimizations were applied by monkeypatch inside a scratch process.
+Nothing in `~/projects/AiLibi` was created, edited, staged or committed. All experiments wrote to the scratch directory; both A/B optimizations were applied by monkeypatch inside a scratch process.

@@ -398,7 +398,7 @@ prompt's edit scope):
 
 ## Final summary lines (per prompt §5 closing requirements)
 
-- **Report path:** `/Users/danielkeinan/projects/AiLibi/audits/audit-2026-05-25-1539-pre-phase-4-real-provider-eval.md`
+- **Report path:** `~/projects/AiLibi/audits/audit-2026-05-25-1539-pre-phase-4-real-provider-eval.md`
 - **Verdict:** Phase 3 blocked — eval crashed (live Anthropic Sonnet 4.6 returns markdown-fenced JSON; `llm/provider.py:121` cannot parse it).
 - **Per-game mean cost:** n/a (no game produced any `LLMCallRecord` rows; the budget hard-cap was uncharged).
 - **Decisive split:** n/a (`BalanceReport` was never printed because the script crashed before line 104).

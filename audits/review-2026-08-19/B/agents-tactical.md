@@ -1,7 +1,7 @@
 # Code-up review — `agents/tactical/` (label: agents-tactical)
 
 Scope: `agents/tactical/{crewmate_policy,impostor_policy,features,pathing}.py`, `agents/tactical/learned/{forward,crew_forward,factory,weights}.py` (+ committed weight artifacts) and `tests/agents/test_{crewmate_policy,impostor_policy,pathing,features,learned_policy}.py` (+ `tests/training/test_learned_factory_acceptance.py` where it is the only test surface for `crew_forward.py`).
-Method: read every file end-to-end (hot paths fully), ran the area's tests, mypy, radon, vulture, pylint duplicate-code, a BFS-vs-A* fuzz (18k queries), a decide() micro-benchmark + cProfile, three deterministic repro scripts, and two measurements over the committed `replays/samples/9p2i` set (54 replays, 2 198 impostor play-ticks). Scratch: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/agents-tactical/`. Machine load during timings: 4.5–7.3 (10 cores, other reviewers concurrent).
+Method: read every file end-to-end (hot paths fully), ran the area's tests, mypy, radon, vulture, pylint duplicate-code, a BFS-vs-A* fuzz (18k queries), a decide() micro-benchmark + cProfile, three deterministic repro scripts, and two measurements over the committed `replays/samples/9p2i` set (54 replays, 2 198 impostor play-ticks). Scratch: `/private/tmp/.../scratchpad/work/agents-tactical/`. Machine load during timings: 4.5–7.3 (10 cores, other reviewers concurrent).
 
 ---
 
@@ -151,4 +151,4 @@ cProfile: 70 % in `_scored_targets` (scans the whole log although only the last 
 7. **Docstring diet + drift fixes**: move task/audit narrative to `audits/`, fix "score at zero", update `DESIGN.md §4.4` and the working-memory HEAD note (F8).
 8. **Bound the per-tick scans** (30-tick `recent()` window, incremental min-remaining) and add a `conftest.py` with the shared map/event fixtures (F9, F13).
 
-Report path: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/reports/B/agents-tactical.md`
+Report path: `/private/tmp/.../scratchpad/reports/B/agents-tactical.md`

@@ -268,7 +268,7 @@ NOT A RE-REPORT: `grep -rn 'IMPOSTOR_PARITY|win check|victory check'` over audit
 ```
 eval/leak_scan.py:710-715 builds the allowance from the events themselves: `witness_allowance = {event.actor for event in events if isinstance(event, (KilledEvent, VentEnteredEvent, VentExitedEvent)) and agent in event.witnesses} - {agent}`; :718 then asserts `seen_players == entitled_players | witness_allowance`, and the room half (:749-759) uses `_witnessed_action_rooms` (eval/leak_scan.py:111-144), which reads the same tuples. Nothing re-derives WHO could have witnessed. The producing rule is engine/rules.py:29-44 `_witnesses_in_room` (co-located + alive + not in_vent), called at :102-107 (kill) and :146-156 (vent).
 
-PROBE A (room clause dropped). Script /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/8c686913-6a30-43ad-8ed2-a35d8125a233/scratchpad/wave0/B/witness_probe.py; `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../witness_probe.py`:
+PROBE A (room clause dropped). Script /private/tmp/.../scratchpad/wave0/B/witness_probe.py; `PYTHONPATH=~/projects/AiLibi uv run python .../witness_probe.py`:
 ```
 --- BASELINE ---
 kill/vent sightings: none
@@ -349,7 +349,7 @@ NOT A RE-REPORT: audits/review-2026-08-19/B/observation-firewall.md §2 F1's mut
 ```
 Call sites: `grep -n "_assert_owned_tasks_match_engine_truth" eval/leak_test.py` -> `41: _assert_owned_tasks_match_engine_truth,` and `157: _assert_owned_tasks_match_engine_truth(` (inside `_run_scripted_game`, eval/leak_test.py:119-170, which walks only `_SCRIPTED_GAMES` at :86-90). `assert_packet_is_leak_clean` (eval/leak_scan.py:958-1030) runs `_assert_owned_task_discipline(packet)` (:1012, shape/sort/no-':'/pending-in-owned only) and `assert_visible_entities_match_engine_truth` (:1013, players+bodies only) — the engine-truth task check at :503 is never invoked. `scan_factory_packets` (:1040) -> `assert_no_factory_packet_leaks` (:1033) -> the same function is what training/bakeoff/harness.py:1833 and training/crew/scorer.py:1748 call.
 
-MUTATION PROBE. Script .../wave0/B/owned_task_probe.py widens `ObservationService._owned_task_ids_for_agent` to `own set | every player's unfinished map ids` (keeping pending a member so the shape invariant still holds). `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../owned_task_probe.py`:
+MUTATION PROBE. Script .../wave0/B/owned_task_probe.py widens `ObservationService._owned_task_ids_for_agent` to `own set | every player's unfinished map ids` (keeping pending a member so the shape invariant still holds). `PYTHONPATH=~/projects/AiLibi uv run python .../owned_task_probe.py`:
 ```
 --- BASELINE ---
 assert_packet_is_leak_clean (champion-gate path) failures: 0 NONE
@@ -635,7 +635,7 @@ NOT A RE-REPORT: no listed known-open id covers testimony-as-content coverage.
 ```
 CODE. agents/memory/store.py:2036-2038 — `for event in episodic.recent(since_tick=0):` / `if event.type != EVENT_SAW_PLAYER_MOVE:` / `continue` (ordinary `saw_player` rows never reach `working.record_sighting`). agents/memory/store.py:2126 — `last_seen_suffix = _format_last_seen_suffix(working.last_seen(player_id))`; store.py:2198-2201 renders `f"last seen in {last_seen.room} at tick {last_seen.tick}"`. agents/memory/working.py:11-20 confirms the single writer: "``record_sighting`` is called by ``agents/memory/store.py`` (``_record_movement_sightings``, at render time) for every witnessed room->room transition". `grep -rn "record_sighting" --include="*.py" . | grep -v tests` returns only that call site.
 
-REPRO (scratchpad/wave0/B/repro_lastseen.py; `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../repro_lastseen.py`) — one witnessed move at tick 2 into ADMIN, then ordinary sightings in LABS at ticks 3-5:
+REPRO (scratchpad/wave0/B/repro_lastseen.py; `PYTHONPATH=~/projects/AiLibi uv run python .../repro_lastseen.py`) — one witnessed move at tick 2 into ADMIN, then ordinary sightings in LABS at ticks 3-5:
 ```
 ## Recent observations (most salient first):
 - [obs p-1:2:1] [tick 2] You saw p-3 move from CAFETERIA to ADMIN.
@@ -1979,7 +1979,7 @@ CODE. agents/memory/store.py:950-953 —
 ```
 and store.py:971-984 then takes `ordered[-1]` as the current sighting and the most-recent DIFFERENT-room entry as `prior`, which the suffix renders at store.py:1011-1014.
 
-REPRO (scratchpad/wave0/B/repro_breadcrumb.py; `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../repro_breadcrumb.py`):
+REPRO (scratchpad/wave0/B/repro_breadcrumb.py; `PYTHONPATH=~/projects/AiLibi uv run python .../repro_breadcrumb.py`):
 ```
 - [obs p-1:2:1] [tick 2] You witnessed p-3 vent in LABS.
 - [obs p-1:3:1] [tick 3] You saw p-3 in MEDBAY (moved from LABS, last seen there at tick 1).
@@ -2016,7 +2016,7 @@ CODE re-read at HEAD: agents/memory/store.py:948-953 skips `action_str in ('vent
 ```
 CODE. agents/memory/store.py:1343-1353 applies `_sighting_is_suppressed` when BUILDING `seen_in_own_room`; store.py:1368-1394 then emits `entered` on `now_seen - prev_seen` and `left` on `prev_seen - now_seen`. The suppression predicate (store.py:1076-1081 with store.py:1039-1042) fires exactly on the tick window `0 <= body_tick - tick <= BODY_PROXIMITY_WINDOW_TICKS` (=3, agents/memory/beliefs.py:100), so a teammate standing still across that window disappears at its first tick and reappears after its last.
 
-REPRO (scratchpad/wave0/B/repro_transitions.py; `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../repro_transitions.py`). Impostor p-1 and teammate p-2 both stand in ROOM_A for ticks 0-6; p-1 sees a body there at tick 4:
+REPRO (scratchpad/wave0/B/repro_transitions.py; `PYTHONPATH=~/projects/AiLibi uv run python .../repro_transitions.py`). Impostor p-1 and teammate p-2 both stand in ROOM_A for ticks 0-6; p-1 sees a body there at tick 4:
 ```
 ## Recent observations (most salient first):
 - [obs p-1:4:2] [tick 4] You discovered p-3's body in ROOM_A.
@@ -2141,7 +2141,7 @@ CODE. agents/perception.py:313-317 —
 ```
 agents/memory/beliefs.py:1162-1178 then pins only players in that map, and skips any body already in `previous_visible_bodies` (perception.py:273-286), so the next tick — when the standing subject IS in the prior window — the body is no longer fresh and the rule never fires.
 
-REPRO (scratchpad/wave0/B/repro_rule1.py; `PYTHONPATH=/Users/danielkeinan/projects/AiLibi uv run python .../repro_rule1.py`), driving the real `ingest_packet`:
+REPRO (scratchpad/wave0/B/repro_rule1.py; `PYTHONPATH=~/projects/AiLibi uv run python .../repro_rule1.py`), driving the real `ingest_packet`:
 ```
 standing-over-the-body p-2 suspicion: 0.5 SuspicionProvenance(... body_proximity=0.0 ...)
 prior-tick co-presence p-2 suspicion: 0.7 SuspicionProvenance(... body_proximity=0.19999999999999996 ...)

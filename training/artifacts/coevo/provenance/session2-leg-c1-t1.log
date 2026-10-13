@@ -4,4 +4,4 @@
 [leg-c1-t1] rank 1: c1-swap2-champ-gen9 selection=47.3000 validity=True referee=False win=0.667 crew_stamped=3
 [leg-c1-t1] rank 2: c1-gen0-owned-tasks-es selection=25.7300 validity=True referee=False win=1.000 crew_stamped=3
 [leg-c1-t1] rank 3: c1-swap0-champ-gen3 selection=24.4000 validity=True referee=False win=1.000 crew_stamped=3
-[leg-c1-t1] LEG DONE ranking=/Users/danielkeinan/ailibi-campaign-1825/realpath/run-c1-crew-owned-tasks/ranking-4000-4002.jsonl
+[leg-c1-t1] LEG DONE ranking=~/ailibi-campaign-1825/realpath/run-c1-crew-owned-tasks/ranking-4000-4002.jsonl

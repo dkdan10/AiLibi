@@ -76,7 +76,7 @@ amendment of 2026-10-09, `:1612-1622` at `335cbdc9`: "Keep the comparison record
 stays, the proposal that round r+1 deletes round r is declined, and a promotion of round 3 keeps round 2's bytes as
 `replays/candidates/stage-b-r2`).
 `tasks/diagnosis-2026-10-02/README.md` Parts 1 to 4. `docs/game-shape.md`. AGENTS.md craft rules 1 to 7. The
-baselines memo (`/Users/danielkeinan/.claude/projects/-Users-danielkeinan-projects-AiLibi/baselines-2026-10-03/baselines-memo.md`,
+baselines memo (`~/.claude/projects/.../baselines-2026-10-03/baselines-memo.md`,
 Part 2's classes, Part 3.1's RETIRE and DEMOTE rows, Part 4 D7, D8 and D14 with D14-T1 to T3) and the rubric design
 memo (`.../rubric-design-2026-10-06/rubric-design-memo.md`) are advisory, outside the tree, read-only at `cf3341ab`
 and `76270d6c`; the decision memo cites both that way (section 8's preamble and 8.6), and so does the audit.

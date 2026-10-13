@@ -33,7 +33,7 @@ the body-freshness band and cleanup decision A-28.
 ## Evidence
 
 Every `path:line` below is a citation at `e886b663`, labelled by its symbol; the implementer re-anchors each
-by that symbol at dispatch. Sources, in `~/.claude/projects/-Users-danielkeinan-projects-AiLibi/`:
+by that symbol at dispatch. Sources, in `~/.claude/projects/.../`:
 `stage-b-2026-09-24/decision-memo.md` (sections 0, 1, 2.3, 3.1, 3.2, 3.4 card 9 and 4),
 `stage-b-2026-09-24/meeting_reset_full.md` (sections 1, 2.2 to 2.9, 4 and 5) and, for the planted tests,
 Part 3 B2 of `analysis-2026-09-24/analysis-memo.md`.

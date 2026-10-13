@@ -870,12 +870,12 @@ What this record deliberately does NOT discharge:
 
 * **299 recorded games** on the corrected substrate at prompt set v5, three sets complete and gated.
 * **The BEFORE column, measured on the preserved baseline-7 bytes** at
-  `/Users/danielkeinan/ailibi-baseline7-preserved/` — honesty, solvability, core R-gate, funnel, V&J
+  `~/ailibi-baseline7-preserved/` — honesty, solvability, core R-gate, funnel, V&J
   and watchability, all four sets, every instrument exit 0. It reproduces the smoke's committed
   reference column exactly (e.g. `samples/9p2i` I-2 `0.0046 (3/659)`, I-10 `0.1711 (26/152)`,
   solvability killer-in-candidate-set `0.875 (126/144)`, and the live 9p2i supply split **92 vent +
   52 transcript = 144/152 = 0.9473684210526315** — NOT B-10's pre-correction 134/152).
-* **The leg-4 partial**, preserved out of tree at `/Users/danielkeinan/ailibi-baseline8-leg4-partial/`
+* **The leg-4 partial**, preserved out of tree at `~/ailibi-baseline8-leg4-partial/`
   (49 replays), so resuming costs ONE seed rather than a leg.
 * **The graduation sweep**, complete and green on its own gates (§0.6).
 

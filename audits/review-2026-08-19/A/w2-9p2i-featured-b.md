@@ -216,4 +216,4 @@ Rewind: t7 (double witness), t9–t10 (reporter dies), meeting-2's "fabricating 
 9. **Meeting protocol**: give the reporter a mandatory "who else was in/near the room" line, let the gate count converging independent accusations (three 0.6s at the same target = leader) instead of requiring a flag, and let a self-placement with the victim ("I was alone in Medbay with p-5") raise a soft flag.
 10. **Wording**: parameterise "a hidden impostor" by impostor count; keep the skip-threshold arithmetic out of the persona voice (or instruct that rationales are spoken).
 
-Full dumps and helper scripts: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/w2-9p2i-featured-b/` (s{23,8,4,5,6}.txt, *.verbose.txt, *.mem.*.txt, s23.llm.p-4.m1.txt, stats.py, stats2.py).
+Full dumps and helper scripts: `/private/tmp/.../scratchpad/work/w2-9p2i-featured-b/` (s{23,8,4,5,6}.txt, *.verbose.txt, *.mem.*.txt, s23.llm.p-4.m1.txt, stats.py, stats2.py).

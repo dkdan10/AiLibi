@@ -449,4 +449,4 @@ Impostors p-2*, p-6*.
    players before rendering instead of leaking `[invalid ... dropped]`; strip role words
    from recorded rationales if they are ever surfaced.
 
-Files: dumps in /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/w1-9p2i-featured-a/ (s2_verbose.txt, s17_verbose.txt, s0/s1/s3.txt, s2_state.txt, s17_state.txt, *_mem.txt, *_prompts.txt, mem.py, state.py).
+Files: dumps in /private/tmp/.../scratchpad/work/w1-9p2i-featured-a/ (s2_verbose.txt, s17_verbose.txt, s0/s1/s3.txt, s2_state.txt, s17_state.txt, *_mem.txt, *_prompts.txt, mem.py, state.py).

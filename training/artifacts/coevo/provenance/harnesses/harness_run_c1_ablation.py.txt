@@ -8,7 +8,7 @@ import os
 import sys
 from pathlib import Path
 
-_REPO = "/Users/danielkeinan/projects/AiLibi"
+_REPO = "~/projects/AiLibi"
 os.chdir(_REPO)
 sys.path.insert(0, _REPO)
 
@@ -19,8 +19,8 @@ from training.coevo.driver import CoevoCampaignConfig, CoevoSideConfig, run_alte
 from training.crew.options import OwnedTaskOptionBasis
 from training.crew.scorer import build_crew_scorer
 
-REPO = Path("/Users/danielkeinan/projects/AiLibi")
-CAMPAIGN_ROOT = Path("/Users/danielkeinan/ailibi-campaign-1825")
+REPO = Path("~/projects/AiLibi")
+CAMPAIGN_ROOT = Path("~/ailibi-campaign-1825")
 RUN_NAME = "ablation-run-c1-conviction-term"
 
 # The 18.24 hand-off seed: intermediates/run-02-utility-lambda4/gen-2 (finalist 1a,

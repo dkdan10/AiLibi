@@ -1,9 +1,9 @@
 # Code review — area `engine` (engine/ + tests/engine/)
 
 Reviewer track: code-up (structure, correctness, determinism, tests, measured behaviour). Read-only.
-Repo: /Users/danielkeinan/projects/AiLibi @ main (b809b19c). Python 3.11 via `uv run`. Load during timings: `load averages: 6.35 6.51 9.42` (10-core box shared with other reviewers) — absolute µs are indicative, ratios are reliable.
+Repo: ~/projects/AiLibi @ main (b809b19c). Python 3.11 via `uv run`. Load during timings: `load averages: 6.35 6.51 9.42` (10-core box shared with other reviewers) — absolute µs are indicative, ratios are reliable.
 
-Scratch/evidence scripts: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/engine/` (`probe_rules.py`, `probe_map.py`, `probe_dupkey.py`, `det_bench.py`, `invariants.py`, `micro.py`, `micro2.py`, `prose.py`).
+Scratch/evidence scripts: `/private/tmp/.../scratchpad/work/engine/` (`probe_rules.py`, `probe_map.py`, `probe_dupkey.py`, `det_bench.py`, `invariants.py`, `micro.py`, `micro2.py`, `prose.py`).
 
 ---
 

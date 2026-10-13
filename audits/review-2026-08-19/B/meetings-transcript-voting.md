@@ -1,7 +1,7 @@
 # Code review — meetings/transcript.py, voting.py, render_contract.py, schemas.py (+ tests)
 
 Track: CODE-UP, read-only. Reviewer label: `meetings-transcript-voting`.
-Repo: /Users/danielkeinan/projects/AiLibi @ main (b809b19c). Python 3.11 via `uv run`.
+Repo: ~/projects/AiLibi @ main (b809b19c). Python 3.11 via `uv run`.
 Machine load during timings: `load averages: 6.14–6.56` (10-core, other reviewers concurrent).
 
 Scratch/evidence scripts (all reproducible with `PYTHONPATH=. uv run python <script>` from repo root):
@@ -138,4 +138,4 @@ Overall: correct and deterministic core, no P0. Two P1s (no provenance on incrim
 
 ---
 
-Report path: /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/reports/B/meetings-transcript-voting.md
+Report path: /private/tmp/.../scratchpad/reports/B/meetings-transcript-voting.md

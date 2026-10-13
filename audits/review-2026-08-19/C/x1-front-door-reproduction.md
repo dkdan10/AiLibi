@@ -27,7 +27,7 @@ Bottom line for the front door: **every reproducible claim above the fold reprod
 `AILIBI_PROMPT_SET` is mentioned **nowhere** in README.md, .env.example, AGENTS.md or docs/architecture.md (grep count 0 in each). So the outsider's very first command tells them they are running something "two generations behind", pointing at a knob no front-door document names. The 5-game tournament prints it 6 times before the summary.
 
 Minor front-door observations [VERIFIED]:
-- The generated bundle `README.md` bakes the builder's absolute path (`baked from /Users/danielkeinan/projects/AiLibi/replays/samples`) into a file the docs describe as "the only sanctioned public artifact".
+- The generated bundle `README.md` bakes the builder's absolute path (`baked from ~/projects/AiLibi/replays/samples`) into a file the docs describe as "the only sanctioned public artifact".
 - `run_game.py` writes an `*.audit.jsonl` sidecar beside the replay; README never mentions it, so the diff demo leaves an unexplained extra file.
 - The 4-player fake tournament yields 100% impostor wins with the FSM alone; the README does warn "set a real provider … for metric values that reflect real model behavior", but does not point to the committed real-provider reports (`replays/samples/{4p1i,9p2i}/tournament-eval-report.json` exist).
 
@@ -116,6 +116,6 @@ docs/reading-guide.md §4 defines **11** terms (baseline N, adopting record, lad
 - Links: 49 relative, 0 broken. Audits: 80 files, 24,527 lines. tasks/: 24 files, 29,807 lines. agent_prompts/: 321 files.
 - Git: 877 commits; 182 merge commits + 170 squash "(#N)" subjects; 346 merged PRs on GitHub, max #350; tracked tree ≈ 260 MiB; .git 190 MB locally.
 - Tests: 4,961 collected / 4,644 default-selected (317 `campaign`).
-- Scratch outputs: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/x1/` (det/, tourn/, bundle/, *.log, timings.txt).
+- Scratch outputs: `/private/tmp/.../scratchpad/work/x1/` (det/, tourn/, bundle/, *.log, timings.txt).
 
 Note: at the end of this review `git status` showed one untracked `.coverage` file (21:40) — pytest-cov is not installed in the project venv and my only in-repo command was `pytest --collect-only`; concurrent reviewer pytest processes were running at that time, so it is theirs, and I left it in place. Nothing in the repo was created, edited, staged or committed by this review.

@@ -2971,13 +2971,13 @@ _OFF_TREE_ANCHORS: Final[tuple[tuple[str, AvailabilityClass, str, str], ...]] = 
         "operator campaign root `~/ailibi-campaign-1824/` (Phase-18 co-evolution)",
         "REPO-EXTERNAL",
         PATHS_DOC,
-        "/Users/danielkeinan/ailibi-campaign-1824/",
+        "the campaign root `~/ailibi-campaign-1824/`",
     ),
     (
         "operator campaign root `~/ailibi-campaign-1825/` (the 18.25 crew campaign)",
         "REPO-EXTERNAL",
         PATHS_DOC,
-        "operator root `/Users/danielkeinan/ailibi-campaign-1825/`",
+        "operator root `~/ailibi-campaign-1825/`",
     ),
     (
         "operator campaign root `~/ailibi-campaign-1826/` (the finalist slate)",

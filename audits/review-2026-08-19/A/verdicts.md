@@ -28,11 +28,11 @@
 
 **Impact.** Innocents are 79/435 = 18.2% of all ejections. Games with ≥1 innocent ejection end in an impostor win 39/68 = 57%, versus 14/132 = 11% without [counts VERIFIED; direction partly [JUDGMENT]]. Since the contradiction reaches voters as VERIFIED evidence, a crewmate that cannot read its own logbook is indistinguishable from an impostor caught lying, and the impostor wins by voting with the crowd. Cheapest fix: render the `own_room_by_tick` spans the store already holds, and re-label the completed-task line with the tick its room belongs to — no prompt change needed.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-1/report.md`
+Full report: `/private/tmp/.../scratchpad/work/verify-G-1/report.md`
 
 ---
 
-**VERDICT: CONFIRMED-DESIGN-CHOICE** (every number reproduces; the behaviour is a twice-ratified owner decision, already a P1 Phase-19 item — not an undiscovered bug). Scripts: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-2/{census,baseline,resolve,ground,impact,causal,both}.py`
+**VERDICT: CONFIRMED-DESIGN-CHOICE** (every number reproduces; the behaviour is a twice-ratified owner decision, already a P1 Phase-19 item — not an undiscovered bug). Scripts: `/private/tmp/.../scratchpad/work/verify-G-2/{census,baseline,resolve,ground,impact,causal,both}.py`
 
 **Census — 707 meetings, all 4 sets, 830 flag-subject rows** [VERIFIED]
 | kind/sev | flags | dedup subjects | %impostor (dedup) | ejects subject |
@@ -86,7 +86,7 @@ Plus verbatim alibis built on nothing: s14 p-2 *"I must place myself firmly in A
 
 **Impact.** 10% (9p2i) to 22% (4p1i) of a crewmate's remembered work is fabricated, in 159/300 committed games, minted precisely on the tick a teammate dies — the exact window the next meeting litigates. Crewmates swear these phantom tasks as alibis (21 spoken instances in `samples/`), and because the room is invented too, the crew's evidence channel manufactures STRONG "VERIFIED evidence" contradiction flags against its own innocents while impostors are gated out of the inference entirely.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-3/REPORT.md`
+Full report: `/private/tmp/.../scratchpad/work/verify-G-3/REPORT.md`
 
 ---
 
@@ -104,11 +104,11 @@ Exemplars confirmed in the bytes: seed 2 meeting-0 @t7 — p-4* sits in STORAGE 
 
 **Impact.** The frozen-in-place meeting is internally coherent but plays as a teleconference, and it hands the impostor a free execution: whoever they were standing next to when the meeting fired is still there at t+1 with a fresh 4-tick window, which is why 15.7% of reporters die within 3 ticks of the meeting they themselves called. The venting participant is the sharper break — one meeting in ten has someone deliberating from inside the one place the design treats as physically hidden, and no crewmate can perceive it, so the game's strongest tell is silently neutralised at the moment it would matter.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-5/REPORT.md`
+Full report: `/private/tmp/.../scratchpad/work/verify-G-5/REPORT.md`
 
 ---
 
-Verification complete. All scripts are in `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-6/`.
+Verification complete. All scripts are in `/private/tmp/.../scratchpad/work/verify-G-6/`.
 
 **VERDICT: CONFIRMED-DESIGN-CHOICE** — the mechanic is real and intentional; every defect inference drawn from it is REFUTED.
 
@@ -146,7 +146,7 @@ Essentially none, and what exists is positive: unreported corpses stay on the fl
 
 **Real gameplay impact.** 82.2% of body reports still open an interrogation later than the murder (median 3 engine ticks, max 29), and in **116/621 body-triggered meetings (18.7%)** the entire spoken tick span never touches the kill tick — the table alibis a window the killer had already left. 79/621 (12.7%) debate a body whose killer was already dead or ejected; seed 21 m1 is the clean case (p-3 killed t5 by p-2, ejected at m0/t10, body reported t21, table argues ticks 15-20, skips). The corrective is not a `died_at` field on `found_body` — it is a `saw_kill` observation kind so the 93.5% of surviving eyewitnesses can put the murder moment on the record as structured evidence.
 
-Scripts: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-7/` (`g7.py` histogram, `g7i.py` clock proof, `g7j.py` corrected histogram, `g7g.py` witness survival, `g7d.py` window coverage).
+Scripts: `/private/tmp/.../scratchpad/work/verify-G-7/` (`g7.py` histogram, `g7i.py` clock proof, `g7j.py` corrected histogram, `g7g.py` witness survival, `g7d.py` window coverage).
 
 ---
 
@@ -176,7 +176,7 @@ Contradictions attributable to the kill: **0/33** — the 5 kill-witness meeting
 
 **Gameplay impact.** The most conclusive act in the game is the least persuasive one: a crewmate who watches the murder becomes personally certain (1.00) but has no vocabulary to put it on the record, so it reaches peers only as testimony, and adding a second eyewitness makes it *worse* (20%) rather than better — the opposite of the vent, which the prompt devotes a whole paragraph to and which converts at 66%. Worse for believability, the meeting routinely ranks a bookkeeping `alibi_vs_sighting` on an innocent above two people saying "I watched him do it" (seed 45 m1), and impostors win those meetings by staying silent about their location, since the one propagation path that exists needs the accused to volunteer an alibi to break. This is a deliberate, owner-locked deferral protecting against fabricated kill-accusations — but the STRICT gate it chose is, in the recorded corpus, effectively an OFF switch.
 
-Scripts and data: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-8/` (`scan.py`, `agg.py`, `dump_calls.py`, `rows.json`). Repo untouched (`git status` clean).
+Scripts and data: `/private/tmp/.../scratchpad/work/verify-G-8/` (`scan.py`, `agg.py`, `dump_calls.py`, `rows.json`). Repo untouched (`git status` clean).
 
 ---
 
@@ -196,7 +196,7 @@ Design status: `DESIGN.md:334` states it verbatim — "Intra-tick simultaneity i
 
 **Gameplay impact.** 26% of kill attempts are contested and 15.8% of all attempts whiff for a reason no spectator can see — the victim's seat number — with nothing in the narrative, memory render, or meeting acknowledging the miss, so it reads as a dropped frame rather than a dodge. Because seat id is fixed for a whole game it is a persistent invisible survivability handicap (p-1 dodges a quarter of everything, p-8/p-9 nothing) that contaminates any per-seat metric unless controlled for. The other three negatives are genuinely clean, but (c) is guaranteed by corpse deletion, not by a report-once rule, and would break the moment a body persisted past its meeting.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-10/report-G-10.md`
+Full report: `/private/tmp/.../scratchpad/work/verify-G-10/report-G-10.md`
 
 ---
 
@@ -215,7 +215,7 @@ Corpus (300 games; samples/9p2i 50, samples/4p1i 50, ml/9p2i 150, ml/4p1i 50): 3
 
 **Impact.** (a) is the live harm: in 25/300 games a truthful movement memory is re-spoken as a placement that is never true, the referee stamps it STRONG "VERIFIED evidence", and 10 meetings ejected the innocent it framed — including an impostor manufacturing a 7–1 ejection of the body reporter by quoting the origin half of a true line. Because the table votes off the flag at 0.85 confidence, one mis-encoded word converts straight into a lost game. (b) is cosmetic by comparison — an odd doorway-narration — and its evidentiary weight is small next to the 72% of genuine departures the same gate silently drops; it is already owned and one substrate flip (plus a re-record) from the strict rule.
 
-/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-9/report.md
+/private/tmp/.../scratchpad/work/verify-G-9/report.md
 
 ---
 
@@ -231,7 +231,7 @@ VERDICT: **PARTIALLY-TRUE** — the `saw_player` half reproduces; the `saw_vent`
 
 **Gameplay impact (3 sentences).** The vent channel is honest and well-defended, so the claim's alarming "witnessed VENT" quotes are almost all real evidence in the wrong syntactic box — the fix is a `saw_kill` observation kind, not a fabrication clamp. The sighting channel is the actual leak: crew narrate inferred hallway transits and re-speak heard testimony as first-hand at ~12-13% of claims, and because that channel has no grounding chokepoint, ~8% of STRONG `alibi_vs_sighting` flags shown to voters as VERIFIED evidence are manufactured from testimony that was physically impossible. That asymmetry — vents grounded, sightings not — reads as an oversight rather than a design ruling, and it is measurably ejecting innocents.
 
-/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-4/G-4-verification.md
+/private/tmp/.../scratchpad/work/verify-G-4/G-4-verification.md
 
 ---
 
@@ -251,7 +251,7 @@ Unintended per its own contract — `meetings/manager.py:3884-3887` promises "a 
 
 **Gameplay impact.** The turn-marker splice puts editor-console text inside quoted dialogue in one prompt in eight, immediately before the sentence that usually names a vent sighting — it corrupts the fiction for any spectator reading the transcript and injects an unexplained token into the deliberation context at exactly the high-leverage moment. The singular persona is worse for reasoning than for prose: every crewmate in a 2-impostor game is told to hunt one killer and is given a parity condition that cannot be satisfied, which plausibly under-motivates a second ejection after a correct first one; the impostors get told they are the lone impostor and then handed a teammate two lines later.
 
-Repro script: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-25/scan.py`
+Repro script: `/private/tmp/.../scratchpad/work/verify-G-25/scan.py`
 
 ---
 
@@ -286,4 +286,4 @@ p-6 was ejected at t34 and is absent from `dead_seen`. p-7 — alive, isolated, 
 
 **Impact (3 sentences).** On the 9p2i roster the impostor spends 8-12% of its decisions hunting someone the whole table watched get ejected, walking past isolated killable crewmates because a corpse's id sorts lower — spectator-visible stupidity that cost kills in 19/200 games and provably threw seed 36. Because 4p1i is clean, the defect silently biases the canonical 9p2i impostor-win baseline downward, so some measured impostor weakness is a target-selection bug rather than a strategy or model ceiling. Fixing the dead-set alone will not remove the pacing artifact: it accounts for only ~42-46% of the A↔B oscillation, the rest being the same stale-sighting fall-through against live targets.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-G-12/REPORT.md` (harness: `repro.py`, `analyze.py`; per-set JSON alongside)
+Full report: `/private/tmp/.../scratchpad/work/verify-G-12/REPORT.md` (harness: `repro.py`, `analyze.py`; per-set JSON alongside)

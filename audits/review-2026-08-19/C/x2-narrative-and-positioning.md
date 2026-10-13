@@ -388,4 +388,4 @@ to `docs/history.md` (or extend the phase table) and `docs/artifacts.md` respect
 ---
 
 Report path:
-/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/reports/C/x2-narrative-and-positioning.md
+/private/tmp/.../scratchpad/reports/C/x2-narrative-and-positioning.md

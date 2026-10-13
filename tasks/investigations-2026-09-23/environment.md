@@ -6,7 +6,7 @@ Investigator memo for `tasks/work/ml-reground-baseline-9.md` (Q3).
 - Read-only: no commit, no push, no tracked edit. `git status --short` was empty after every run.
 - Nothing under `training/artifacts/` was written.
 - Every output went to
-  `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/cd3daac2-c664-44ef-918c-024def8b33b9/scratchpad/envinv/`,
+  `/private/tmp/.../scratchpad/envinv/`,
   called `$SCR` below.
 - No provider call, no `.env`, no `--complete`, no recorder, no held-out generator.
 - Citations are at `95fb894b` unless marked.
@@ -252,7 +252,7 @@ reports, the artifacts, the 21.17 commit messages and the PR #413 body.
 
 **Task 21.17 (PR #413, squash `1793eb23`) produced the committed baseline-8 fits, and it very
 likely ran on this Mac.**
-- It was authored under the local identity `danielkeinan@icloud.com`, the identity this
+- It was authored under the owner's local git identity, the same identity this
   host's git config uses.
 - It ran on branch `phase-21-reground`, with author times 15:47-17:11 EDT.
 - Its PR body says the pre-fit campaign run was taken on a `git stash`ed clean tree.

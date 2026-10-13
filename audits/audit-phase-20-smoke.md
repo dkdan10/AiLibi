@@ -527,7 +527,7 @@ Phase-20 lever exports matching the recorded slate:
 `uv run python scripts/measure_baseline.py --honesty <preserved smoke dir>` — exit 0:
 
 ```
-Evidence-honesty instruments over /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/tasks/20.35/smoke/9p2i (5 games, 15 meetings; +1 agent clock proved on 252 discriminating sightings):
+Evidence-honesty instruments over /private/tmp/.../scratchpad/tasks/20.35/smoke/9p2i (5 games, 15 meetings; +1 agent clock proved on 252 discriminating sightings):
   I-2 false crew self-placement: 0.0  (0/63)  95% CI [0.0, 0.0575]  (rare count — read the interval)
     ... agent-frame reading: 0.0  (0/63)  95% CI [0.0, 0.0575]  (rare count — read the interval)
     ... impostor claims: 0.0  (0/13)  95% CI [0.0, 0.2281]  (rare count — read the interval)
@@ -556,7 +556,7 @@ Evidence-honesty instruments over /private/tmp/claude-501/-Users-danielkeinan-pr
 `uv run python scripts/measure_baseline.py --solvability <preserved smoke dir>` — exit 0:
 
 ```
-Solvability ceiling over /private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/tasks/20.35/smoke/9p2i (5 games, 15 body meetings, 9 ejections at them):
+Solvability ceiling over /private/tmp/.../scratchpad/tasks/20.35/smoke/9p2i (5 games, 15 body meetings, 9 ejections at them):
   killer in candidate set: 0.9333  (14/15)  95% CI [0.7018, 0.9881]
   one candidate: 0.0  (0/15)  95% CI [0.0, 0.2039]  (rare count — read the interval)
     ... and it is the killer: None  (0/0)  95% CI undefined  (rare count — read the interval)

@@ -332,7 +332,7 @@ Ordered by (probability the reader hits it) × (damage to a stated claim) ÷ (fi
 | 10 | **The front door runs a prompt set no committed replay uses** (B1 + C-130) — every command prints "AILIBI_PROMPT_SET is unset — falling back to … two generations behind the operational baseline" (6× in the 5-game tournament) for a variable documented in no front-door file; and the README's tournament example produces an all-null report (B2). | Default the CLI surfaces to the operational set (or silence the notice under the fake provider) **and** document `AILIBI_PROMPT_SET` beside `AILIBI_LLM_PROVIDER`; point the README's report example at `replays/samples/9p2i/tournament-eval-report.json`. | `agents/strategic/prompts/loader.py:238-242`, `scripts/*`, `README.md`, `.env.example` | S | no |
 
 **Near-misses, all cheap:** C-24 (rule + document the `redistribute` self-channel, or gate it in the substrate
-wave); the `--filter=blob:none` clone caveat and the bundle README baking `/Users/danielkeinan/…` (B8/B9);
+wave); the `--filter=blob:none` clone caveat and the bundle README baking `~/…` (B8/B9);
 "recorded verbatim in ADR-0001" is not verbatim (X1 GOOD-12); `docs/deployment.md`'s unresolvable "audit
 C-C-1/2/4"; C-115/C-117/C-118 DESIGN drift (four counts in the engine section alone, incl. `redistribute`
 appearing 0 times in DESIGN while `tick.py:322` cites it).

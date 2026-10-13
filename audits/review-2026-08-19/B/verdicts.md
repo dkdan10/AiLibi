@@ -2,7 +2,7 @@
 
 VERDICT: **CONFIRMED** (all sub-claims held; one framing correction on `training/env.py`).
 
-**Decisive evidence** — repro at `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-1/repro.py`, `repro2.py`, `repro3.py` (load avg 3.41):
+**Decisive evidence** — repro at `/private/tmp/.../scratchpad/work/verify-C-1/repro.py`, `repro2.py`, `repro3.py` (load avg 3.41):
 ```
 after vent: ['VentEntered','TickAdvanced'] in_vent= True room= ADMIN
 KILL events: ['Killed','TickAdvanced']
@@ -60,7 +60,7 @@ Every crewmate is handed the map-wide corpse ledger and all four suites are sile
 
 **Corrected severity: P1** (not P0 — no live leak exists today; `engine/visibility.py` is correct on main, and `tests/observation/test_service.py` does pin the *player*-side room/vent rules with hand-built world states). The defect is gate coverage: the leak firewall's most-advertised, ML-gate-wired scanner validates packet *shape* and *string content*, never packet *entitlement*, so the entire body-visibility axis and (in the three suites other than `test_service.py`) the player-visibility axis are unguarded. A refactor of `_visible_body_ids` — or a learned-agent path that reaches bodies differently — would ship a total hidden-information leak green. The cheap fix: give the scanner the `VisibilityResult`/`WorldState` and assert `set(packet.visible_bodies ids) == set(visibility.visible_body_ids)` recomputed independently, or at minimum assert every `BodyView.room` lies in `visible_rooms_for_player`.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-31/` (repro copy, `count_bodies.py`, `m6_full.txt`, `base_full.txt`, `visibility_m6.py`). Repo untouched — `git status --porcelain` empty. Load at measurement: `load averages: 4.95 5.04 5.43`.
+Full report: `/private/tmp/.../scratchpad/work/verify-C-31/` (repro copy, `count_bodies.py`, `m6_full.txt`, `base_full.txt`, `visibility_m6.py`). Repo untouched — `git status --porcelain` empty. Load at measurement: `load averages: 4.95 5.04 5.43`.
 
 ---
 
@@ -93,7 +93,7 @@ Clean baseline: `Analyzed 89 files, 379 dependencies.` — so the probe *was* pa
 
 **Credit where due.** The blind spot is known and written down in-repo at `tests/test_firewall.py:162-166`; all four existing contracts are plant-tested ("a gate that cannot fail is not a gate", `tests/test_firewall.py:141`); `orchestrator/game.py:23-25` retracts a now-false claim in a "Historical note" rather than leaving stale prose. Cheapest fix: add the four dirs to `root_packages`, or widen the repo-wide scan at `tests/test_firewall.py:90` using the machinery already at `:167`.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-32/report-C-32.md`
+Full report: `/private/tmp/.../scratchpad/work/verify-C-32/report-C-32.md`
 
 ---
 
@@ -126,7 +126,7 @@ p-2 never acted. The prompt is self-contradictory: global counter 0/2 while firs
 
 **Impact.** A crewmate's *first-hand* memory — the one channel the design treats as ground truth — gains a false, id-stamped "You completed X (you were in ROOM)" row, and the report prompts instruct agents to quote their own `completed_task` rows verbatim as alibi evidence (`agents/strategic/prompts/qwen3_6_27b/crewmate_report.j2:107-112`). So an innocent crewmate can emit a structurally-valid but factually false alibi and be contradicted by other agents' honest testimony. The same rows feed eval/ML features derived from rendered memory, so the corruption is silently baked into recorded baselines. The store's own comment names this exact failure ("corrupt the meeting/eval evidence") when justifying the impostor gate — the fix it applied is now incomplete for crewmates.
 
-Repro files: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-2/{repro.py,repro_after.py,rate.py}`
+Repro files: `/private/tmp/.../scratchpad/work/verify-C-2/{repro.py,repro_after.py,rate.py}`
 
 ---
 
@@ -165,7 +165,7 @@ seed=5 tick=12 imp=p-4 room=EAST_HALL ranking=[('p-1','ENGINEERING',0,1.0), ('p-
 
 Note: running `pytest tests/agents/test_impostor_policy.py` left an untracked `.coverage` file in the repo root (pytest side-effect); I did not delete it, per the read-only rule. Nothing else in the repo changed.
 
-/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-3/REPORT-C-3.md
+/private/tmp/.../scratchpad/work/verify-C-3/REPORT-C-3.md
 
 ---
 
@@ -198,7 +198,7 @@ Path: `api/replay_loader.py:727` catches only `CorruptedFileError`; `cost_summar
 
 **Real-world impact.** Any interrupted recording — Ctrl-C'd tournament, OOM-killed worker, full disk — leaves a partial last line, and from then on the spectator picker and cost endpoint 500 for the entire set, making every *healthy* replay in that directory unreachable through the listing rather than degrading to "skip the bad one". The narrow `except CorruptedFileError` plus its passing test create a false impression that K-K-8 was fixed generally. Separately, a zero-byte file is served as a legitimate 0-tick replay and quietly skews the eval cost aggregate.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-5/report-C-5.md`
+Full report: `/private/tmp/.../scratchpad/work/verify-C-5/report-C-5.md`
 
 ---
 
@@ -225,7 +225,7 @@ What I found trying to refute it:
 
 **Real-world impact:** No live corruption path exists today through `reconstruct_episode`, so no fitness number in the repo is currently wrong because of it. The genuine exposure is the corpus acceptance gate: a corpus replay shortened by any route outside the recorder (interrupted direct `run_tournament` into a set dir, a bad copy, hand edit) passes `eval/validity.py`'s `all_games_reach_game_over` and would enter downstream consumers as a "verified" game. Both sites are one-line fixes, and the correct version is already written in `anchor_study.py`.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-6/report-C-6.md`
+Full report: `/private/tmp/.../scratchpad/work/verify-C-6/report-C-6.md`
 
 ---
 
@@ -260,13 +260,13 @@ Corrected severity: **P1**, high confidence (display-only, so not P0; no engine/
 
 Impact: on 67% of committed frames the Omniscient map paints corpses the world no longer contains, styled exactly like real ones, permanently; anyone reading "what was on the floor at tick N" over-counts, and a room can hit the `BODY_CAP` "✕ ×N" mass-grave collapse from phantoms alone. The API meanwhile serves the correct set with `killed_by`, and no frontend code reads it.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-7/report-C-7.md`
+Full report: `/private/tmp/.../scratchpad/work/verify-C-7/report-C-7.md`
 
 ---
 
 **VERDICT: CONFIRMED** (all six sub-assertions verified; one framing nuance corrected, plus one aggravating fact the claim missed)
 
-Decisive evidence — repro at `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-8/c8.test.ts` (config + symlinked node_modules alongside; repo untouched, `git status --porcelain` empty). One skewed `RubricView` payload, two code paths, load avg 7.58:
+Decisive evidence — repro at `/private/tmp/.../scratchpad/work/verify-C-8/c8.test.ts` (config + symlinked node_modules alongside; repo untouched, `git status --porcelain` empty). One skewed `RubricView` payload, two code paths, load avg 7.58:
 
 ```
 ✓ C-8 > ReplayPicker/GuidedTour path (client.getRubric) REJECTS 27ms
@@ -333,7 +333,7 @@ Ejections where the ONLY strong flag was vent_sighting:                    {IMP:
 
 **Real-world impact.** Any player's unverified speech can mint the maximum-weight evidence label against an innocent, and impostors demonstrably exploit it (17 of 53 crew-naming STRONG flags had the sighting spoken by an impostor). It is the single largest source of wrongful ejections in the committed corpus, and it inverts the project's stated evidence hierarchy — fabricated testimony carries the same +0.30 as engine-grounded vent proof.
 
-/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-11/REPORT-C-11.md
+/private/tmp/.../scratchpad/work/verify-C-11/REPORT-C-11.md
 
 ---
 
@@ -372,7 +372,7 @@ crew_forward.py  335 stmts  90 miss  106 branch  68%   Missing: ... 987-1133 ...
 
 **Real-world impact:** ES cannot silently optimise a different action space — the crew and impostor Q4 gates would fail the build on any bit-level divergence in the option menu or scoring, as demonstrated. The residual exposure is narrow: a drift confined to `_build_action_mask` branches outside its single tested state, or to option branches seeds 1004/1009 never reach. The 888 duplicated lines remain a real maintainability tax (every edit made twice by hand, caught only after the fact), but this is a fork defended by measurement, not an undefended one.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-33/REPORT.md`
+Full report: `/private/tmp/.../scratchpad/work/verify-C-33/REPORT.md`
 
 ---
 
@@ -440,7 +440,7 @@ Every base leg > every cached leg. **1.20x, not 1.24x** — claim modestly optim
 
 **Corrected severity: P2** (was implicitly P1). The default client is `FakeProvider` (`llm/provider.py:305`), so this 12–17 ms/game only bites the LLM-free paths: CI, the eval harness, and `training/` ES rollouts, where thousands of games run and ~16% is real throughput. On any real provider (Ollama/Featherless) a meeting costs seconds, so the saving is noise. Real-world impact: a one-line memoization would cut CI/tournament and ML-rollout wall time by ~1/6 with byte-identical replays and no loss of the PR #203 set-binding discipline.
 
-Scratch: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-42/{ab.py,cacheplug.py,t10.prof}`
+Scratch: `/private/tmp/.../scratchpad/work/verify-C-42/{ab.py,cacheplug.py,t10.prof}`
 
 ---
 
@@ -464,4 +464,4 @@ Scratch: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-1
 
 **Good, for the record:** `append()`'s fail-loud non-decreasing-tick guard and duplicate-`observation_id` guard are exactly the right kind of cheap invariant enforcement — they are what makes the fix safe and provable.
 
-Full report: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/verify-C-43/report.md`
+Full report: `/private/tmp/.../scratchpad/work/verify-C-43/report.md`

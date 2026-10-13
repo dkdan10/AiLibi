@@ -66,7 +66,7 @@ AILIBI_LLM_PROVIDER=featherless
 AILIBI_PROMPT_SET=qwen3_6_27b
 AILIBI_LLM_MEETING_MODEL=Qwen/Qwen3.6-27B
 AILIBI_NUM_PLAYERS=9  AILIBI_NUM_IMPOSTORS=2  AILIBI_TASKS_PER_CREWMATE=2
-AILIBI_SAMPLE_DIR=/Users/danielkeinan/ailibi-smoke-21-14/9p2i     # absolute, OUTSIDE the repo
+AILIBI_SAMPLE_DIR=~/ailibi-smoke-21-14/9p2i     # absolute, OUTSIDE the repo
 AILIBI_REFRESH_WORKERS=2
 AILIBI_SEED_MAX_ATTEMPTS=8
 AILIBI_LAST_SEEN_FROM_SIGHTINGS=1
@@ -128,7 +128,7 @@ Error: the live substrate-lever slate does not match --expect-levers.
 [dry-run] mode: seeds
 [dry-run] seeds: 4,13,30,39,43
 [dry-run] roster: num_players=9 num_impostors=2 tasks_per_crewmate=2
-[dry-run] sample dir: /Users/danielkeinan/ailibi-smoke-21-14/9p2i
+[dry-run] sample dir: ~/ailibi-smoke-21-14/9p2i
 [dry-run] provider: featherless
 [dry-run] meeting model: Qwen/Qwen3.6-27B
 [dry-run] prompt set: qwen3_6_27b
@@ -142,7 +142,7 @@ Substrate slate OK: expected levers ON = last_seen_from_sightings,vent_single_mi
 live toggle OFF; the graduated levers unconditional ON.
 ```
 
-`/Users/danielkeinan/ailibi-smoke-21-14` did not exist after any of the three. The real run's own
+`~/ailibi-smoke-21-14` did not exist after any of the three. The real run's own
 preflight block, before any seed staged:
 
 ```
@@ -233,7 +233,7 @@ bare gate shell would report a substrate refusal rather than a result.
 ```
 uv run python scripts/validity_gate.py "$SMOKE_DIR" --expected-model Qwen/Qwen3.6-27B --require-zero-cost
 
-Validity gate over /Users/danielkeinan/ailibi-smoke-21-14/9p2i (5 games):
+Validity gate over ~/ailibi-smoke-21-14/9p2i (5 games):
   [PASS] all_games_reach_game_over: 5/5 games reached a reconstructed game_over with a consistent win condition
   [PASS] meeting_rate_and_resolution: meeting_rate 1.0 (floor 0.60); 16 resolved meetings; 0 unresolved
   [PASS] no_duplicate_meeting_rows: 0 duplicate meeting rows over 16 (want 0)
@@ -359,7 +359,7 @@ uv run python /tmp/marker_pass.py replays/samples/9p2i
 
 # the smoke column — the SAME shell discipline as the recording
 AILIBI_LAST_SEEN_FROM_SIGHTINGS=1 AILIBI_VENT_SINGLE_MINT=1 \
-  uv run python /tmp/marker_pass.py /Users/danielkeinan/ailibi-smoke-21-14/9p2i
+  uv run python /tmp/marker_pass.py ~/ailibi-smoke-21-14/9p2i
 ```
 
 **And it is calibrated against the register before it is trusted.** Applied unchanged to the four
@@ -1004,7 +1004,7 @@ re-measured on the same bytes at $0 without re-recording a seed — the §14 add
 last window, where the re-measure ran on preserved bytes and no seed was re-recorded.
 
 ```
-path : /Users/danielkeinan/ailibi-smoke-21-14/9p2i        (absolute, outside the repository)
+path : ~/ailibi-smoke-21-14/9p2i        (absolute, outside the repository)
 bytes: 5.9 MB — 5 replays (375,531 / 571,738 / 599,802 / 730,389 / 732,306 B),
        MANIFEST.md, roster.json, tournament-eval-report.json
 sidecars in the set dir: none

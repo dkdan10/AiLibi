@@ -236,7 +236,7 @@ a 19-phase audit trail did not catch a game in which 20 % of crew testimony is i
 **C-7** (phantom corpses, 67 % of frames) · **C-9** (focus trap in the tour) · **G-41/C-track B6** (strip
 `(DESIGN.md §11.3)` / `Task 9.6` / `56/100 MED · INTERNAL HEURISTIC` from product copy; expand "4p1i/9p2i";
 legend the R1/R2/R3/R7 bars) · the dock height (map hidden below ~800 px) · the Tournament tab's raw 404 dump ·
-the bundle README's baked `/Users/danielkeinan/…` path. Then re-record the GIF (C/A3) against a fixed map.
+the bundle README's baked `~/…` path. Then re-record the GIF (C/A3) against a fixed map.
 
 **T12 — a minor inter-report contradiction inside A, for the record.**
 `w2` claimed rejected actions are not recorded in the JSONL; s1/s2/w1/w4/w5/w6 all read attempted actions out

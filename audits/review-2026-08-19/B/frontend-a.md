@@ -1,11 +1,11 @@
 # Code review — `frontend/src/components` + `hooks` + `lib` (label: **frontend-a**)
 
 Reviewer track: CODE-UP (structure, tests, measured behaviour). Read-only; nothing in the repo was
-modified. All commands run from `/Users/danielkeinan/projects/AiLibi`. Machine load recorded with each
+modified. All commands run from `~/projects/AiLibi`. Machine load recorded with each
 timing (`uptime` load ≈ 4.5–6.9 throughout — other reviewers were running concurrently).
 
 Scratch artefacts (probes, dumped fixtures):
-`/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/frontend-a/`
+`/private/tmp/.../scratchpad/work/frontend-a/`
 
 ---
 

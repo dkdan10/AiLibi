@@ -5,7 +5,7 @@ Collated from all 16 area reports under `scratchpad/reports/B/`:
 `meetings-transcript-voting`, `orchestrator`, `llm-and-prompts`, `api`, `eval-and-scripts`,
 `training-ml`, `perf-runtime`, `repo-health-architecture`, `tests-ci-tooling`, `frontend-a`, `frontend-b`.
 
-Repo: `/Users/danielkeinan/projects/AiLibi` @ `main` `b809b19c`. All work read-only.
+Repo: `~/projects/AiLibi` @ `main` `b809b19c`. All work read-only.
 Machine load during every timing was 4.3–9.8 on a 10-core box with reviewers running concurrently —
 absolute timings are indicative; A/B ratios taken back-to-back in one process are reliable.
 

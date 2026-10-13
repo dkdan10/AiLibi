@@ -635,7 +635,7 @@ twin's config-identity claim is auditable by diff (run name + `conviction=None` 
 only deltas). They are §1.3/§1.6/§6 configs applied to the 18.24 §9 snippet shape — `first_side="crew"`,
 `run_label` set per run, fresh `ConvictionFitnessTerm` (or `None` for twins),
 `hall_root=training/artifacts/coevo/<run>`, work_dir under the operator root
-`/Users/danielkeinan/ailibi-campaign-1825/` (PATHS.md carries the prefix map).
+`~/ailibi-campaign-1825/` (PATHS.md carries the prefix map).
 Verification pins: `uv run pytest tests/training/test_coevo_driver.py -k
 CommittedCrewCampaignRows`. Run digests: c1 `7a613696…`, c2 `7e682377…`, twin-c1
 `43570747…`, twin-c2 (committed rows at `ablation-run-c2-conviction-term/`).

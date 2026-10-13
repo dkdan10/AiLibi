@@ -1,6 +1,6 @@
 # Code review — area: tests / CI / tooling  (label: `tests-ci-tooling`)
 
-Repo: `/Users/danielkeinan/projects/AiLibi` @ `main` (`b809b19c`), read-only review.
+Repo: `~/projects/AiLibi` @ `main` (`b809b19c`), read-only review.
 Scope: `tests/`, `.github/workflows/*`, `pyproject.toml`, `.importlinter`, `scripts/check.sh`,
 `scripts/setup_env.sh`, `uv.lock`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.hypothesis/`,
 plus the frontend test/CI toolchain.
@@ -676,6 +676,6 @@ uv lock --check                                                   # Resolved 46 
 cd frontend && npm run test                                       # 6 files, 173 tests, 360ms
 ```
 
-Scratch artifacts: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/tests-ci-tooling/`
+Scratch artifacts: `/private/tmp/.../scratchpad/work/tests-ci-tooling/`
 (`full-run.txt`, `fw-conc.txt`, `prose.py`, `env-code.txt`, `env-doc.txt`).
 No file inside the repository was created, edited, staged or deleted; `git status --short` is empty.

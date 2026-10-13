@@ -9,7 +9,7 @@ reports, 707 meetings.
 (`ticks[].bodies`, `ticks[].events`, `agent_states[].visibility`), plus the raw
 JSONL `actions` array for *attempted* actions (the JSONL carries only
 `actions` + `state_hash` per tick; every event is a re-simulation product).
-Scripts: `/private/tmp/claude-501/-Users-danielkeinan-projects-AiLibi/d2f79696-15f2-4a2e-a7e2-cb7d5b023724/scratchpad/work/s1-bodies-kills-reports/{extract,analyze,analyze2,analyze3,analyze4,dig}.py`.
+Scripts: `/private/tmp/.../scratchpad/work/s1-bodies-kills-reports/{extract,analyze,analyze2,analyze3,analyze4,dig}.py`.
 
 **Sanity check** (required before trusting numbers): the extractor's frame dump for
 `samples/9p2i` seed 2 and `samples/4p1i` seed 0 was diffed by hand against

@@ -1,6 +1,6 @@
 # Code review — area `api` (api/, tests/api/)
 
-Reviewer track: code-up, read-only. Repo: /Users/danielkeinan/projects/AiLibi @ main (b809b19c). Date 2026-08-18.
+Reviewer track: code-up, read-only. Repo: ~/projects/AiLibi @ main (b809b19c). Date 2026-08-18.
 Machine load during timings: `uptime` load averages 4.4–6.2 on 10 cores (other reviewers concurrent) — treat absolute timings as ±30%.
 
 Files: `api/main.py` (240), `api/replay_loader.py` (3165), `api/schemas.py` (1355), `api/routes/{replays,eval,sets}.py` (102/216/44), `tests/api/*` (19 files, ~6.9k lines, 2 fixture modules).
