@@ -56,7 +56,7 @@ AiLibi is a deterministic Among-Us-style simulation where scripted movers roam a
 - README Setup: the 200-word "**`--filter=blob:none` is the fast path, and here is the honest caveat**" paragraph — the honesty is admirable but the position (in Setup) means the first thing a cloner learns is that the repo is heavy and history rewrite "is not scheduled".
 - TournamentDashboard.tsx:518 (user-visible description): "How this set's ejection accuracy splits by whether engine-donated vent proof was PRESENT (Task 19.14; audits/audit-phase-19-triage.md §7 item 15)…" — a tooltip citing an audit file path.
 - Bundle Tournament tab (in-app): "API request to ./data/9p2i/eval/tournament-report.json failed (status 404): <!DOCTYPE HTML PUBLIC …" — raw server HTML in the UI.
-- Bundle README.md (shipped inside the artifact): "These games were baked from ~/projects/AiLibi/replays/samples" — the author's absolute home path ships in the public artifact.
+- Bundle README.md (shipped inside the artifact): "These games were baked from /Users/.../projects/AiLibi/replays/samples" — the author's absolute home path ships in the public artifact.
 - ReplayPicker header in the bundle: "Every recorded replay in the served set." while the served set has 4 of 50 games — literally untrue in bundle mode.
 - Repo metadata: description `null`, homepage `null`, topics `[]` — a recruiter's search will never find it.
 
@@ -91,7 +91,7 @@ AiLibi is a deterministic Among-Us-style simulation where scripted movers roam a
 10. Make the map survive smaller viewports: below ~800 px tall either collapse the event timeline by default or make the dock non-fixed, so the first thing a laptop user sees is the map. [VERIFIED clipping at 1280×800, hidden at 1000×640]
 
 **NICE**
-11. Don't ship the builder's absolute path in the bundle README (`~/…`); print a repo-relative path. [VERIFIED]
+11. Don't ship the builder's absolute path in the bundle README (`/Users/.../…`); print a repo-relative path. [VERIFIED]
 12. A short "for hiring managers / what the human did vs. what the agents did" paragraph with 3 links: one task contract, its generated prompt, and the merged PR — the README has the first two; add the PR. [JUDGMENT]
 13. Component-level render tests (testing-library) for MeetingView/MindInspector to complement the pure-logic vitest suite (today: playback, store, client, tokens, EventTicker, CostChips). [VERIFIED test inventory]
 14. A 20-second MP4/WebM alongside the GIF for the README (GitHub renders video), so the map animation isn't palette-crushed at 640 px. [JUDGMENT]

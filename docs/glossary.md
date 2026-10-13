@@ -138,7 +138,7 @@ surprise ([`tasks/phase-18.md`](../tasks/phase-18.md)).
 ### errata discipline
 
 Living documentation is rewritten; *records* — campaign reports and audits — are
-not. They take additive, dated errata, and later prose quotes only
+not, apart from the 2026-10-13 personal-data scrub, which spelled the operator's home directory `~` or elided its account name, elided scratch paths and redacted one mail address in place, keeping every line number, with a dated erratum in each campaign report it touched. Otherwise they take additive, dated errata, and later prose quotes only
 errata-approved figures
 ([`training/reports/report-finalist-eval.md`](../training/reports/report-finalist-eval.md)
 §18).

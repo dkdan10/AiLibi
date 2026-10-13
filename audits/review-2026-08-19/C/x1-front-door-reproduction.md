@@ -27,7 +27,7 @@ Bottom line for the front door: **every reproducible claim above the fold reprod
 `AILIBI_PROMPT_SET` is mentioned **nowhere** in README.md, .env.example, AGENTS.md or docs/architecture.md (grep count 0 in each). So the outsider's very first command tells them they are running something "two generations behind", pointing at a knob no front-door document names. The 5-game tournament prints it 6 times before the summary.
 
 Minor front-door observations [VERIFIED]:
-- The generated bundle `README.md` bakes the builder's absolute path (`baked from ~/projects/AiLibi/replays/samples`) into a file the docs describe as "the only sanctioned public artifact".
+- The generated bundle `README.md` bakes the builder's absolute path (`baked from /Users/.../projects/AiLibi/replays/samples`) into a file the docs describe as "the only sanctioned public artifact".
 - `run_game.py` writes an `*.audit.jsonl` sidecar beside the replay; README never mentions it, so the diff demo leaves an unexplained extra file.
 - The 4-player fake tournament yields 100% impostor wins with the FSM alone; the README does warn "set a real provider … for metric values that reflect real model behavior", but does not point to the committed real-provider reports (`replays/samples/{4p1i,9p2i}/tournament-eval-report.json` exist).
 

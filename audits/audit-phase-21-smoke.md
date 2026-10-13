@@ -66,7 +66,7 @@ AILIBI_LLM_PROVIDER=featherless
 AILIBI_PROMPT_SET=qwen3_6_27b
 AILIBI_LLM_MEETING_MODEL=Qwen/Qwen3.6-27B
 AILIBI_NUM_PLAYERS=9  AILIBI_NUM_IMPOSTORS=2  AILIBI_TASKS_PER_CREWMATE=2
-AILIBI_SAMPLE_DIR=~/ailibi-smoke-21-14/9p2i     # absolute, OUTSIDE the repo
+AILIBI_SAMPLE_DIR=/Users/.../ailibi-smoke-21-14/9p2i     # absolute, OUTSIDE the repo
 AILIBI_REFRESH_WORKERS=2
 AILIBI_SEED_MAX_ATTEMPTS=8
 AILIBI_LAST_SEEN_FROM_SIGHTINGS=1
@@ -1004,7 +1004,7 @@ re-measured on the same bytes at $0 without re-recording a seed — the §14 add
 last window, where the re-measure ran on preserved bytes and no seed was re-recorded.
 
 ```
-path : ~/ailibi-smoke-21-14/9p2i        (absolute, outside the repository)
+path : /Users/.../ailibi-smoke-21-14/9p2i        (absolute, outside the repository)
 bytes: 5.9 MB — 5 replays (375,531 / 571,738 / 599,802 / 730,389 / 732,306 B),
        MANIFEST.md, roster.json, tournament-eval-report.json
 sidecars in the set dir: none

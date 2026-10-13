@@ -695,3 +695,19 @@ green at HEAD. The items below are the residue; none overturns a conclusion.
 5. **The §2 session ledger's per-session commit shas are unreachable from main**
    (they lived on the squashed PR branch). The evidence they pointed at is fully
    committed (rows digests, leg logs, harness transcripts); follow those, not the shas.
+
+## 13. Home-directory erratum (2026-10-13 — the personal-data scrub; one line of §9 edited in place)
+
+On 2026-10-13 the operator's home directory was removed from every tracked file.
+One line of this report changed in place: §9's operator root (:638) now reads
+`~/ailibi-campaign-1825/` where the report wrote the operator's absolute home path.
+The same scrub spelled the home directory `~` in the harnesses and leg scripts
+§9 calls COMMITTED VERBATIM (`training/artifacts/coevo/provenance/harnesses/`),
+in the session logs beside them, and in the `replay_set_dir` fields of the
+committed `realpath-crew/` ranking rows. So that "verbatim" now holds for every
+byte except the home directory, which is spelled `~`; each twin still differs from
+its run only in the run name and `conviction=None`. The bytes on the pinned
+evidence commit (`training/artifacts/coevo/EVIDENCE-MANIFEST.md`) still carry the
+absolute path, and `training/artifacts/coevo/PATHS.md` maps either spelling. No
+figure, table, digest, statistic or verdict in this report moved, and no line above this section
+changed its number.
