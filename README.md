@@ -6,13 +6,13 @@ by **Daniel Keinan** · implemented by Claude Code and Codex agents · AI-review
 
 **[Watch a recorded game in your browser](https://dkdan10.github.io/AiLibi/)** · [See the results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Five-minute guide](docs/reading-guide.md)
 
-AiLibi is a hidden-role game in the shape of Among Us. Nine players share a small space station: seven crewmates do tasks while two impostors kill, lie and sabotage. When a body is found, everyone meets, speaks and votes to eject someone or skip. Rules move each player; a language model speaks and votes for it at meetings, from a memory of what that player saw and heard. The question: does each vote rest on something the voter actually saw or heard? Two 50-game sets are recorded: 9p2i (nine players, two impostors) and 4p1i (four players, one impostor).
+AiLibi is a hidden-role game like Among Us. Nine players share a small space station: seven crewmates do tasks while two impostors kill, lie and sabotage. When a body is found, everyone meets, speaks and votes to eject someone or skip. Rules move each player; a language model speaks and votes for it at meetings, from a memory of what that player saw and heard. The question: does each vote rest on something the voter actually saw or heard? Two 50-game sets are recorded: 9p2i (nine players, two impostors) and 4p1i (four players, one impostor).
 
 [![One scene in the omniscient view and through a crewmate's fog, with the agent's accusation below](docs/media/spectator-two-truths.png)](https://dkdan10.github.io/AiLibi/)
 
 *At tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. This is 9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-09 record (9p2i); [media provenance](docs/media/README.md#provenance) records its source and asset identities.*
 
-Here p-5 accuses p-4 on something it really saw, yet p-4 is a crewmate.
+p-5 accuses p-4 on something it really saw, yet p-4 is a crewmate.
 
 ## Who did what
 
@@ -22,10 +22,10 @@ Daniel's part:
 
 - set the question and the design: a pure engine, agents walled off from game state, a model only at meetings;
 - chose the checks and wrote targets down before measuring;
-- decided which of the 514 pull requests merged (503, as of 2026-10-12);
+- merged 503 of the 514 pull requests, as of 2026-10-12;
 - decided what the demo shows.
 
-Coding agents wrote the code, tests and most documents and drafted the tasks, with AI review passes: 2,131 commits as of 2026-10-12.
+Coding agents wrote the code, tests and most documents and drafted the tasks, with AI review passes. The history holds 2,131 commits as of 2026-10-12.
 
 [How a change gets in](docs/workflow.md) · [Lessons](docs/lessons.md) · [One decision, traced](docs/ownership-case-study.md) · [History](docs/history.md)
 
@@ -45,7 +45,7 @@ The [demo](https://dkdan10.github.io/AiLibi/) carries all 100 games; its guided 
 - **Hashed replays** ([`orchestrator/`](orchestrator/)). Each tick carries a SHA-256 of the whole state, and model replies are recorded, so replays never call a model.
 - **A firewall** ([`observation/`](observation/)). Agents get filtered packets, never engine state. One of five import contracts keeps [`agents/`](agents/) out of the engine; [a test](tests/test_firewall.py) plants a forbidden import that must fail.
 - **Two model calls** ([`meetings/`](meetings/), [`llm/`](llm/)). Movement, kills and tasks are rule-based; the model is called at exactly two sites, a speaking turn and a ballot, under token, cost and time budgets.
-- **One gate** ([`scripts/check.sh`](scripts/check.sh)). Lint, strict typing, import contracts, 10,954 Python and 1,327 frontend tests as of 2026-10-12, and a checker that re-derives this page's table.
+- **One gate** ([`scripts/check.sh`](scripts/check.sh)). Lint, strict typing, import contracts, 10,954 tests and 1,327 frontend tests as of 2026-10-12, and a checker that re-derives this page's figures.
 
 Python 3.11 · FastAPI/Pydantic · React/Vite/PixiJS · strict mypy · Hypothesis. [Current architecture and enforced boundaries](docs/architecture.md).
 
@@ -54,14 +54,14 @@ Python 3.11 · FastAPI/Pydantic · React/Vite/PixiJS · strict mypy · Hypothesi
 In the 9-player set:
 
 1. **Votes follow a rule-based suspicion score, and going against it is usually wrong.** The ballot prompt shows the voter's rule-kept suspicion of every player ([`agents/memory/`](agents/memory/)). Crew votes for the highest-rated player hit an impostor [215 of 235 times](docs/process-scorecard.md) (91%); the 56 against it hit one twice (4%), where chance is about one in three.
-2. **A reported vent sighting decides outcomes.** A vent claim counts only when the engine's witness record matches it. In the 24 meetings with one, all 24 ejections removed an impostor; in the 95 without, [22 of 37](docs/reading-guide.md) did and 15 removed crewmates, near a coin flip: hard evidence, not general social deduction.
+2. **Meetings with a reported vent sighting never ejected a crewmate.** A vent claim counts only when the engine's witness record matches it. In the 24 meetings with one, every ejection removed an impostor; in the 95 without, [22 of 37](docs/reading-guide.md) did and 15 removed crewmates, near a coin flip: hard evidence, not general social deduction.
 3. **Votes cite what the voter saw.** [394 of 397](docs/process-scorecard.md) votes to eject cite something the voter saw or heard; the ballot demands a citation, so this is by design.
 
 *Before* is each set's previously shown recording.
 
 | What | Figure | Before | Recorded on, and where it lives |
 |---|---|---|---|
-| Sample games that replay byte for byte | 100 of 100 (100%) | 100 of 100 (100%) | `scripts/verify_samples.sh`; on every push, a [gate test](tests/api/test_replay_loader.py) for the 9-player set |
+| Sample games that replay byte for byte | 100 of 100 (100%) | 100 of 100 (100%) | `scripts/verify_samples.sh`; in CI, a [gate test](tests/api/test_replay_loader.py) for the 9-player set |
 | Observation boundary checks | import rules and planted/recursive leak checks | import rules and planted/recursive leak checks | [contracts](.importlinter), [planted imports](tests/test_firewall.py), [packet scans](eval/leak_scan.py); bounded checks, not complete privacy assurance |
 | Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394 of 397 (99%) | 407 of 410 (99%) | [process scorecard](docs/process-scorecard.md); a floor: the ballot asks every eject to cite |
 | Crew eject ballots naming someone other than the voter's [top suspect](docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56 of 291 (19%) | 65 of 292 (22%) | [process scorecard](docs/process-scorecard.md) |
@@ -78,8 +78,8 @@ In the 9-player set:
 ## Limitations
 
 - **One model, one recording per round.** One open model and prompt set, recorded once per round, so no figure ranks one version above another.
-- **Learned policies stayed off.** Four learned impostor policies won more games and still failed gates written before measuring ([negative results](docs/ml-program.md)).
-- **Reproducibility has three scopes.** Recordings always reconstruct; fake-provider runs repeat on one machine; real-model games are not deterministic; bit-identical optimizer output across machines is seen on Linux/x86-64 only.
+- **Learned policies stayed off.** Four learned impostor policies won more games than the scripted one and still failed gates written before measuring ([negative results](docs/ml-program.md)).
+- **Reproducibility has limits.** Recordings always reconstruct; fake-provider runs repeat on one machine; real-model games are not deterministic; bit-identical optimizer output across machines is seen on Linux/x86-64 only.
 
 **Targets written down before measuring were missed twice:** the owner adopted the first recording anyway, in writing, and nothing from the second ([what each measured](docs/history.md#evidence-honesty-phase-20)).
 

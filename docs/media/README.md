@@ -108,10 +108,10 @@ token tweens and freeze the kill ring.
 
 ### Current README presentation
 
-The README embeds `spectator-two-truths.png` and, below its caption,
-`spectator-journey.gif`; it does not embed the meeting still. The caption
-describes the scene and then names the game, its set and its recording date, and
-both images link to the interactive demo, which serves the same game.
+The README embeds `spectator-two-truths.png` under its opening paragraph, and
+`spectator-journey.gif` in its "The demo" section, after "Who did what"; it does not embed
+the meeting still. The picture's caption describes the scene and then names the game, its set
+and its recording date, and both images link to the interactive demo, which serves the same game.
 
 Budget: the directory is currently 1.0 MB. Keep each still under 400 kB and the
 GIF under 1.5 MB — the capture asserts both, so a walk that grows past them

@@ -35,7 +35,7 @@ each with its enforcing symbol.
 `engine/visibility.py`, strips hidden fields and writes packets through
 `audit.py`. Its engine-free schemas include `PublicMapView` and `ActionIntent`.
 `orchestrator/boundary.py::public_map_from_engine_map` projects the shared public
-topology. Observation imports none of agents, meetings or llm.
+topology.
 
 **`agents/`** — tactical policies make deterministic per-tick decisions; learned
 movers remain opt-in. Strategic reasoning renders strict-undefined Jinja prompts
@@ -86,10 +86,10 @@ one-off `design/` generators, bypass strict typing.
 
 ## Enforced boundaries
 
-Five import-linter contracts forbid agents importing engine, training or
-`meetings.manager`, and observation importing agents, meetings or llm. Agents
-may use meeting schemas. Meetings and llm are engine-free in fact, without
-separate contracts. All shipping root packages appear in `.importlinter`, so
+Five import-linter contracts forbid agents importing engine, training or `meetings.manager`;
+observation importing agents, meetings or llm; and agents, meetings, orchestrator, engine and
+training importing the game-shape profile. Agents may use meeting schemas. Meetings and llm are
+engine-free in fact, not by contract. All shipping root packages appear in `.importlinter`, so
 transitive paths through privileged packages are checked too.
 
 `tests/test_firewall.py` plants a forbidden import in an isolated copy and
@@ -181,7 +181,7 @@ memory-only reconstruction. Spectator plans name their decision tick and respect
 own-agent display; later discoveries cannot certify earlier alibis.
 
 New recordings stamp actual agent-factory identity and configuration on the
-first tick as well as completed outcomes. Strict readers validate the living ballot roster,
+first tick and on completed outcomes. Strict readers validate the living ballot roster,
 legal targets and the recorded confidence cutoff before applying an outcome.
 Historical missing identity stays unknown. Report and public-summary groups keep
 distinct recorded configurations visible; served report identity is rebound to

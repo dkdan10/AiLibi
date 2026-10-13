@@ -10,7 +10,7 @@ class the 19.1 sweep cleaned (a stale refresh date, a stale win rate, a stale
 ladder tip, a graduated lever still documented as a live knob) is exactly what
 regenerates silently otherwise.
 
-Twenty-three checks. Each accumulates precise errors; all of them are reported
+Twenty-four checks. Each accumulates precise errors; all of them are reported
 together, so one run names every drifted fact rather than the first.
 
 1. **Sample provenance.** ``replays/samples/<set>/MANIFEST.md`` owns each sample
@@ -122,9 +122,10 @@ together, so one run names every drifted fact rather than the first.
     impostor, and those with evidence on the meeting's record) come from that
     report's own ``vote_correctness`` block, never from prose.
 11. **Volatile counts carry an as-of stamp.** A count that changes without any
-    commit touching the prose (merged pull requests, commits, tests) must be
-    stated with ``as of YYYY-MM-DD`` in its own sentence. The stamp's presence
-    and shape are checked, never its value: no doc check may reach the network.
+    commit touching the prose (pull requests, commits, tests, with at most one
+    lowercase word between the number and the noun) must be stated with
+    ``as of YYYY-MM-DD`` in its own sentence. The stamp's presence and shape
+    are checked, never its value: no doc check may reach the network.
 12. **The reading guide carries no ``file.ext:NN`` citations.** Line numbers rot
     on the next edit; the guide cites heading anchors and symbols instead.
 13. **Every relative link resolves.** Across the front-door documents and the
@@ -210,6 +211,18 @@ together, so one run names every drifted fact rather than the first.
     win rates are (``round(100 * k / n)``); one helper renders that form for
     every derived cell, and the forms it replaced (``k/n``, ``k / n`` and a
     printed ``= 0.…`` rate) are refused in any cell of either table.
+24. **The README's prose figures are re-derived, not transcribed.** Six
+    passages outside the tables retell a figure, and each is held to the
+    source it retells: the votes for and against the top suspect to the shown
+    set's role-correct cell on the scorecard page; the vent sentence to the
+    reading guide's cross-tab, its "never ejected a crewmate" refused once the
+    flagged row records an innocent ejection; the cited-vote count to the
+    scorecard cell its results row restates (check 22); the demo's game count
+    to the committed sample replays; the import-contract count to the contract
+    sections of ``.importlinter``; and the install block's recording count to
+    the replay files a bare ``scripts/verify_samples.sh`` re-runs. Each
+    sentence is required, and every copy of a claim's shape must agree, so a
+    stale duplicate cannot sit beside the sentence it retells.
 
 ``--repo-root`` points the document and source reads at another tree (the unit
 tests perturb a copy); it defaults to this checkout. The lever registry ALWAYS
@@ -508,14 +521,17 @@ _HEADING: Final = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t]*$", re.MULTILINE)
 
 # Counts that change without any commit touching the prose. Each must be stated
 # with an as-of stamp in its own sentence; the VALUE is never checked, because
-# no doc check may reach the network to learn the true one.
+# no doc check may reach the network to learn the true one. One lowercase word
+# may stand between the number and its noun ("1,327 frontend tests", "364 merged
+# pull requests"), so a qualified count is held to the stamp as a bare one is.
+_VOLATILE_QUALIFIER: Final = r"\d[\d,]*\+?\s+(?:(?-i:[a-z]+)\s+)?"
 _VOLATILE_COUNTS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     (
-        "merged pull requests",
-        re.compile(r"\d[\d,]*\+?\s+merged\s+(?:pull requests|PRs)\b", re.IGNORECASE),
+        "pull requests",
+        re.compile(rf"{_VOLATILE_QUALIFIER}(?:pull requests|PRs)\b", re.IGNORECASE),
     ),
-    ("commits", re.compile(r"\d[\d,]*\+?\s+commits\b", re.IGNORECASE)),
-    ("tests", re.compile(r"\d[\d,]*\+?\s+tests\b", re.IGNORECASE)),
+    ("commits", re.compile(rf"{_VOLATILE_QUALIFIER}commits\b", re.IGNORECASE)),
+    ("tests", re.compile(rf"{_VOLATILE_QUALIFIER}tests\b", re.IGNORECASE)),
 )
 _AS_OF: Final = re.compile(r"as of (\d{4}-\d{2}-\d{2})")
 
@@ -766,6 +782,71 @@ _SCORECARD_VALUE_HEADER: Final = "value"
 _SCORECARD_REWRITES: Final = "Row 7 detail: typed guard rewrites "
 _SCORECARD_REWRITE_ENTRY: Final = re.compile(r"\A(\w+) (\d+)\Z")
 _SCORECARD_NO_REWRITES: Final = "none"
+# The README's PROSE figures: the sentences that retell a scorecard cell, the
+# vent cross-tab, a file population or a config. Each claim shape
+# is held wherever the README states it, so a stale copy beside a correct one
+# fails as surely as a stale sole copy, and a sentence that stops stating its
+# figure fails rather than leaving the source bound to nothing.
+#
+# How crew eject ballots for and against the voter's top suspect fared, from the
+# shown set's row-2 role-correct cell on the scorecard page: followers,
+# deviators and the chance rate.
+_ROLE_CORRECT_ROW: Final = "argmax-independence: role-correct, followers vs deviators"
+_ROLE_CORRECT_CELL: Final = re.compile(
+    r"\A(\d+)/(\d+) = [\d.]+% vs (\d+)/(\d+) = [\d.]+% \(chance ([\d.]+)%\)\Z"
+)
+_FOLLOWER_PROSE: Final = re.compile(
+    r"\bhit an impostor (\d+) of (\d+) times \((\d+)%\)"
+)
+_DEVIATOR_PROSE: Final = re.compile(
+    r"\bthe (\d+) against it hit one (\w+(?: times)?) \((\d+)%\)"
+)
+_CHANCE_PROSE: Final = re.compile(r"\bchance is about one in (\w+)\b")
+# Any other "k of <followers>" claim: the follower figure retold in other words,
+# which must still name the role-correct count.
+_FOLLOWER_COUNT_PROSE: Final = r"\b(\d+) of {followers}\b"
+_REPEAT_WORDS: Final[Mapping[int, str]] = MappingProxyType({1: "once", 2: "twice"})
+# The vent cross-tab retold under the vent headline: the flagged row's meetings
+# and its clean record, then the unflagged row's meetings, its impostor share of
+# its ejections and its innocent ejections.
+_VENT_FLAGGED_PROSE: Final = re.compile(
+    r"\bin the (\d+) meetings with one\b", re.IGNORECASE
+)
+_VENT_UNFLAGGED_PROSE: Final = re.compile(
+    r"\bin the (\d+) without, (\d+) of (\d+) did and (\d+) removed crewmates\b",
+    re.IGNORECASE,
+)
+_VENT_UNFLAGGED_SHARE_PROSE: Final = r"\b(\d+) of {ejections}\b"
+_VENT_INNOCENT_PROSE: Final = re.compile(r"\b(\d+) removed crewmates\b")
+# The flagged row's clean record, stated twice: true only while that row records
+# no innocent ejection.
+_VENT_CLEAN_RECORD_PROSE: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"\bnever ejected a crewmate\b", re.IGNORECASE),
+    re.compile(r"\bevery ejection removed an impostor\b", re.IGNORECASE),
+)
+# The cited-vote figure retold in prose, held to the scorecard cell its results
+# row restates.
+_GROUNDED_EJECT_PROSE: Final = re.compile(r"\b(\d+) of (\d+) votes to eject\b")
+# The demo's game count, held to the committed sample replays.
+_DEMO_GAMES_PROSE: Final = re.compile(r"\bcarries all (\d+) games\b")
+# The import contracts, counted as the contract sections of the linter's config.
+_IMPORT_LINTER: Final = ".importlinter"
+_IMPORT_CONTRACT_SECTION: Final = re.compile(
+    r"^\[importlinter:[^\]\n]+\]", re.MULTILINE
+)
+_IMPORT_CONTRACT_PROSE: Final = re.compile(
+    r"\bof (\w+) import contracts\b", re.IGNORECASE
+)
+# The recordings a bare ``scripts/verify_samples.sh`` re-runs: each set directory
+# under the samples root and each ``<round>/<set>/`` under the candidates root.
+# The README states this count inside its install block, so it is read raw.
+_VERIFIED_SET_GLOBS: Final[tuple[tuple[str, str], ...]] = (
+    ("replays/samples", "*"),
+    ("replays/candidates", "*/*"),
+)
+_VERIFIED_RECORDINGS_PROSE: Final = re.compile(
+    r"\b(\d+) sample and candidate recordings\b"
+)
 # A results row whose history cell this checker RE-DERIVES from the audit that
 # owns it, rather than only comparing the two tables' copies; the process rows'
 # history cells are re-derived from the scorecard page's before column.
@@ -958,7 +1039,19 @@ _PASS_COUNT_CLAIM: Final = re.compile(
 _MET_COUNT_CLAIM: Final = re.compile(
     r"\bmet (\w+) of (\w+)(?: fresh)? bars\b", re.IGNORECASE
 )
-_NUMBER_WORDS: Final[tuple[str, ...]] = ("no", "one", "two", "three", "four")
+_NUMBER_WORDS: Final[tuple[str, ...]] = (
+    "no",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+)
 # The other half of the published decision: what the owner DID about the
 # verdict. On a FINDING nothing graduated and no override was made, so a
 # paragraph that states this record's fall may not also assert one — the
@@ -1138,6 +1231,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{_READING_GUIDE}'s, before column included, led in both by the four "
         f"process rows {_SCORECARD_PAGE} owns; the real-report example "
         f"matches {_POPULATED_REPORT}; every volatile count is as-of stamped; "
+        f"{_README}'s prose figures recompute from {_SCORECARD_PAGE}, "
+        f"{_READING_GUIDE}'s vent cross-tab, its own results table, the "
+        f"committed sample and candidate replays and {_IMPORT_LINTER}; "
         f"{_READING_GUIDE} carries no file:line citation, narrates the cells "
         f"{_DEDUCTION_INSTRUMENT} pins, and names only games {_PICKER} "
         f"features; the claim-shaped facts hold across "
@@ -1174,6 +1270,12 @@ def check_facts(repo_root: Path) -> list[str]:
         check_process_rows(repo_root, readme, errors)
         check_populated_report_example(repo_root, readme, errors)
         check_volatile_stamps(readme, errors)
+        check_role_correct_prose(repo_root, readme, errors)
+        check_vent_prose(repo_root, readme, errors)
+        check_grounded_prose(repo_root, readme, errors)
+        check_demo_game_count(repo_root, readme, errors)
+        check_import_contract_count(repo_root, readme, errors)
+        check_verified_recording_count(repo_root, readme, errors)
     check_ladder_tip(repo_root, errors)
     check_replaced_era(repo_root, errors)
     # One read for both registry checks, so a missing template is reported
@@ -3173,10 +3275,7 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
     # sidecar or a hand-named debug file is a .jsonl that
     # ``scripts/verify_samples.sh`` never reconstructs, and counting it would
     # inflate the figure this row claims was verified.
-    replays = sum(
-        len(sample_paths(repo_root / _SAMPLE_REPLAY_DIR.format(name=name)))
-        for name in _SAMPLE_SETS
-    )
+    replays = committed_sample_replays(repo_root)
     if not replays:
         # A vacuous pass is the one outcome this check must not have: an empty
         # corpus would otherwise let any replay figure stand.
@@ -3240,6 +3339,20 @@ def check_result_sources(repo_root: Path, readme: str, errors: list[str]) -> Non
             )
 
     check_conviction_partition(repo_root, readme, figures, errors)
+
+
+def committed_sample_replays(repo_root: Path) -> int:
+    """How many replays the verifier reconstructs across the two sample sets.
+
+    The verifier's own population, not a glob of the directory: an audit
+    sidecar or a hand-named debug file is a .jsonl that
+    ``scripts/verify_samples.sh`` never reconstructs.
+    """
+
+    return sum(
+        len(sample_paths(repo_root / _SAMPLE_REPLAY_DIR.format(name=name)))
+        for name in _SAMPLE_SETS
+    )
 
 
 def check_conviction_partition(
@@ -3444,33 +3557,7 @@ def scorecard_process_cells(page: str, label: str, before_era: str) -> _ProcessC
     """
 
     heading = _SCORECARD_SET_HEADING.format(label=label)
-    lines = page.splitlines()
-    if heading not in lines:
-        raise ScorecardPageError(f"no {heading!r} section")
-    section: list[str] = []
-    for line in lines[lines.index(heading) + 1 :]:
-        if _HEADING.match(line):
-            break
-        section.append(line)
-    header: list[str] | None = None
-    table: dict[str, list[str]] = {}
-    for line in section:
-        cells = table_cells(line)
-        if cells is None:
-            if header is not None:
-                break
-            continue
-        if header is None:
-            if tuple(cells[: len(_SCORECARD_HEADER)]) == _SCORECARD_HEADER:
-                header = cells
-            continue
-        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
-            continue
-        table[cells[1] if len(cells) > 1 else ""] = cells
-    if header is None:
-        raise ScorecardPageError(
-            f"the {heading!r} section has no '| {' | '.join(_SCORECARD_HEADER)} |' table"
-        )
+    header, table, section = scorecard_set_table(page, label)
     marker = _SCORECARD_BEFORE_HEADER.format(era=before_era)
     before = [index for index, cell in enumerate(header) if cell.startswith(marker)]
     if not before:
@@ -3505,6 +3592,72 @@ def scorecard_process_cells(page: str, label: str, before_era: str) -> _ProcessC
                 )
             counts[match.group(1)] = int(match.group(2))
     return _ProcessCells(rows, counts.get(_TEAMMATE_REASON, 0))
+
+
+def scorecard_set_table(
+    page: str, label: str
+) -> tuple[list[str], dict[str, list[str]], list[str]]:
+    """``label``'s section on the generated scorecard page, and its table.
+
+    The section runs from the ``### <label>`` heading to the next heading; its
+    table is the one whose header opens ``| # | row |``. Returns the header
+    cells, the table's rows keyed by their ``row`` cell, and the section's
+    lines. Raises :class:`ScorecardPageError` naming a missing section or table.
+    """
+
+    heading = _SCORECARD_SET_HEADING.format(label=label)
+    lines = page.splitlines()
+    if heading not in lines:
+        raise ScorecardPageError(f"no {heading!r} section")
+    section: list[str] = []
+    for line in lines[lines.index(heading) + 1 :]:
+        if _HEADING.match(line):
+            break
+        section.append(line)
+    header: list[str] | None = None
+    table: dict[str, list[str]] = {}
+    for line in section:
+        cells = table_cells(line)
+        if cells is None:
+            if header is not None:
+                break
+            continue
+        if header is None:
+            if tuple(cells[: len(_SCORECARD_HEADER)]) == _SCORECARD_HEADER:
+                header = cells
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            continue
+        table[cells[1] if len(cells) > 1 else ""] = cells
+    if header is None:
+        raise ScorecardPageError(
+            f"the {heading!r} section has no '| {' | '.join(_SCORECARD_HEADER)} |' table"
+        )
+    return header, table, section
+
+
+def shown_set_values(repo_root: Path) -> dict[str, str] | None:
+    """Each row's value cell in the shown set's table on the scorecard page.
+
+    ``None`` when the page, the set's section, its table or the value column
+    cannot be read: :func:`check_process_rows` reads the same table first and
+    reports each of those by name, so the prose checks that read it after do
+    not report it again.
+    """
+
+    try:
+        page = (repo_root / _SCORECARD_PAGE).read_text(encoding="utf-8")
+        header, table, _ = scorecard_set_table(
+            page, _WIN_SPLIT_ROW.format(name=_PROOF_SET)
+        )
+    except (OSError, ScorecardPageError):
+        return None
+    if _SCORECARD_VALUE_HEADER not in header:
+        return None
+    value = header.index(_SCORECARD_VALUE_HEADER)
+    return {
+        row: cells[value] for row, cells in table.items() if len(cells) == len(header)
+    }
 
 
 def coerced_clause(count: int) -> str:
@@ -4279,6 +4432,305 @@ def check_volatile_stamps(readme: str, errors: list[str]) -> None:
                         f"{label} count is stamped 'as of {stamp}', which is "
                         "not a calendar date."
                     )
+
+
+class _ProseClaim(NamedTuple):
+    """One claim shape the README may state, and the figures it must state.
+
+    ``expected`` holds one value per capture group of ``pattern``, compared
+    case-insensitively; a ``required`` claim must be stated at least once.
+    """
+
+    pattern: re.Pattern[str]
+    expected: tuple[str, ...]
+    required: bool = True
+
+
+def check_prose_claims(
+    blocks: Sequence[tuple[int, str]],
+    claims: Sequence[_ProseClaim],
+    source: str,
+    errors: list[str],
+) -> None:
+    """Every statement of each claim shape in ``blocks``, held to ``source``.
+
+    ``blocks`` are ``(line, text)`` pairs of the README. Claims are scanned in
+    order, and a later claim's match inside text an earlier claim already
+    matched is the same statement, reported once: a narrow refusal ("k of n")
+    listed after the sentence it sits in does not re-report that sentence.
+    """
+
+    found = [False] * len(claims)
+    for number, text in blocks:
+        taken: list[tuple[int, int]] = []
+        for index, claim in enumerate(claims):
+            wanted = tuple(value.casefold() for value in claim.expected)
+            for match in claim.pattern.finditer(text):
+                if any(
+                    start < match.end() and match.start() < end for start, end in taken
+                ):
+                    continue
+                taken.append(match.span())
+                found[index] = True
+                if tuple(group.casefold() for group in match.groups()) == wanted:
+                    continue
+                errors.append(
+                    f"{_README}:{number}: the claim {match.group(0)!r} disagrees "
+                    f"with {source}, which makes it "
+                    f"{restated_claim(match, claim.expected)!r}."
+                )
+    for claim, seen in zip(claims, found, strict=True):
+        if claim.required and not seen:
+            errors.append(
+                f"{_README}: no sentence matching {claim.pattern.pattern!r} — what "
+                f"{source} gives is no longer stated, so nothing binds the prose "
+                "to it."
+            )
+
+
+def restated_claim(match: re.Match[str], values: Sequence[str]) -> str:
+    """``match``'s text with each capture group replaced by its derived value."""
+
+    text, offset = match.group(0), match.start()
+    pieces: list[str] = []
+    cursor = 0
+    for group, value in enumerate(values, start=1):
+        start, end = match.span(group)
+        pieces += [text[cursor : start - offset], value]
+        cursor = end - offset
+    return "".join(pieces) + text[cursor:]
+
+
+def percent(numerator: int, denominator: int) -> str:
+    """A share as the front door prints it, rounded as :func:`fraction_figure`."""
+
+    return str(round(100 * numerator / denominator))
+
+
+def repeat_word(count: int) -> str:
+    """How often, as the README says it: "once", "twice", "three times"."""
+
+    return _REPEAT_WORDS.get(count, f"{number_word(count)} times")
+
+
+def check_role_correct_prose(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """The README's account of votes for and against the voter's top suspect.
+
+    The shown set's row-2 role-correct cell on the scorecard page owns the
+    figures: how many crew eject ballots followed the top suspect and how many
+    of those hit an impostor, the same for the ballots against it, and the
+    chance rate. The README must state them as "hit an impostor k of n times
+    (p%)", "the n against it hit one <k> (p%)" and "chance is about one in
+    <N>", and any other "k of <followers>" claim must name the same count, so a
+    re-record that moves the cell cannot leave the sentence telling the old one.
+    """
+
+    values = shown_set_values(repo_root)
+    if values is None:
+        return  # check_process_rows reports the unreadable page
+    label = _WIN_SPLIT_ROW.format(name=_PROOF_SET)
+    cell = values.get(_ROLE_CORRECT_ROW)
+    if cell is None:
+        errors.append(
+            f"{_SCORECARD_PAGE}: the {label} table has no {_ROLE_CORRECT_ROW!r} "
+            f"row — the {_README} sentence on votes for and against the top "
+            "suspect has no committed source."
+        )
+        return
+    match = _ROLE_CORRECT_CELL.match(cell.strip())
+    counts = (
+        None if match is None else [int(match.group(index)) for index in range(1, 5)]
+    )
+    chance = None if match is None else float(match.group(5))
+    if counts is None or chance is None or not (counts[1] and counts[3] and chance):
+        errors.append(
+            f"{_SCORECARD_PAGE}: the {label} {_ROLE_CORRECT_ROW!r} cell reads "
+            f"{cell!r}, not 'k/n = p% vs k/n = p% (chance p%)' over two non-empty "
+            f"populations — the {_README} sentence on votes for and against the "
+            "top suspect cannot be derived from it."
+        )
+        return
+    hits, followers, deviator_hits, deviators = counts
+    source = f"the {label} role-correct cell of {_SCORECARD_PAGE} ({cell.strip()})"
+    claims = (
+        _ProseClaim(
+            _FOLLOWER_PROSE,
+            (str(hits), str(followers), percent(hits, followers)),
+        ),
+        _ProseClaim(
+            _DEVIATOR_PROSE,
+            (
+                str(deviators),
+                repeat_word(deviator_hits),
+                percent(deviator_hits, deviators),
+            ),
+        ),
+        _ProseClaim(_CHANCE_PROSE, (number_word(round(100 / chance)),)),
+        _ProseClaim(
+            re.compile(_FOLLOWER_COUNT_PROSE.format(followers=followers)),
+            (str(hits),),
+            required=False,
+        ),
+    )
+    check_prose_claims(list(prose_blocks(readme)), claims, source, errors)
+
+
+def check_vent_prose(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """The README's retelling of the vent cross-tab, held to that table.
+
+    The headline row is arithmetic over the reading guide's cross-tab
+    (:func:`check_result_sources`); the sentence under the headline retells the
+    same table: how many meetings carried a reported vent sighting and that none
+    of them ejected a crewmate, then how many did not, how many of their
+    ejections removed an impostor and how many removed a crewmate. Each figure is
+    read off the table's own rows and their "(N meetings)" labels, and the clean
+    record is refused outright once the flagged row records an innocent
+    ejection.
+    """
+
+    guide = read_document(repo_root, _READING_GUIDE, errors)
+    if guide is None:
+        return
+    crosstab = vent_crosstab(guide)
+    if crosstab is None:
+        return  # check_result_sources reports the unlocatable table
+    (_, flagged_innocent), (unflagged_impostor, unflagged_innocent) = crosstab
+    # A row without its population is reported by check_guide_narrative.
+    meetings = {
+        match.group(1): match.group(2) for match in _VENT_ROW_MEETINGS.finditer(guide)
+    }
+    ejections = unflagged_impostor + unflagged_innocent
+    source = f"the vent cross-tab in {_READING_GUIDE}"
+    blocks = list(prose_blocks(readme))
+    claims: list[_ProseClaim] = []
+    if "yes" in meetings:
+        claims.append(_ProseClaim(_VENT_FLAGGED_PROSE, (meetings["yes"],)))
+    if "no" in meetings:
+        claims.append(
+            _ProseClaim(
+                _VENT_UNFLAGGED_PROSE,
+                (
+                    meetings["no"],
+                    str(unflagged_impostor),
+                    str(ejections),
+                    str(unflagged_innocent),
+                ),
+            )
+        )
+    claims += [
+        _ProseClaim(
+            re.compile(_VENT_UNFLAGGED_SHARE_PROSE.format(ejections=ejections)),
+            (str(unflagged_impostor),),
+            required=False,
+        ),
+        _ProseClaim(_VENT_INNOCENT_PROSE, (str(unflagged_innocent),), required=False),
+    ]
+    if flagged_innocent == 0:
+        claims += [_ProseClaim(pattern, ()) for pattern in _VENT_CLEAN_RECORD_PROSE]
+    else:
+        for number, text in blocks:
+            for pattern in _VENT_CLEAN_RECORD_PROSE:
+                errors.extend(
+                    f"{_README}:{number}: the claim {match.group(0)!r} is refuted by "
+                    f"{source}, whose flagged row's innocent-ejected cell reads "
+                    f"{flagged_innocent}."
+                    for match in pattern.finditer(text)
+                )
+    check_prose_claims(blocks, claims, source, errors)
+
+
+def check_grounded_prose(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """The cited-vote count in prose, held to the cell its results row restates.
+
+    The row ``Eject ballots citing what the voter saw or heard about the
+    accused`` is the shown set's grounded EJECT cell on the scorecard page
+    (:func:`check_process_rows`), and the sentence that retells it in prose is
+    read off that same cell, so prose and row state one figure and move
+    together on a re-record.
+    """
+
+    values = shown_set_values(repo_root)
+    row = dict(_PROCESS_ROWS)[_GROUNDED_EJECT_CLAIM]
+    cell = None if values is None else values.get(row)
+    fraction = None if cell is None else _SCORECARD_FRACTION.match(cell.strip())
+    if cell is None or fraction is None:
+        return  # check_process_rows reports the unreadable page, row or cell
+    check_prose_claims(
+        list(prose_blocks(readme)),
+        (_ProseClaim(_GROUNDED_EJECT_PROSE, (fraction.group(1), fraction.group(2))),),
+        f"the {_WIN_SPLIT_ROW.format(name=_PROOF_SET)} {row!r} cell of "
+        f"{_SCORECARD_PAGE} ({cell.strip()}), which the results row "
+        f"{_GROUNDED_EJECT_CLAIM!r} restates",
+        errors,
+    )
+
+
+def check_demo_game_count(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """The demo's game count, held to the committed sample replays it serves."""
+
+    replays = committed_sample_replays(repo_root)
+    if not replays:
+        return  # check_result_sources reports the empty corpus
+    check_prose_claims(
+        list(prose_blocks(readme)),
+        (_ProseClaim(_DEMO_GAMES_PROSE, (str(replays),)),),
+        f"the {replays} committed replays under replays/samples/",
+        errors,
+    )
+
+
+def check_import_contract_count(
+    repo_root: Path, readme: str, errors: list[str]
+) -> None:
+    """The import-contract count, held to the linter config's contract sections."""
+
+    config = read_document(repo_root, _IMPORT_LINTER, errors)
+    if config is None:
+        return
+    contracts = len(_IMPORT_CONTRACT_SECTION.findall(config))
+    if not contracts:
+        errors.append(
+            f"{_IMPORT_LINTER}: no '[importlinter:<name>]' contract section — the "
+            f"{_README} contract count has nothing to be derived from."
+        )
+        return
+    check_prose_claims(
+        list(prose_blocks(readme)),
+        (_ProseClaim(_IMPORT_CONTRACT_PROSE, (number_word(contracts),)),),
+        f"the {contracts} contract sections of {_IMPORT_LINTER}",
+        errors,
+    )
+
+
+def check_verified_recording_count(
+    repo_root: Path, readme: str, errors: list[str]
+) -> None:
+    """The count of recordings the install block's verifier re-runs.
+
+    A bare ``scripts/verify_samples.sh`` walks every sample set and every
+    candidate set; the README's install block says how many recordings that is,
+    and the count is the replay files the verifier's own reader accepts there.
+    """
+
+    recordings = sum(
+        len(sample_paths(directory))
+        for root, pattern in _VERIFIED_SET_GLOBS
+        for directory in sorted((repo_root / root).glob(pattern))
+        if directory.is_dir()
+    )
+    roots = " and ".join(f"{root}/" for root, _ in _VERIFIED_SET_GLOBS)
+    if not recordings:
+        errors.append(
+            f"{roots}: no replay files found, so the {_README} count of recordings "
+            "the verifier re-runs cannot be derived."
+        )
+        return
+    check_prose_claims(
+        list(enumerate(readme.splitlines(), start=1)),
+        (_ProseClaim(_VERIFIED_RECORDINGS_PROSE, (str(recordings),)),),
+        f"the {recordings} replay files under {roots}",
+        errors,
+    )
 
 
 def check_guide_line_citations(repo_root: Path, errors: list[str]) -> None:
