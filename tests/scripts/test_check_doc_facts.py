@@ -1838,9 +1838,13 @@ def test_previous_set_row_reaches_the_before_column(doc_tree: Path) -> None:
     )
 
 
+# The README as it stood at d1220ead, frozen: the base the historical front
+# doors below are rebuilt from, so rewording the live page leaves them intact.
+_FROZEN_README = Path(__file__).parent / "_goldens" / "README-d1220ead.md"
+
 # The README as it stood at 2eed2e92, the last commit before round 3's
-# promotion, kept as the hunks that differ from the committed page: each pair
-# is (the committed text, the 2eed2e92 text). Applied in order, they rebuild
+# promotion, kept as the hunks that differ from the frozen d1220ead page: each
+# pair is (the d1220ead text, the 2eed2e92 text). Applied in order, they rebuild
 # the whole round-2 front door inside the promoted tree.
 _ROUND_2_README_HUNKS: tuple[tuple[str, str], ...] = (
     (
@@ -2109,7 +2113,7 @@ experiment; it is not adopted. [Observation contract and limitations](docs/obser
 
 
 def _readme_rebuilt(doc_tree: Path, *steps: tuple[tuple[str, str], ...]) -> list[str]:
-    readme = _read(doc_tree, _README)
+    readme = _FROZEN_README.read_text(encoding="utf-8")
     for hunks in steps:
         for current, previous in hunks:
             assert readme.count(current) == 1, current[:60]
@@ -6583,7 +6587,11 @@ _WORDING_PAGES = (
     "SECURITY.md",
     "CONTRIBUTING.md",
 )
-_README_TITLE = "# AiLibi — can agents reason from what they actually saw?"
+# The title leads with the game and who built it (the 2026-10-13 addendum).
+_README_TITLE = (
+    "# AiLibi — an Among Us-style game played by LLM agents, built by directing "
+    "AI coding agents"
+)
 _TAGLINE = "Recorded AI social deduction"
 # The byline, byte for byte: kept as it is and linked to nothing new.
 _BYLINE = (
@@ -6868,10 +6876,9 @@ def _planted(tmp_path: Path, page: str, old: str, new: str) -> dict[str, list[st
     return _wording_problems(tree)
 
 
-_ERA_SENTENCE_NOW = (
-    "The shown 9-player set was recorded 2026-10-09 under the adopted gameplay "
-    "changes; the 4-player set and the ML training games were recorded 2026-09-22."
-)
+# The sentence that now stands where the era sentence stood: the README defines
+# the Before column rather than dating each set.
+_BEFORE_SENTENCE_NOW = "*Before* is each set's previously shown recording."
 
 
 @pytest.mark.parametrize(
@@ -6879,7 +6886,7 @@ _ERA_SENTENCE_NOW = (
     [
         pytest.param(
             _README,
-            _ERA_SENTENCE_NOW,
+            _BEFORE_SENTENCE_NOW,
             _ERA_SENTENCE_AT_BASE,
             ["README.md: carries 'in its own era'", "README.md: carries 'ML corpus'"],
             id="era-link-restored",

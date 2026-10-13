@@ -86,7 +86,7 @@ one-off `design/` generators, bypass strict typing.
 
 ## Enforced boundaries
 
-Four import-linter contracts forbid agents importing engine, training or
+Five import-linter contracts forbid agents importing engine, training or
 `meetings.manager`, and observation importing agents, meetings or llm. Agents
 may use meeting schemas. Meetings and llm are engine-free in fact, without
 separate contracts. All shipping root packages appear in `.importlinter`, so
