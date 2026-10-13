@@ -1,8 +1,8 @@
 # Publishes the static demo bundle — the project's public face — to GitHub
 # Pages on every push to `main`. `docs/deployment.md` is the authority on why
 # this artifact is publishable when the live API is not (pre-rendered answers
-# for the curated games; no server, no query surface), and names this workflow
-# as the sanctioned public route.
+# for every committed sample game; no server, no query surface), and names this
+# workflow as the sanctioned public route.
 #
 # A SEPARATE workflow file rather than a job in ci.yml, for the reason
 # campaign-tier.yml records: a trigger set shared with ci.yml would emit SKIPPED
@@ -61,15 +61,14 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       # BOTH toolchains, so no AILIBI_SKIP_FRONTEND here: the bundle is a Vite
-      # build plus an engine re-walk of the featured games out of the committed
-      # recordings.
+      # build plus an engine re-walk of every committed recording.
       - name: Set up project environment
         run: bash scripts/setup_env.sh
 
       # The builder's own tests, ahead of the build they guard — cheapest signal
       # first, as in ci.yml. The build then adds its compiled-in assertions over
-      # the emitted bundle (the static data seam, and the Tournament tab's
-      # bundle-only empty state), so nothing reaches the upload unproven.
+      # the emitted bundle (the static data seam, and the compact results with no
+      # local-checkout guidance), so nothing reaches the upload unproven.
       - name: Test the bundle builder
         run: uv run pytest tests/scripts/test_build_demo_bundle.py -q
 

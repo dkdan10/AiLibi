@@ -3,9 +3,10 @@
 Three things have to hold for the artifact to be worth shipping, and each is a
 different kind of failure:
 
-* the bundle bakes the CURATED games and nothing else — the featured list is read
-  out of ``ReplayPicker.tsx``, so a curation edit changes the bundle and a bundle
-  that quietly baked a stale list is caught here;
+* the bundle bakes EVERY recorded game and nothing else — the games are listed
+  from the recording files, a featured game in ``ReplayPicker.tsx`` with no
+  recording fails the build, and a recording the loader refuses fails the bake
+  rather than leaving the bundle one game short;
 * every baked file sits at the URL the client will ask for — including the
   filename reduction that turns ``headless-seed-2:meeting-0`` into a portable
   name, which is duplicated across a TypeScript file and a Python file and so is
@@ -20,9 +21,10 @@ requests — is ``frontend/e2e/bundle.spec.ts``. This file never runs ``npm``.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import pytest
@@ -31,7 +33,11 @@ from fastapi.testclient import TestClient
 import build_demo_bundle as bdb
 from api.main import ENV_REPLAY_DIR, create_app
 from api.replay_loader import DEFAULT_SET, ReplayLoader
-from api.schemas import PublicResultsView
+from api.schemas import PublicCaseView, PublicResultsView
+from orchestrator.recording_fingerprint import (
+    REPLAY_FILENAME_GLOB,
+    replay_seed_from_filename,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SAMPLES = _REPO_ROOT / "replays" / "samples"
@@ -122,9 +128,9 @@ def test_a_partially_parsed_curation_fails_loud(tmp_path: Path) -> None:
 
 
 def test_a_featured_seed_the_set_does_not_carry_fails_loud(tmp_path: Path) -> None:
-    """A curated seed with no recording is an error, not a missing card."""
+    """A seed asked for with no recording is an error, not a missing card."""
 
-    with pytest.raises(FileNotFoundError, match="featured seeds absent"):
+    with pytest.raises(FileNotFoundError, match="seeds absent from"):
         bdb.bake_data(
             tmp_path,
             games=(bdb.FeaturedGame(set_name="9p2i", seed=9999),),
@@ -475,11 +481,11 @@ def test_a_stale_profile_bakes_no_member(tmp_path: Path) -> None:
 
 
 def test_rebaking_removes_the_previous_data_tree(tmp_path: Path) -> None:
-    """A de-curated game must LEAVE the bundle, not linger as fetchable JSON.
+    """A removed recording must LEAVE the bundle, not linger as fetchable JSON.
 
     Overwrite-only baking would keep serving a dropped seed (or a dropped set)
     out of a reused output directory, contradicting the bundle's own note that it
-    ships the current featured games and nothing else.
+    ships the current recordings and nothing else.
     """
 
     bdb.bake_data(
@@ -492,7 +498,7 @@ def test_rebaking_removes_the_previous_data_tree(tmp_path: Path) -> None:
     )
     assert (tmp_path / "data" / "4p1i" / "replays" / "headless-seed-29.json").is_file()
 
-    # Re-bake with 4p1i de-curated entirely, into the same directory.
+    # Re-bake without 4p1i, into the same directory.
     summary = bdb.bake_data(tmp_path, games=_ONE_9P2I, samples_dir=_SAMPLES)
     assert summary.sets == ("9p2i",)
     assert not (tmp_path / "data" / "4p1i").exists()
@@ -719,14 +725,15 @@ def test_there_is_no_bake_only_fast_path() -> None:
     """Removed deliberately, so pin its absence.
 
     A reuse flag decouples two halves built from the SAME source read: the
-    curated list and the resolved default set are compiled into the frontend AND
-    are what the data is baked from. Re-baking over an older frontend lets them
-    disagree — a de-curated game disappears through the picker's metadata join, a
-    newly curated one is baked but never featured, and a curation that drops the
-    old default leaves the compiled default pointing at a directory the bundle no
-    longer carries. Keeping the flag correct would need the compiled curation
-    stamped into the artifact and validated on every re-bake; building both
-    halves every time makes the mismatch impossible instead.
+    curated strip and the resolved default set are compiled into the frontend,
+    and the bake is checked against both. Re-baking over an older frontend would
+    check the current curation while shipping the old strip, whose games could
+    have lost their recordings and vanish through the picker's metadata join,
+    and recordings without the old default set would leave the compiled default
+    pointing at a directory the bundle no longer carries. Keeping the flag
+    correct would need the compiled curation stamped into the artifact and
+    validated on every re-bake; building both halves every time makes the
+    mismatch impossible instead.
     """
 
     source = Path(bdb.__file__).read_text(encoding="utf-8")
@@ -926,53 +933,112 @@ def test_summary_covers_full_validated_set_but_links_only_baked_cases(
         assert (base / mid / "memory" / f"{case['observer_id']}.json").is_file()
 
 
-def _assert_strip_carries_every_case(
-    out: Path, build: Callable[[ReplayLoader], PublicResultsView]
-) -> None:
-    """Every case ``build`` publishes for a baked set is in its baked summary."""
+def _recordings(samples: Path) -> dict[tuple[str, int], Path]:
+    """Every recording file under ``samples``, keyed by ``(set, seed)``."""
 
+    found: dict[tuple[str, int], Path] = {}
+    for path in sorted(samples.glob(f"*/{REPLAY_FILENAME_GLOB}")):
+        seed = replay_seed_from_filename(path.name)
+        if seed is not None:
+            assert (path.parent.name, seed) not in found, f"two files for {path}"
+            found[(path.parent.name, seed)] = path
+    return found
+
+
+def _uncovered_cases(
+    baked: Iterable[tuple[str, Path]], cases: Iterable[PublicCaseView]
+) -> list[str]:
+    """Ids of the cases whose game, at its exact recorded bytes, is not baked.
+
+    A case names its game id and its recording's sha256 but no set, so the
+    recording file places it: a baked ``(game id, recording)`` pair covers a
+    case when both the id and the file's hash match.
+    """
+
+    sources = {
+        (game_id, hashlib.sha256(path.read_bytes()).hexdigest())
+        for game_id, path in baked
+    }
+    return [
+        case.case_id
+        for case in cases
+        if (case.game_id, case.source_sha256) not in sources
+    ]
+
+
+def test_the_bundle_bakes_every_committed_game(tmp_path: Path) -> None:
+    # The bundle carries every recording the live API serves, so the browser,
+    # the results and the published cases all describe the same games. Both
+    # listings are checked: the files on disk and the loader's validated list.
     import api.public_results as public
 
-    for set_dir in sorted((out / "data").iterdir()):
-        live = build(ReplayLoader(_SAMPLES / set_dir.name))
-        baked = json.loads((set_dir / "eval/summary.json").read_text())
-        assert [case["case_id"] for case in baked["cases"]] == [
-            case.case_id for case in live.cases
-        ], (set_dir.name, "a published case is missing from the baked summary")
-    # The check is about the real curation, so the real one is non-empty.
-    assert public._curated_cases()  # noqa: SLF001
-
-
-def test_the_strip_carries_every_published_case(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The bundle bakes a case only beside its game, and bakes only featured
-    # games, so a case the curation moves off the strip would vanish from the
-    # demo with every other test green. Baking the strip's OWN list keeps every
-    # case the live results publish.
-    import api.public_results as public
-
-    strip = bdb.parse_featured_games()
-    bdb.bake_data(tmp_path / "strip", games=strip, samples_dir=_SAMPLES)
-    _assert_strip_carries_every_case(tmp_path / "strip", public.build_public_results)
-    nine = json.loads((tmp_path / "strip/data/9p2i/eval/summary.json").read_text())
-    assert len(nine["cases"]) == 2
-
-    # Planted: a case pointed at a game the strip does not feature is published
-    # live and missing from the bundle.
-    real = public.build_public_results
+    games = bdb.games_to_bake(_SAMPLES)
+    recordings = _recordings(_SAMPLES)
+    assert list(games) == [
+        bdb.FeaturedGame(set_name=set_name, seed=seed)
+        for set_name, seed in sorted(recordings)
+    ]
+    assert len(games) == 100
+    baked: list[tuple[str, Path]] = []
+    for set_name in sorted({set_name for set_name, _ in recordings}):
+        listed = ReplayLoader(_SAMPLES / set_name).list_replays()
+        assert [meta.seed for meta in listed] == [
+            game.seed for game in games if game.set_name == set_name
+        ], set_name
+        baked.extend(
+            (meta.game_id, recordings[(set_name, meta.seed)]) for meta in listed
+        )
+    assert set(bdb.parse_featured_games()) <= set(games)
     curated = public._curated_cases()  # noqa: SLF001
-    moved = curated[1].model_copy(
-        update={"game_id": "headless-seed-2", "meeting_id": "headless-seed-2:meeting-0"}
+    assert curated
+    assert _uncovered_cases(baked, curated) == []
+
+    # Planted: a curated case on a game the samples do not carry is reported.
+    stray = curated[1].model_copy(update={"game_id": "headless-seed-9999"})
+    assert _uncovered_cases(baked, (curated[0], stray)) == [stray.case_id]
+
+    # Planted: a featured game with no recording fails the listing by name,
+    # because the picker would drop its card without a word.
+    picker = tmp_path / "ReplayPicker.tsx"
+    picker.write_text(
+        _picker_source('  {\n    set: "9p2i",\n    seed: 9999,\n    label: "a",\n  },'),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="9p2i seed 9999"):
+        bdb.games_to_bake(_SAMPLES, picker)
+
+    # A directory with no recorded set has nothing to bake, and says so.
+    with pytest.raises(ValueError, match="no recorded set"):
+        bdb.games_to_bake(tmp_path / "empty", picker)
+
+
+def test_a_recording_the_loader_refuses_fails_the_bake(tmp_path: Path) -> None:
+    """A bad recording file is a build error, not a game the bundle leaves out.
+
+    The loader's listing skips a file it cannot validate, so a bake driven by
+    that listing would ship one game fewer with every check green. The games are
+    listed from the files instead, and the bake refuses the one it cannot load.
+    """
+
+    samples = tmp_path / "samples"
+    (samples / "4p1i").mkdir(parents=True)
+    source = _SAMPLES / "4p1i" / "replay-seed-29.jsonl"
+    (samples / "4p1i" / source.name).write_bytes(source.read_bytes())
+    (samples / "4p1i" / "replay-seed-7.jsonl").write_text(
+        "not a recording\n", encoding="utf-8"
+    )
+    picker = tmp_path / "ReplayPicker.tsx"
+    picker.write_text(
+        _picker_source('  {\n    set: "4p1i",\n    seed: 29,\n    label: "a",\n  },'),
+        encoding="utf-8",
     )
 
-    def planted(loader: ReplayLoader) -> PublicResultsView:
-        result = real(loader)
-        if loader._replay_dir.name != "9p2i":  # noqa: SLF001
-            return result
-        return result.model_copy(update={"cases": (curated[0], moved)})
-
-    monkeypatch.setattr(bdb, "build_public_results", planted)
-    bdb.bake_data(tmp_path / "planted", games=strip, samples_dir=_SAMPLES)
-    with pytest.raises(AssertionError, match="missing from the baked summary"):
-        _assert_strip_carries_every_case(tmp_path / "planted", planted)
+    games = bdb.games_to_bake(samples, picker)
+    assert games == (
+        bdb.FeaturedGame(set_name="4p1i", seed=7),
+        bdb.FeaturedGame(set_name="4p1i", seed=29),
+    )
+    # The defect this guards: the loader's own list drops seed 7 silently.
+    assert [meta.seed for meta in ReplayLoader(samples / "4p1i").list_replays()] == [29]
+    with pytest.raises(FileNotFoundError, match=r"seeds absent from .*: \[7\]"):
+        bdb.bake_data(tmp_path / "out", games=games, samples_dir=samples)

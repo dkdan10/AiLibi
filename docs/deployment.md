@@ -120,34 +120,35 @@ authenticate.
 **Why this is safe to publish when the API is not.** The bundle is a set of
 pre-rendered ANSWERS, not a query surface. It ships:
 
-* the hand-curated featured replays only (`FEATURED_GAMES` in
-  `frontend/src/components/ReplayPicker.tsx`), not the 100-replay corpus;
-* those games' own entries in the 9-player set's game-shape profile (their
-  shelves, chip and facets) with the profile's provenance and catalogue, and no
-  set-level size, table or count; a stale profile ships no entry, while the
-  curated games remain playable;
+* every committed recording of every set under `replays/samples/` — the 100
+  games the live `GET /replays` lists — with each game's replay view, belief
+  frames, meetings, per-agent memories and rendered prompts. That is about
+  56 MB of JSON in about 1,600 files, about 4.9 MB gzipped; the builder prints
+  the file count and size when it finishes. `FEATURED_GAMES` in
+  `frontend/src/components/ReplayPicker.tsx` is a curated starting list shown
+  above the full browser, and the build fails if a featured game is not baked.
+  A recording the loader refuses fails the build too, rather than leaving the
+  bundle one game short;
+* each set's compact verified results, and the 9-player set's game-shape
+  profile with its set-level class tables and flag counts cut (no screen reads
+  them); a stale profile ships no game entry, while every game stays playable;
 * no `tournament-eval-report.json` (the 9p2i one is 35 MB — that is the corpus,
-  not a demo), so the Dashboard tab renders a card written for this artifact:
-  what the demo ships, and where the eval report lives. That card renders no
-  part of the failed request. It has to be said explicitly, because the natural
-  implementation gets it wrong: `ApiError` folds the response BODY into its
-  message, and a file server answers a missing file with its own HTML error
-  page, so a panel that printed the error printed a raw
-  `<!DOCTYPE HTML PUBLIC …>` document at the visitor. The copy is
-  `noReportBundle` in `frontend/src/lib/copy.ts`, and
-  `scripts/build_demo_bundle.py` fails the build unless the emitted JS both
-  carries it and has dropped the local-checkout arm — so no bundle ships with
-  that card deleted, or with the arm that tells a visitor to run a tournament.
+  not a demo). The static Results tab shows the compact verified results only,
+  and `scripts/build_demo_bundle.py` fails the build unless the emitted JS
+  carries those results and has dropped the local-checkout guidance — so no
+  bundle ships without them, or with text that tells a visitor to run a
+  tournament.
 
-It carries the same **post-game GM view** of those specific games that the local
-spectator shows — roles, kill attribution, vent usage — because that is what the
-spectator IS (`docs/architecture.md`, `api/` — privileged by design). Publishing
-the bundle therefore publishes the recorded outcomes of the curated games, which
-are already committed to this repository in `replays/samples/`. What it does NOT
-publish is a live, unauthenticated, unbounded-work endpoint over whatever the
-host happens to have on disk. That distinction — a fixed set of already-public
-bytes vs. an open query surface into the operator's filesystem — is the whole
-reason one of these is publishable and the other is not.
+It carries the same **post-game GM view** that the local spectator shows —
+roles, kill attribution, vent usage — for every committed game, because that is
+what the spectator IS (`docs/architecture.md`, `api/` — privileged by design).
+Publishing the bundle therefore publishes the recorded outcomes of all of those
+games, which are already committed to this repository in `replays/samples/`.
+What it does NOT publish is a live, unauthenticated, unbounded-work endpoint
+over whatever the host happens to have on disk. That distinction — a fixed set
+of already-public bytes vs. an open query surface into the operator's
+filesystem — is the whole reason one of these is publishable and the other is
+not.
 
 **What the bundle does not change.** Nothing above. The live API's posture is
 untouched by this document's addition: no `StaticFiles` mount was added to
@@ -163,7 +164,7 @@ front of the world. On every push to `main` — and on manual dispatch, never on
 pull request, which would hand a fork's head commit a deployment of the
 project's public face — it runs the builder's tests, builds
 `frontend/dist/demo-bundle`, uploads it as the Pages artifact, and deploys it.
-Because Pages rebuilds on push, re-recording the featured games refreshes the
+Because Pages rebuilds on push, re-recording any committed set refreshes the
 live demo with no further work.
 
 Least privilege is `ci.yml`'s rule: the workflow's token is `contents: read`,

@@ -25,7 +25,7 @@ import { evidenceJourney } from "./evidence-journey";
 // the app genuinely reaches.
 
 import { spawnSync } from "node:child_process";
-import { createReadStream, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { createReadStream, existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
@@ -40,9 +40,24 @@ const TOUR_SEEN_KEY = "ailibi.guidedTourSeen.v1";
 
 const REPO_ROOT = resolve(import.meta.dirname, "..", "..");
 
-// Enough for `npm run build` plus the engine re-walk of seven featured games on a
-// cold CI runner. Measured locally at well under a minute.
+// Enough for `npm run build` plus the engine re-walk of every committed recording
+// (100 games) on a cold CI runner. Measured locally at about a minute.
 const BUILD_TIMEOUT_MS = 300_000;
+
+/** A recording's file name, as `orchestrator/recording_fingerprint.py` reads it. */
+const RECORDING_NAME = /^replay-seed-(-?\d+)\.jsonl$/u;
+
+/** The distinct seeds recorded for one committed set, read from the repository. */
+function committedGameCount(set: string): number {
+  const seeds = new Set<number>();
+  for (const name of readdirSync(join(REPO_ROOT, "replays", "samples", set))) {
+    const match = RECORDING_NAME.exec(name);
+    if (match?.[1] !== undefined) {
+      seeds.add(Number(match[1]));
+    }
+  }
+  return seeds.size;
+}
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
@@ -150,7 +165,8 @@ interface ServedBundle {
  * did, and the tests receive an origin instead of reaching for a global.
  *
  * Worker-scoped, not test-scoped: the bundle costs a `vite build` plus an engine
- * re-walk of seven games, and paying that per test would triple it for nothing.
+ * re-walk of every committed game, and paying that per test would multiply it
+ * for nothing.
  */
 // `provide`, not `use`: Playwright names this callback `use`, which collides
 // with React's `use` hook and makes `react-hooks/rules-of-hooks` fire on the
@@ -167,7 +183,7 @@ const test = base.extend<object, { bundle: ServedBundle }>({
     async ({}, provide) => {
       const prebuilt = process.env.AILIBI_DEMO_BUNDLE_DIR;
       const reusing = prebuilt !== undefined && prebuilt !== "";
-      // A temp dir, NOT a path under `frontend/`: the bundle is ~8 MB of built
+      // A temp dir, NOT a path under `frontend/`: the bundle is ~57 MB of built
       // output, and anything living inside the package gets swept up by the
       // repo's own tooling (eslint walks `e2e/`, and a `dist/`-shaped ignore
       // would have to be maintained in three config files for output nobody
@@ -331,10 +347,9 @@ test.describe("static demo bundle", () => {
     page,
     bundle,
   }) => {
-    // Deliberate omission, not an oversight: the 9p2i tournament report is 35 MB
-    // (was 33 MB on round 2's bytes).
-    // The dashboard's existing first-class no-report panel is the honest state,
-    // and pinning it here keeps the omission a DECISION rather than a surprise.
+    // Deliberate omission, not an oversight: the 9p2i tournament report is 35 MB,
+    // so the static Results tab shows the compact verified results only, and
+    // pinning that here keeps the omission a DECISION rather than a surprise.
     const apiAttempts = await forbidApi(page);
     await page.addInitScript((key) => {
       window.localStorage.setItem(key, "1");
@@ -343,6 +358,27 @@ test.describe("static demo bundle", () => {
 
     await page.getByRole("button", { name: "Results", exact: true }).click();
     await expect(page.getByRole("heading", { name: "What the recordings show" })).toBeVisible();
+
+    expect(apiAttempts).toEqual([]);
+  });
+
+  test("the replay browser lists every committed game of each set", async ({
+    page,
+    bundle,
+  }) => {
+    // The bundle bakes every committed recording, not only the Featured strip,
+    // so each set's unfiltered count is the number of recordings on disk.
+    const apiAttempts = await forbidApi(page);
+    await page.addInitScript((key) => {
+      window.localStorage.setItem(key, "1");
+    }, TOUR_SEEN_KEY);
+    const browser = page.getByRole("region", { name: "Replay browser", exact: true });
+    for (const set of ["9p2i", "4p1i"]) {
+      const count = committedGameCount(set);
+      expect(count).toBeGreaterThan(0);
+      await page.goto(`${bundle.origin}/?set=${set}&view=replays`);
+      await expect(browser.getByText(`${String(count)} games`, { exact: true })).toBeVisible();
+    }
 
     expect(apiAttempts).toEqual([]);
   });
