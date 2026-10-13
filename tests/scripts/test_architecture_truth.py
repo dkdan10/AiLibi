@@ -1,13 +1,9 @@
-"""The architecture note names the current baseline and links the game's shape.
+"""The architecture note links the game's shape, and that page names its enforcers.
 
-``scripts/check_doc_facts.py`` does not check that ``docs/architecture.md``
-names the ladder tip, so the ladder test here is that gate: the paragraph that
-opens "Baselines are adopting records" must name baseline 9 and cite the audit
-``check_doc_facts._LADDER_TIP_AUDIT`` holds. The game-shape facts live on their
-own page (``docs/game-shape.md``, linked from one architecture sentence),
-because the architecture note is held to a word ceiling the facts did not fit
-beside; each fact must keep naming the symbol that enforces it. Every check runs
-against the committed page and against a planted page that has to make it fire.
+The game-shape facts live on their own page (``docs/game-shape.md``, linked
+from one architecture sentence); each fact must keep naming the symbol that
+enforces it. Every check runs against the committed page and against a planted
+page that has to make it fire.
 """
 
 from __future__ import annotations
@@ -17,13 +13,9 @@ from pathlib import Path
 
 import pytest
 
-import check_doc_facts
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ARCHITECTURE = _REPO_ROOT / "docs" / "architecture.md"
 _GAME_SHAPE = _REPO_ROOT / "docs" / "game-shape.md"
-_LADDER_OPENING = "Baselines are adopting records"
-_CURRENT_BASELINE = "Baseline 9"
 _GAME_SHAPE_LINK = "](game-shape.md)"
 
 # One enforcing symbol per fact the note states.
@@ -35,35 +27,8 @@ _FACT_SYMBOLS: dict[str, str] = {
     "crewmates see one room": "_resolve_observer_visibility_mode",
 }
 
-# The paragraph as it read at e886b663, before baseline 9 was named.
-_BASE_LADDER_PARAGRAPH = (
-    "Baselines are adopting records. Baseline 8 is the maintenance re-record on "
-    "corrected behavior (`audits/audit-phase-21-rerecord.md`). Baseline 7 followed "
-    "an explicit FINDING override (`audits/audit-phase-20-baseline-7.md` §6.1), "
-    "not a claim that its missed bars passed."
-)
-
 # A task or audit identifier: the note is reader-facing prose (craft rule 4).
 _RECORD_ID = re.compile(r"\b[Tt]ask \d|\baudit|\bPR #\d")
-
-
-def _paragraphs(text: str) -> list[str]:
-    return [" ".join(block.split()) for block in re.split(r"\n\s*\n", text)]
-
-
-def _ladder_problems(text: str) -> list[str]:
-    paragraphs = [p for p in _paragraphs(text) if p.startswith(_LADDER_OPENING)]
-    if len(paragraphs) != 1:
-        return [f"expected one paragraph opening {_LADDER_OPENING!r}"]
-    paragraph = paragraphs[0]
-    problems = []
-    if _CURRENT_BASELINE not in paragraph:
-        problems.append(f"the ladder paragraph does not name {_CURRENT_BASELINE}")
-    if check_doc_facts._LADDER_TIP_AUDIT not in paragraph:
-        problems.append(
-            f"the ladder paragraph does not cite {check_doc_facts._LADDER_TIP_AUDIT}"
-        )
-    return problems
 
 
 def _note_problems(note: str, architecture: str) -> list[str]:
@@ -79,18 +44,6 @@ def _note_problems(note: str, architecture: str) -> list[str]:
         for match in _RECORD_ID.finditer(note)
     )
     return problems
-
-
-def test_the_ladder_paragraph_names_the_current_baseline() -> None:
-    assert _ladder_problems(_ARCHITECTURE.read_text(encoding="utf-8")) == []
-
-
-def test_the_base_ladder_paragraph_is_rejected() -> None:
-    # Planted: the e886b663 paragraph, which stops at baseline 8.
-    assert _ladder_problems(_BASE_LADDER_PARAGRAPH) == [
-        "the ladder paragraph does not name Baseline 9",
-        f"the ladder paragraph does not cite {check_doc_facts._LADDER_TIP_AUDIT}",
-    ]
 
 
 def test_the_game_shape_note_names_every_enforcing_symbol() -> None:

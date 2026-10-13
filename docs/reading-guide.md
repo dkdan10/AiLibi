@@ -8,49 +8,13 @@ outrank summaries. See the [glossary](glossary.md) for terms and
 
 ## 1. The numbers worth knowing
 
-The shown 9-player set was recorded 2026-10-09 under the adopted gameplay
-changes; the 4-player set and the ML training games were recorded 2026-09-22.
-Before is each set's previously shown recording.
+The headline figures, each beside what the previously shown recording read,
+are in the results table of the [README](../README.md); two more follow.
 
-| What | Figure | Before | Recorded on, and where it lives |
+| What | Figure | Before | Where it lives |
 |---|---|---|---|
-| Sample games that replay byte for byte | 100 of 100 (100%) | 100 of 100 (100%) | `scripts/verify_samples.sh`; in CI, a [gate test](../tests/api/test_replay_loader.py) for the 9-player set |
-| Observation boundary checks | import rules and planted/recursive leak checks | import rules and planted/recursive leak checks | bounded mechanisms, described below |
-| Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394 of 397 (99%) | 407 of 410 (99%) | [process scorecard](process-scorecard.md); a floor: the ballot asks every eject to cite |
-| Crew eject ballots naming someone other than the voter's [top suspect](glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56 of 291 (19%) | 65 of 292 (22%) | [process scorecard](process-scorecard.md) |
-| Ballots with no stated reason (9p2i) | 6 of 702 (1%) | 11 of 691 (2%) | [process scorecard](process-scorecard.md) |
-| Ballots whose target is the one their voter wrote (9p2i) | 692 of 702 (99%); 10 impostor votes against a partner turned into skips | 674 of 691 (98%) | [process scorecard](process-scorecard.md) |
-| Eject ballots with a valid citation of a statement or sighting (9p2i) | 397 of 397 (100%), zero dangling | 410 of 410 (100%), zero dangling | the 2026-10-09 record (9p2i) — [instrument](../tests/eval/test_vj_instruments.py) |
-| Impostor win rate, sample games | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](../replays/samples/4p1i/MANIFEST.md), [9p2i](../replays/samples/9p2i/MANIFEST.md) |
-| Impostors among those ejected, with and without proof of their role (9p2i) | 24 of 24 (100%) vs 22 of 37 (59%) | 24 of 24 (100%) vs 20 of 42 (48%) | the 2026-10-09 record (9p2i) — [the record](../audits/audit-2026-10-09-stage-b-r3.md) §12.5, against [round 2's](../audits/audit-2026-10-01-stage-b-r2.md) §9.6 |
-| Impostors ejected after a reported sighting of them venting (9p2i) | 24 of 46 (52%) | 24 of 44 (55%) | the 2026-10-09 record (9p2i) — the cross-tab in §3, [pinned](../tests/eval/test_deduction_metrics.py) |
 | Impostor ballots cast against a partner (9p2i) | 0 of 198 (0%) | 0 of 200 (0%) | enforced by the meeting layer, not shown by the model — §3 |
 | Learned behaviours the ML program set out to show | 0 of 14 (0%) | 0 of 14 (0%) | [close audit](../audits/audit-phase-18-close.md), derived in [the emergence reading](../audits/audit-phase-18-flip-emergence.md) |
-| Learned tactical policies that became the default | none, ruled twice | none, ruled twice | [phase 17](../audits/audit-phase-17-close.md), [18](../audits/audit-phase-18-close.md) |
-
-Two of baseline 7's pre-registered bars missed: conviction accuracy without
-engine-certified proof reached 61 of 103 = 0.5922 against a bar of 0.60, and
-wrongful ejections reached 42 against a bar of fewer than 35. That read was a
-**finding**; the recording became the reference by an explicit owner override
-dated 2026-08-26 ([the phase-20 record](../audits/audit-phase-20-baseline-7.md)
-§6.1). Baseline 8 registered no bars and read 50 of 96 = 0.5208 and 46 innocent
-ejections. An experiment on it met three of four fresh bars:
-innocent ejections fell from 46 to 20, and 11 of those 20 were the meeting's own
-reporter, against 34 of 46 — a share of 0.5500 against a registered 0.40, so a
-**finding** again, and nothing was adopted
-([the record](../audits/audit-phase-21-adopting-record.md)). Baseline 9
-registered none and read 43 of 85 = 0.5059 and 42 innocent ejections over its
-four recorded sets.
-
-**What the boundary checks cover.** The
-[import-linter contracts](../.importlinter), the
-[planted-leak test](../tests/test_firewall.py) and the recursive
-[packet sweep](../eval/leak_scan.py) test imports and entitled
-packets. They do not establish complete privacy: in the 2026-09-22 recordings,
-the opening prompts name each body by a label that reveals when it died; the
-shown 9-player set's report openings no longer carry it (0 of 115). The full
-repair stays switched off. The
-[observation contract](observation-contract.md) states the exact boundary.
 
 ## 2. What to run, and what to watch
 
