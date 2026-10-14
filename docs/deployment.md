@@ -4,7 +4,7 @@ This document records the privilege model of the AiLibi spectator API and the
 hard prerequisites for ever exposing it beyond the local machine. It is the
 durable note for a future deployer; read it before changing any network bind.
 
-Anchors: audit C-C-1, C-C-2 and C-C-4 of [audits/audit-2026-05-30-0059-mvp-close.md](../audits/audit-2026-05-30-0059-mvp-close.md)
+Anchors: audit C-C-1, C-C-2 and C-C-4 of [audits/audit-2026-05-30-0059-mvp-close.md](../process/audits/audit-2026-05-30-0059-mvp-close.md)
 — the MVP-close security review, which writes the three up under "Class C —
 Security review" and groups them as its repair item 6.0.3; DESIGN.md §1.1 (component diagram, Spectator
 API as a *privileged view*), §7 (tech stack — FastAPI, docker-compose dev infra);
@@ -37,7 +37,7 @@ local operator**. Concretely, it is safe in exactly two configurations:
 
 **Never bind or publish this API on a non-loopback interface (e.g. `0.0.0.0`)
 without first putting it behind auth + network isolation.** Doing so exposes
-every hidden field to anyone on the network (audit C-C-1 of [audits/audit-2026-05-30-0059-mvp-close.md](../audits/audit-2026-05-30-0059-mvp-close.md),
+every hidden field to anyone on the network (audit C-C-1 of [audits/audit-2026-05-30-0059-mvp-close.md](../process/audits/audit-2026-05-30-0059-mvp-close.md),
 the single highest-urgency operational finding that review recorded).
 
 ### Default binds (safe by default)
@@ -145,7 +145,7 @@ what the spectator IS (`docs/architecture.md`, `api/` — privileged by design).
 Publishing the bundle therefore publishes the recorded outcomes of all of those
 games, which are already committed to this repository in `replays/samples/`.
 Carrying every game rather than the featured five is a publication decision,
-recorded in [its decision record](../tasks/decision-2026-10-13-demo-all-games.md).
+recorded in [its decision record](../process/tasks/decision-2026-10-13-demo-all-games.md).
 What it does NOT publish is a live, unauthenticated, unbounded-work endpoint
 over whatever the host happens to have on disk. That distinction — a fixed set
 of already-public bytes vs. an open query surface into the operator's
@@ -229,7 +229,7 @@ Two checks, answering two different questions.
   proves is that the bytes the workflow uploads are bytes that work — the
   `curl` above is what says they arrived.
 
-## CORS posture ([audit C-C-2](../audits/audit-2026-05-30-0059-mvp-close.md))
+## CORS posture ([audit C-C-2](../process/audits/audit-2026-05-30-0059-mvp-close.md))
 
 CORS is **closed by default** and additive:
 
@@ -254,7 +254,7 @@ another origin, configuring `AILIBI_CORS_ORIGINS` is itself a step on the
 exposure path and must be paired with the auth + network isolation requirements
 above.
 
-## Prerequisites before any network exposure ([audit C-C-4](../audits/audit-2026-05-30-0059-mvp-close.md))
+## Prerequisites before any network exposure ([audit C-C-4](../process/audits/audit-2026-05-30-0059-mvp-close.md))
 
 The following are **hard prerequisites** that must be built *before* the API is
 exposed on any network path beyond loopback. They are documented here as

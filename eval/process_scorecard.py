@@ -174,36 +174,29 @@ from meetings.schemas import (
 from meetings.transcript import maximal_stays
 from orchestrator.experiment_config import ConfigLayer
 
-#: Bumped only when the published JSON changes shape in a way an older reader
+#: Bumped only when the scorecard model changes shape in a way an older reader
 #: cannot interpret. Version 1 is the first publication (2026-09-19); version 2
 #: groups the sets by recorded era and carries a frozen before column
 #: (2026-10-02); version 3 drops the fifth run's appendix, the key a version-2
-#: reader expects (2026-10-09).
-SCHEMA_VERSION: Final[int] = 3
+#: reader expects (2026-10-09); version 4 drops the no-consumer note with the
+#: JSON copy it described, which nothing read (2026-10-13).
+SCHEMA_VERSION: Final[int] = 4
 
 #: The date D1 was accepted, stamped into every artifact so the demotion is
 #: dated wherever the scorecard is read.
 DECISION_DATE: Final[str] = "2026-09-19"
 
-#: The D1 demotion, verbatim in the markdown header and as typed keys in the
-#: JSON. Role-correctness is the LAST row of the suite and gates nothing.
+#: The D1 demotion, verbatim in the markdown header. Role-correctness is the
+#: LAST row of the suite and gates nothing.
 ROLE_CORRECTNESS_NOTE: Final[str] = (
     "Role-correctness is REPORTED and is NOT a gate. The owner accepted decision "
-    "D1 of tasks/direction-2026-09-19-process-over-outcome.md section 10 on "
+    "D1 of process/tasks/direction-2026-09-19-process-over-outcome.md section 10 on "
     "2026-09-19: the process suite is the headline, role-correctness is a "
     "reported cell beside it, and the preregistered supported_correct_ejection "
     "outcome stops being the project's gate. Nothing in this scorecard, and "
     "nothing any card derived from it gates on, pushes an agent toward the "
     "correct answer: a wrong decision on believable data is the game working, "
     "and it is counted in row 8, never penalised."
-)
-
-#: Stated in the JSON so a reader does not mistake the artifact for a live feed.
-NO_CONSUMER_NOTE: Final[str] = (
-    "No component reads this file yet. It is published beside the markdown so a "
-    "spectator surface can load it later; today its only consumer is "
-    "scripts/publish_process_scorecard.py --check, which recomputes both files "
-    "from the committed recordings and fails on drift."
 )
 
 #: The agent frame runs exactly +1 against the engine frame: a claim spoken at
@@ -440,10 +433,9 @@ class RateCell(_FrozenModel):
             raise ValueError("rate must be set when the denominator is > 0")
         # The published rate must BE the quotient of the published counts. This
         # is the typed boundary every scorecard rate crosses, in both
-        # directions: a future spectator surface parses
-        # ``docs/process-scorecard.json`` through this model, so a serialized
-        # cell whose rate disagrees with its own counts must be refused here
-        # rather than preserved and read as a measurement.
+        # directions: the frozen before columns are read back through this
+        # model, so a serialized cell whose rate disagrees with its own counts
+        # must be refused here rather than preserved and read as a measurement.
         expected = round(self.numerator / self.denominator, 6)
         if self.rate != expected:
             raise ValueError(
@@ -611,7 +603,6 @@ class ProcessScorecard(_FrozenModel):
     role_correctness_is_a_gate: bool
     role_correctness_reported: bool
     role_correctness_note: str
-    no_consumer_note: str
     row_definitions: Mapping[str, str]
     report_format_version: int
     recording_provenance: tuple[str, ...]
@@ -1855,7 +1846,7 @@ COMMITTED_SETS: Final[tuple[str, ...]] = tuple(entry.path for entry in REGISTERE
 #: ``docs/process-scorecard.json`` as published before its bytes moved, oldest
 #: first. Today two blocks, both ``samples/9p2i``: at ``d41c9006`` (baseline 9)
 #: and at ``2eed2e92`` (round 2).
-BEFORE_COLUMNS_PATH: Final[str] = "docs/process-scorecard-before.json"
+BEFORE_COLUMNS_PATH: Final[str] = "eval/reports/process-scorecard-before.json"
 
 #: The sha256 of :data:`BEFORE_COLUMNS_PATH`'s bytes. The publisher copies the
 #: file into every publication and never recomputes it; a byte that moves
@@ -1986,27 +1977,12 @@ def compute_process_scorecard(root: Path) -> ProcessScorecard:
         role_correctness_is_a_gate=False,
         role_correctness_reported=True,
         role_correctness_note=ROLE_CORRECTNESS_NOTE,
-        no_consumer_note=NO_CONSUMER_NOTE,
         row_definitions=dict(ROW_DEFINITIONS),
         report_format_version=CURRENT_FORMAT_VERSION,
         recording_provenance=tuple(item.source for item in inputs),
         eras=eras,
         sets=sets,
         before=before,
-    )
-
-
-def serialize_scorecard(scorecard: ProcessScorecard) -> str:
-    """Deterministic JSON: sorted keys, two-space indent, one trailing newline."""
-
-    return (
-        json.dumps(
-            scorecard.model_dump(mode="json"),
-            indent=2,
-            sort_keys=True,
-            ensure_ascii=False,
-        )
-        + "\n"
     )
 
 
@@ -2018,7 +1994,6 @@ __all__ = [
     "COMMITTED_SETS",
     "DECISION_DATE",
     "FAITHFULNESS_LIMITS",
-    "NO_CONSUMER_NOTE",
     "RECORDINGS_ROOT",
     "ROLE_CORRECTNESS_NOTE",
     "ROW_DEFINITIONS",
@@ -2048,6 +2023,5 @@ __all__ = [
     "read_before_columns",
     "scorecard_from_tally",
     "scorecard_source_paths",
-    "serialize_scorecard",
     "walk_routes",
 ]

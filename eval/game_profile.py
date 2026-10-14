@@ -4,7 +4,7 @@ The profile describes each game; it scores, ranks and zeroes none. For every
 game it gives a timeline of physical moments (the facets), the named shelves it
 sits on, the meeting chips it carries, and two tripwires. Shelves come in one
 fixed order and list their games in seed order, so nothing here orders a game
-by anything but its seed. ``docs/game-profile.md`` is the generated page;
+by anything but its seed. ``eval/reports/game-profile.md`` is the generated page;
 ``scripts/publish_game_profile.py`` writes it and the served file
 ``results-game-profile.json`` beside the recordings.
 

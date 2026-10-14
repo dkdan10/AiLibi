@@ -10,9 +10,9 @@ environment switch. The one older switch among the wave's fields,
 meeting runner built from the environment, and a game using that runner
 records the value; `build_default_meeting_runner` refuses the switch exported
 ON beside a declared profile. The owner's rulings and the wave's design are in
-[the Stage-B decision memo](../tasks/decision-2026-09-24-stage-b-wave.md)
+[the Stage-B decision memo](../process/tasks/decision-2026-09-24-stage-b-wave.md)
 (sections 0.3, 1 and 3.3) and in the dated 2026-09-24 addendum to
-[the process-over-outcome direction](../tasks/direction-2026-09-19-process-over-outcome.md).
+[the process-over-outcome direction](../process/tasks/direction-2026-09-19-process-over-outcome.md).
 
 ## The fields
 
@@ -24,16 +24,16 @@ balance round added and the route lines round 3 adds, defaults first:
 
 | Field | Values | Layer | Card that builds it |
 | --- | --- | --- | --- |
-| `vent_witness_rule` | `both_rooms`, `physical` | engine | [physical vent witness](../tasks/work/vent-witness-physical.md) |
-| `vent_exit_policy` | `target_distance`, `observed_risk`, `look_and_wait` | tactical | [look and wait](../tasks/work/vent-look-and-wait.md) |
-| `vent_entry_policy` | `any_body`, `own_fresh_kill` | tactical | [look and wait](../tasks/work/vent-look-and-wait.md) |
-| `meeting_reset` | `preserve`, `hub_with_grace` | orchestrator | exists; [coherence](../tasks/work/meeting-reset-coherence.md) |
-| `bounded_rebuttal_version` | none, `1` | meeting | exists; [readers](../tasks/work/stage-b-readers.md) |
-| `report_body_handle_version` | none, `1` | orchestrator | [body handle](../tasks/work/report-body-handle.md) |
-| `ballot_kill_row_version` | none, `1` | meeting | [ballot](../tasks/work/ballot-kill-row-and-impostor-strategy.md) |
-| `impostor_ballot_version` | none, `1` | meeting | [ballot](../tasks/work/ballot-kill-row-and-impostor-strategy.md) |
-| `kill_cooldown_ticks` | none (the map's value), an integer of at least 1 | engine | [kill cooldown](../tasks/work/kill-cooldown-arm.md) |
-| `route_lines_version` | none, `1` | meeting | [route lines](../tasks/work/route-lines-field.md) |
+| `vent_witness_rule` | `both_rooms`, `physical` | engine | [physical vent witness](../process/tasks/work/vent-witness-physical.md) |
+| `vent_exit_policy` | `target_distance`, `observed_risk`, `look_and_wait` | tactical | [look and wait](../process/tasks/work/vent-look-and-wait.md) |
+| `vent_entry_policy` | `any_body`, `own_fresh_kill` | tactical | [look and wait](../process/tasks/work/vent-look-and-wait.md) |
+| `meeting_reset` | `preserve`, `hub_with_grace` | orchestrator | exists; [coherence](../process/tasks/work/meeting-reset-coherence.md) |
+| `bounded_rebuttal_version` | none, `1` | meeting | exists; [readers](../process/tasks/work/stage-b-readers.md) |
+| `report_body_handle_version` | none, `1` | orchestrator | [body handle](../process/tasks/work/report-body-handle.md) |
+| `ballot_kill_row_version` | none, `1` | meeting | [ballot](../process/tasks/work/ballot-kill-row-and-impostor-strategy.md) |
+| `impostor_ballot_version` | none, `1` | meeting | [ballot](../process/tasks/work/ballot-kill-row-and-impostor-strategy.md) |
+| `kill_cooldown_ticks` | none (the map's value), an integer of at least 1 | engine | [kill cooldown](../process/tasks/work/kill-cooldown-arm.md) |
+| `route_lines_version` | none, `1` | meeting | [route lines](../process/tasks/work/route-lines-field.md) |
 
 The meeting layer is exactly `MeetingEvidenceProfile`'s fields, and the
 tactical layer is exactly `TacticalExperimentOptions`' fields apart from the
@@ -151,35 +151,5 @@ records `route_lines_version = 1`, named like the kept vent exit and the six-tic
 kill cooldown as a setting these recordings carry rather than an adopted rule,
 with graduation waiting for a full re-record.
 
-## Candidate round 1
-
-The ladder tip stands at baseline 9.
-[`replays/candidates/stage-b-r1/9p2i`](../replays/candidates/stage-b-r1/README.md)
-is candidate round 1, recorded with the experimental switches its README
-names; it adopts nothing and is not a canonical sample set.
-
-## Candidate round 2
-
-Candidate round 2 was recorded with the adopted switches, the kept vent exit
-and a six-tick kill cooldown, under one declared config. On 2026-10-02 the owner
-promoted it as the shown 9-player set, in its own era
-([the record](../audits/audit-2026-10-01-stage-b-r2.md), section 9), with one
-flag its record states: reporters ejected per report meeting read 17/114, above
-the pre-registered 0.104, so the round's own rule named no promotion step; the
-owner's ruling promoted it regardless. Since round 3's promotion its bytes are
-[`replays/candidates/stage-b-r2/9p2i`](../replays/candidates/stage-b-r2/README.md),
-moved there without a byte changed with its config at the round's root: the
-comparison record for the route lines, which round 3 adds and nothing else. It
-adopts nothing and is not a canonical sample set.
-
-## Candidate round 3, the shown set
-
-Candidate round 3 was recorded with round 2's rules and one more switch that
-gives each voter a plain line about the places stated at the table. On
-2026-10-09 the orchestrator, under the owner's delegation, promoted it: it is now
-[`replays/samples/9p2i`](../replays/samples/9p2i/MANIFEST.md), the shown
-9-player set, in its own era (`eval/eras.py`), with its declared config beside
-its replays as `experiment-config.json`, and its candidate copy is deleted
-([the record](../audits/audit-2026-10-09-stage-b-r3.md), sections 11 and 12).
-Promotion moves no default and deletes no switch. The ladder tip stands at
-baseline 9.
+The candidate rounds that recorded these settings, and the promotions of rounds
+2 and 3, are told in [the process record](../process/README.md#candidate-rounds).

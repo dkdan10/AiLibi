@@ -30,6 +30,7 @@ from experiments.held_out_prefixes import (
     MANIFEST_PATH,
     MAX_TICKS,
     PREREGISTERED_BAND,
+    RECORDED_PATH_PREFIXES,
     TEMPORAL_OBSERVATION_VERSION,
     ConvertedRecord,
     HeldOutPrefix,
@@ -45,6 +46,7 @@ from experiments.held_out_prefixes import (
     build_manifest,
     build_prefix,
     canonical_prefix_json,
+    current_path,
     development_definition_digests,
     evaluate_prefix,
     filter_environment,
@@ -72,27 +74,27 @@ _DEBUG_SEEDS = (9001, 9002)
 #: The first band's freeze record after the second freeze moved it. Development
 #: data since 2026-09-10, kept for the digests it froze.
 _CONVERTED_MANIFEST_PATH = (
-    "audits/deduction-candidate/held-out/manifest-band-3000-3999.json"
+    "process/audits/deduction-candidate/held-out/manifest-band-3000-3999.json"
 )
 
 #: The second band's freeze record after the third freeze moved it. Development
 #: data since 2026-09-13, on the same grounds and kept the same way.
 _CONVERTED_MANIFEST_PATH_5000 = (
-    "audits/deduction-candidate/held-out/manifest-band-5000-5999.json"
+    "process/audits/deduction-candidate/held-out/manifest-band-5000-5999.json"
 )
 
 #: The third band's freeze record after the fourth freeze moved it. Development
 #: data since 2026-09-13 as well: the run of that date rendered two of its
 #: prefixes before the per-unit output ceiling stopped it.
 _CONVERTED_MANIFEST_PATH_6000 = (
-    "audits/deduction-candidate/held-out/manifest-band-6000-6999.json"
+    "process/audits/deduction-candidate/held-out/manifest-band-6000-6999.json"
 )
 
 #: The fourth band's freeze record after the fifth freeze moved it. Development
 #: data since 2026-09-15: the run of that date rendered thirteen of its prefixes
 #: before a ballot overran the per-call vote cap and truncated its JSON.
 _CONVERTED_MANIFEST_PATH_7000 = (
-    "audits/deduction-candidate/held-out/manifest-band-7000-7999.json"
+    "process/audits/deduction-candidate/held-out/manifest-band-7000-7999.json"
 )
 
 
@@ -1070,7 +1072,8 @@ def test_the_converted_band_keeps_the_blocks_it_was_frozen_with() -> None:
     assert record.branch == "work/fresh-deduction-run"
     assert record.rendered_seeds == (3000,)
     assert record.informed == "tasks/work/fresh-deduction-instrument-reconciliation.md"
-    assert record.superseded_by == MANIFEST_PATH
+    assert record.superseded_by is not None
+    assert current_path(record.superseded_by) == MANIFEST_PATH
     unmodelled = dict(_converted_manifest()["converted"])  # type: ignore[call-overload]
     unmodelled["reason"] = "a field no reader of this module would find"
     with pytest.raises(ValidationError):
@@ -1115,7 +1118,8 @@ def test_the_converted_second_band_keeps_the_blocks_it_was_frozen_with() -> None
     assert record.informed == (
         "tasks/work/fresh-deduction-instrument-transport-resilience.md"
     )
-    assert record.superseded_by == MANIFEST_PATH
+    assert record.superseded_by is not None
+    assert current_path(record.superseded_by) == MANIFEST_PATH
 
 
 def test_the_converted_third_band_keeps_the_blocks_it_was_frozen_with() -> None:
@@ -1155,7 +1159,8 @@ def test_the_converted_third_band_keeps_the_blocks_it_was_frozen_with() -> None:
     assert record.branch == "work/fresh-deduction-run-3"
     assert record.rendered_seeds == (6000, 6001)
     assert record.informed == "tasks/work/fresh-deduction-limits-4.md"
-    assert record.superseded_by == MANIFEST_PATH
+    assert record.superseded_by is not None
+    assert current_path(record.superseded_by) == MANIFEST_PATH
 
 
 def test_the_converted_fourth_band_keeps_the_blocks_it_was_frozen_with() -> None:
@@ -1220,7 +1225,8 @@ def test_the_converted_fourth_band_keeps_the_blocks_it_was_frozen_with() -> None
     # run's; the thirteen are the accepted block's own first thirteen, in order.
     assert list(record.rendered_seeds) == [row["seed"] for row in accepted[:13]]
     assert record.informed == "tasks/work/fresh-deduction-limits-5.md"
-    assert record.superseded_by == MANIFEST_PATH
+    assert record.superseded_by is not None
+    assert current_path(record.superseded_by) == MANIFEST_PATH
     assert "tasks/diagnosis-2026-09-15-truncation-stop.md" in record.note
 
 
@@ -1255,7 +1261,7 @@ def test_the_archived_record_is_the_fifth_band_and_records_its_restamps() -> Non
     for entry in DEPENDENCY_RESTAMPS:
         assert set(entry) == {"card", "commit", "date", "note", "sources"}
         assert entry["card"].startswith("tasks/work/")
-        assert (REPO_ROOT / entry["card"]).is_file()
+        assert (REPO_ROOT / current_path(entry["card"])).is_file()
     # The one this band has: the relevance-aware citation guard's edit to
     # `orchestrator/game.py`. The set itself is untouched by it -- generation
     # runs with no meeting runner at all -- which is why it is a restamp and
@@ -1298,11 +1304,44 @@ def test_the_archived_record_names_the_run_that_spent_it() -> None:
     assert record.branch == "work/fresh-deduction-run-5"
     assert record.superseded_by is None
     assert record.informed == "tasks/work/close-deduction-candidate-evaluation.md"
-    assert (REPO_ROOT / record.informed).is_file()
+    assert (REPO_ROOT / current_path(record.informed)).is_file()
     assert list(record.rendered_seeds) == [row["seed"] for row in accepted]
     assert len(record.rendered_seeds) == 50
     for stated in ("INCONCLUSIVE", "not a rejection", "2026-09-19"):
         assert stated in record.note, stated
+
+
+def test_recorded_paths_map_to_the_folders_they_live_in_now() -> None:
+    """Every path the frozen manifests record resolves; anything else is refused.
+
+    The manifests are sha256-pinned, so their paths keep the spelling they were
+    recorded with. Each card, ``informed`` and ``superseded_by`` path they carry
+    maps to a file in the checkout, a path already spelled the new way stays as
+    written, and a planted path under neither spelling raises rather than
+    resolving to itself.
+    """
+
+    recorded: set[str] = set()
+    for path in (MANIFEST_PATH, *(band.manifest_path for band in CONVERTED_BANDS)):
+        manifest = json.loads((REPO_ROOT / path).read_text(encoding="utf-8"))
+        recorded.add(manifest["card"])
+        record = ConvertedRecord.model_validate(manifest["converted"])
+        recorded.add(record.informed)
+        if record.superseded_by is not None:
+            recorded.add(record.superseded_by)
+        recorded.update(
+            entry["card"] for entry in manifest["dependency_restamps"]["entries"]
+        )
+    assert {path.split("/", 1)[0] + "/" for path in recorded} <= set(
+        RECORDED_PATH_PREFIXES
+    )
+    for path in sorted(recorded):
+        assert (REPO_ROOT / current_path(path)).is_file(), path
+    assert current_path("design/phase-12/x.md") == "process/design/phase-12/x.md"
+    assert current_path(MANIFEST_PATH) == MANIFEST_PATH
+    for planted in ("docs/history.md", "tasksx/work/a.md", "process/docs/a.md"):
+        with pytest.raises(ValueError, match="not a recorded path"):
+            current_path(planted)
 
 
 def test_a_converted_record_may_name_no_successor() -> None:

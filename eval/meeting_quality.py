@@ -292,7 +292,7 @@ _UNCITED_ZERO_FLAG_MARKER_PATTERN: Final[re.Pattern[str]] = re.compile(
 
 # ---------------------------------------------------------------------------
 # Task 10.4 gate-metric parses (ported from the audit extractor's derivations,
-# audits/workflows/extract_gameplay_facts.py — the gp-7 instruction is to ship
+# experiments/extract_gameplay_facts.py — the gp-7 instruction is to ship
 # those derivations here so later waves read them off the report instead of
 # re-deriving operator-inline).
 # ---------------------------------------------------------------------------
@@ -1769,7 +1769,7 @@ def compute_gate_metrics(
     sequence of :class:`~eval.report_schema.GameReport` (matching the other
     analyzers' signature). Pure: no I/O, no engine/agent/LLM calls — every
     derivation is a fold over recorded artifacts, ported from the audit
-    extractor (``audits/workflows/extract_gameplay_facts.py``) so the shipped
+    extractor (``experiments/extract_gameplay_facts.py``) so the shipped
     surface and the audited numbers share one definition.
 
     The genuine-class pair is produced by the owning

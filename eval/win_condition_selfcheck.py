@@ -14,7 +14,7 @@ last impostor is eliminated, so a faithful recording must have
 all-impostors-eliminated tick is the win-condition regression the gameplay-data
 audit (A-A-3) confirmed CLOSED; this check keeps it closed as a durable,
 in-suite assertion (the in-repo form of the audit's
-``audits/workflows/extract_gameplay_facts.py`` extract self-check). When the
+``experiments/extract_gameplay_facts.py`` extract self-check). When the
 impostors are never all eliminated (crew win by tasks, impostor win by parity,
 or a non-decisive game) ``first_zero_impostor_tick`` is ``None`` and the
 invariant is vacuously satisfied.

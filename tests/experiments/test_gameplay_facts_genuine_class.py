@@ -1,6 +1,6 @@
 """The gameplay extractor's genuine-class self-check compares like with like, and bites.
 
-``audits/workflows/extract_gameplay_facts.py`` folds its own genuine-class
+``experiments/extract_gameplay_facts.py`` folds its own genuine-class
 supplied/converted pair and cross-checks it against the shipped
 ``eval.vote_correctness.compute_genuine_class_conversion`` over the same bytes,
 writing the verdict as one of its self-checks. ``experiments/lab/rubric_score.py``
@@ -30,7 +30,6 @@ three cases run the real extractor over the baseline-9 era's nine-player set,
 
 from __future__ import annotations
 
-import importlib
 import json
 from pathlib import Path
 from typing import Any
@@ -42,6 +41,7 @@ from eval.vote_correctness import (
     GenuineClassConversionReport,
     compute_genuine_class_conversion,
 )
+from experiments import extract_gameplay_facts as _facts
 from experiments.lab.rubric_score import _facts_integrity_ok, interestingness
 from meetings.transcript import (
     WEAK_REASON_ENDPOINT_TICK,
@@ -49,10 +49,6 @@ from meetings.transcript import (
     WEAK_REASON_RETARGETED_PROXY,
     detect_contradictions,
 )
-
-# Imported dynamically for the reason tests/experiments/
-# test_gameplay_facts_suspicion_row.py gives: audits/workflows/ is not a package.
-_facts: Any = importlib.import_module("audits.workflows.extract_gameplay_facts")
 
 _GENUINE_CHECK = "re-derived genuine-class == shipped compute_genuine_class_conversion"
 

@@ -127,7 +127,7 @@ def test_eras_is_the_registrys_eras_oldest_first() -> None:
 #: An era no committed set belongs to, recorded after both committed eras.
 _THIRD_ERA = eras.Era(
     id="planted-third",
-    record="audits/planted.md",
+    record="process/audits/planted.md",
     recorded_on="2026-10-12",  # was 2026-10-05, before the shown era's 2026-10-09
     declared_config=None,
 )
@@ -158,7 +158,7 @@ def test_registered_eras_sort_by_date_then_first_appearance() -> None:
         *reversed(eras.COMMITTED_SETS),
     )
     assert eras.registered_eras(newest_first) == (*eras.ERAS, _THIRD_ERA)
-    same_day = eras.Era("same-day", "audits/planted.md", "2026-09-22", None)
+    same_day = eras.Era("same-day", "process/audits/planted.md", "2026-09-22", None)
     paired = (
         eras.CommittedSet("replays/y/9p2i", same_day),
         *eras.COMMITTED_SETS,

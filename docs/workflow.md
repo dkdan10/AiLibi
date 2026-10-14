@@ -1,62 +1,40 @@
-# Iterating on AiLibi
+# How a change gets in
 
-Choose the next change from evidence, verify it, and use the result to choose
-what follows. [AGENTS.md](../AGENTS.md) carries the standing rules and
-[architecture.md](architecture.md) defines the system boundaries. The
-[task index](../tasks/README.md) describes the current outcome and candidate
-work; only work ready to start receives a detailed card.
-
-## Branch and delivery
-
-Implementation for a card happens on a short-lived branch named
-`work/<card-slug>` and reaches `main` through one pull request per card. CI runs
-on every pull request and on pushes to `main`, so a new working branch needs no
-workflow change. Delete the branch after the merge; its commits stay reachable
-from `main`.
-
-Planning and contract documents — plans, indexes, ledgers, checkpoints and
-records — may land on `main` directly as `docs:` or `coordination:` commits.
-They change no behavior, and routing them through a review branch would only
-delay the record the next card reads.
-
-The pull request carries what the cleanup's commit-only route put in Results:
-the validation evidence, the referenced contract and architecture sections,
-material decisions, and limitations. Include the card path in the commit body so
-a reviewer can locate the contract from the commit and its implementation with
-`git log -- <card-path>`. Preserve task boundaries and published history: merge
-or fast-forward, never a squash that orphans a commit another document cites,
-and do not amend a published commit.
-
-A merge into `main` also publishes. `.github/workflows/pages.yml` rebuilds the
-demo bundle on every push to `main`, so a viewer, featured-list or
-public-results change is a publication decision as well as a merge; see
-[deployment.md](deployment.md).
+Choose the next change from evidence, verify it, and let the result choose what
+follows. [AGENTS.md](../AGENTS.md) carries the standing rules and
+[architecture.md](architecture.md) the system boundaries. The
+[task index](../process/tasks/README.md) names current work and the next
+candidates; only work ready to start receives a detailed card. Phase contracts
+and past audits under `process/` are historical records and are never
+rewritten, except that a move of the folder re-points the relative links they
+carry.
 
 ## One card per change
 
-New tasks live at `tasks/work/<slug>.md`. That file is the canonical contract;
-dispatch it by path instead of copying it into a generated prompt or issue.
-Link longer evidence or design discussions rather than repeating them.
+A new task lives at `process/tasks/work/<slug>.md`. That file is the canonical
+contract: dispatch it by path instead of copying it into a prompt or an issue,
+and link longer evidence or design discussion rather than repeating it.
 
-Use one `#` title, a `**Status:**` of `ready`, `active`, or `done`, and these
-sections:
+A card has one `#` title, a `**Status:**` of `ready`, `active` or `done`, and
+these sections:
 
 | Section | Content |
 | --- | --- |
-| Outcome | The observable problem to resolve and resulting behavior. |
+| Outcome | The observable problem to resolve and the resulting behavior. |
 | Evidence | A reproducible case and relevant source or decision links. |
 | Acceptance | Checkboxes describing success and a meaningful adverse case. |
-| Constraints | Non-goals, protected decisions, prerequisites, and any authorized run budget. |
+| Constraints | Non-goals, protected decisions, prerequisites and any authorized run budget. |
 | Expected scope | Likely files and the boundaries of permitted follow-through. |
-| Record impact | Effects on future behavior, recorded bytes, compatibility, and evaluation. |
+| Record impact | Effects on future behavior, recorded bytes, compatibility and evaluation. |
 | Validation | Commands that establish acceptance, including the full project check. |
 
-A completed card also has `## Results`, with verification evidence and any
-material limitations. Keep cards concise; implementation detail belongs in the
-code and durable decisions belong in the appropriate architecture or decision
-document.
+A completed card adds `## Results` with the verification evidence and material
+limitations. Implementation detail belongs in the code, and durable decisions in
+the architecture or a decision record. `scripts/validate_task_docs.py`, part of
+the gate, checks each card's structure and the index's card counts.
 
-Track delivery states separately in Results and the [review ledger](../tasks/review-ledger.md):
+Track delivery states separately, in Results and the
+[review ledger](../process/tasks/review-ledger.md):
 
 | State | Evidence required |
 | --- | --- |
@@ -67,10 +45,9 @@ Track delivery states separately in Results and the [review ledger](../tasks/rev
 | Merged | The actual merge into main exists; pushing cleanup does not qualify. |
 | Adopted | A behavior experiment's decision and adopting record exist; implementation or a green test alone does not qualify. |
 
-The card's `Status` is its work state, not a compressed claim that all six
-delivery states occurred. Repairs with no experimental behavior use adoption
-"not applicable". Keep the active queue to the available workers and a small
-next set; create the next card after its dependencies and evidence are clear.
+A card's `Status` is its work state, not a claim that all six delivery states
+occurred. A repair with no experimental behavior records adoption as "not
+applicable".
 
 ## Discover, implement, verify
 
@@ -79,103 +56,176 @@ next set; create the next card after its dependencies and evidence are clear.
    consumers, and choose an implementation before editing. Update the card if
    discovery changes the expected files; ask for an unresolved protected
    decision before dependent work.
-2. **Active:** implement one coherent change with relevant tests. Directly
-   necessary call-site, test, generated-output, and documentation updates are
-   permitted within the card's boundaries. Record material follow-through in
-   the PR or cleanup card's Results. Unrelated cleanup, new behavior,
-   compatibility changes, dependencies, and spending require authorization if
-   the card or owner has not provided it.
+2. **Active:** implement one coherent change with relevant tests and the
+   directly necessary follow-through [AGENTS.md](../AGENTS.md) permits,
+   recorded in Results. Anything beyond it needs authorization.
 3. **Done:** acceptance is demonstrated, the required checks pass, and Results
-   records the evidence. This means locally verified and ready for review; it
-   does not mean merged, deployed, or adopted as an experimental baseline.
+   records the evidence. Done means locally verified and ready for review, not
+   merged, deployed or adopted.
 
-Run targeted checks while developing, then `bash scripts/check.sh` for final
-verification. The campaign tier (`uv run pytest -m campaign`) runs outside that
-gate, so a change to a campaign-tier file records the campaign count in its pull
-request and Results: from the campaign workflow's run at the exact head, cited by
-run id, or from `uv run pytest -m campaign` when no run exists. The campaign
-workflow runs on every pull request that changes `tests/training/**` and weekly
-on `main`. A new invariant gate needs a planted or perturbed failure proving
-that it detects the claimed defect. Do not check an acceptance item merely
-because its implementation exists. Reopen a done card as active if verification
-or review reveals unfinished work.
+Do not tick an acceptance item merely because its implementation exists. A new
+invariant gate needs a planted or perturbed failure proving it detects the
+claimed defect. Reopen a done card if verification or review reveals unfinished
+work.
+
+## Environment and history
+
+Run `bash scripts/setup_env.sh` in a fresh checkout. It installs the Python
+environment with the `dev` dependency group, which holds the gate's tools, and
+the frontend packages; a plain `uv sync --no-dev` deliberately leaves the tools
+out. Make an intentional dependency change with `uv add` or `uv lock` and commit
+the project metadata with the lockfile.
+
+Checks never reach the network: tests use the deterministic fake provider, and
+real-provider tests are opt-in behind the environment gates in
+[llm/README.md](../llm/README.md).
+
+Before a claim derived from history, check
+`git rev-parse --is-shallow-repository`. A shallow clone needs
+`git fetch --unshallow` or an equivalent full fetch; never read a truncated log
+as the complete project history.
+
+## The local gate
+
+`bash scripts/check.sh` is the required gate and the one-command local truth:
+ruff and its formatter, import-linter, the task-card and link checks, strict
+mypy, pytest across one worker per core, and the frontend's lint, typecheck,
+unit-test and build legs. Targeted `uv run ...` commands are fine while
+iterating; a change is not done until the whole script is green.
+
+CI adds one check the script leaves out, because it needs a browser and both dev
+servers: a Playwright journey over the real app and API (the `frontend-e2e` job
+in `.github/workflows/ci.yml`). To run it locally:
+
+```bash
+cd frontend
+npx playwright install chromium   # once per Playwright version
+npm run e2e
+```
+
+Neither the script nor CI's per-change jobs run the campaign tier, the frozen
+ML-campaign families selected with `uv run pytest -m campaign`.
+`.github/workflows/campaign-tier.yml` runs it weekly on `main` and on every pull
+request that changes `tests/training/**`. A change to a campaign-tier file
+records the campaign count in its pull request and Results: from that
+workflow's run at the exact head, cited by run id, or from
+`uv run pytest -m campaign` when no run exists.
+
+## Branch and delivery
+
+Implementation for a card happens on a short-lived branch named
+`work/<card-slug>` and reaches `main` through one pull request per card. CI runs
+on every pull request and every push to `main`. Delete the branch after the
+merge; its commits stay reachable from `main`.
+
+Planning and contract documents (plans, indexes, ledgers, checkpoints and
+records) change no behavior and may land on `main` directly as `docs:` or
+`coordination:` commits, carrying the pull request's evidence in the card's
+Results instead.
+
+Include the card path in the commit body, so a reviewer can find the contract
+from the commit and the implementation with `git log -- <card-path>`. Preserve
+published history: merge or fast-forward, never a squash that orphans a commit
+another document cites, and never amend a published commit.
+
+A merge into `main` also publishes. `.github/workflows/pages.yml` rebuilds the
+demo bundle on every push to `main`, so a change to the viewer, the featured
+games or the public-results payload is a publication decision as well as a
+merge ([deployment.md](deployment.md)). Task completion never authorizes a
+deployment or an experimental adoption.
+
+## GitHub operations
+
+Dispatch environments provision different GitHub integrations, so detect what
+is available. If the `gh` CLI is present and authenticated
+(`which gh && gh auth status`), use it; otherwise use the environment's GitHub
+integration, such as the `mcp__github__*` tools. Try both before declaring
+GitHub work impossible.
+
+Every pull request, card-driven or not, fills each section of
+[the template](../.github/pull_request_template.md):
+
+- **Summary:** what changed and why, the card path, and each material decision
+  made without the owner.
+- **Acceptance:** the card's checklist, each item ticked against its evidence;
+  without a card, the scope actually executed.
+- **Verification:** the commands run and their results, including the full gate.
+- **Record impact:** effects on recordings, compatibility and evaluation, or
+  "None".
+- **Limitations:** what remains unproven, and any blocking question for the
+  owner.
+
+Pass the populated body explicitly, with `gh pr create --body-file <file>` or
+the body parameter of the integration's create call. An explicit body replaces
+the repository template, so it must carry every section itself; `--fill`,
+`--body ""` and an omitted body ship an empty description and are not
+permitted.
 
 ## Coordinate and review
 
-Keep the next few candidates in the task index and schedule them manually.
-Declare semantic prerequisites in Constraints. Shared-file ownership is a
-scheduling concern: assign one writer per file at a time, with isolated
-worktrees where useful for independent investigation and review; each card's
-implementation stays on its own `work/<card-slug>` branch. Independent
-investigation, test design, and review can run alongside implementation.
-`scripts/compute_next_task.py` remains the
-historical phase scheduler; it does not dispatch these cards.
+Keep the active queue to the available workers and the next few candidates in
+the task index, scheduled by hand; write the next card once its dependencies and
+evidence are clear, and declare semantic prerequisites in Constraints. Assign
+one writer per file at a time, with isolated worktrees where independent
+investigation or review helps. Investigation, test design and review can run
+alongside implementation.
 
-A reviewer should attempt the adverse case and inspect relevant failure paths,
-not just repeat the implementer's summary. For gameplay experiments and release
-reviews, form gameplay-first and code-first findings independently, then
-synthesize them. Preserve the distinction between engine truth, agent-visible
-information, and model inference. Human decisions about game rules and
-experimental adoption remain explicit.
+A reviewer attempts the adverse case and inspects the failure paths rather than
+repeating the implementer's summary. Keep engine truth, agent-visible
+information and model inference distinct, and human decisions about game rules
+and experimental adoption explicit.
 
 ## Records and experiments
 
 Every card declares record impact, including a repair that changes future
-failure handling without changing committed recordings. Preserve existing
-reproducibility and historical-validation requirements. Use the existing replay
-stamps, manifests, and experiment switches; a new task format changes none of
-their guarantees.
+failure handling without changing committed recordings, and uses the existing
+replay stamps, manifests and experiment switches.
 
 For a behavior experiment, specify the hypothesis, inputs, comparison,
-measurement, and decision rule before the evaluation that decides adoption.
-Development cases can inform that rule; they are not independent confirmation.
-Inspect existing candidate implementations and prior findings before creating
-another variant. A later experiment never changes an earlier verdict.
+measurement and decision rule before the evaluation that decides adoption;
+development cases can inform that rule but are not independent confirmation.
+Inspect existing candidates and prior findings before creating another variant,
+freeze development and held-out inputs before evaluating one, and record
+negative results and stop rules as carefully as apparent improvements. A later
+experiment never changes an earlier verdict.
 
-Write the gameplay-first assessment from viewed or reconstructed games before
-reading implementation details. A different reviewer develops the code-first
-assessment independently. Preserve both notes before writing their synthesis;
-label mechanism checks, recorded-model analysis, and fresh-model evaluation
-separately. Fake-provider games establish mechanics, not model reasoning quality.
-Freeze development and held-out inputs before evaluating a candidate. Record
-negative results and stop rules with the same care as apparent improvements.
+For gameplay experiments and release reviews, one reviewer writes a
+gameplay-first assessment from viewed or reconstructed games before reading the
+implementation, and another writes the code-first assessment independently.
+Preserve both before their synthesis, and label mechanism checks,
+recorded-model analysis and fresh-model evaluation separately. Fake-provider
+games establish mechanics, not reasoning quality.
 
-A live-provider run needs an authorized provider and explicit token, wall-time,
-and cost limits, including a cost statement for flat-rate service. Ordinary
-implementation and CI use the fake provider. Each experiment needs a decision
-point and a retirement condition. Adoption deletes the switch as required by
-AGENTS; rejection deletes the candidate unless an explicitly authorized
-comparison still needs it. Keep the recorded evidence and its provenance.
+A live-provider run needs an authorized provider and explicit token, wall-time
+and cost limits, with a cost statement even for flat-rate service. Each
+experiment needs a decision point and a retirement condition: adoption deletes
+the switch, as the next section describes, and rejection deletes the candidate
+unless an authorized comparison still needs it. Keep the recorded evidence and
+its provenance.
 
-## Historical work and the pilot
+## Retiring substrate levers
 
-Phase contracts, their generated prompts, and past audits remain historical
-records. Existing phase validators and prompt synchronization checks continue
-to run; the card check adds validation for new work. Do not rewrite old plans
-to make them look like this workflow. An explicitly resumed phase task retains
-its original contract and exact file scope.
+When a substrate lever graduates (its `AILIBI_*` gate retired and its behavior
+unconditional, normally at an adopting baseline record), **delete the
+mechanism, keep the stamp key and one history line.**
 
-The pilot has now run through the first parallel recording batch. Its recorded
-results justify keeping canonical cards and manual ownership; they do not
-establish a measured time-saving claim. The owner's delivery policy for that
-cleanup was a shared branch and Claude review after all cleanup. During
-implementation, the coordinating agent handled necessary manifest attribution
-and explicit historical-loader follow-through without another owner permission
-round. The pilot's independent reviewer found parser defects, now covered by
-adverse tests; the three recording repairs' independent reviews left no blockers.
-Their cards preserve the underlying checks and limitations.
+What goes: the `*_enabled()` resolver, the `ENV_*` constant and its `__all__`
+entry, the `env` parameter wherever no live resolver is reachable from that call
+chain, every `if <lever>_enabled():` guard (replaced by its always-taken side),
+and the tests that pin the parameter rather than the behavior.
 
-The combined recording gate passed 6,292 Python and 440 frontend tests plus
-100 canonical reconstructions. The Python leg took 133.51 seconds on that local
-run; this is a verification measurement, not total development time. Continue
-recording scope follow-through and independently found defects in Results, and
-compare future batches before changing the process again.
+What stays: the lever's snake_case key in
+`orchestrator/replay.py::_RETIRED_ALWAYS_ON_LEVERS`, so a recording keeps
+describing the substrate that produced it and the loader can still refuse a
+legacy stamp that recorded it OFF, plus at most one trailing provenance line
+naming the adopting record.
 
-**Merged into main (2026-09-07).** The cleanup branch merged into `main` as
-`8161689a` through PR #435 — a merge commit rather than a squash, so the branch
-SHAs the ledger cites stay reachable. Its last recorded full gate ran at
-`93bf7d54`: 7,173 Python tests, 514 frontend tests and 300 canonical
-reconstructions, with 20 optional skips and three expected failures; CI and the
-Pages build then passed on the merge commit itself. The shared-branch policy
-above ended with that cleanup; delivery for new work is the `work/<card-slug>`
-branch and pull request described at the top of this document.
+Then sweep the prose. Grep the lever's name repo-wide and rewrite every
+docstring, comment and doc line that still describes it as live or default-OFF,
+and move it into the graduated note in `.env.example`, which
+`scripts/check_doc_facts.py` holds to the registry. `_RETIRED_ALWAYS_ON_LEVERS`
+and `_TOGGLEABLE_LEVER_RESOLVERS` in `orchestrator/replay.py` are the source of
+truth for which levers still switch, and `tests/meetings/test_lever_registry.py`
+fails on any `*_enabled` function under `agents/`, `meetings/` or
+`orchestrator/` that neither reads its `env` argument nor returns anything but a
+bare `True`.

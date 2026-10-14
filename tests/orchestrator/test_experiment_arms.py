@@ -166,7 +166,7 @@ def _on_engine_value(field: str) -> object:
 # Committed payloads re-serialize byte for byte.
 # ---------------------------------------------------------------------------
 
-_ARCHIVE = _REPO / "audits" / "deduction-candidate" / "run-2026-09-16"
+_ARCHIVE = _REPO / "process" / "audits" / "deduction-candidate" / "run-2026-09-16"
 
 
 def _payloads(node: object) -> Iterator[dict[str, object]]:
@@ -184,7 +184,7 @@ def _payloads(node: object) -> Iterator[dict[str, object]]:
 def _committed_files(suffix: str) -> list[Path]:
     return sorted(
         path
-        for root in (_REPO / "audits", _REPO / "tests" / "fixtures")
+        for root in (_REPO / "process" / "audits", _REPO / "tests" / "fixtures")
         for path in root.rglob(f"*{suffix}")
         if '"experiment_config"' in path.read_text(encoding="utf-8")
     )
@@ -238,11 +238,11 @@ def test_every_committed_audit_json_payload_reserializes_unchanged() -> None:
             # Committed in declaration order or sorted; either way the same keys.
             assert list(payload) in (list(dumped), sorted(dumped))
     assert counts == {
-        "audits/deduction-candidate/2026-09-06-mechanisms.json": 41,
-        "audits/deduction-candidate/run-2026-09-16/usage-reconciliation.json": 100,
-        "audits/investigation-candidate/2026-09-06-meetings.json": 41,
-        "audits/investigation-candidate/2026-09-06-normal-policies.json": 42,
-        "audits/investigation-candidate/candidate-handoff.json": 13,
+        "process/audits/deduction-candidate/2026-09-06-mechanisms.json": 41,
+        "process/audits/deduction-candidate/run-2026-09-16/usage-reconciliation.json": 100,
+        "process/audits/investigation-candidate/2026-09-06-meetings.json": 41,
+        "process/audits/investigation-candidate/2026-09-06-normal-policies.json": 42,
+        "process/audits/investigation-candidate/candidate-handoff.json": 13,
     }
 
 

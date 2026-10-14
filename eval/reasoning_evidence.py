@@ -326,7 +326,7 @@ def scorecard_source_paths(root: Path) -> tuple[Path, ...]:
         for name in (
             "scripts/measure_reasoning_evidence.py",
             "scripts/_report_output.py",
-            "audits/reasoning-evidence/scorecard-plan.md",
+            "process/audits/reasoning-evidence/scorecard-plan.md",
             "pyproject.toml",
             "uv.lock",
         )

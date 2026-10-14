@@ -344,10 +344,10 @@ def test_a_rate_that_contradicts_its_own_counts_is_refused() -> None:
     """The perturbed case: a cell whose published rate is not its own quotient.
 
     ``1/2`` with a rate of ``0.9`` is internally inconsistent, and this is the
-    typed boundary every published rate crosses in both directions — the model a
-    later spectator surface parses ``docs/process-scorecard.json`` with. An
-    inconsistent cell must be REFUSED rather than preserved and read as a
-    measurement, whether it is constructed in process or validated from JSON.
+    typed boundary every published rate crosses in both directions — the model
+    the frozen before columns are read back through. An inconsistent cell must
+    be REFUSED rather than preserved and read as a measurement, whether it is
+    constructed in process or validated from JSON.
     """
 
     with pytest.raises(ValidationError):
@@ -1574,7 +1574,7 @@ def test_recutting_a_restated_alibi_does_not_move_the_impostor_alibi_cells() -> 
 
     ``impostor_alibis``, ``impostor_alibis_survived`` and
     ``impostor_alibi_survival_rate`` are PUBLISHED in
-    ``docs/process-scorecard.{md,json}`` and pinned by
+    ``eval/reports/process-scorecard.md`` and pinned by
     ``scripts/publish_process_scorecard.py --check``. They are
     ``compute_alibi_fabrication_rate``'s counts, so the round-5 dedup repair --
     keying the ACCOUNT rather than the narration -- is what keeps them out of

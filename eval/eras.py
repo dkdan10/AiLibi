@@ -71,7 +71,7 @@ class CommittedSet:
 #: The process re-record that adopted the substrate wave; the ladder tip.
 BASELINE_9: Final[Era] = Era(
     id="baseline-9",
-    record="audits/audit-2026-09-22-process-rerecord.md",
+    record="process/audits/audit-2026-09-22-process-rerecord.md",
     recorded_on="2026-09-22",
     declared_config=None,
 )
@@ -81,7 +81,7 @@ BASELINE_9: Final[Era] = Era(
 #: ``replays/candidates/stage-b-r2``, read with this declared config there.
 STAGE_B_R2: Final[Era] = Era(
     id="stage-b-r2",
-    record="audits/audit-2026-10-01-stage-b-r2.md",
+    record="process/audits/audit-2026-10-01-stage-b-r2.md",
     recorded_on="2026-10-01",
     declared_config="replays/candidates/stage-b-r2/experiment-config.json",
 )
@@ -90,7 +90,7 @@ STAGE_B_R2: Final[Era] = Era(
 #: round's record, section 12).
 STAGE_B_R3: Final[Era] = Era(
     id="stage-b-r3",
-    record="audits/audit-2026-10-09-stage-b-r3.md",
+    record="process/audits/audit-2026-10-09-stage-b-r3.md",
     recorded_on="2026-10-09",
     declared_config="replays/samples/9p2i/experiment-config.json",
 )

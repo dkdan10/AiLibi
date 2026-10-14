@@ -108,7 +108,7 @@ def test_the_four_mechanisms_are_separate_and_documented() -> None:
     for mechanism in EVIDENCE_MECHANISMS:
         assert mechanism.demonstrates.strip(), f"{mechanism.key}: no one-liner"
         assert mechanism.missing_check.strip(), f"{mechanism.key}: no missing check"
-        assert mechanism.audit_ref.startswith("audits/"), (
+        assert mechanism.audit_ref.startswith("process/audits/"), (
             f"{mechanism.key}: the exhibit must cite its audit source"
         )
         assert mechanism.anchors, f"{mechanism.key}: no committed anchor"

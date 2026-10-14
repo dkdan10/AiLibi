@@ -1,4 +1,92 @@
-# Observation entitlement and timing
+# Game rules and what each player may know
+
+The first part states the rules that shape every game, each with the code that
+enforces it; the second, what the observation firewall lets each player know,
+and when.
+
+## The rules that shape every game
+
+Six rules shape every game the default configuration plays, which is every
+game of the baseline-9 era: the 4-player set and the ML corpus. Each section
+names the code that enforces its rule. An experiment can change one of them only
+through a recorded experiment field, and no default has moved. The shown
+9-player set is a later era (`eval/eras.py`), recorded under one declared config
+(`replays/samples/9p2i/experiment-config.json`) that changes two of these rules,
+as the sections below say; the other four hold there too.
+
+### Venting is visible
+
+Only impostors vent. `engine.rules.resolve_vent` lists the witnesses of each
+vent by the rule below, and the observation layer shows each witness the vent as
+that player's action. At a meeting, a spoken vent claim that matches the
+speaker's own witness record becomes a public `vent_sighting`
+[flag](glossary.md#flag-minting-stamping-a-contradiction-into-the-transcript)
+(`meetings.transcript.detect_contradictions`). A vent claim with no matching
+record raises no flag.
+
+Who witnesses a vent is set by the recording's `vent_witness_rule`. Under the
+default, `both_rooms`, a vent exit is witnessed from the room the impostor left
+and from the room it surfaced into. Under `physical`, an exit into another room
+is witnessed only from the room surfaced into, because the impostor was unseen
+inside the vent it left. An entry, and an exit in place, happen in one room and
+are witnessed from that room under both rules. A recording without the key
+reads as `both_rooms`.
+
+The shown 9-player set's declared config sets `physical`. Its impostors also
+vent only away from their own fresh kill (`vent_entry_policy`) and look before
+leaving a vent (`vent_exit_policy`).
+
+### Impostors never report
+
+The default impostor policy, `agents.tactical.impostor_policy.ImpostorPolicy`,
+never asks to report a body or to call an emergency meeting. When a body lies in
+its room it walks away, or vents away when the room has a vent and nobody but a
+teammate is there to see. Impostor self-report exists only as an experiment
+(`self_report`), off by default.
+
+### Actions resolve in player-id order
+
+`orchestrator.action_ordering.order_actions_for_tick` sorts each tick's actions
+by player id, and `engine.tick.advance_tick` applies them in that order. When an
+action opens a meeting, `advance_tick` returns at once: the actions of players
+later in the order are dropped for that tick, and the end-of-tick updates (kill
+cooldowns, sabotage timers and task progress) do not run.
+
+### Every move takes one tick
+
+A player crosses one room edge, or one vent, per tick: `engine.world.Edge` and
+`engine.world.Vent` reject any other `traversal_ticks`, because the engine has
+no in-transit state and public pathing and meeting geometry count adjacency
+hops. A custom map loads through `engine.world.load_map`, so unsupported timing
+and invalid topology fail before a simulation begins. Task, sabotage and
+cooldown durations stay configurable. Longer moves would need a coordinated
+engine, observation, pathing, reasoning and spectator change, with explicit
+recording compatibility.
+
+### Meetings pause the world
+
+Under the default (`meeting_reset = preserve`), a meeting changes the map in two
+ways only: it removes the reported body and, on an ejection, the ejected player.
+`orchestrator.game.apply_meeting_result` removes only the body that was
+reported, so every other corpse stays where it fell, and players resume where
+they stood.
+Kill cooldowns do not count down across a meeting: `engine.tick._decrement_cooldowns`
+runs only among the end-of-tick updates of a play tick, which neither the tick
+that opened the meeting nor the meeting itself runs.
+
+The shown 9-player set records a regroup instead (`meeting_reset =
+hub_with_grace`): [the regroup reset](#the-regroup-reset) below says what it
+moves, clears and restarts.
+
+### Crewmates see one room
+
+At the map's base visibility, `engine.visibility._resolve_observer_visibility_mode`
+limits a crewmate to its own room, while an impostor also sees the adjacent
+rooms. An active lights sabotage limits everyone to their own room. The map
+file's comment that visibility is uniform across the map describes its base
+setting, not what each role sees.
+
+## What each player may know
 
 The observation firewall projects engine truth into typed values. An agent may
 retain only the listed evidence; knowing that a player died is distinct from
@@ -14,14 +102,6 @@ knowing when or where the kill occurred.
 | Movement | Legacy: departure room visible from post-tick observer state. Temporal: actor visible immediately before that move resolves in sequential action order | Actor, source room, destination room | Source event tick in temporal mode | Legacy: next snapshot; temporal: before meeting | Observed movement ID |
 | Global status and alarm | Public aggregates; alarm available to every scheduled recipient | Task totals, sabotage status; exactly one roomless alarm while active | Snapshot tick | Before decision; dead players are not scheduled | Global aggregate inferred; alarm observed |
 | Dead roster and ejection | Public meeting announcement | Public dead/ejected identities and meeting result; no hidden kill time or role | Announcement tick | Meeting opening/conclusion | Meeting outcome memory; not a private kill observation |
-
-Who witnesses a vent is set by the recording's `vent_witness_rule`. Under the
-default, `both_rooms`, a vent exit is witnessed from the room the impostor left
-and from the room it surfaced into. Under `physical`, an exit into another room
-is witnessed only from the room surfaced into, because the impostor was unseen
-inside the vent it left. An entry, and an exit in place, happen in one room and
-are witnessed from that room under both rules. A recording without the key
-reads as `both_rooms`.
 
 `EventObservationBatch` separates source-time evidence from current-state
 snapshots. In temporal mode the next snapshot does not repeat kill, vent, own
@@ -60,7 +140,7 @@ explicitly reads version-2 payloads with compatible audio, including direct tick
 requests. Frozen encoder versions keep the former cue's position as a reserved
 zero so their weights and dimensions remain valid.
 
-## Explicit temporal version 2
+### Explicit temporal version 2
 
 Temporal OFF and recorded version 1 retain their original projection, identifiers
 and rendering. `AILIBI_TEMPORAL_OBSERVATIONS=2` selects the new ordered contract;
@@ -171,7 +251,8 @@ as a speaker's claim even if the viewer can independently inspect engine truth.
 The recorded `meeting_reset = hub_with_grace` regroups the survivors when a
 meeting that did not end the game closes: every living player is placed in the
 meeting room, every corpse is cleared, the vents are emptied and each living
-impostor's kill cooldown restarts ([glossary](glossary.md#regroup-the-full-meeting-reset)).
+impostor's kill cooldown restarts at its full value, six ticks in the shown set
+(`kill_cooldown_ticks`) ([glossary](glossary.md#regroup-the-full-meeting-reset)).
 Two rules keep what an agent perceives true to that relocation.
 
 **The resume rule.** The first packets after a meeting are built from the

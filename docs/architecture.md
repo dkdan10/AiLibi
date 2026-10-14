@@ -28,7 +28,7 @@ must never import it to reach engine state.
 actions, without wall clock or globals. It owns roles, kill attribution and vent
 occupancy. `rng.py` serializes the full Mersenne state into every committed
 `state_hash`; the default `FULL` hash policy preserves byte identity.
-[The game-shape page](game-shape.md) states the rules that shape every game,
+[The game-rules page](observation-contract.md) states the rules that shape every game,
 each with its enforcing symbol.
 
 **`observation/`** — `service.py` builds `ObservationPacket` through
@@ -114,7 +114,7 @@ repeatability and optimizer portability.
 `testimony_shapes` and `temporal_observations`. Each toggle has a default-OFF
 `AILIBI_*` variable. Recordings and manifests stamp the substrate; readers refuse
 incompatible settings. Graduation deletes the resolver and env mechanism but
-keeps its provenance key (`docs/agent-procedures.md`).
+keeps its provenance key (`docs/workflow.md#retiring-substrate-levers`).
 
 Baselines are adopting records. Baseline 9, the current one, is the process
 re-record adopting the substrate wave
@@ -170,7 +170,7 @@ the 9p2i era's reply and reset.
 Experiment format 3 adds independent bounded investigation and contextual
 self-report, requiring temporal/evidence version 2. The search reducer uses owned
 sightings and public deaths; working memory retains intentions separately from
-evidence. [The investigation contract](../tasks/work/bounded-investigation.md)
+evidence. [The investigation contract](../process/tasks/work/bounded-investigation.md)
 defines bounds and urgent overrides. Both candidates remain OFF.
 
 Format 3 requires exact built-in agents and policies. Shared

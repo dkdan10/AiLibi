@@ -11,7 +11,7 @@ substrate toggle off.
 It adopts nothing and is not a canonical sample set. The committed sample sets
 keep their bytes, the spectator and the static demo never read this directory,
 and nothing here is published. The reading of the round, and each switch's
-next step, are in its record, listed in [the audits index](../../../audits/README.md)
+next step, are in its record, listed in [the audits index](../../../process/audits/README.md)
 under the Stage-B gameplay wave.
 
 ## The declaration

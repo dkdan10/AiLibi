@@ -126,7 +126,9 @@ from tests.meetings.test_prompt_byte_golden import (
 import counterfactual_phase21 as cf
 
 _REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
-_MEMO: Final[Path] = _REPO_ROOT / "audits" / "audit-phase-21-counterfactual.md"
+_MEMO: Final[Path] = (
+    _REPO_ROOT / "process" / "audits" / "audit-phase-21-counterfactual.md"
+)
 _FAST_SET: Final[str] = "samples/4p1i"
 
 # The four sets the memo priced, in the record audit's order. The memo is dated
@@ -234,7 +236,7 @@ def test_the_guard_refuses_a_graduated_lever(monkeypatch: pytest.MonkeyPatch) ->
     assert "the OFF column cannot be produced in the planted case" in message
     assert _GRADUATED_LEVER in message
     assert env_var_for_lever(_GRADUATED_LEVER) in message
-    assert "audits/audit-phase-21-counterfactual.md" in message
+    assert "process/audits/audit-phase-21-counterfactual.md" in message
 
 
 def test_the_guard_refuses_a_stale_ambient_export(
@@ -369,7 +371,7 @@ def test_a_reconstruction_that_misses_the_record_refuses(
         cf.run([_FAST_SET])
     message = str(excinfo.value)
     assert "DEFECT IN THIS SCRIPT" in message
-    assert "audits/audit-2026-09-22-process-rerecord.md" in message
+    assert "process/audits/audit-2026-09-22-process-rerecord.md" in message
 
 
 @pytest.mark.slow
@@ -585,7 +587,7 @@ def test_a_registered_set_of_a_third_era_is_refused_with_that_eras_id(
     _sentinel_after_the_era_check(monkeypatch)
     third = Era(
         id="planted-third",
-        record="audits/planted.md",
+        record="process/audits/planted.md",
         recorded_on="2026-10-05",
         declared_config=None,
     )

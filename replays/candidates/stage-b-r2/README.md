@@ -16,7 +16,7 @@ shown set's file as it was, moved without a byte changed.
 It adopts nothing and is not a canonical sample set. The spectator and the
 static demo never read this directory, and nothing here is published. The
 round's reading is in its record, and the promotion that replaced it is in
-round 3's record; both are listed in [the audits index](../../../audits/README.md)
+round 3's record; both are listed in [the audits index](../../../process/audits/README.md)
 under the Stage-B gameplay wave.
 
 ## The declaration

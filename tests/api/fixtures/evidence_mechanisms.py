@@ -120,7 +120,7 @@ PROVENANCE_IMPOSSIBLE_SIGHTING: Final[EvidenceMechanism] = EvidenceMechanism(
         "No provenance gate on spoken sightings — a sighting is never checked "
         "against the speaker's own visibility at the tick it names."
     ),
-    audit_ref="audits/audit-phase-19-input-claude.md §5.2 (9p2i seed 23 M1)",
+    audit_ref="process/audits/audit-phase-19-input-claude.md §5.2 (9p2i seed 23 M1)",
     # PARTLY FLIPPED on the promoted set (was FLIPPED on round 2's bytes and on
     # baseline 9): the evidence half held, since the meeting still carries no
     # flag at all, but the outcome half did not, since the table ejects the
@@ -169,7 +169,7 @@ CONTENT_VS_OWN_MEMORY_MISS: Final[EvidenceMechanism] = EvidenceMechanism(
         "No content-vs-memory validation — a misremembered tick or room in a "
         "restated observation passes as evidence against a third party."
     ),
-    audit_ref="audits/audit-phase-19-input-claude.md §5.2 (9p2i seed 12 M0)",
+    audit_ref="process/audits/audit-phase-19-input-claude.md §5.2 (9p2i seed 12 M0)",
     # PARTLY FLIPPED on baselines 8 and 9 and on the promoted sets, and the
     # halves are stated separately because they moved in opposite directions. The
     # EVIDENCE half held: the fatal STRONG flag is still gone; on round 3's bytes
@@ -237,7 +237,7 @@ ONE_TICK_INTERVAL_ARTIFACT: Final[EvidenceMechanism] = EvidenceMechanism(
         "Interval extraction and weighting — a one-tick placement contradicted "
         "at its own tick carries the same conviction weight as a real window."
     ),
-    audit_ref="audits/audit-phase-19-input-claude.md §5.2 (4p1i seeds 41/49)",
+    audit_ref="process/audits/audit-phase-19-input-claude.md §5.2 (4p1i seeds 41/49)",
     status="FLIPPED",
     anchors=(
         MechanismAnchor(
@@ -318,7 +318,7 @@ EQUAL_WEIGHT_CONFLICT: Final[EvidenceMechanism] = EvidenceMechanism(
         "pair enter the suspicion graph at the same lift, against the project's "
         "own hard-evidence doctrine."
     ),
-    audit_ref="audits/audit-phase-19-input-claude.md §5.1, §5.2 (4p1i seed 41)",
+    audit_ref="process/audits/audit-phase-19-input-claude.md §5.1, §5.2 (4p1i seed 41)",
     status="FLIPPED",
     anchors=(
         MechanismAnchor(

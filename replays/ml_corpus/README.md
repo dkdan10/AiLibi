@@ -117,14 +117,12 @@ meetings, 3,630 transcript turns and 3,630 ballots.
 
 > **S9 is history (2026-10-02).** `replays/samples/9p2i` now holds the shown
 > 9-player set, a later era (`eval/eras.py`): candidate round 3 since 2026-10-09
-> ([its record](../../audits/audit-2026-10-09-stage-b-r3.md) section 12), round 2
-> before it ([its record](../../audits/audit-2026-10-01-stage-b-r2.md) section 9). Here, S9
+> ([its record](../../process/audits/audit-2026-10-09-stage-b-r3.md) section 12), round 2
+> before it ([its record](../../process/audits/audit-2026-10-01-stage-b-r2.md) section 9). Here, S9
 > means that path's baseline-9 bytes as of `d41c9006`, the last commit that held
 > them, and every
-> figure under that label is a record of those bytes. On 2026-10-09 the gate
-> stopped holding those cells to literals: in a checkout of `d41c9006`,
-> `uv run python scripts/check_doc_facts.py` re-derives them from that commit's
-> `replays/samples/9p2i` report. The corpus did not
+> figure under that label is a record of those bytes; fold (a) below re-derives
+> them from that commit's `replays/samples/9p2i` report. The corpus did not
 > move, and the one-rung and pairing notes above now hold, among the samples,
 > for `replays/samples/4p1i` alone.
 
@@ -138,8 +136,9 @@ prove the bytes:
 folds then produce every figure, each of them offline and at `$0`:
 
 ```bash
-# (a) the REPORT fold — each set's own tournament-eval-report.json.gz
-uv run python scripts/check_doc_facts.py
+# (a) the REPORT fold — each set's own tournament-eval-report.json.gz, read the
+# way tests/eval/test_deduction_metrics.py reads it
+uv run pytest tests/eval/test_deduction_metrics.py -q
 
 # (b) the REPLAY fold — re-seed the engine, walk every recorded tick, verify
 #     every state hash; the only frame that can see mid-tick facts
@@ -164,13 +163,9 @@ print(c['turns'], c['ballots'], c['skips'], c['kill:applied'], c['kill:rejected'
 Which item comes from which. Fold (a) gives item 1's crew-triggered meeting
 cell, item 7's partner-naming, role-statement and crew-control counts (the
 report's `scaffold_leakage` block) and item 8's coverage cells and
-macro-average. `scripts/check_doc_facts.py` gates seven of those cells on *every*
-gate run, and only those seven: the meeting cell over the three sets in the tree
-and item 8's six crew and impostor coverage pairs of those sets. It reads their
-three eval reports, fails on disagreement,
-and holds this section's substrate label to the ladder tip, so the section
-cannot be relabelled onto a new recording while those seven cells stay as they
-were. No other figure here is gated. Item 2's rejection causes and resolved
+macro-average. Since 2026-10-13 no gate check holds these cells: the doc
+checker reads only the README's figures, so this page is a record of the bytes
+it names, re-derived by the folds above when someone asks. Item 2's rejection causes and resolved
 counts, item 4, item 8's truthfulness cells and item 9's kill census are fold
 (b), which reads the engine's own per-tick output rather than inferring it from
 the transcript. Items 3, 5 and 6, item 7's text scans, item 1's action-stream

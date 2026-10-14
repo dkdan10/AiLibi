@@ -1,0 +1,20 @@
+[
+  {
+    "commit": "dadce2ed",
+    "games": 50,
+    "impostor_wins": 18,
+    "read_from": "audits/audit-2026-09-22-process-rerecord.md section 6.2, the win split's baseline-8 column",
+    "replaced": "baseline-8",
+    "set": "replays/samples/4p1i"
+  },
+  {
+    "commit": "dadce2ed",
+    "games": 50,
+    "impostor_wins": 24,
+    "no_proof": [20, 42],
+    "proof": [24, 24],
+    "read_from": "audits/audit-2026-10-09-stage-b-r3.md section 12.4 (win split) and audits/audit-2026-10-01-stage-b-r2.md section 9.6 (proof cells)",
+    "replaced": "stage-b-r2",
+    "set": "replays/samples/9p2i"
+  }
+]

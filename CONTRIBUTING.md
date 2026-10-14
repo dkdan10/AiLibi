@@ -1,118 +1,40 @@
 # Contributing
 
-Read this before opening anything. The short version: **issues are welcome,
-pull requests are not the workflow.**
+Read this before opening anything. The short version: **issues are welcome;
+pull requests from outside the project are not merged.**
 
-## What this repository is
+## Why outside pull requests are not merged
 
-AiLibi is an experiment in agentic software workflow as much as it is a
-social-deduction simulator. Every coding change is written by an AI coding agent
-working against a task contract authorized by the owner, in a fresh checkout. CI
-is the gate, separate AI reviewers check each change, and the owner decides what
-is accepted and published. The contract — not this file, and not a
-conversation on a PR — is the specification the agent sees.
+Every coding change here is written by an AI coding agent working against a
+task contract or a scope the owner has set. CI is the gate, separate AI reviewers
+check each change, and the owner decides what is accepted and published. The
+contract, not this file and not a conversation on a pull request, is the
+specification the agent sees.
 
-That has a direct consequence for outside contributions: there is no review lane
-for unsolicited code. A drive-by pull request has no contract behind it, no
-authorized scope, and no reviewer budget. It will not be
+So there is no review lane for unsolicited code. A drive-by pull request has no
+contract behind it, no authorized scope and no reviewer budget. It will not be
 merged, and saying so up front is fairer than leaving one open.
 
 ## What is welcome
 
 **Issues.** Bug reports, reproductions, questions about the architecture, and
-"this claim in the docs does not match the code" findings are all genuinely
-useful — the last category especially. This project takes truth-in-documentation
-seriously enough to spend whole tasks on it, and an outside reader spotting a
-stale number or a docstring that contradicts the bytes is doing exactly the kind
-of work the internal audits do.
-
-A good issue says what you observed, what you expected, and how to reproduce it.
-If it is about a specific claim, quote the file and line.
+"this claim in the docs does not match the code" findings are all useful, the
+last especially: a stale number or a docstring that contradicts the bytes is
+exactly what the internal audits look for. A good issue says what you observed,
+what you expected and how to reproduce it; for a specific claim, quote the file
+and line.
 
 **Forks.** The license is MIT (see [LICENSE](LICENSE)). Fork it, take it apart,
 build something else with it. No permission needed.
 
-**Security reports** go through [SECURITY.md](SECURITY.md), not the issue
-tracker.
+**Security reports** follow [SECURITY.md](SECURITY.md).
 
-## How the work actually happens
+## Read these first
 
-If you want to understand the loop — or you are an agent dispatched against a
-contract in this repository — the authoritative reading order is:
-
-1. [AGENTS.md](AGENTS.md) — the standing rules for any agent working here: the
-   three load-bearing architectural decisions, the observation firewall, the
-   coding conventions, and the definition of done.
-2. [docs/architecture.md](docs/architecture.md) — the current architecture and
-   enforced boundaries.
-3. [docs/workflow.md](docs/workflow.md) — the task lifecycle, scope rules,
-   verification, and treatment of records and experiments.
-4. The assigned `tasks/work/<slug>.md` card — its outcome, evidence, acceptance,
-   constraints, expected scope, record impact, and validation. The
-   [task index](tasks/README.md) names current work. Dispatch by card path;
-   new cards have no generated prompt copies.
-
-`tasks/phase-*.md` and `agent_prompts/task-*.md` remain historical contracts and
-generated exports. Their checks continue to run. When explicitly resuming a
-phase task, follow its original contract; **never hand-edit its prompt** — edit
-the contract and regenerate. [DESIGN.md](DESIGN.md) and
-[AGENT_IMPLEMENTATION.md](AGENT_IMPLEMENTATION.md) provide design and workflow
-history, not the current reading route.
-
-## Working on a change locally
-
-```bash
-bash scripts/setup_env.sh   # uv sync (incl. the dev group) + frontend deps
-bash scripts/check.sh       # the full gate: ruff, import-linter, mypy, pytest, frontend
-```
-
-`scripts/check.sh` is the required gate and the one-command local truth: ruff,
-import-linter, mypy, task-card and historical-prompt checks, pytest, and the
-frontend lint, typecheck, unit-test and build legs.
-
-CI runs those same checks and one more the script deliberately leaves out: a
-Playwright browser journey over the real app and the real API
-(`.github/workflows/ci.yml`). It needs a browser and both dev servers running,
-which is minutes of setup for a gate that is otherwise dependency-free. So a
-green `check.sh` predicts CI except for that one job. To run it on demand:
-
-```bash
-cd frontend
-npx playwright install chromium   # once per Playwright version; setup_env.sh
-                                  # installs the npm packages, not the browser
-npm run e2e
-```
-
-Neither the script nor CI's per-change jobs run the campaign tier: the frozen
-ML-campaign test families and the ML pins that read role or outcome on a frozen
-record, selected with `uv run pytest -m campaign`. Those run from
-`.github/workflows/campaign-tier.yml`, weekly against `main` and on every pull
-request that changes `tests/training/**`; a change to a campaign-tier file
-records the campaign count as [the workflow](docs/workflow.md) says.
-
-Targeted `uv run ...` commands are fine while you are iterating, but a change is
-not done until the whole script is green.
-
-Two notes on the environment:
-
-- Dev tooling (pytest, hypothesis, ruff, mypy, import-linter) lives in the `dev`
-  dependency group, not in the runtime dependencies. `scripts/setup_env.sh`
-  installs it; a plain `uv sync --no-dev` deliberately will not.
-- Checks never hit the network. CI and `check.sh` always run against the
-  deterministic fake LLM provider; the real-provider tests are opt-in behind
-  environment gates (see [AGENTS.md](AGENTS.md)).
-
-## The invariants that are not negotiable
-
-If you do end up proposing a change, these hold regardless of how good the idea
-is — they are enforced by tooling, and a change that breaks one is a change to
-the architecture, not a change to the code:
-
-- **The observation firewall.** `agents/` must not import from `engine/`,
-  directly or transitively. `import-linter` enforces it.
-- **Determinism.** The engine is a pure function of state and actions; replays
-  are byte-identical from a seed. No wall-clock, no unseeded randomness.
-- **No global state, no silent fallbacks.** State is owned by an explicit object
-  and passed through. Invalid input raises rather than being papered over.
-
-[ADR-0001](docs/adr/0001-three-load-bearing-decisions.md) records the reasoning.
+1. [README.md](README.md): what the project is, what the recordings show, and
+   how to install and verify it offline.
+2. [docs/architecture.md](docs/architecture.md): the current architecture and
+   its enforced boundaries.
+3. [docs/workflow.md](docs/workflow.md): how a change gets in, from task card to
+   local gate to pull request.
+4. [AGENTS.md](AGENTS.md): the standing rules every agent working here follows.

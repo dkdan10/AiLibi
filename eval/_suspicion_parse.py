@@ -16,7 +16,7 @@ classify SKIP ballots against it:
 * :mod:`eval.meeting_quality` — the shipped ``missed_skip_ballots`` /
   ``threshold_inversions`` SKIP sentinels on the tournament eval report
   (DESIGN.md §11.3, §5.5; audit gp-2).
-* ``audits/workflows/extract_gameplay_facts.py`` — the gameplay-data audit's
+* ``experiments/extract_gameplay_facts.py`` — the gameplay-data audit's
   ``skip_partition`` / ``threshold_inversions`` facts (``audits`` -> ``eval``
   is the allowed consumer direction).
 

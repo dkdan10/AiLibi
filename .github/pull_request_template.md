@@ -1,22 +1,21 @@
 ## Summary
 
-<!-- One paragraph: what this PR does and why. Reference the task ID and section refs. -->
+<!-- What changed and why, the card path, and each material decision made without the owner. -->
 
-## Definition of done
+## Acceptance
 
-<!-- Copy the checklist from the task contract and tick each item. -->
+<!-- The card's checklist, each item ticked against its evidence. Without a card, the scope actually executed. -->
 
 - [ ] ...
 
-## Decisions
+## Verification
 
-<!-- Document every ambiguous choice you resolved by judgment: defaults chosen, tie-breaks,
-     naming decisions, deviations from the hint. If nothing was ambiguous, write "None." -->
+<!-- The commands run and their results, including `bash scripts/check.sh`. -->
 
-None.
+## Record impact
 
-## Questions
+<!-- Effects on recordings, compatibility and evaluation, or "None". -->
 
-<!-- Blocking questions only — things you cannot resolve without human input.
-     If present, open this PR as a draft and request review before continuing.
-     If nothing is blocking, delete this section entirely. -->
+## Limitations
+
+<!-- What remains unproven, and any blocking question for the owner (then open as a draft). -->

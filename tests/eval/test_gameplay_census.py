@@ -1000,7 +1000,9 @@ def test_the_census_errors_are_the_standard_kinds() -> None:
 
 def _published() -> dict[str, Any]:
     payload: dict[str, Any] = json.loads(
-        (repo_root / "docs" / "gameplay-census.json").read_text(encoding="utf-8")
+        (repo_root / "eval" / "reports" / "gameplay-census.json").read_text(
+            encoding="utf-8"
+        )
     )
     return payload
 
@@ -1194,7 +1196,7 @@ def test_the_two_meeting_structure_counts_the_direction_cites() -> None:
     assert _pair(pooled, "first_reply_accuses_opener") == (401, 531)
     assert _pair(pooled, "opener_speaks_again") == (0, 531)
     direction = (
-        repo_root / "tasks" / "direction-2026-09-19-process-over-outcome.md"
+        repo_root / "process" / "tasks" / "direction-2026-09-19-process-over-outcome.md"
     ).read_text(encoding="utf-8")
     assert "521 of 676" in direction
     assert "0 of 676" in direction
@@ -1257,7 +1259,9 @@ def test_on_baseline_9_every_scoped_cell_and_table_reads_n_a() -> None:
     for kind in ("cells", "tables"):
         for key, view in promoted[kind].items():
             assert view["in_scope"] is True, key  # was False under the route lines
-    page = (repo_root / "docs" / "gameplay-census.md").read_text(encoding="utf-8")
+    page = (repo_root / "eval" / "reports" / "gameplay-census.md").read_text(
+        encoding="utf-8"
+    )
     four = " n/a |" * 4
     # The shown set's column carries a measured cell where each baseline-9
     # column reads n/a; its value is the census --check's to hold. The route
@@ -8394,7 +8398,7 @@ def test_the_cooldown_refusal_names_the_era_its_registry_gives() -> None:
 
     second = Era(
         id="planted-second",
-        record="audits/planted.md",
+        record="process/audits/planted.md",
         recorded_on="2026-10-05",
         declared_config=None,
     )

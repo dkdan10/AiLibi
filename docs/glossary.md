@@ -1,11 +1,9 @@
 # Glossary
 
 This project keeps its records as case law, and case law grows a private
-vocabulary. Every term below is one an audit, a contract or a report uses as if
-it were common English. Where a convention was originally named after the task
-that introduced it, the descriptive name is the heading and the old name is
-given inside the entry — the descriptive one is what the prose should say from
-here on.
+vocabulary. Every term below is one a live page, the viewer or a record uses as
+if it were common English. Words that only the records use are defined with
+them, in [the process record's vocabulary](../process/README.md#vocabulary-of-the-records).
 
 Each entry names one committed usage you can go and read.
 
@@ -23,7 +21,7 @@ Me — Daniel Keinan, the one human on the project. The contracts and audits say
 "the party whose merge decides". An owner ruling is a decision no gate can make:
 which route a phase takes, whether a measured miss is acceptable, whether a
 learned policy ships. Usage: the phase-19 close routes its open decision to the
-owner ([`audits/audit-phase-19-close.md`](../audits/audit-phase-19-close.md)).
+owner ([`audits/audit-phase-19-close.md`](../process/audits/audit-phase-19-close.md)).
 
 ### agent
 
@@ -40,7 +38,7 @@ in play, the game's are **crewmate** and **impostor**.
 A numbered reference recording: one recording of the sample sets under a stated
 set of behavioural settings, which everything afterwards is measured against.
 Nine exist; the newest — the ladder tip — is baseline 9, recorded 2026-09-22
-([`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md)).
+([`audits/audit-2026-09-22-process-rerecord.md`](../process/audits/audit-2026-09-22-process-rerecord.md)).
 Since 2026-10-02 the shown 9-player set sits in a later era, recorded with the
 adopted gameplay changes, while the 4-player set and the ML corpus stay at
 baseline 9.
@@ -54,7 +52,7 @@ owns the 4-player set and the ML corpus, and a later one owns the shown
 9-player set, recorded 2026-10-09 with the adopted gameplay changes and the
 [route lines](#route-line-what-the-doors-say-about-a-players-stated-places)
 switched on by one declared config
-([`audits/audit-2026-10-09-stage-b-r3.md`](../audits/audit-2026-10-09-stage-b-r3.md)
+([`audits/audit-2026-10-09-stage-b-r3.md`](../process/audits/audit-2026-10-09-stage-b-r3.md)
 §12).
 
 ### adopting record (the recording that adopts a change)
@@ -63,17 +61,7 @@ The point of a reference recording: it is the recording that *adopts* a
 substrate change, not a label applied to one afterwards. So a setting
 "graduates at its own adopting record" — the change and the recording that
 makes it canonical are the same event
-([`audits/audit-phase-17-absence-gate.md`](../audits/audit-phase-17-absence-gate.md)).
-
-### the ladder tip (the newest reference recording)
-
-Where the substrate currently stands. "The ladder tip stands at baseline 9"
-([`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md)); the
-phrase is checked against that audit by
-[`scripts/check_doc_facts.py`](../scripts/check_doc_facts.py), so no document
-can quietly name a different one. The shown 9-player set moved to later eras
-on 2026-10-02 and 2026-10-09 without moving the tip: no substrate setting
-changed, and baseline 10 is reserved for a full re-record.
+([`audits/audit-phase-17-absence-gate.md`](../process/audits/audit-phase-17-absence-gate.md)).
 
 ### graduated lever (a setting deleted into the default)
 
@@ -85,7 +73,7 @@ Twenty-one have graduated; five live substrate toggles remain — `impostor_roll
 `temporal_observations`
 ([`orchestrator/replay.py`](../orchestrator/replay.py));
 graduating requires deleting the mechanism and updating current prose
-([retirement procedure](agent-procedures.md#retiring-substrate-levers)).
+([retirement procedure](workflow.md#retiring-substrate-levers)).
 Separately versioned cleanup experiments use the closed recording configuration
 described in [architecture](architecture.md); they do not inflate this registry.
 
@@ -94,64 +82,13 @@ nothing is decided on it, so at its record it is deleted outright and promoted
 nowhere, which leaves the graduated-lever stamp keys — and the MANIFEST `flags`
 cell derived from them — byte-identical across the flip.
 
-### the flip bar (formerly "the §1.3 bar")
-
-The written bar a learned policy must clear to become the default: close both
-evidence-supply gaps *without* surrendering its win edge. Stated in
-[`audits/audit-phase-17-close.md`](../audits/audit-phase-17-close.md) §1.3, and
-every later ruling reads against it.
-
 ### NO-FLIP (the scripted policy stays the default)
 
-The ruling that the flip bar was not cleared, so the scripted policy stays the
+The ruling that the [flip bar](../process/README.md#the-flip-bar-formerly-the-13-bar)
+was not cleared, so the scripted policy stays the
 default and the learned one stays opt-in. Ruled twice, in the titles of
-[`audits/audit-phase-17-close.md`](../audits/audit-phase-17-close.md) and
-[`audits/audit-phase-18-close.md`](../audits/audit-phase-18-close.md).
-
-### canary denominator (the held-out monitoring corpus)
-
-The largest same-substrate, validity-gated recording set that monitoring metrics
-are judged on — today [`replays/ml_corpus/`](../replays/ml_corpus/README.md),
-200 games against the 100 sample games. Using a bigger denominator than the sets a
-change was tuned on is the point.
-
-### findings, not failures
-
-The closing doctrine: a pre-registered measurement that misses its bar is a
-finding to record, not a failure to hide or re-price. Chartered in
-[`tasks/phase-18.md`](../tasks/phase-18.md) and applied in
-[`audits/audit-phase-18-close.md`](../audits/audit-phase-18-close.md) §6.
-
-### merge-as-ratification (formerly "the 15.18 convention")
-
-Decision documents — plans, close readings, tier maps — are proposed as pull
-requests, and the owner's *merge* is the ratification. Measurements commit their
-pre-registration before the measurement and their reproduction snippets beside
-the numbers ([`tasks/phase-19.md`](../tasks/phase-19.md)).
-
-### the two-owner gate
-
-A phase's ruling and its close are two separate owner merges, and the close
-carries no new evidence — so the second merge ratifies a reading rather than a
-surprise ([`tasks/phase-18.md`](../tasks/phase-18.md)).
-
-### errata discipline
-
-Living documentation is rewritten; *records* — campaign reports and audits — are
-not, apart from the 2026-10-13 personal-data scrub, which spelled the operator's home directory `~` or elided its account name, elided scratch paths and redacted one mail address in place, keeping every line number, with a dated erratum in each campaign report it touched. Otherwise they take additive, dated errata, and later prose quotes only
-errata-approved figures
-([`training/reports/report-finalist-eval.md`](../training/reports/report-finalist-eval.md)
-§18).
-
-### citation shorthand
-
-`§N.M` is a section of the cited document. `F<n>` is a numbered campaign finding
-carried between contracts, `L<n>` an item in a ruling's own ledger, and
-`P0`–`P2` the input audits' severity ranks. In
-[`audits/audit-phase-19-triage.md`](../audits/audit-phase-19-triage.md), `[C]`
-marks a finding both external audits reached, `[S-Claude]` / `[S-Codex]` a
-single-source one, and `[L]` an internal-ledger-only one — provenance tags, not
-verification status.
+[`audits/audit-phase-17-close.md`](../process/audits/audit-phase-17-close.md) and
+[`audits/audit-phase-18-close.md`](../process/audits/audit-phase-18-close.md).
 
 ---
 
@@ -202,29 +139,6 @@ constants). A weak flag is still shown to the voters and still counted; it moves
 a voter's suspicion less than a strong one. The meeting view lists these last,
 under “Weak signals”.
 
-### conviction economy (what a meeting does with evidence)
-
-The pipeline from flag to ballot to tally, and how much of the evidence a
-meeting is handed it converts into a correct ejection. "Conviction engine" means
-this pipeline in [`meetings/`](../meetings), never the [`engine/`](../engine)
-package.
-
-### supply and conversion floors
-
-The two halves of that economy, as numbers a recording must clear: how much
-usable evidence the meeting is *supplied*, and how much of it the table
-*converts*. They are the gauges the referee below prices
-([`eval/watchability.py`](../eval/watchability.py)).
-
-### starved-economy shape
-
-The failure pattern where a learned mover wins more games by supplying the
-meeting with less evidence — the win edge is real and the deduction gets worse.
-First named in
-[`audits/audit-phase-17-close.md`](../audits/audit-phase-17-close.md) and
-reproduced on a co-adapted slate in
-[`audits/audit-phase-18-close.md`](../audits/audit-phase-18-close.md).
-
 ### roll-call round (the whereabouts round)
 
 After the opening, reply chain and information-sharing rounds, the remaining
@@ -265,19 +179,6 @@ The setting is off by default
 ([`engine/meeting_reset.py`](../engine/meeting_reset.py),
 [observation contract](observation-contract.md#the-regroup-reset),
 [experiment arms](experiment-arms.md)).
-
-### endpoint-band whereabouts exemption
-
-The rule that a whereabouts claim is not treated as contradicted when the two
-statements differ only at the ends of the interval each covers — a player who
-says "Engineering" for ticks 4–8 and one who saw them leave at tick 8 are not in
-conflict ([`meetings/transcript.py`](../meetings/transcript.py)).
-
-### absence prior
-
-The starting assumption a table brings to a player nobody can place: absence is
-weak evidence, weighted rather than ignored
-([`audits/audit-phase-17-absence-gate.md`](../audits/audit-phase-17-absence-gate.md)).
 
 ### stated basis (what a voter says its vote rests on)
 
@@ -325,7 +226,7 @@ someone else departs from that arithmetic: the voter chose against the number
 its memory handed it, which can be right or wrong. When two players tie for the
 top there is no top suspect, and the ballot is left out of the count. The
 reading uses only the target the ballot recorded and the rows its voter was
-shown, and it gates nothing ([process scorecard](process-scorecard.md), row 2;
+shown, and it gates nothing ([process scorecard](../eval/reports/process-scorecard.md), row 2;
 [`eval/process_scorecard.py`](../eval/process_scorecard.py)).
 
 ### route line (what the doors say about a player's stated places)
@@ -347,7 +248,7 @@ voter and every role, and it names, ranks and recommends no one
 
 The game-shape profile is how the owner chose, on 2026-10-06, to have the replay
 viewer describe each game of the shown 9-player set without a score or a rank
-([decision memo](../tasks/decision-2026-09-24-stage-b-wave.md), section 8.6): a
+([decision memo](../process/tasks/decision-2026-09-24-stage-b-wave.md), section 8.6): a
 **facet** is a plain fact every game has, such as its length, its meetings or
 when its kills fell; a **shelf** is a named kind of moment to browse by, such as
 a double kill or a close vote, listing its games by seed number and never by
@@ -360,7 +261,7 @@ raised against an account that was in fact true. The profile is version 2 of the
 rubric: version 1, the interestingness score, is retired for the shown era and
 kept as history. It is computed after the fact from committed bytes, a **chip**
 marks one meeting, and no agent, pre-registration, step rule, gate or objective
-reads any of it ([the generated page](game-profile.md),
+reads any of it ([the generated page](../eval/reports/game-profile.md),
 [`eval/game_profile.py`](../eval/game_profile.py)).
 
 ### the shelves (the moments a game can sit on)
@@ -433,7 +334,7 @@ comparator.
 ### slate (the set of arms in a campaign)
 
 The full set of arms a campaign measures, chosen before the measurement runs
-([`audits/audit-phase-18-close.md`](../audits/audit-phase-18-close.md)).
+([`audits/audit-phase-18-close.md`](../process/audits/audit-phase-18-close.md)).
 
 ### champion (the best arm, kept opt-in)
 
@@ -448,32 +349,7 @@ what a mover does to the deduction economy it plays in, not just whether it
 wins, and it is a *selection* gate only — never a training reward
 ([`eval/watchability.py`](../eval/watchability.py)).
 
-### screening-tier shortlist
-
-A campaign result that is explicitly too small to rule on: the arms are ranked
-well enough to shortlist for a bigger run, and no further
-([`audits/audit-phase-18-close.md`](../audits/audit-phase-18-close.md)).
-
-### training-time-runner tier
-
-A verdict on a learned component saying it is good enough to drive training
-rollouts but not to decide anything in a real game — the two jobs have different
-accuracy requirements ([`training/README.md`](../training/README.md)).
-
-### two-axis owner ruling
-
-A close that rules on two independent questions at once — here, "does a learned
-mover become the default?" and "was any pre-registered emergence claim
-demonstrated?" — so a yes on one cannot be read as a yes on the other
-([`audits/audit-phase-18-close.md`](../audits/audit-phase-18-close.md)).
-
-### evidence-gated default flip
-
-The proposal that the learned mover become the default *conditional* on the
-evidence gauges, rather than on wins alone. Ruled FAIL in
-[`audits/audit-phase-17-close.md`](../audits/audit-phase-17-close.md).
-
 ---
 
 Back to the [README](../README.md), the [reading guide](reading-guide.md), or
-the [phase history](history.md).
+the [process record](../process/README.md).

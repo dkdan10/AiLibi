@@ -32,7 +32,7 @@ quotes the parenthetical gets a claim the tree does not support.
   covered, and every caller of it in the tree was under `tests/`. A live agent's trust
   score therefore never left its initial value, and no rendered memory view ever showed
   a moved one. Ruling D5 of 2026-09-19
-  ([the direction](../../tasks/direction-2026-09-19-process-over-outcome.md)) deleted
+  ([the direction](../../process/tasks/direction-2026-09-19-process-over-outcome.md)) deleted
   the writer rather than wiring it: a credibility scalar computed in Python and handed
   to the agent is a second engine verdict, which is the defect that ruling exists to
   remove, and the credibility information reaches the voter as evidence instead — a
@@ -71,6 +71,6 @@ on it, and both are one diff away from checkable.
   when a game passes 100. The figure is what the two-tier split was sized
   against.
 
-README.md's "What it is" restates these three decisions in its own words, names
-this record and DESIGN.md §0 as where they are kept, and says outright that the two
-figures above live here rather than repeating them as claims of its own.
+README.md describes the engine, the firewall and the two-tier split in its own
+words and repeats neither figure above as a claim of its own; this record and
+DESIGN.md §0 are where the decisions and both figures are kept.

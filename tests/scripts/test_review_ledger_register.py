@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_LEDGER = _REPO_ROOT / "tasks" / "review-ledger.md"
+_LEDGER = _REPO_ROOT / "process" / "tasks" / "review-ledger.md"
 
 #: The merge that landed the cleanup into `main`. Everything after it is a
 #: post-review commit; the ledger's earlier sections stop here.

@@ -158,20 +158,19 @@ def _availability_tree(root: Path) -> None:
         vme.SURROGATE_DIR,
         vme.CONVICTION_DIR,
         vme.COMPOSED_DIR,
-        "audits",
+        "process/audits",
         "docs/media",
-        # The process scorecard's row probes all three of its files, so each is
+        # The process scorecard's row probes both of its files, so each is
         # linked: a tree holding fewer would make the row read MISSING for a
         # reason this scratch tree is not about.
-        "docs/process-scorecard.md",
-        "docs/process-scorecard.json",
-        "docs/process-scorecard-before.json",
+        "eval/reports/process-scorecard.md",
+        "eval/reports/process-scorecard-before.json",
         # The gameplay census's row probes its pair the same way.
-        "docs/gameplay-census.md",
-        "docs/gameplay-census.json",
+        "eval/reports/gameplay-census.md",
+        "eval/reports/gameplay-census.json",
         # The game-shape profile's page has a row of its own.
-        "docs/game-profile.md",
-        "design/phase-12",
+        "eval/reports/game-profile.md",
+        "process/design/phase-12",
         "experiments/lab",
         "experiments/model_probe",
         "agents/tactical/learned/weights.json",
@@ -1056,9 +1055,9 @@ def test_registry_row_with_no_probe_fails_the_availability_leg(
     doc = _copy(root, vme.ARTIFACTS_DOC)
     doc.write_text(
         doc.read_text().replace(
-            "| `audits/` ",
+            "| `process/audits/` ",
             "| `training/artifacts/brand_new/` — a later phase's family | (a) "
-            "| in git | 1 file |\n| `audits/` ",
+            "| in git | 1 file |\n| `process/audits/` ",
             1,
         )
     )
@@ -1155,7 +1154,7 @@ def test_a_singular_stated_count_is_read_and_can_fail(
     )
 
 
-_SCORECARD_KEY = "docs/process-scorecard.md"
+_SCORECARD_KEY = "eval/reports/process-scorecard.md"
 
 
 def _scorecard_row_text(root: Path) -> str:
@@ -1223,7 +1222,7 @@ def test_a_moved_before_path_fails_the_registration_case(
 ) -> None:
     """Planted: the publisher pinning another file turns the case red."""
 
-    moved = "docs/process-scorecard-before-moved.json"
+    moved = "eval/reports/process-scorecard-before-moved.json"
     monkeypatch.setattr(process_scorecard, "BEFORE_COLUMNS_PATH", moved)
     problems = _before_file_registration_problems(_REPO_ROOT)
     assert f"the probe entry does not name {moved}" in problems
@@ -1232,14 +1231,15 @@ def test_a_moved_before_path_fails_the_registration_case(
     assert f"the index does not track {moved}" in problems
 
 
-def test_the_scorecard_row_restated_as_two_files_fails_the_inventory(
+def test_the_scorecard_row_restated_as_three_files_fails_the_inventory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Planted: the row's old count, against the three files the index tracks."""
+    """Planted: the row's count from when it held a JSON copy, against the two
+    files the index tracks."""
 
     rows = vme.registry_rows(_REPO_ROOT)
     changed = [
-        (key, category, where, "2 files" if key == _SCORECARD_KEY else size)
+        (key, category, where, "3 files" if key == _SCORECARD_KEY else size)
         for key, category, where, size in rows
     ]
     assert changed != rows
@@ -1249,7 +1249,7 @@ def test_the_scorecard_row_restated_as_two_files_fails_the_inventory(
     )
     assert result.status == "FAIL", result.detail
     assert (
-        f"{_SCORECARD_KEY}: {vme.ARTIFACTS_DOC} promises 2 files, the index tracks 3"
+        f"{_SCORECARD_KEY}: {vme.ARTIFACTS_DOC} promises 3 files, the index tracks 2"
         in result.detail
     )
 
@@ -1257,16 +1257,16 @@ def test_the_scorecard_row_restated_as_two_files_fails_the_inventory(
 def test_an_inventory_scope_without_the_before_file_fails_the_inventory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Planted: the scope's old pair, against the row's stated three files."""
+    """Planted: the scope holding the page alone, against the row's two files."""
 
-    pair = ("docs/process-scorecard.md", "docs/process-scorecard.json")
-    monkeypatch.setitem(vme._IN_TREE_INVENTORY, _SCORECARD_KEY, (pair, ()))
+    page = ("eval/reports/process-scorecard.md",)
+    monkeypatch.setitem(vme._IN_TREE_INVENTORY, _SCORECARD_KEY, (page, ()))
     result = _row(
         vme.run_availability(_context(_REPO_ROOT)).rows, "in-tree family inventory"
     )
     assert result.status == "FAIL", result.detail
     assert (
-        f"{_SCORECARD_KEY}: {vme.ARTIFACTS_DOC} promises 3 files, the index tracks 2"
+        f"{_SCORECARD_KEY}: {vme.ARTIFACTS_DOC} promises 2 files, the index tracks 1"
         in result.detail
     )
 
@@ -2752,7 +2752,7 @@ def test_the_destination_alternatives_swallow_no_tracked_python() -> None:
     """The fence is exactly the restore roots — it hides no committed module.
 
     Checked per added alternative rather than over the whole regex: the pre-existing
-    ``experiments/lab/`` and ``design/`` alternatives legitimately cover tracked
+    ``experiments/lab/`` and ``process/design/`` alternatives legitimately cover tracked
     files.
     """
 
@@ -2793,4 +2793,4 @@ def test_the_fence_can_fail_when_a_destination_alternative_is_dropped() -> None:
         )
     # The narrowing removed only the two alternatives under test.
     assert narrowed.search("experiments/lab/ml_spike/core.py")
-    assert narrowed.search("design/phase-12/gen_map_reference.py")
+    assert narrowed.search("process/design/phase-12/gen_map_reference.py")

@@ -4,7 +4,7 @@
 // or, without one, on the last frame where the served `is_venting` still holds
 // for its actor. Over the shown 9p2i set that reproduces the gameplay census's
 // own tables (`eval/gameplay_census.py`, `ticks_inside_per_trip` and
-// `trips_closed_by_regroup`, published in `docs/gameplay-census.json`), cell
+// `trips_closed_by_regroup`, published in `eval/reports/gameplay-census.json`), cell
 // for cell, whatever the recording (round 2's bytes read 140 dives, 72
 // surfaced trips and 47 a regroup closed).
 //
@@ -46,7 +46,7 @@ interface CensusSet {
 
 /** The published gameplay census's row for the shown set: the Python twin. */
 function shownCensus(): CensusSet {
-  const path = resolve(dirname(fileURLToPath(import.meta.url)), "../../../docs/gameplay-census.json");
+  const path = resolve(dirname(fileURLToPath(import.meta.url)), "../../../eval/reports/gameplay-census.json");
   const parsed = JSON.parse(readFileSync(path, "utf8")) as { readonly sets: readonly CensusSet[] };
   const found = parsed.sets.find((candidate) => candidate.label === "samples/9p2i");
   if (found === undefined) throw new Error("the published census carries no samples/9p2i row");

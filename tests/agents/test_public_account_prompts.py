@@ -197,8 +197,8 @@ def test_versions_distinguish_each_arm_and_refuse_unsupported_families() -> None
 @pytest.mark.parametrize(
     "capture",
     [
-        "audits/investigation-candidate/2026-09-06-meetings.json",
-        "audits/deduction-candidate/2026-09-06-mechanisms.json",
+        "process/audits/investigation-candidate/2026-09-06-meetings.json",
+        "process/audits/deduction-candidate/2026-09-06-mechanisms.json",
     ],
 )
 def test_no_committed_capture_already_carries_todays_account_stamps(

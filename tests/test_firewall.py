@@ -6,8 +6,8 @@
 inside the graph, so the AST source scan below covers the two ways out: the
 external packages grimp never sees (``numpy``, ``torch``, banned under
 ``agents/`` by the pure-Python inference doctrine) and the packages left out of
-the graph on purpose (``tests``, ``experiments``, ``audits``, ``design``), where
-a traversal stops dead and whatever follows is unseen.
+the graph on purpose (``tests``, ``experiments``, ``process``), where a traversal
+stops dead and whatever follows is unseen.
 
 The scan is stated as a CLOSURE, not a list of places to look. ``agents``,
 ``llm``, ``meetings`` and ``observation`` are the firewall's interior; no file
@@ -413,12 +413,12 @@ def test_import_linter_refuses_a_planted_import_of_the_game_profile(
 
 # The top-level packages that hold tracked Python and stay OUT of the import
 # graph on purpose: ``tests`` and ``experiments`` import the inner packages
-# freely, and ``audits`` and ``design`` hold one-off generators. grimp builds no
+# freely, and ``process`` holds the record's one-off generators. grimp builds no
 # nodes for them, so a chain through one is invisible to every contract —
 # ``tests._helpers.world_state`` imports ``engine``, which makes
 # ``agents -> observation -> tests._helpers -> engine`` a real route no linter
 # can follow. This scan is what forbids it.
-_UNGRAPHED_PACKAGES = frozenset({"tests", "experiments", "audits", "design"})
+_UNGRAPHED_PACKAGES = frozenset({"tests", "experiments", "process"})
 
 # The INTERIOR of the firewall: the roots ``agents/`` may import. Naming the
 # interior rather than the exterior is what makes this gate safe by default — a
