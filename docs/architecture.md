@@ -28,7 +28,7 @@ must never import it to reach engine state.
 actions, without wall clock or globals. It owns roles, kill attribution and vent
 occupancy. `rng.py` serializes the full Mersenne state into every committed
 `state_hash`; the default `FULL` hash policy preserves byte identity.
-[The game-shape page](game-shape.md) states the rules that shape every game,
+[The game-rules page](observation-contract.md) states the rules that shape every game,
 each with its enforcing symbol.
 
 **`observation/`** — `service.py` builds `ObservationPacket` through

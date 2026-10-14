@@ -151,35 +151,5 @@ records `route_lines_version = 1`, named like the kept vent exit and the six-tic
 kill cooldown as a setting these recordings carry rather than an adopted rule,
 with graduation waiting for a full re-record.
 
-## Candidate round 1
-
-The ladder tip stands at baseline 9.
-[`replays/candidates/stage-b-r1/9p2i`](../replays/candidates/stage-b-r1/README.md)
-is candidate round 1, recorded with the experimental switches its README
-names; it adopts nothing and is not a canonical sample set.
-
-## Candidate round 2
-
-Candidate round 2 was recorded with the adopted switches, the kept vent exit
-and a six-tick kill cooldown, under one declared config. On 2026-10-02 the owner
-promoted it as the shown 9-player set, in its own era
-([the record](../process/audits/audit-2026-10-01-stage-b-r2.md), section 9), with one
-flag its record states: reporters ejected per report meeting read 17/114, above
-the pre-registered 0.104, so the round's own rule named no promotion step; the
-owner's ruling promoted it regardless. Since round 3's promotion its bytes are
-[`replays/candidates/stage-b-r2/9p2i`](../replays/candidates/stage-b-r2/README.md),
-moved there without a byte changed with its config at the round's root: the
-comparison record for the route lines, which round 3 adds and nothing else. It
-adopts nothing and is not a canonical sample set.
-
-## Candidate round 3, the shown set
-
-Candidate round 3 was recorded with round 2's rules and one more switch that
-gives each voter a plain line about the places stated at the table. On
-2026-10-09 the orchestrator, under the owner's delegation, promoted it: it is now
-[`replays/samples/9p2i`](../replays/samples/9p2i/MANIFEST.md), the shown
-9-player set, in its own era (`eval/eras.py`), with its declared config beside
-its replays as `experiment-config.json`, and its candidate copy is deleted
-([the record](../process/audits/audit-2026-10-09-stage-b-r3.md), sections 11 and 12).
-Promotion moves no default and deletes no switch. The ladder tip stands at
-baseline 9.
+The candidate rounds that recorded these settings, and the promotions of rounds
+2 and 3, are told in [the process record](../process/README.md#candidate-rounds).

@@ -1,17 +1,46 @@
-# Phase history
+# The process record
+
+This folder keeps how AiLibi was built: what the agents were asked to do, how
+each result was checked and what the owner decided. It is a record, not a set of
+instructions; current work follows [AGENTS.md](../AGENTS.md) and
+[the workflow](../docs/workflow.md).
+
+- [`tasks/`](tasks/README.md) holds the task cards and phase contracts the agents
+  were dispatched against, the owner's decision memos and the review ledger.
+- [`audits/`](audits/README.md) holds the close audits, the recording records
+  and the independent reviews.
+- [`design/`](design/phase-12/) holds the viewer's phase-12 design record: its
+  brief and stages, the map reference and the one-off generator that draws it.
+- [`DESIGN.md`](DESIGN.md) is the original system design, kept as rationale.
+- [`AGENT_IMPLEMENTATION.md`](AGENT_IMPLEMENTATION.md) is the original plan for
+  building with coding agents, kept as onboarding history.
+- [`docs/cleanup-dispositions.md`](docs/cleanup-dispositions.md) routes the
+  findings of the September cleanup.
+
+The paths written inside these records predate their move into this folder, and
+a record is never rewritten to follow a move. A record that cites `tasks/…`,
+`audits/…`, `design/…`, `DESIGN.md` or `AGENT_IMPLEMENTATION.md` means that path
+here; `docs/history.md` means this page and `docs/cleanup-dispositions.md` means
+`process/docs/cleanup-dispositions.md`. The generated pages it cites under
+`docs/` (the gameplay census, the game profile and the process scorecard) are
+under [`eval/reports/`](../eval/reports/README.md); `docs/ownership-case-study.md`
+is the second part of [How this was built](../docs/lessons.md#one-decision-traced),
+and `docs/game-shape.md` and `engine/README.md` open
+[the game rules](../docs/observation-contract.md).
+
+## Phase history
 
 One paragraph per phase, in order. Each names its contract — the document the
 agents were dispatched against — and its close audit where one exists. Close
 audits begin at the MVP close and resume at phase 13; the phases in between
 closed inside their contract files, which carry the per-task status lines.
 
-The short version is on the [README](../README.md) as a table. Vocabulary that
-turns up below is defined in the [glossary](../docs/glossary.md); the numbers and what
-they do and do not show are in the [reading guide](../docs/reading-guide.md).
+Vocabulary that turns up below is defined in the [glossary](../docs/glossary.md),
+or [on this page](#vocabulary-of-the-records) when only the records use it; the
+numbers and what they do and do not show are in the
+[reading guide](../docs/reading-guide.md).
 
----
-
-## The MVP: phases 0–5
+### The MVP: phases 0–5
 
 **Phase 0 — scaffolding.** Repository, CI, the project skeleton, the lint rule
 that enforces the observation firewall, and a deliberately failing leak test, so
@@ -47,7 +76,7 @@ prompt, watch a metric move, attributably" into a test. This is the MVP.
 Retired on 2026-10-09: the close gate and its module, with the three-seed
 fixtures whose last version is at `4e5b6d6a`.
 
-## Making the agents reason: phases 6–13.5
+### Making the agents reason: phases 6–13.5
 
 **Phase 6 — repair and hardening.** The post-MVP cleanup pass: the defects the
 close audit surfaced, closed before anything was built on top of them.
@@ -95,7 +124,7 @@ suspicion scalar before it reached anyone's beliefs. This phase took the fix
 down to the substrate rather than papering over it at the prompt.
 [Contract](tasks/phase-13-5.md).
 
-## Measurement and the ML program: phases 14–18
+### Measurement and the ML program: phases 14–18
 
 **Phase 14 — the hosted provider.** A hosted OpenAI-compatible provider, and the
 model and prompt migration onto it. The first numbered reference recording
@@ -149,7 +178,7 @@ kill-placement effects recorded as named findings rather than upgraded to fit
 the claim. No crew adoption. [Contract](tasks/phase-18.md) ·
 [close audit](audits/audit-phase-18-close.md).
 
-## Review and refresh: phase 19
+### Review and refresh: phase 19
 
 **Phase 19.** Chartered as review-and-refresh after the owner deferred
 presentation work. It ran the front-door and in-code truth sweeps with
@@ -162,7 +191,7 @@ phase and a presentation phase was routed to the owner.
 [Contract](tasks/phase-19.md) ·
 [close audit](audits/audit-phase-19-close.md).
 
-## Evidence honesty: phase 20
+### Evidence honesty: phase 20
 
 **Phase 20** takes the presentation-and-honesty route out of that decision: the
 front door made true, the inference channel repaired, and one pre-registered
@@ -180,9 +209,7 @@ the phase closed behind it that same day at `d8ec0a1c`
 Retired on 2026-10-09: the offline lever counterfactual script, which refused to
 run once its levers graduated; its last version is at `a8a3db9b`.
 
----
-
-## Phase 21 — the substrate told the truth, and the record caught up
+### Phase 21 — the substrate told the truth, and the record caught up
 
 Phase 20's repairs had landed in the code but not in the bytes: every instrument,
 the training corpus, the front door and the spectator were still reading
@@ -230,9 +257,7 @@ The phase closed on 2026-09-05 behind that finding.
 [Contract](tasks/phase-21.md) ·
 [close audit](audits/audit-phase-21-close.md).
 
----
-
-## Where the sample sets came from
+### Where the sample sets came from
 
 The 100 committed replays under `replays/samples/` sit in two eras, named in
 `eval/eras.py`. On 2026-10-02 the owner promoted candidate round 2 as the shown
@@ -293,6 +318,205 @@ refresh date, cost and outcome. `scripts/refresh_samples.sh` regenerates the
 sets against the active provider and rewrites those rows;
 `scripts/verify_samples.sh` replays every sample through the engine, free and
 offline, and fails loudly the moment a recorded state hash stops reconstructing.
+
+## Vocabulary of the records
+
+The records use these words as if they were common English, and no live page
+does; [the glossary](../docs/glossary.md) defines the rest. Where a convention
+was originally named after the task that introduced it, the descriptive name is
+the heading and the old name is given inside the entry.
+
+### the ladder tip (the newest reference recording)
+
+Where the substrate currently stands. "The ladder tip stands at baseline 9"
+([`audits/audit-2026-09-22-process-rerecord.md`](audits/audit-2026-09-22-process-rerecord.md)).
+The shown 9-player set moved to later eras
+on 2026-10-02 and 2026-10-09 without moving the tip: no substrate setting
+changed, and baseline 10 is reserved for a full re-record.
+
+### the flip bar (formerly "the §1.3 bar")
+
+The written bar a learned policy must clear to become the default: close both
+evidence-supply gaps *without* surrendering its win edge. Stated in
+[`audits/audit-phase-17-close.md`](audits/audit-phase-17-close.md) §1.3, and
+every later ruling reads against it.
+
+### canary denominator (the held-out monitoring corpus)
+
+The largest same-substrate, validity-gated recording set that monitoring metrics
+are judged on — today [`replays/ml_corpus/`](../replays/ml_corpus/README.md),
+200 games against the 100 sample games. Using a bigger denominator than the sets a
+change was tuned on is the point.
+
+### findings, not failures
+
+The closing doctrine: a pre-registered measurement that misses its bar is a
+finding to record, not a failure to hide or re-price. Chartered in
+[`tasks/phase-18.md`](tasks/phase-18.md) and applied in
+[`audits/audit-phase-18-close.md`](audits/audit-phase-18-close.md) §6.
+
+### merge-as-ratification (formerly "the 15.18 convention")
+
+Decision documents — plans, close readings, tier maps — are proposed as pull
+requests, and the owner's *merge* is the ratification. Measurements commit their
+pre-registration before the measurement and their reproduction snippets beside
+the numbers ([`tasks/phase-19.md`](tasks/phase-19.md)).
+
+### the two-owner gate
+
+A phase's ruling and its close are two separate owner merges, and the close
+carries no new evidence — so the second merge ratifies a reading rather than a
+surprise ([`tasks/phase-18.md`](tasks/phase-18.md)).
+
+### errata discipline
+
+Living documentation is rewritten; *records* — campaign reports and audits — are
+not, apart from the 2026-10-13 personal-data scrub, which spelled the operator's home directory `~` or elided its account name, elided scratch paths and redacted one mail address in place, keeping every line number, with a dated erratum in each campaign report it touched. Otherwise they take additive, dated errata, and later prose quotes only
+errata-approved figures
+([`training/reports/report-finalist-eval.md`](../training/reports/report-finalist-eval.md)
+§18).
+
+### citation shorthand
+
+`§N.M` is a section of the cited document. `F<n>` is a numbered campaign finding
+carried between contracts, `L<n>` an item in a ruling's own ledger, and
+`P0`–`P2` the input audits' severity ranks. In
+[`audits/audit-phase-19-triage.md`](audits/audit-phase-19-triage.md), `[C]`
+marks a finding both external audits reached, `[S-Claude]` / `[S-Codex]` a
+single-source one, and `[L]` an internal-ledger-only one — provenance tags, not
+verification status.
+
+### conviction economy (what a meeting does with evidence)
+
+The pipeline from flag to ballot to tally, and how much of the evidence a
+meeting is handed it converts into a correct ejection. "Conviction engine" means
+this pipeline in [`meetings/`](../meetings), never the [`engine/`](../engine)
+package.
+
+### supply and conversion floors
+
+The two halves of that economy, as numbers a recording must clear: how much
+usable evidence the meeting is *supplied*, and how much of it the table
+*converts*. They are the gauges the
+[referee](../docs/glossary.md#referee-the-selection-gate) prices
+([`eval/watchability.py`](../eval/watchability.py)).
+
+### starved-economy shape
+
+The failure pattern where a learned mover wins more games by supplying the
+meeting with less evidence — the win edge is real and the deduction gets worse.
+First named in
+[`audits/audit-phase-17-close.md`](audits/audit-phase-17-close.md) and
+reproduced on a co-adapted slate in
+[`audits/audit-phase-18-close.md`](audits/audit-phase-18-close.md).
+
+### endpoint-band whereabouts exemption
+
+The rule that a whereabouts claim is not treated as contradicted when the two
+statements differ only at the ends of the interval each covers — a player who
+says "Engineering" for ticks 4–8 and one who saw them leave at tick 8 are not in
+conflict ([`meetings/transcript.py`](../meetings/transcript.py)).
+
+### absence prior
+
+The starting assumption a table brings to a player nobody can place: absence is
+weak evidence, weighted rather than ignored
+([`audits/audit-phase-17-absence-gate.md`](audits/audit-phase-17-absence-gate.md)).
+
+### screening-tier shortlist
+
+A campaign result that is explicitly too small to rule on: the arms are ranked
+well enough to shortlist for a bigger run, and no further
+([`audits/audit-phase-18-close.md`](audits/audit-phase-18-close.md)).
+
+### training-time-runner tier
+
+A verdict on a learned component saying it is good enough to drive training
+rollouts but not to decide anything in a real game — the two jobs have different
+accuracy requirements ([`training/README.md`](../training/README.md)).
+
+### two-axis owner ruling
+
+A close that rules on two independent questions at once — here, "does a learned
+mover become the default?" and "was any pre-registered emergence claim
+demonstrated?" — so a yes on one cannot be read as a yes on the other
+([`audits/audit-phase-18-close.md`](audits/audit-phase-18-close.md)).
+
+### evidence-gated default flip
+
+The proposal that the learned mover become the default *conditional* on the
+evidence gauges, rather than on wins alone. Ruled FAIL in
+[`audits/audit-phase-17-close.md`](audits/audit-phase-17-close.md).
+
+## Candidate rounds
+
+Each candidate round recorded the 9-player set under one declared config.
+[The experiment arms page](../docs/experiment-arms.md) states the recorded
+settings and which of them are adopted.
+
+### Candidate round 1
+
+The ladder tip stands at baseline 9.
+[`replays/candidates/stage-b-r1/9p2i`](../replays/candidates/stage-b-r1/README.md)
+is candidate round 1, recorded with the experimental switches its README
+names; it adopts nothing and is not a canonical sample set.
+
+### Candidate round 2
+
+Candidate round 2 was recorded with the adopted switches, the kept vent exit
+and a six-tick kill cooldown, under one declared config. On 2026-10-02 the owner
+promoted it as the shown 9-player set, in its own era
+([the record](audits/audit-2026-10-01-stage-b-r2.md), section 9), with one
+flag its record states: reporters ejected per report meeting read 17/114, above
+the pre-registered 0.104, so the round's own rule named no promotion step; the
+owner's ruling promoted it regardless. Since round 3's promotion its bytes are
+[`replays/candidates/stage-b-r2/9p2i`](../replays/candidates/stage-b-r2/README.md),
+moved there without a byte changed with its config at the round's root: the
+comparison record for the route lines, which round 3 adds and nothing else. It
+adopts nothing and is not a canonical sample set.
+
+### Candidate round 3, the shown set
+
+Candidate round 3 was recorded with round 2's rules and one more switch that
+gives each voter a plain line about the places stated at the table. On
+2026-10-09 the orchestrator, under the owner's delegation, promoted it: it is now
+[`replays/samples/9p2i`](../replays/samples/9p2i/MANIFEST.md), the shown
+9-player set, in its own era (`eval/eras.py`), with its declared config beside
+its replays as `experiment-config.json`, and its candidate copy is deleted
+([the record](audits/audit-2026-10-09-stage-b-r3.md), sections 11 and 12).
+Promotion moves no default and deletes no switch. The ladder tip stands at
+baseline 9.
+
+## The workflow pilot
+
+Copied from [the workflow page](../docs/workflow.md), whose
+[branch and delivery route](../docs/workflow.md#branch-and-delivery) is the one
+the last paragraph names.
+
+The pilot has now run through the first parallel recording batch. Its recorded
+results justify keeping canonical cards and manual ownership; they do not
+establish a measured time-saving claim. The owner's delivery policy for that
+cleanup was a shared branch and Claude review after all cleanup. During
+implementation, the coordinating agent handled necessary manifest attribution
+and explicit historical-loader follow-through without another owner permission
+round. The pilot's independent reviewer found parser defects, now covered by
+adverse tests; the three recording repairs' independent reviews left no blockers.
+Their cards preserve the underlying checks and limitations.
+
+The combined recording gate passed 6,292 Python and 440 frontend tests plus
+100 canonical reconstructions. The Python leg took 133.51 seconds on that local
+run; this is a verification measurement, not total development time. Continue
+recording scope follow-through and independently found defects in Results, and
+compare future batches before changing the process again.
+
+**Merged into main (2026-09-07).** The cleanup branch merged into `main` as
+`8161689a` through PR #435 — a merge commit rather than a squash, so the branch
+SHAs the ledger cites stay reachable. Its last recorded full gate ran at
+`93bf7d54`: 7,173 Python tests, 514 frontend tests and 300 canonical
+reconstructions, with 20 optional skips and three expected failures; CI and the
+Pages build then passed on the merge commit itself. The shared-branch policy
+above ended with that cleanup; delivery for new work is the `work/<card-slug>`
+branch and pull request described at the top of this document.
 
 ---
 

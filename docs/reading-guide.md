@@ -107,5 +107,5 @@ The ML program's method, results and measurement flaws are in
 
 [Architecture](architecture.md) · [glossary](glossary.md) ·
 [history](../process/README.md) · [audits index](../process/audits/README.md) ·
-[ownership decision](ownership-case-study.md) · [workflow protocol](../AGENTS.md) · [design history](../process/DESIGN.md) ·
+[ownership decision](lessons.md#one-decision-traced) · [workflow protocol](../AGENTS.md) · [design history](../process/DESIGN.md) ·
 [deployment](deployment.md) · [artifacts](artifacts.md).
