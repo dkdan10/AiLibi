@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Check the README's figures against the committed files they come from.
+"""Check the results page's figures against the committed files they come from.
 
 Seconds, offline, no model calls. Each check recomputes a figure from the file
 that owns it, and every mismatch is reported, not only the first.
 
-1. **Sample provenance.** The README's samples paragraph dates each sample set,
+1. **Sample provenance.** The results page's samples paragraph dates each sample set,
    names the recording model, links each set's manifest and the record of its
    era (``eval/eras.py``), and states each set's game count and impostor win
    rate. All of it is recomputed from ``replays/samples/<set>/MANIFEST.md``.
    Every ``<rate>% (<set>)`` claim and every dated claim elsewhere in the
-   README is held to the same manifests, except in the results table's Before
+   the results page is held to the same manifests, except in the results table's Before
    column, which is held to the frozen before cells (:data:`_RESULTS_BEFORE`).
 2. **The .env.example registries.** Each live substrate lever and each meeting
    experiment switch appears as a commented example showing its default, never
@@ -29,7 +29,7 @@ that owns it, and every mismatch is reported, not only the first.
    ``vote_correctness`` block of the committed 9p2i report.
 5. **The prose figures.** The top-suspect sentence, the vent sentence, the
    cited-vote count, the demo's game count, the import-contract count and the
-   install block's recording count are each recomputed from their source.
+   verify block's recording count are each recomputed from their source.
 6. **The ML results table.** ``docs/ml-program.md``'s table is recomputed from
    ``training/reports/results-finalist-eval.jsonl``.
 
@@ -86,7 +86,7 @@ from orchestrator.replay import (  # noqa: E402
     substrate_flag_snapshot,
 )
 
-_README: Final = "README.md"
+_RESULTS: Final = "RESULTS.md"
 _ENV_EXAMPLE: Final = ".env.example"
 _SAMPLE_SETS: Final[tuple[str, ...]] = ("4p1i", "9p2i")
 _MANIFEST_PATH: Final = "replays/samples/{name}/MANIFEST.md"
@@ -100,13 +100,13 @@ _SET_LABEL: Final = "samples/{name}"
 _IMPOSTOR_WINNER: Final = "IMPOSTORS"
 # ``refreshed_at`` is ISO ``YYYY-MM-DD``, so lexicographic max is chronological.
 _ISO_DATE: Final = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
-# The README's samples paragraph is anchored on this clause; the refresh-date
+# The results page's samples paragraph is anchored on this clause; the refresh-date
 # claim is parsed from it rather than sought file-wide, so a stale paragraph
 # cannot be alibied by the correct date elsewhere.
 _REGENERATED_DATE: Final = re.compile(r"regenerated (\d{4}-\d{2}-\d{2})")
 # Any "<rate>% (<set>)" claim, wherever it appears, must match the manifest.
 _WIN_RATE_CLAIM: Final = re.compile(r"(\d+)% \((4p1i|9p2i)\)")
-# The two other shapes the README dates a recording in. An unnumbered one is
+# The two other shapes the results page dates a recording in. An unnumbered one is
 # about a current recording and is held to the manifest of the set it names; a
 # numbered one ("reference recording 6, <date>") is about an older recording
 # and is left alone.
@@ -255,9 +255,9 @@ _SCORECARD_NO_REWRITES: Final = "none"
 # counts are what the table restates in its own form.
 _SCORECARD_FRACTION: Final = re.compile(r"\A(\d+)/(\d+) = \d*\.?\d+%?\Z")
 
-# The README's PROSE figures: the sentences that retell a scorecard cell, the
+# The results page's PROSE figures: the sentences that retell a scorecard cell, the
 # census's vent cells, a file population or a config. Each claim shape is held
-# wherever the README states it, so a stale copy beside a correct one fails as
+# wherever the results page states it, so a stale copy beside a correct one fails as
 # surely as a stale sole copy, and a sentence that stops stating its figure
 # fails rather than leaving the source bound to nothing.
 #
@@ -314,7 +314,7 @@ _IMPORT_CONTRACT_PROSE: Final = re.compile(
 )
 # The recordings a bare ``scripts/verify_samples.sh`` re-runs: each set directory
 # under the samples root and each ``<round>/<set>/`` under the candidates root.
-# The README states this count inside its install block, so it is read raw.
+# The results page states this count inside its verify block, so it is read raw.
 _VERIFIED_SET_GLOBS: Final[tuple[tuple[str, str], ...]] = (
     ("replays/samples", "*"),
     ("replays/candidates", "*/*"),
@@ -336,7 +336,7 @@ _NUMBER_WORDS: Final[tuple[str, ...]] = (
     "ten",
 )
 
-# The committed report the README hands a reader instead of the empty one a
+# The committed report the results page hands a reader instead of the empty one a
 # fake-provider run produces, and the phrase that anchors its paragraph.
 _POPULATED_REPORT: Final = "replays/samples/9p2i/" + REPORT_FILENAME
 _EXAMPLE_ANCHOR: Final = "fake provider's report is empty on purpose"
@@ -394,7 +394,7 @@ _ML_TABLE_COLUMNS: Final = 5
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Check the README's figures against the files they come from."
+        description="Check the results page's figures against the files they come from."
     )
     parser.add_argument(
         "--repo-root",
@@ -417,7 +417,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     print(
-        f"Doc facts verified: {_README}'s samples paragraph, results table, "
+        f"Doc facts verified: {_RESULTS}'s samples paragraph, results table, "
         "real-report example and prose figures agree with the "
         f"{len(_SAMPLE_SETS)} sample manifests, the committed replays, "
         f"{_CITATION_INSTRUMENT}, {_CENSUS_PAGE}, {_SCORECARD_PAGE}, "
@@ -435,7 +435,7 @@ def check_facts(repo_root: Path) -> list[str]:
 
     errors: list[str] = []
     before = before_cells(repo_root, errors)
-    readme = read_document(repo_root, _README, errors)
+    readme = read_document(repo_root, _RESULTS, errors)
     if readme is not None:
         check_sample_provenance(repo_root, readme, before, errors)
         check_result_sources(repo_root, readme, before, errors)
@@ -502,10 +502,10 @@ def check_sample_provenance(
     before: Mapping[str, BeforeCells],
     errors: list[str],
 ) -> None:
-    """README's sample refresh dates, win rates and eras, re-derived per set.
+    """The results page's sample refresh dates, win rates and eras, re-derived per set.
 
     The rate is ``rows won by IMPOSTORS / rows``, rounded to a whole percent —
-    the same arithmetic the README paragraph states in prose. A manifest that
+    the same arithmetic the results page's paragraph states in prose. A manifest that
     parses to zero rows is a hard failure rather than a vacuous pass: silent
     format drift would otherwise let any claim through.
 
@@ -564,14 +564,14 @@ def check_sample_provenance(
             era=era_of(_SAMPLE_REPLAY_DIR.format(name=name)),
         )
 
-    # Before the paragraph check, not after: a README that lost its samples
+    # Before the paragraph check, not after: a results page that lost its samples
     # paragraph still states these facts elsewhere, and they are still checked.
     check_repeated_claims(readme, facts, before, errors)
 
     paragraph = provenance_paragraph(readme)
     if paragraph is None:
         errors.append(
-            f"{_README}: expected exactly one sample-provenance paragraph "
+            f"{_RESULTS}: expected exactly one sample-provenance paragraph "
             "(anchored on 'replays/samples/' plus a 'regenerated YYYY-MM-DD' "
             "clause) — without it the provenance claims have no home to check."
         )
@@ -582,14 +582,14 @@ def check_sample_provenance(
             dated = f"regenerated {fact.date} ({name})"
             if dated not in paragraph:
                 errors.append(
-                    f"{_README}: the sample-provenance paragraph does not date "
+                    f"{_RESULTS}: the sample-provenance paragraph does not date "
                     f"the {name} set with {dated!r} — "
                     f"{_MANIFEST_PATH.format(name=name)} records its newest "
                     f"refresh on {fact.date}."
                 )
         if f"]({fact.era.record})" not in paragraph:
             errors.append(
-                f"{_README}: the sample-provenance paragraph does not link the "
+                f"{_RESULTS}: the sample-provenance paragraph does not link the "
                 f"{name} set's era, {fact.era.id}, to the record that owns it "
                 f"({fact.era.record}) — each set is named with its own era "
                 "(eval/eras.py), never one record for both."
@@ -599,7 +599,7 @@ def check_sample_provenance(
         claim = f"{round(100 * fact.wins / fact.total)}% ({name})"
         if claim not in paragraph:
             errors.append(
-                f"{_README}: the sample-provenance paragraph is missing the "
+                f"{_RESULTS}: the sample-provenance paragraph is missing the "
                 f"recorded impostor win rate {claim!r} — "
                 f"{_MANIFEST_PATH.format(name=name)} records "
                 f"{fact.wins}/{fact.total} games won by the impostors."
@@ -611,7 +611,7 @@ def check_sample_provenance(
     for games_claim, names in sorted(size_claims.items()):
         if games_claim not in paragraph:
             errors.append(
-                f"{_README}: the sample-provenance paragraph is missing the "
+                f"{_RESULTS}: the sample-provenance paragraph is missing the "
                 f"tournament size {games_claim!r} — "
                 f"{', '.join(_MANIFEST_PATH.format(name=name) for name in names)} "
                 f"hold that many replay rows per set."
@@ -620,7 +620,7 @@ def check_sample_provenance(
     for size_match in re.finditer(r"(\d+)-game", paragraph):
         if int(size_match.group(1)) not in set_sizes:
             errors.append(
-                f"{_README}: the sample-provenance paragraph claims a "
+                f"{_RESULTS}: the sample-provenance paragraph claims a "
                 f"'{size_match.group(0)}' tournament, but no manifest holds "
                 f"that many rows (per-set row counts: "
                 f"{', '.join(str(size) for size in sorted(set_sizes))})."
@@ -630,21 +630,21 @@ def check_sample_provenance(
         replays_claim = f"{grand_total} sample replays"
         if replays_claim not in paragraph:
             errors.append(
-                f"{_README}: the sample-provenance paragraph is missing the "
+                f"{_RESULTS}: the sample-provenance paragraph is missing the "
                 f"total {replays_claim!r} — the manifests hold {grand_total} "
                 "replay rows between them."
             )
         for total_match in re.finditer(r"(\d+) sample replays", paragraph):
             if int(total_match.group(1)) != grand_total:
                 errors.append(
-                    f"{_README}: the sample-provenance paragraph claims "
+                    f"{_RESULTS}: the sample-provenance paragraph claims "
                     f"{total_match.group(0)!r}, but the manifests hold "
                     f"{grand_total} replay rows between them."
                 )
 
     if len(models) > 1:
         errors.append(
-            f"{_README}: the manifests disagree on the recording model "
+            f"{_RESULTS}: the manifests disagree on the recording model "
             f"({', '.join(sorted(models))}) — a single model claim cannot be "
             "checked; the sample sets should share one recorded model."
         )
@@ -652,7 +652,7 @@ def check_sample_provenance(
         model = next(iter(models))
         if model not in paragraph:
             errors.append(
-                f"{_README}: the sample-provenance paragraph does not name "
+                f"{_RESULTS}: the sample-provenance paragraph does not name "
                 f"the recording model {model!r} — the manifest `model` column "
                 "records it on every row."
             )
@@ -660,7 +660,7 @@ def check_sample_provenance(
         manifest = _MANIFEST_PATH.format(name=name)
         if f"]({manifest})" not in paragraph:
             errors.append(
-                f"{_README}: the sample-provenance paragraph does not link "
+                f"{_RESULTS}: the sample-provenance paragraph does not link "
                 f"{manifest} — the paragraph names the model and leaves each "
                 "set's prompt stamps to its manifest, so the manifest is linked."
             )
@@ -673,7 +673,7 @@ def check_sample_provenance(
         )
         if token not in recorded:
             errors.append(
-                f"{_README}: the sample-provenance paragraph names the {kind} "
+                f"{_RESULTS}: the sample-provenance paragraph names the {kind} "
                 f"{token!r}, which no row's `prompt_versions` column records "
                 f"(recorded: {', '.join(sorted(recorded)) or 'none'})."
             )
@@ -685,7 +685,7 @@ def check_repeated_claims(
     before: Mapping[str, BeforeCells],
     errors: list[str],
 ) -> None:
-    """The win rates and the recordings' dates, everywhere the README states them.
+    """The win rates and the recordings' dates, everywhere the results page states them.
 
     The samples paragraph is where a claim like "34% (9p2i)" is first written,
     not the only place it rots, so every claim of that shape is held to its own
@@ -719,7 +719,7 @@ def check_repeated_claims(
                 else (_MANIFEST_PATH.format(name=name), "")
             )
             errors.append(
-                f"{_README}:{number}: win-rate claim {match.group(0)!r}{where} "
+                f"{_RESULTS}:{number}: win-rate claim {match.group(0)!r}{where} "
                 f"disagrees with {source} ({wins}/{total} = {expected}%)."
             )
         if historical:
@@ -727,7 +727,7 @@ def check_repeated_claims(
         for stated, claim, named in current_record_dates(unit):
             if not named:
                 errors.append(
-                    f"{_README}:{number}: {claim!r} names no sample set — the two "
+                    f"{_RESULTS}:{number}: {claim!r} names no sample set — the two "
                     "sets were recorded on different days ("
                     + ", ".join(f"{name} {fact.date}" for name, fact in facts.items())
                     + "), so a dated claim names the set it dates, as "
@@ -738,7 +738,7 @@ def check_repeated_claims(
                 if name not in facts or facts[name].date == stated:
                     continue
                 errors.append(
-                    f"{_README}:{number}: {claim!r} dates the {name} recording "
+                    f"{_RESULTS}:{number}: {claim!r} dates the {name} recording "
                     f"{stated!r}, but {_MANIFEST_PATH.format(name=name)} records "
                     f"{facts[name].date!r}."
                 )
@@ -810,7 +810,7 @@ def strip_links(text: str) -> str:
 
 
 def provenance_paragraph(readme: str) -> str | None:
-    """The README's single sample-provenance paragraph.
+    """The results page's single sample-provenance paragraph.
 
     ``None`` when the anchor is missing or ambiguous — both are format drift
     the caller reports rather than papering over.
@@ -1202,7 +1202,7 @@ def check_result_sources(
     That the replays still *reconstruct* is ``scripts/verify_samples.sh``'s
     answer, and the citation counts come from a full pass over the 9p2i set
     that ``tests/eval/test_vj_instruments.py`` already makes. This module is
-    the cheap half, so it binds the README to those instruments' pins rather
+    the cheap half, so it binds the results page to those instruments' pins rather
     than repeating their work. The win rates are re-derived by
     :func:`check_sample_provenance` and the process rows by
     :func:`check_process_rows`.
@@ -1211,12 +1211,12 @@ def check_result_sources(
     rows = results_rows(readme)
     if rows is None:
         errors.append(
-            f"{_README}: no results table with a "
+            f"{_RESULTS}: no results table with a "
             f"'{' | '.join(_RESULTS_TABLE_HEADER)}' header row — its figures have "
             "nothing to be checked against."
         )
         return
-    figures = reject_repeated_claims(_README, rows, errors)
+    figures = reject_repeated_claims(_RESULTS, rows, errors)
 
     # The verifier's own population, not a glob of the directory: an audit
     # sidecar or a hand-named debug file is a .jsonl that
@@ -1245,7 +1245,7 @@ def check_result_sources(
         if missing:
             errors.append(
                 f"{_CITATION_INSTRUMENT}: no pinned assertion for "
-                f"{', '.join(missing)} — the {_README} citation figure has no "
+                f"{', '.join(missing)} — the {_RESULTS} citation figure has no "
                 "committed source to re-derive it from."
             )
         else:
@@ -1268,7 +1268,7 @@ def check_result_sources(
         vent = census_vent_cells((repo_root / _CENSUS_PAGE).read_text(encoding="utf-8"))
     except (OSError, CensusPageError) as error:
         errors.append(
-            f"{_CENSUS_PAGE}: {error} — the {_README} vent and proof rows have "
+            f"{_CENSUS_PAGE}: {error} — the {_RESULTS} vent and proof rows have "
             "nothing to be derived from."
         )
         return
@@ -1369,7 +1369,7 @@ def check_injustice_cell(
         return  # compare_result_figure already reported the missing row
     if proof_innocent:
         errors.append(
-            f"{_README}: the results row {_PROOF_CLAIM!r} says every innocent "
+            f"{_RESULTS}: the results row {_PROOF_CLAIM!r} says every innocent "
             f"ejection sits in the no-proof cell, but {census_source()} puts "
             f"{proof_innocent} crewmate ejection(s) in the vent band."
         )
@@ -1377,14 +1377,14 @@ def check_injustice_cell(
     stated = _INJUSTICE_CLAIM.format(count=innocent)
     if stated not in " | ".join(row):
         errors.append(
-            f"{_README}: the results row {_PROOF_CLAIM!r} does not state "
+            f"{_RESULTS}: the results row {_PROOF_CLAIM!r} does not state "
             f"{stated!r} — {census_source()} counts {innocent} crewmate "
             "ejections, none of them in the vent band."
         )
 
 
 class CensusPageError(ValueError):
-    """The census page lacks the section, table, column or cell the README reads."""
+    """The census page lacks the section, table, column or cell the results page reads."""
 
 
 class VentCells(NamedTuple):
@@ -1475,7 +1475,7 @@ def census_source() -> str:
 
 
 def partition_figure(proof: tuple[int, int], non_proof: tuple[int, int]) -> str:
-    """The proof row's figure, its two halves as the README states them."""
+    """The proof row's figure, its two halves as the results page states them."""
 
     return f"{fraction_figure(*proof)} vs {fraction_figure(*non_proof)}"
 
@@ -1508,13 +1508,13 @@ def compare_result_figure(
     stated = figures.get(claim)
     if stated is None:
         errors.append(
-            f"{_README}: the results table has no {claim!r} row — the figure "
+            f"{_RESULTS}: the results table has no {claim!r} row — the figure "
             f"{source} recomputes to ({expected!r}) has nowhere to be stated, "
             "so nothing is being checked."
         )
     elif stated != expected:
         errors.append(
-            f"{_README}: the results row {claim!r} reads {stated!r}, but "
+            f"{_RESULTS}: the results row {claim!r} reads {stated!r}, but "
             f"{source} recomputes to {expected!r}."
         )
 
@@ -1531,7 +1531,7 @@ def compare_before_figure(
     before = results_before_column(readme)
     if before is None:
         errors.append(
-            f"{_README}: the results table has no {_BEFORE_COLUMN_HEADER!r} "
+            f"{_RESULTS}: the results table has no {_BEFORE_COLUMN_HEADER!r} "
             "column — every figure a recording moved states what it moved from, "
             "so the column is the page's own before/after."
         )
@@ -1539,12 +1539,12 @@ def compare_before_figure(
     stated = before.get(claim)
     if stated is None:
         errors.append(
-            f"{_README}: the results row {claim!r} has no "
+            f"{_RESULTS}: the results row {claim!r} has no "
             f"{_BEFORE_COLUMN_HEADER!r} cell."
         )
     elif strip_links(stated) != expected:
         errors.append(
-            f"{_README}: the {_BEFORE_COLUMN_HEADER!r} cell of results row "
+            f"{_RESULTS}: the {_BEFORE_COLUMN_HEADER!r} cell of results row "
             f"{claim!r} reads {stated!r}, but {source} recomputes to "
             f"{expected!r}."
         )
@@ -1666,7 +1666,7 @@ def table_cells(line: str) -> list[str] | None:
 
 
 class ScorecardPageError(ValueError):
-    """The scorecard page lacks a section, table, column, row or line the README reads."""
+    """The scorecard page lacks a section, table, column, row or line the results page reads."""
 
 
 class _ProcessCells(NamedTuple):
@@ -1683,7 +1683,7 @@ class _ProcessCells(NamedTuple):
 def check_process_rows(repo_root: Path, readme: str, errors: list[str]) -> None:
     """The four process rows, held to the scorecard page.
 
-    The README leads with how each vote was cast: on a line its voter held,
+    The results page leads with how each vote was cast: on a line its voter held,
     with or against its own top suspect, with a reason, and as its voter wrote
     it. Each row's figure and before cell is the shown set's own cell on
     ``docs/process-scorecard.md``, restated in the table's ``k of n (p%)`` form
@@ -1874,7 +1874,7 @@ def scorecard_fraction(cell: str) -> str:
 def check_populated_report_example(
     repo_root: Path, readme: str, errors: list[str]
 ) -> None:
-    """The README's real-report example, held to that report's own numbers.
+    """The results page's real-report example, held to that report's own numbers.
 
     The front door hands a reader a populated report precisely because the
     default fake provider produces an empty one. Copying its headline counts
@@ -1895,7 +1895,7 @@ def check_populated_report_example(
     )
     if paragraph is None:
         errors.append(
-            f"{_README}: no paragraph naming {_POPULATED_REPORT} beside "
+            f"{_RESULTS}: no paragraph naming {_POPULATED_REPORT} beside "
             f"'{_EXAMPLE_ANCHOR}' — the real-report example has no home to "
             "check, so its numbers are unverified prose."
         )
@@ -1909,7 +1909,7 @@ def check_populated_report_example(
         if not isinstance(value, int) or isinstance(value, bool):
             errors.append(
                 f"{_POPULATED_REPORT}: {key} is {value!r}, not a count — the "
-                f"{_README} example's {label} claim cannot be re-derived."
+                f"{_RESULTS} example's {label} claim cannot be re-derived."
             )
             continue
         counts[key] = value
@@ -1919,7 +1919,7 @@ def check_populated_report_example(
         claim = expected.format_map(counts)
         if claim not in paragraph:
             errors.append(
-                f"{_README}: the real-report example does not state "
+                f"{_RESULTS}: the real-report example does not state "
                 f"{claim!r} — {_POPULATED_REPORT} records {key} as {counts[key]!r}."
             )
 
@@ -1991,7 +1991,7 @@ def read_report_block(
 
 
 class _ProseClaim(NamedTuple):
-    """One claim shape the README may state, and the figures it must state.
+    """One claim shape the results page may state, and the figures it must state.
 
     ``expected`` holds one value per capture group of ``pattern``, compared
     case-insensitively; a ``required`` claim must be stated at least once.
@@ -2010,7 +2010,7 @@ def check_prose_claims(
 ) -> None:
     """Every statement of each claim shape in ``blocks``, held to ``source``.
 
-    ``blocks`` are ``(line, text)`` pairs of the README. Claims are scanned in
+    ``blocks`` are ``(line, text)`` pairs of the results page. Claims are scanned in
     order, and a later claim's match inside text an earlier claim already
     matched is the same statement, reported once: a narrow refusal ("k of n")
     listed after the sentence it sits in does not re-report that sentence.
@@ -2031,14 +2031,14 @@ def check_prose_claims(
                 if tuple(group.casefold() for group in match.groups()) == wanted:
                     continue
                 errors.append(
-                    f"{_README}:{number}: the claim {match.group(0)!r} disagrees "
+                    f"{_RESULTS}:{number}: the claim {match.group(0)!r} disagrees "
                     f"with {source}, which makes it "
                     f"{restated_claim(match, claim.expected)!r}."
                 )
     for claim, seen in zip(claims, found, strict=True):
         if claim.required and not seen:
             errors.append(
-                f"{_README}: no sentence matching {claim.pattern.pattern!r} — what "
+                f"{_RESULTS}: no sentence matching {claim.pattern.pattern!r} — what "
                 f"{source} gives is no longer stated, so nothing binds the prose "
                 "to it."
             )
@@ -2064,7 +2064,7 @@ def percent(numerator: int, denominator: int) -> str:
 
 
 def repeat_word(count: int) -> str:
-    """How often, as the README says it: "once", "twice", "three times"."""
+    """How often, as the results page says it: "once", "twice", "three times"."""
 
     return _REPEAT_WORDS.get(count, f"{number_word(count)} times")
 
@@ -2076,12 +2076,12 @@ def number_word(count: int) -> str:
 
 
 def check_role_correct_prose(repo_root: Path, readme: str, errors: list[str]) -> None:
-    """The README's account of votes for and against the voter's top suspect.
+    """The results page's account of votes for and against the voter's top suspect.
 
     The shown set's row-2 role-correct cell on the scorecard page owns the
     figures: how many crew eject ballots followed the top suspect and how many
     of those hit an impostor, the same for the ballots against it, and the
-    chance rate. The README must state them as "hit an impostor k of n times
+    chance rate. The results page must state them as "hit an impostor k of n times
     (p%)", "the n against it hit one <k> (p%)" and "chance is about one in
     <N>", and any other "k of <followers>" claim must name the same count, so a
     re-record that moves the cell cannot leave the sentence telling the old one.
@@ -2095,7 +2095,7 @@ def check_role_correct_prose(repo_root: Path, readme: str, errors: list[str]) ->
     if cell is None:
         errors.append(
             f"{_SCORECARD_PAGE}: the {label} table has no {_ROLE_CORRECT_ROW!r} "
-            f"row — the {_README} sentence on votes for and against the top "
+            f"row — the {_RESULTS} sentence on votes for and against the top "
             "suspect has no committed source."
         )
         return
@@ -2108,7 +2108,7 @@ def check_role_correct_prose(repo_root: Path, readme: str, errors: list[str]) ->
         errors.append(
             f"{_SCORECARD_PAGE}: the {label} {_ROLE_CORRECT_ROW!r} cell reads "
             f"{cell!r}, not 'k/n = p% vs k/n = p% (chance p%)' over two non-empty "
-            f"populations — the {_README} sentence on votes for and against the "
+            f"populations — the {_RESULTS} sentence on votes for and against the "
             "top suspect cannot be derived from it."
         )
         return
@@ -2138,7 +2138,7 @@ def check_role_correct_prose(repo_root: Path, readme: str, errors: list[str]) ->
 
 
 def check_vent_prose(repo_root: Path, readme: str, errors: list[str]) -> None:
-    """The README's vent sentence, held to the census's vent-proof cells.
+    """The results page's vent sentence, held to the census's vent-proof cells.
 
     The sentence says how many meetings carried vent proof and that none of
     them ejected a crewmate, then how many did not, how many of their
@@ -2186,7 +2186,7 @@ def check_vent_prose(repo_root: Path, readme: str, errors: list[str]) -> None:
         for number, text in blocks:
             for pattern in _VENT_CLEAN_RECORD_PROSE:
                 errors.extend(
-                    f"{_README}:{number}: the claim {match.group(0)!r} is refuted by "
+                    f"{_RESULTS}:{number}: the claim {match.group(0)!r} is refuted by "
                     f"{source}: meetings with vent proof ejected "
                     f"{flagged_innocent} crewmate(s)."
                     for match in pattern.finditer(text)
@@ -2271,7 +2271,7 @@ def check_import_contract_count(
     if not contracts:
         errors.append(
             f"{_IMPORT_LINTER}: no '[importlinter:<name>]' contract section — the "
-            f"{_README} contract count has nothing to be derived from."
+            f"{_RESULTS} contract count has nothing to be derived from."
         )
         return
     check_prose_claims(
@@ -2285,10 +2285,10 @@ def check_import_contract_count(
 def check_verified_recording_count(
     repo_root: Path, readme: str, errors: list[str]
 ) -> None:
-    """The count of recordings the install block's verifier re-runs.
+    """The count of recordings the verify block's verifier re-runs.
 
     A bare ``scripts/verify_samples.sh`` walks every sample set and every
-    candidate set; the README's install block says how many recordings that is,
+    candidate set; the results page's verify block says how many recordings that is,
     and the count is the replay files the verifier's own reader accepts there.
     """
 
@@ -2301,7 +2301,7 @@ def check_verified_recording_count(
     roots = " and ".join(f"{root}/" for root, _ in _VERIFIED_SET_GLOBS)
     if not recordings:
         errors.append(
-            f"{roots}: no replay files found, so the {_README} count of recordings "
+            f"{roots}: no replay files found, so the {_RESULTS} count of recordings "
             "the verifier re-runs cannot be derived."
         )
         return

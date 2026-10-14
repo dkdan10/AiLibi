@@ -1,6 +1,6 @@
-"""Unit tests for scripts/check_doc_facts.py, and a pin on four README lines.
+"""Unit tests for scripts/check_doc_facts.py, and a pin on two README phrases.
 
-The checker must pass on the committed README and fail, naming the drifted
+The checker must pass on the committed results page (RESULTS.md) and fail, naming the drifted
 figure, on each drift it guards. The fixture stands up a tmp tree holding only
 the files the checker reads; each test perturbs one of them and asserts both
 the failure and that the message names the right figure.
@@ -30,19 +30,10 @@ _SCRIPT = _REPO_ROOT / "scripts" / "check_doc_facts.py"
 
 # ── the README pin ───────────────────────────────────────────────────────────
 #
-# What the README must keep saying whatever else a rewrite changes: its title
-# line, its byline, and the two facts about who wrote the code and what the
-# audits are. Kept together so a rewrite retargets them in one place.
-_README_TITLE = (
-    "# AiLibi — an Among Us-style game played by LLM agents, built by directing "
-    "AI coding agents"
-)
-_README_BYLINE = (
-    "by **Daniel Keinan** · implemented by Claude Code and Codex agents · "
-    "AI-reviewed · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/"
-    "actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/"
-    "actions/workflows/ci.yml)"
-)
+# What the README must keep saying whatever else a rewrite changes: the two
+# facts about who wrote the code and what the audits are. Its figures are
+# checked on RESULTS.md, the page the checker reads, so a rewrite of the README
+# in the owner's own words never touches the checker.
 _README_HONESTY = (
     "without hand-writing the production code",
     "not independent human assurance",
@@ -50,17 +41,10 @@ _README_HONESTY = (
 
 
 def _readme_pin_problems(readme: str) -> list[str]:
-    """Which of the pinned lines and phrases ``readme`` no longer carries."""
+    """Which of the pinned phrases ``readme`` no longer carries."""
 
-    lines = readme.splitlines()
-    problems = [] if lines and lines[0] == _README_TITLE else ["the title line moved"]
-    if _README_BYLINE not in lines:
-        problems.append("the byline moved")
     flat = " ".join(readme.split())
-    problems += [
-        f"missing {phrase!r}" for phrase in _README_HONESTY if phrase not in flat
-    ]
-    return problems
+    return [f"missing {phrase!r}" for phrase in _README_HONESTY if phrase not in flat]
 
 
 def test_the_readme_keeps_its_pinned_lines() -> None:
@@ -70,14 +54,10 @@ def test_the_readme_keeps_its_pinned_lines() -> None:
 
 @pytest.mark.parametrize(
     ("pinned", "problem"),
-    [
-        (_README_TITLE, "the title line moved"),
-        (_README_BYLINE, "the byline moved"),
-        *((phrase, f"missing {phrase!r}") for phrase in _README_HONESTY),
-    ],
+    [(phrase, f"missing {phrase!r}") for phrase in _README_HONESTY],
 )
 def test_the_readme_pin_fails_on_each_removal(pinned: str, problem: str) -> None:
-    # Planted: one pinned line or phrase struck from the committed README.
+    # Planted: one pinned phrase struck from the committed README.
     readme = (_REPO_ROOT / "README.md").read_text(encoding="utf-8")
     assert readme.count(pinned) == 1
     assert _readme_pin_problems(readme.replace(pinned, "")) == [problem]
@@ -90,7 +70,7 @@ def test_the_readme_pin_fails_on_each_removal(pinned: str, problem: str) -> None
 _COPIED = tuple(
     dict.fromkeys(
         (
-            "README.md",
+            "RESULTS.md",
             ".env.example",
             "replays/samples/4p1i/MANIFEST.md",
             "replays/samples/9p2i/MANIFEST.md",
@@ -128,7 +108,7 @@ _ENUMERATED_GLOBS = (
 # followed back into the checkout.
 _LINK_ABOVE_BYTES = 1_000_000
 
-_README = "README.md"
+_RESULTS = "RESULTS.md"
 _ENV_EXAMPLE = ".env.example"
 _MANIFEST_4P1I = "replays/samples/4p1i/MANIFEST.md"
 _MANIFEST_9P2I = "replays/samples/9p2i/MANIFEST.md"
@@ -248,17 +228,17 @@ def test_stale_sample_date_detected(doc_tree: Path) -> None:
     # place the README dates the 9p2i recording is held to that set's own
     # manifest, so a blanket rewrite is named once per claim rather than once
     # per file.
-    _substitute(doc_tree, _README, "2026-10-09", "2026-08-19")
+    _substitute(doc_tree, _RESULTS, "2026-10-09", "2026-08-19")
     # The set's record's file name carries the date too; the blanket rewrite
     # is about the claims, so the link is put back rather than broken.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "audit-2026-08-19-stage-b-r3.md",
         "audit-2026-10-09-stage-b-r3.md",
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    assert all(_README in error for error in errors)
+    assert all(_RESULTS in error for error in errors)
     paragraph = [
         error for error in errors if "'regenerated 2026-10-09 (9p2i)'" in error
     ]
@@ -277,14 +257,14 @@ def test_paragraph_date_drift_not_alibied_elsewhere(doc_tree: Path) -> None:
     # paragraph (the pre-hardening checker accepted exactly this).
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "regenerated 2026-10-09 (9p2i)",
         "regenerated 2026-08-19 (9p2i)",
     )
     _write(
         doc_tree,
-        _README,
-        _read(doc_tree, _README)
+        _RESULTS,
+        _read(doc_tree, _RESULTS)
         + "\nAn unrelated historical note mentioning 2026-10-09.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -306,7 +286,7 @@ def test_duplicate_stale_date_clause_detected(doc_tree: Path) -> None:
     # duplicate beside the correct clause is drift, same as the win rates.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "regenerated 2026-09-22 (4p1i)",
         "regenerated 2026-09-22 (4p1i) (an earlier draft said regenerated 2026-08-19 "
         "(4p1i))",
@@ -321,7 +301,7 @@ def test_date_claim_naming_no_set_detected(doc_tree: Path) -> None:
     # The two sets were recorded on different days, so a dated claim names the
     # set it dates; one naming neither is refused, whatever date it carries.
     _substitute(
-        doc_tree, _README, "regenerated 2026-10-09 (9p2i)", "regenerated 2026-10-09"
+        doc_tree, _RESULTS, "regenerated 2026-10-09 (9p2i)", "regenerated 2026-10-09"
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
@@ -334,8 +314,8 @@ def test_date_claim_naming_both_sets_detected(doc_tree: Path) -> None:
     # Planted: one date naming both sets is false for one of them.
     _write(
         doc_tree,
-        _README,
-        _read(doc_tree, _README)
+        _RESULTS,
+        _read(doc_tree, _RESULTS)
         + "\nBoth sets are the 2026-09-22 record (4p1i, 9p2i).\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -348,7 +328,7 @@ def test_baseline_9_date_for_the_promoted_set_detected(doc_tree: Path) -> None:
     # Planted: the 9p2i set dated by the recording it replaced.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "the 2026-10-09 record (9p2i) — [instrument]",
         "the 2026-09-22 record (9p2i) — [instrument]",
     )
@@ -362,8 +342,8 @@ def test_unnumbered_record_date_detected(doc_tree: Path) -> None:
     # so it is held to the manifest of the set it names.
     _write(
         doc_tree,
-        _README,
-        _read(doc_tree, _README)
+        _RESULTS,
+        _read(doc_tree, _RESULTS)
         + "\nThe 4-player set is the reference recording, made 2026-07-20 (4p1i).\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -379,8 +359,8 @@ def test_older_recording_date_is_left_alone(doc_tree: Path) -> None:
     # recording it replaced was made without being held to today's manifests.
     _write(
         doc_tree,
-        _README,
-        _read(doc_tree, _README)
+        _RESULTS,
+        _read(doc_tree, _RESULTS)
         + "\nThe first sets were reference recording 6, 2026-07-20.\n",
     )
     assert check_doc_facts.check_facts(doc_tree) == []
@@ -389,7 +369,7 @@ def test_older_recording_date_is_left_alone(doc_tree: Path) -> None:
 def test_wrong_total_sample_count_detected(doc_tree: Path) -> None:
     # The paragraph's total-replay count is a manifest fact too: the expected
     # claim is missing AND the drifted one contradicts the row totals.
-    _substitute(doc_tree, _README, "100 sample replays", "80 sample replays")
+    _substitute(doc_tree, _RESULTS, "100 sample replays", "80 sample replays")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert "'100 sample replays'" in errors[0]
@@ -398,7 +378,7 @@ def test_wrong_total_sample_count_detected(doc_tree: Path) -> None:
 
 def test_wrong_tournament_size_detected(doc_tree: Path) -> None:
     # As is the per-set tournament size — both facets reported.
-    _substitute(doc_tree, _README, "50-game", "40-game")
+    _substitute(doc_tree, _RESULTS, "50-game", "40-game")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert "'50-game'" in errors[0]
@@ -410,7 +390,7 @@ def test_stale_count_beside_correct_detected(doc_tree: Path) -> None:
     # every count-shaped claim in the paragraph is held to the row totals.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "two 50-game tournaments",
         "one stale 40-game tournament and one 50-game tournament",
     )
@@ -423,7 +403,7 @@ def test_wrong_recording_model_detected(doc_tree: Path) -> None:
     # The recording model named in the paragraph is a manifest fact.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "played by the `Qwen/Qwen3.6-27B` model",
         "played by the `Qwen/Qwen3-32B` model",
     )
@@ -438,7 +418,7 @@ def test_wrong_prompt_set_version_detected(doc_tree: Path) -> None:
     # version it does name is a claim the prompt_versions column must record.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "played by the `Qwen/Qwen3.6-27B` model",
         "played by the `Qwen/Qwen3.6-27B` model on `v2` prompts",
     )
@@ -463,7 +443,7 @@ def test_samples_paragraph_naming_an_unrecorded_stamp_detected(
     # Planted: a stamp the manifests do not record, backticked or bare.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "played by the `Qwen/Qwen3.6-27B` model",
         f"played by the `Qwen/Qwen3.6-27B` model with {stamp}",
     )
@@ -478,7 +458,7 @@ def test_samples_paragraph_naming_recorded_stamps_passes(doc_tree: Path) -> None
     # The converse: a stamp the manifests do record may be named.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "played by the `Qwen/Qwen3.6-27B` model",
         "played by the `Qwen/Qwen3.6-27B` model on `v6` prompts and `route_lines_v1`",
     )
@@ -492,9 +472,9 @@ def test_a_stamp_like_token_outside_the_samples_paragraph_is_not_read(
     # another paragraph is not a claim about the recorded prompts.
     _substitute(
         doc_tree,
-        _README,
-        "\nPython 3.11 · FastAPI/Pydantic",
-        "\nThe viewer reads replay format v5.\n\nPython 3.11 · FastAPI/Pydantic",
+        _RESULTS,
+        "\n## Where the figures come from",
+        "\nThe viewer reads replay format v5.\n\n## Where the figures come from",
     )
     assert check_doc_facts.check_facts(doc_tree) == []
 
@@ -510,7 +490,7 @@ def test_samples_paragraph_without_a_manifest_link_detected(
         "game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), "
         "[9p2i](replays/samples/9p2i/MANIFEST.md))"
     )
-    _substitute(doc_tree, _README, links, links.replace(f"[{name}]({manifest})", name))
+    _substitute(doc_tree, _RESULTS, links, links.replace(f"[{name}]({manifest})", name))
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert f"does not link {manifest}" in errors[0]
@@ -521,7 +501,7 @@ def test_missing_provenance_paragraph_fails_loud(doc_tree: Path) -> None:
     for name, day in (("4p1i", "2026-09-22"), ("9p2i", "2026-10-09")):
         _substitute(
             doc_tree,
-            _README,
+            _RESULTS,
             f"regenerated {day} ({name})",
             f"refreshed {day} ({name})",
         )
@@ -536,13 +516,13 @@ def test_repeated_claims_survive_a_lost_provenance_paragraph(doc_tree: Path) -> 
     for name, day in (("4p1i", "2026-09-22"), ("9p2i", "2026-10-09")):
         _substitute(
             doc_tree,
-            _README,
+            _RESULTS,
             f"regenerated {day} ({name})",
             f"refreshed {day} ({name})",
         )
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "| 36% (4p1i), 34% (9p2i) |",
         "| 36% (4p1i), 30% (9p2i) |",
     )
@@ -555,7 +535,7 @@ def test_wrong_win_rate_detected(doc_tree: Path) -> None:
     # (b) A win rate that no longer matches the manifest it is drawn from:
     # the paragraph misses the expected substring AND carries a claim that
     # contradicts the manifest — both are reported.
-    _substitute(doc_tree, _README, "rate 36% (4p1i)", "rate 30% (4p1i)")
+    _substitute(doc_tree, _RESULTS, "rate 36% (4p1i)", "rate 30% (4p1i)")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert any("'36% (4p1i)'" in error and "18/50" in error for error in errors)
@@ -565,7 +545,7 @@ def test_wrong_win_rate_detected(doc_tree: Path) -> None:
 def test_promoted_rate_held_to_its_own_manifest(doc_tree: Path) -> None:
     # Planted: the 9p2i set's round-2 rate left in a live claim (was its
     # baseline-9 rate, 22%, before round 3's promotion).
-    _substitute(doc_tree, _README, "rate 34% (9p2i)", "rate 48% (9p2i)")
+    _substitute(doc_tree, _RESULTS, "rate 34% (9p2i)", "rate 48% (9p2i)")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert any("'34% (9p2i)'" in error and "17/50" in error for error in errors)
@@ -580,8 +560,8 @@ def test_stray_win_rate_claim_detected(doc_tree: Path) -> None:
     # paragraph being right must not license a false claim elsewhere.
     _write(
         doc_tree,
-        _README,
-        _read(doc_tree, _README)
+        _RESULTS,
+        _read(doc_tree, _RESULTS)
         + "\nHistorically the impostors held 36% (9p2i) of the games.\n",
     )
     errors = check_doc_facts.check_facts(doc_tree)
@@ -595,7 +575,7 @@ def test_in_paragraph_stale_claim_detected(doc_tree: Path) -> None:
     # OTHER claims: a stale duplicate beside the correct value is drift.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "rate 34% (9p2i)",
         "rate 34% (9p2i) (an earlier draft misquoted 25% (9p2i))",
     )
@@ -910,9 +890,9 @@ def _readme_rebuilt(doc_tree: Path, *steps: tuple[tuple[str, str], ...]) -> list
         for current, previous in hunks:
             assert readme.count(current) == 1, current[:60]
             readme = readme.replace(current, previous)
-    _write(doc_tree, _README, readme)
+    _write(doc_tree, _RESULTS, readme)
     errors = check_doc_facts.check_facts(doc_tree)
-    return [error for error in errors if error.startswith(_README)]
+    return [error for error in errors if error.startswith(_RESULTS)]
 
 
 def test_the_round_2_front_door_fails_on_the_promoted_tree(doc_tree: Path) -> None:
@@ -961,8 +941,8 @@ def test_samples_paragraph_dropping_only_the_promoted_sets_record_detected(
     # Planted: the samples paragraph keeps baseline 9's record link and drops
     # only the promoted set's. Each set is linked to its own era's record, so
     # the ladder tip's link never stands in for the 9p2i set's.
-    _substitute(doc_tree, _README, f" ([its record]({_ROUND_3_RECORD}))", "")
-    paragraph = check_doc_facts.provenance_paragraph(_read(doc_tree, _README))
+    _substitute(doc_tree, _RESULTS, f" ([its record]({_ROUND_3_RECORD}))", "")
+    paragraph = check_doc_facts.provenance_paragraph(_read(doc_tree, _RESULTS))
     assert paragraph is not None
     assert f"]({_BASELINE_9_RECORD})" in paragraph
     errors = check_doc_facts.check_facts(doc_tree)
@@ -977,8 +957,8 @@ def test_samples_paragraph_dropping_only_the_tips_record_detected(
     # Planted, the mirror case: the promoted set's record link kept, baseline
     # 9's dropped. Only the 4p1i set, the one baseline-9 set the paragraph
     # names, is reported; the 9p2i set's own link still holds.
-    _substitute(doc_tree, _README, f" ([its record]({_BASELINE_9_RECORD}))", "")
-    paragraph = check_doc_facts.provenance_paragraph(_read(doc_tree, _README))
+    _substitute(doc_tree, _RESULTS, f" ([its record]({_BASELINE_9_RECORD}))", "")
+    paragraph = check_doc_facts.provenance_paragraph(_read(doc_tree, _RESULTS))
     assert paragraph is not None
     assert f"]({_ROUND_3_RECORD})" in paragraph
     errors = check_doc_facts.check_facts(doc_tree)
@@ -994,7 +974,7 @@ def test_before_column_win_rate_held_to_the_frozen_cells(doc_tree: Path) -> None
     # A history cell is checked, not skipped: a made-up before value fails.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "| 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) |",
         "| 36% (4p1i), 34% (9p2i) | 12% (4p1i), 48% (9p2i) |",
     )
@@ -1011,7 +991,7 @@ def test_before_column_held_to_each_sets_own_cells(doc_tree: Path) -> None:
     # the one it replaced.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "| 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) |",
         "| 36% (4p1i), 34% (9p2i) | 36% (4p1i), 22% (9p2i) |",
     )
@@ -1024,13 +1004,13 @@ def test_before_column_held_to_each_sets_own_cells(doc_tree: Path) -> None:
 def test_proof_before_cell_held_to_the_frozen_cells(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "| 24 of 24 (100%) vs 20 of 42 (48%) |",
         "| 24 of 24 (100%) vs 21 of 42 (50%) |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert errors == [
-        f"{_README}: the 'Before' cell of results row {_PROOF_CLAIM!r} reads "
+        f"{_RESULTS}: the 'Before' cell of results row {_PROOF_CLAIM!r} reads "
         f"'24 of 24 (100%) vs 21 of 42 (50%)', but {_RESULTS_BEFORE} recomputes "
         "to '24 of 24 (100%) vs 20 of 42 (48%)'."
     ]
@@ -1040,7 +1020,7 @@ def test_dropped_before_column_fails_loud(doc_tree: Path) -> None:
     # Losing the column must fail rather than quietly stop checking every
     # history cell: the rows held to a before cell say so, and the old rates
     # left in the row are then read as current claims.
-    _substitute(doc_tree, _README, "| What | Figure | Before |", "| What | Figure |")
+    _substitute(doc_tree, _RESULTS, "| What | Figure | Before |", "| What | Figure |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert any("the results table has no 'Before' column" in error for error in errors)
     assert any("claim '48% (9p2i)' disagrees" in error for error in errors)
@@ -1419,10 +1399,10 @@ def test_repeated_results_claim_detected(doc_tree: Path) -> None:
     # A stale row left beside a corrected one is named, and the first copy is
     # the one held to the source.
     row = "| Sample games that replay byte for byte | 100 of 100 (100%) |"
-    text = _read(doc_tree, _README)
+    text = _read(doc_tree, _RESULTS)
     assert row in text
     stale = row.replace("| 100 of 100 (100%) |", "| 99 of 100 (99%) |")
-    _write(doc_tree, _README, text.replace(row, f"{stale}|\n{row}", 1))
+    _write(doc_tree, _RESULTS, text.replace(row, f"{stale}|\n{row}", 1))
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 2
     assert "states 'Sample games that replay byte for byte' twice" in errors[0]
@@ -1433,7 +1413,7 @@ def test_replay_count_figure_derived_from_the_committed_replays(
     doc_tree: Path,
 ) -> None:
     # The row is recomputed from the replay files on disk.
-    _substitute(doc_tree, _README, "| 100 of 100 (100%) |", "| 96 of 96 (100%) |")
+    _substitute(doc_tree, _RESULTS, "| 100 of 100 (100%) |", "| 96 of 96 (100%) |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'96 of 96 (100%)'" in errors[0]
@@ -1471,7 +1451,7 @@ def test_a_removed_replay_moves_the_count_figure(doc_tree: Path) -> None:
     replay.unlink()
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        error.startswith(f"{_README}: the results row 'Sample games that replay")
+        error.startswith(f"{_RESULTS}: the results row 'Sample games that replay")
         and "recomputes to '99 of 99 (100%)'" in error
         for error in errors
     )
@@ -1483,7 +1463,7 @@ def test_citation_figure_derived_from_the_committed_instrument(
     # The citation row's source is the instrument's pinned assertions.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "| 397 of 397 (100%), zero dangling |",
         "| 396 of 397 (100%), zero dangling |",
     )
@@ -1528,9 +1508,9 @@ def test_vent_and_proof_rows_derived_from_the_census(doc_tree: Path) -> None:
     _set_census_cell(doc_tree, "Impostor ejections in the vent band", "23/46 (50.0%)")
     errors = check_doc_facts.check_facts(doc_tree)
     assert errors == [
-        f"{_README}: the results row {_VENT_CLAIM!r} reads '24 of 46 (52%)', but "
+        f"{_RESULTS}: the results row {_VENT_CLAIM!r} reads '24 of 46 (52%)', but "
         f"{_CENSUS_SOURCE} recomputes to '23 of 46 (50%)'.",
-        f"{_README}: the results row {_PROOF_CLAIM!r} reads '24 of 24 (100%) vs "
+        f"{_RESULTS}: the results row {_PROOF_CLAIM!r} reads '24 of 24 (100%) vs "
         f"22 of 37 (59%)', but {_CENSUS_SOURCE} recomputes to '23 of 23 (100%) "
         "vs 23 of 38 (61%)'.",
     ]
@@ -1555,7 +1535,7 @@ def test_innocent_ejections_moved_to_the_wrong_cell_detected(doc_tree: Path) -> 
     # matching the number without the placement would gate shape, not meaning.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "15 of 15 innocent ejections sit in the no-proof cell",
         "15 of 15 innocent ejections sit in the proof-present cell",
     )
@@ -1569,7 +1549,7 @@ def test_four_set_figure_kept_as_the_current_figure_detected(doc_tree: Path) -> 
     # the shown set moved to its own era, kept as the 9p2i set's figure.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "| 24 of 24 (100%) vs 22 of 37 (59%) |",
         "| 326 of 326 (100%) vs 43 of 85 (51%) |",
     )
@@ -1611,7 +1591,7 @@ def test_an_unreadable_census_table_fails_loud(
     _substitute(doc_tree, _CENSUS_PAGE, old, new)
     errors = check_doc_facts.check_facts(doc_tree)
     assert errors == [
-        f"{_CENSUS_PAGE}: {refusal} — the {_README} vent and proof rows have "
+        f"{_CENSUS_PAGE}: {refusal} — the {_RESULTS} vent and proof rows have "
         "nothing to be derived from."
     ]
 
@@ -1701,20 +1681,20 @@ def test_the_coerced_clause_counts_in_words() -> None:
 
 
 def test_a_process_numerator_edited_detected(doc_tree: Path) -> None:
-    _substitute(doc_tree, _README, "| 394 of 397 (99%) |", "| 393 of 397 (99%) |")
+    _substitute(doc_tree, _RESULTS, "| 394 of 397 (99%) |", "| 393 of 397 (99%) |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert errors[0].startswith(f"{_README}: the results row {_GROUNDED_CLAIM!r}")
+    assert errors[0].startswith(f"{_RESULTS}: the results row {_GROUNDED_CLAIM!r}")
     assert "reads '393 of 397 (99%)'" in errors[0]
     assert f"{_SCORECARD_SOURCE} recomputes to '394 of 397 (99%)'" in errors[0]
 
 
 def test_a_process_before_cell_edited_detected(doc_tree: Path) -> None:
-    _substitute(doc_tree, _README, "| 65 of 292 (22%) |", "| 64 of 292 (22%) |")
+    _substitute(doc_tree, _RESULTS, "| 65 of 292 (22%) |", "| 64 of 292 (22%) |")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(
-        f"{_README}: the 'Before' cell of results row {_DEVIATING_CLAIM!r}"
+        f"{_RESULTS}: the 'Before' cell of results row {_DEVIATING_CLAIM!r}"
     )
     assert f"{_SCORECARD_SOURCE} recomputes to '65 of 292 (22%)'" in errors[0]
 
@@ -1731,17 +1711,17 @@ def test_a_scorecard_value_moved_under_an_unchanged_readme_detected(
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert errors[0].startswith(f"{_README}: the results row {_UNEXPLAINED_CLAIM!r}")
+    assert errors[0].startswith(f"{_RESULTS}: the results row {_UNEXPLAINED_CLAIM!r}")
     assert "recomputes to '7 of 702 (1%)'" in errors[0]
 
 
 def test_a_deleted_process_row_detected(doc_tree: Path) -> None:
-    line = _results_row_line(_read(doc_tree, _README), _DEVIATING_CLAIM)
-    _substitute(doc_tree, _README, line + "\n", "")
+    line = _results_row_line(_read(doc_tree, _RESULTS), _DEVIATING_CLAIM)
+    _substitute(doc_tree, _RESULTS, line + "\n", "")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert errors[0].startswith(
-        f"{_README}: the results table has no {_DEVIATING_CLAIM!r} row"
+        f"{_RESULTS}: the results table has no {_DEVIATING_CLAIM!r} row"
     )
 
 
@@ -1798,13 +1778,13 @@ def test_the_teammate_count_edited_detected(doc_tree: Path) -> None:
     # Planted: the count beside the authored share moved...
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "; 10 impostor votes against a partner turned into skips |",
         "; 9 impostor votes against a partner turned into skips |",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
-    assert errors[0].startswith(f"{_README}: the results row {_AUTHORED_CLAIM!r}")
+    assert errors[0].startswith(f"{_RESULTS}: the results row {_AUTHORED_CLAIM!r}")
     assert (
         "recomputes to '692 of 702 (99%); 10 impostor votes against a partner "
         "turned into skips'"
@@ -1871,7 +1851,7 @@ def test_a_shown_set_with_no_replaced_era_is_named(
     unnamed = Era("baseline-10", "a record", "2026-11-01", None)
     monkeypatch.setattr(check_doc_facts, "era_of", lambda path: unnamed)
     errors: list[str] = []
-    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _README), errors)
+    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _RESULTS), errors)
     assert len(errors) == 1
     assert errors[0].startswith(
         f"{_SCORECARD_PAGE}: no replaced era is named for the baseline-10 era"
@@ -1890,7 +1870,7 @@ def test_the_before_column_follows_the_registrys_replaced_era(
 
     monkeypatch.setattr(check_doc_facts, "era_of", lambda path: STAGE_B_R2)
     errors: list[str] = []
-    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _README), errors)
+    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _RESULTS), errors)
     assert len(errors) == 1
     assert errors[0].startswith(
         f"{_SCORECARD_PAGE}: the '### samples/9p2i' table has no before column "
@@ -1904,7 +1884,7 @@ def test_the_before_column_follows_the_registrys_replaced_era(
         "| # | row | before: baseline-9, as published",
     )
     errors = []
-    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _README), errors)
+    check_doc_facts.check_process_rows(doc_tree, _read(doc_tree, _RESULTS), errors)
     assert errors == []
 
 
@@ -2068,11 +2048,11 @@ def test_a_linked_claim_is_still_read_as_its_row(doc_tree: Path) -> None:
         "proof of their role", "[proof of their role](docs/glossary.md)"
     )
     assert linked != _PROOF_CLAIM
-    _substitute(doc_tree, _README, f"| {_PROOF_CLAIM} |", f"| {linked} |")
+    _substitute(doc_tree, _RESULTS, f"| {_PROOF_CLAIM} |", f"| {linked} |")
     assert check_doc_facts.check_facts(doc_tree) == []
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "15 of 15 innocent ejections sit in the no-proof cell",
         "14 of 14 innocent ejections sit in the no-proof cell",
     )
@@ -2146,7 +2126,7 @@ def test_a_partition_cell_is_two_fractions_in_the_tables_form() -> None:
 def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:
     # The example exists because the fake provider's report is empty; its
     # scalars come from the committed report, not from prose.
-    _substitute(doc_tree, _README, "records 61 ejections", "records 92 ejections")
+    _substitute(doc_tree, _RESULTS, "records 61 ejections", "records 92 ejections")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'61 ejections'" in errors[0]
@@ -2155,7 +2135,7 @@ def test_report_example_ejection_count_drift_detected(doc_tree: Path) -> None:
 
 def test_report_example_impostor_count_drift_detected(doc_tree: Path) -> None:
     # (was the vote-correctness rate, before the example stated counts)
-    _substitute(doc_tree, _README, "46 removed an impostor", "45 removed an impostor")
+    _substitute(doc_tree, _RESULTS, "46 removed an impostor", "45 removed an impostor")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'46 removed an impostor'" in errors[0]
@@ -2164,7 +2144,7 @@ def test_report_example_impostor_count_drift_detected(doc_tree: Path) -> None:
 
 def test_report_example_evidence_count_drift_detected(doc_tree: Path) -> None:
     # (was the ejection-accuracy rate, before the example stated counts)
-    _substitute(doc_tree, _README, "36 of those 46 with", "40 of those 46 with")
+    _substitute(doc_tree, _RESULTS, "36 of those 46 with", "40 of those 46 with")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1
     assert "'36 of those 46 with evidence against that player'" in errors[0]
@@ -2176,7 +2156,7 @@ def test_missing_report_example_paragraph_fails_loud(doc_tree: Path) -> None:
     # would then be silent about what a fake-provider report looks like.
     _substitute(
         doc_tree,
-        _README,
+        _RESULTS,
         "The fake provider's report is empty on purpose:",
         "The fake provider's report is unusual:",
     )
@@ -2196,7 +2176,7 @@ def test_eval_report_count_drift_reaches_the_report_example(doc_tree: Path) -> N
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert any(
-        error.startswith(f"{_README}:")
+        error.startswith(f"{_RESULTS}:")
         and "'47 removed an impostor'" in error
         and "impostor_ejections as 47" in error
         for error in errors
@@ -2204,7 +2184,7 @@ def test_eval_report_count_drift_reaches_the_report_example(doc_tree: Path) -> N
     # ...and the evidence clause's denominator, which is the same count read
     # again, so the example cannot keep "36 of those 46" once the report says 47.
     assert any(
-        error.startswith(f"{_README}:")
+        error.startswith(f"{_RESULTS}:")
         and "'36 of those 47 with evidence against that player'" in error
         for error in errors
     )
@@ -2220,9 +2200,9 @@ def test_a_moved_ejection_total_reaches_the_report_example(doc_tree: Path) -> No
         '"total_ejections": 62,',
     )
     errors = check_doc_facts.check_facts(doc_tree)
-    readme = [error for error in errors if error.startswith(f"{_README}:")]
+    readme = [error for error in errors if error.startswith(f"{_RESULTS}:")]
     assert readme == [
-        f"{_README}: the real-report example does not state '62 ejections' — "
+        f"{_RESULTS}: the real-report example does not state '62 ejections' — "
         f"{_EVAL_REPORT_9P2I} records total_ejections as 62."
     ]
 
@@ -2345,7 +2325,7 @@ def test_a_drifted_prose_figure_fails_by_name(
 ) -> None:
     # Planted: one figure of the live README's prose moved off its source. Each
     # is named once, with the claim as stated and as its source makes it.
-    _substitute(doc_tree, _README, old, new)
+    _substitute(doc_tree, _RESULTS, old, new)
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1, errors
     assert f"the claim {stated!r} disagrees" in errors[0]
@@ -2373,7 +2353,7 @@ _PROSE_REWORDINGS = (
 def test_a_prose_figure_reworded_away_fails_loud(
     doc_tree: Path, old: str, new: str
 ) -> None:
-    _substitute(doc_tree, _README, old, new)
+    _substitute(doc_tree, _RESULTS, old, new)
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1, errors
     assert "no sentence matching" in errors[0]
@@ -2435,7 +2415,7 @@ def test_a_second_copy_of_a_prose_figure_is_held_too(
 ) -> None:
     # Planted: a correct sentence kept and a stale retelling appended beside it.
     # The copy is refused rather than left to drift on its own.
-    _write(doc_tree, _README, _read(doc_tree, _README) + f"\n{sentence}\n")
+    _write(doc_tree, _RESULTS, _read(doc_tree, _RESULTS) + f"\n{sentence}\n")
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1, errors
     assert f"the claim {stated!r} disagrees" in errors[0]
@@ -2768,8 +2748,8 @@ def test_missing_ml_results_table_fails_loud(doc_tree: Path) -> None:
 def test_main_reports_every_failure_at_once(
     doc_tree: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _substitute(doc_tree, _README, "2026-09-22", "2026-08-19")
-    _substitute(doc_tree, _README, "36% (4p1i)", "30% (4p1i)")
+    _substitute(doc_tree, _RESULTS, "2026-09-22", "2026-08-19")
+    _substitute(doc_tree, _RESULTS, "36% (4p1i)", "30% (4p1i)")
     assert check_doc_facts.main(["--repo-root", str(doc_tree)]) == 1
     err = capsys.readouterr().err
     assert "Doc-fact check failed:" in err

@@ -149,8 +149,8 @@ def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
     # set, 9p2i seed 19, since the promotion of 2026-10-02 (they were a
     # historical seed-2 capture from the baseline-7 record before it), re-shot
     # on round 3's bytes at its promotion of 2026-10-09: the captured recording
-    # is the replay this checkout serves, byte for byte, and the README caption
-    # names that game, its set and its record.
+    # is the replay this checkout serves, byte for byte; the README caption names
+    # that game and the results page names its set and its record.
     root = Path(__file__).resolve().parents[2]
     media = root / "docs/media"
     assert not _asset_mismatches(media)
@@ -163,12 +163,12 @@ def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
         19,
         "2026-10-09",  # was 2026-10-01, round 2's recording
     )
-    readme = (root / "README.md").read_text()
+    results = (root / "RESULTS.md").read_text()
     assert (
         "9p2i seed 19, the game the demo's guided tour opens on, from the "
-        "2026-10-09 record" in readme
+        "2026-10-09 record" in results
     )
-    assert "earlier recording" not in readme
+    assert "earlier recording" not in (root / "README.md").read_text()
     # A capture of a recording the checkout no longer serves must fail.
     moved = {**provenance, "recording": {**recording, "sha256": "0" * 64}}
     assert _recording_mismatch(root, moved)
@@ -262,8 +262,8 @@ def test_the_front_door_names_the_pictured_game_in_plain_words(
     assert "the other is inside a vent" in caption
     assert "both impostors are on the map" not in caption
     assert (
-        "The picture above is from the 9-player game the guided tour opens on."
-        in readme
+        "the 9-player game the guided tour opens on"
+        in (root / "RESULTS.md").read_text()
     )
     assert (
         "the game the demo's guided tour opens on"
@@ -678,7 +678,7 @@ def test_the_caption_is_the_line_under_the_hero_picture() -> None:
     readme = (root / "README.md").read_text()
     caption = _readme_caption(readme)
     assert caption.startswith("*At tick ")
-    assert "9p2i seed 19" in caption
+    assert "game 19" in caption
     # Planted: the GIF moved between the picture and its caption, so the line
     # under the picture is no caption at all.
     gif = next(line for line in readme.splitlines() if "spectator-journey.gif" in line)
@@ -1072,8 +1072,8 @@ def test_media_placement_claims_follow_actual_frontdoor_links(tmp_path: Path) ->
     assert _media_placement_mismatches(tmp_path) == ["spectator-two-truths.png"]
     # Planted: the GIF's embed taken out of the README its row places it in.
     gif_embed = (
-        "[![The same game playing from its first tick to the meeting]"
-        "(docs/media/spectator-journey.gif)](https://dkdan10.github.io/AiLibi/)\n"
+        next(line for line in original.splitlines() if "spectator-journey.gif" in line)
+        + "\n"
     )
     assert original.count(gif_embed) == 1
     readme.write_text(original.replace(gif_embed, ""))

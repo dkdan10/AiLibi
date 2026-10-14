@@ -11,7 +11,7 @@ a script calls a language model. Games use the free fake provider unless
 | --- | --- | --- |
 | `setup_env.sh` | Installs the Python and frontend dependencies (needs the network). | none |
 | `check.sh` | The full gate: lint, format, import contracts, task cards, links, types, tests, frontend. | fake |
-| `check_doc_facts.py` | Recomputes the README's figures and the ML results table from their sources. | none |
+| `check_doc_facts.py` | Recomputes the results page's figures (`RESULTS.md`) and the ML results table from their sources. | none |
 | `check_links.py` | Reports relative links on the live pages that point at nothing. | none |
 | `validate_task_docs.py` | Checks the work cards and the task index's card counts. | none |
 | `gen_frontend_types.py` | Writes `frontend/src/types/api.ts` from the API's data models. | none |

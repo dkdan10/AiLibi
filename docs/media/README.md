@@ -110,4 +110,4 @@ the README and the architecture note actually carry.
 | `spectator-two-truths.png` | 2036×909 — the same scene through omniscient and crewmate views, with the following accusation | [README image](../../README.md) |
 | `spectator-meeting.png` | 1440×900 — accusation chain, ballots and mind inspector | Archive only |
 | `spectator-journey.gif` | 640×400, 13 frames — playback from the opening tick to a meeting | [README image](../../README.md) |
-| `architecture.svg` | Text SVG of the packages, data flow and observation firewall | [Architecture image](../architecture.md) |
+| `architecture.svg` | Text SVG of the packages, data flow and observation firewall | [README image](../../README.md) · [Architecture image](../architecture.md) |

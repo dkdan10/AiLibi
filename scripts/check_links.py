@@ -37,6 +37,7 @@ _REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 # several link a card that is not written yet.
 DEFAULT_SCOPE: Final[tuple[str, ...]] = (
     "README.md",
+    "RESULTS.md",
     "AGENTS.md",
     "CONTRIBUTING.md",
     "SECURITY.md",

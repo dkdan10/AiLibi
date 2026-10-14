@@ -84,7 +84,7 @@ disk. A gate only sees the axis it was pointed at. The fix is another axis.
 
 I found sentences on the front page describing behaviour the repository had stopped having;
 they had been true when written. Prose rots silently because nothing runs it. So the
-front door now has a check in the same gate as the tests: outcomes are recomputed from the
+results page the front door links has a check in the same gate as the tests: outcomes are recomputed from the
 recording manifests, results are re-derived from the instruments rather than from a
 second copy of themselves, and every relative link is resolved. The narrower checks that
 once policed ageing dates and private vocabulary were retired on 2026-10-13: they held
