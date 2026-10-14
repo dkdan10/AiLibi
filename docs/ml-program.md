@@ -237,5 +237,9 @@ layer learns. The method is the ES family (Salimans et al., 2017); the shaping a
 Ng, Harada & Russell (1999); and the selection scalar is kept off the objective for the
 reasons the referee itself cites (Pan et al., 2022; Skalse et al., 2022).
 
+The program's reports are indexed in
+[`training/README.md`](../training/README.md#the-reports), and the lab work that
+came before it in [`experiments/README.md`](../experiments/README.md).
+
 Next: the [reading guide](reading-guide.md) and
 [`training/README.md`](../training/README.md).
