@@ -68,6 +68,7 @@ def test_raw_html_targets_count_and_html_in_code_does_not(tmp_path: Path) -> Non
     text = (
         '<p align="center"><img src="docs/media/missing.png" alt="x"></p>\n'
         '\nread <a href="gone.md#top">this</a> first\n'
+        "\n<img src=unquoted-missing.png alt=x> and <a href='single.md'>one</a>\n"
         '\n```html\n<img src="docs/media/also-missing.png">\n```\n'
     )
     assert [
@@ -76,7 +77,17 @@ def test_raw_html_targets_count_and_html_in_code_does_not(tmp_path: Path) -> Non
     ] == [
         "docs/media/missing.png",
         "gone.md#top",
+        "unquoted-missing.png",
+        "single.md",
     ]
+
+
+def test_a_query_is_not_part_of_the_path(tmp_path: Path) -> None:
+    text = "[plain](kept.md?plain=1) [both](kept.md?plain=1#top) [frag](kept.md#?x)\n"
+    assert [
+        resolved
+        for _, resolved in check_links.relative_targets(tmp_path, "page.md", text)
+    ] == [tmp_path / "kept.md"] * 3
 
 
 def test_relative_links_decode_paths_and_include_images(tmp_path: Path) -> None:
@@ -119,29 +130,34 @@ def test_the_live_pages_hold_no_broken_link() -> None:
 def test_a_planted_broken_link_fails(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # Planted: a page in scope linking a file that is not there, beside one that
-    # is, and a record out of scope with its own broken link.
+    # Planted: a page in scope linking a file that is not there and a file that
+    # is on disk but not tracked, beside one that is tracked, and a record out
+    # of scope with its own broken link.
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "kept.md").write_text("# kept\n", encoding="utf-8")
     (tmp_path / "docs" / "page.md").write_text(
-        "[kept](kept.md#top) and [gone](gone.md)\n", encoding="utf-8"
+        "[kept](kept.md#top) and [gone](gone.md) and [ghost](ghost.md)\n",
+        encoding="utf-8",
     )
     (tmp_path / "process" / "audits").mkdir(parents=True)
     (tmp_path / "process" / "audits" / "old.md").write_text(
         "[gone](gone.md)\n", encoding="utf-8"
     )
-    assert check_links.broken_links(tmp_path, ["docs/page.md"]) == [
-        ("docs/page.md", "gone.md")
-    ]
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    # On disk after the add, so untracked: present here, absent from every clone.
+    (tmp_path / "docs" / "ghost.md").write_text("# ghost\n", encoding="utf-8")
+    assert check_links.broken_links(tmp_path, ["docs/page.md"]) == [
+        ("docs/page.md", "gone.md"),
+        ("docs/page.md", "ghost.md"),
+    ]
     assert check_links.main(["--root", str(tmp_path)]) == 1
-    assert (
-        "docs/page.md: the link 'gone.md' points at nothing" in capsys.readouterr().out
-    )
+    out = capsys.readouterr().out
+    assert "docs/page.md: the link 'gone.md' points at nothing" in out
+    assert "docs/page.md: the link 'ghost.md' points at nothing" in out
     assert check_links.main(["--root", str(tmp_path), "--all"]) == 1
     assert capsys.readouterr().out.splitlines() == [
-        "docs: 1",
+        "docs: 2",
         "process: 1",
-        "2 broken relative links in 3 pages",
+        "3 broken relative links in 3 pages",
     ]

@@ -2,10 +2,11 @@
 """Report relative markdown links that point at nothing.
 
 Reads each tracked ``.md`` page with markdown-it, so a link inside code is not a
-link, drops the ``#fragment`` from every link and image target, including the
-``href`` and ``src`` of raw HTML, resolves the path from the page's own folder
-and reports each target that does not exist. Web addresses and in-page anchors
-are skipped.
+link, drops the ``?query`` and ``#fragment`` from every link and image target,
+including the ``href`` and ``src`` of raw HTML, resolves the path from the page's
+own folder and reports each target that is not a tracked file or folder: a file
+that is only on this disk is absent from every clone and from the published
+repository. Web addresses and in-page anchors are skipped.
 
 By default only the live pages are read (:data:`DEFAULT_SCOPE`). Old records
 keep links that were true when they were written, so ``--all`` reads every
@@ -53,8 +54,10 @@ DEFAULT_SCOPE: Final[tuple[str, ...]] = (
     "process/audits/review-2026-09-06/correction-record.md",
 )
 _ABSOLUTE_TARGET: Final = re.compile(r"\A(?:[a-z][a-z0-9+.-]*:|//)", re.IGNORECASE)
+# A quoted or an unquoted attribute value; HTML allows both.
 _HTML_TARGET: Final = re.compile(
-    r"""\b(?:href|src)\s*=\s*["']([^"']*)["']""", re.IGNORECASE
+    r"""\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>`=]+))""",
+    re.IGNORECASE,
 )
 
 
@@ -79,17 +82,35 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 1 if misses else 0
 
 
-def tracked_pages(root: Path) -> list[str]:
-    """Every tracked ``.md`` path under ``root``; raises when git cannot list them."""
+def tracked_paths(root: Path) -> frozenset[str]:
+    """Every tracked path under ``root``; raises when git cannot list them."""
 
     listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", "*.md"],
+        ["git", "ls-files", "-z"],
         cwd=root,
         capture_output=True,
         text=True,
         check=True,
     )
-    return sorted(path for path in listed.stdout.split("\0") if path)
+    return frozenset(path for path in listed.stdout.split("\0") if path)
+
+
+def tracked_pages(root: Path) -> list[str]:
+    """Every tracked ``.md`` path under ``root``, sorted."""
+
+    return sorted(path for path in tracked_paths(root) if path.endswith(".md"))
+
+
+def tracked_folders(paths: frozenset[str]) -> frozenset[str]:
+    """Every folder that holds a tracked path, at every depth."""
+
+    folders: set[str] = set()
+    for path in paths:
+        folder = posixpath.dirname(path)
+        while folder:
+            folders.add(folder)
+            folder = posixpath.dirname(folder)
+    return frozenset(folders)
 
 
 def in_scope(page: str, scope: Sequence[str] = DEFAULT_SCOPE) -> bool:
@@ -107,16 +128,25 @@ def in_scope(page: str, scope: Sequence[str] = DEFAULT_SCOPE) -> bool:
 
 
 def broken_links(root: Path, pages: Sequence[str]) -> list[tuple[str, str]]:
-    """``(page, target)`` for every relative target in ``pages`` that does not exist."""
+    """``(page, target)`` for every relative target in ``pages`` that names no tracked path.
 
-    return [
-        (page, target)
-        for page in pages
-        for target, resolved in relative_targets(
-            root, page, (root / page).read_text(encoding="utf-8")
-        )
-        if not resolved.exists()
-    ]
+    Held to git's index, not to the disk: an untracked or ignored file at the
+    target is on this machine only, so a link to it breaks in every clone.
+    """
+
+    files = tracked_paths(root)
+    folders = tracked_folders(files)
+    misses: list[tuple[str, str]] = []
+    for page in pages:
+        text = (root / page).read_text(encoding="utf-8")
+        for target, resolved in relative_targets(root, page, text):
+            if not resolved.is_relative_to(root):
+                misses.append((page, target))
+                continue
+            relative = resolved.relative_to(root).as_posix()
+            if relative != "." and relative not in files and relative not in folders:
+                misses.append((page, target))
+    return misses
 
 
 def relative_targets(
@@ -128,7 +158,7 @@ def relative_targets(
     for target in markdown_targets(MarkdownIt("commonmark").parse(text)):
         if target.startswith("#") or _ABSOLUTE_TARGET.match(target):
             continue
-        path = unquote(target.split("#", 1)[0])
+        path = unquote(re.split(r"[?#]", target, maxsplit=1)[0])
         if path:
             yield target, repo_root / posixpath.normpath(posixpath.join(base, path))
 
@@ -149,7 +179,8 @@ def markdown_targets(tokens: Sequence[Token]) -> Iterator[str]:
                     raise TypeError(f"Markdown {attribute} must be text: {target!r}")
                 yield target
         elif token.type in ("html_inline", "html_block"):
-            yield from _HTML_TARGET.findall(token.content)
+            for quoted, single, bare in _HTML_TARGET.findall(token.content):
+                yield quoted or single or bare
         elif token.children is not None:
             yield from markdown_targets(token.children)
 
