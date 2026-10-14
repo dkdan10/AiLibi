@@ -1,14 +1,16 @@
 # Results in full
 
-Every figure on this page is recomputed from the committed recordings and the generated reports by `scripts/check_doc_facts.py`, which runs inside `bash scripts/check.sh` and fails when a number drifts from its source. The [README](README.md) carries the plain-words summary; this page is the ledger it summarises.
+*9p2i* is the nine-player set (two impostors) and *4p1i* the four-player set (one impostor); a *record* is the audit that documents a recording; *candidate* recordings are the two earlier trial rounds of the nine-player game.
+
+The findings, the Figure column, the samples paragraph and the real-report paragraph on this page are recomputed from the committed recordings and the generated reports by `scripts/check_doc_facts.py`, which runs inside `bash scripts/check.sh` and fails when one drifts from its source. The Before cells of the win-rate, proof and four process rows are held to their frozen record; the other Before cells and the limitations are copied from their records as written. The [README](README.md) carries the plain-words summary; this page is the ledger it summarises.
 
 ## What the recordings show
 
 In the 9-player set:
 
 1. **Votes follow a rule-based suspicion score, and going against it is usually wrong.** The ballot prompt shows the voter's rule-kept suspicion of every player ([`agents/memory/`](agents/memory/)). Crew votes for the highest-rated player hit an impostor [215 of 235 times](eval/reports/process-scorecard.md) (91%); the 56 against it hit one twice (4%), where chance is about one in three.
-2. **Meetings with a reported vent sighting never ejected a crewmate.** A vent claim counts only when the engine's witness record matches it. In the 24 meetings with one, every ejection removed an impostor; in the 95 without, [22 of 37](eval/reports/gameplay-census.md) did and 15 removed crewmates, near a coin flip: hard evidence, not general social deduction.
-3. **Every vote to eject cites a real line.** [394 of 397](eval/reports/process-scorecard.md) votes to eject cite something the voter saw or heard; most of those lines are other players' claims, which can be lies, and the ballot demands a citation, so this is by design.
+2. **Meetings with a reported vent sighting never ejected a crewmate.** A vent claim counts only when the engine's witness record matches it. In the 24 meetings with one, every ejection removed an impostor; in the 95 without, [22 of 37](eval/reports/gameplay-census.md) did and 15 removed crewmates, better than chance and far from reliable: hard evidence, not general social deduction.
+3. **Every vote to eject cites a real line.** All 397 citations resolve to a line the voter saw or heard, and [394 of 397](eval/reports/process-scorecard.md) votes to eject cite one about the player voted against; most of those lines are other players' claims, which can be lies. The ballot demands a citation, so this is by design.
 
 *Before* is each set's previously shown recording, copied from its record.
 
@@ -36,13 +38,13 @@ In the 9-player set:
 
 ## The recordings
 
-A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was regenerated 2026-09-22 (4p1i) with every experimental switch off ([its record](process/audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the [route lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), a recorded setting ([its record](process/audits/audit-2026-10-09-stage-b-r3.md)): impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md)). The README's pictures show the 9-player game the guided tour opens on.
+A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was regenerated 2026-09-22 (4p1i) with every experimental switch off ([its record](process/audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the [route lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), a recorded setting ([its record](process/audits/audit-2026-10-09-stage-b-r3.md)): impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md)).
 
 The README's pictures show 9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-09 record (9p2i); [media provenance](docs/media/README.md#provenance) records its source and asset identities.
 
 **The fake provider's report is empty on purpose:** it returns one fixed reply, so every meeting skips and nothing is ejected. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections; 46 removed an impostor, 36 of those 46 with evidence against that player on the meeting's record.
 
-## Where the figures come from
+## Checks you can run
 
 The [demo](https://dkdan10.github.io/AiLibi/) carries all 100 games and replays them in the browser with no server and no model calls. One of five import contracts keeps [`agents/`](agents/) out of the engine; [a test](tests/test_firewall.py) plants a forbidden import that must fail. The recordings re-verify offline:
 

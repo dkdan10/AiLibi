@@ -168,7 +168,14 @@ def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
         "9p2i seed 19, the game the demo's guided tour opens on, from the "
         "2026-10-09 record" in results
     )
-    assert "earlier recording" not in (root / "README.md").read_text()
+    readme = (root / "README.md").read_text()
+    assert "earlier recording" not in readme
+    # The caption names the recorded seed, which the sha256 above holds to the
+    # replay the demo serves.
+    assert (
+        f"This is game {recording['seed']} of the nine-player set,"
+        in _readme_caption(readme)
+    )
     # A capture of a recording the checkout no longer serves must fail.
     moved = {**provenance, "recording": {**recording, "sha256": "0" * 64}}
     assert _recording_mismatch(root, moved)
@@ -199,8 +206,8 @@ def test_media_hashes_and_labels_are_current(tmp_path: Path) -> None:
     assert _asset_mismatches(tmp_path) == [names[-1]]
 
 
-#: The two pages that describe the pictured game to a first reader.
-_FRONT_DOOR_PAGES = ("README.md", "docs/media/README.md")
+#: The pages that describe the pictured game to a first reader.
+_FRONT_DOOR_PAGES = ("README.md", "RESULTS.md", "docs/media/README.md")
 
 #: The picker's internal words for the featured list and its first entry; a
 #: first reader has no glossary entry for either.
@@ -262,7 +269,7 @@ def test_the_front_door_names_the_pictured_game_in_plain_words(
     assert "the other is inside a vent" in caption
     assert "both impostors are on the map" not in caption
     assert (
-        "the 9-player game the guided tour opens on"
+        "9p2i seed 19, the game the demo's guided tour opens on"
         in (root / "RESULTS.md").read_text()
     )
     assert (
@@ -678,7 +685,7 @@ def test_the_caption_is_the_line_under_the_hero_picture() -> None:
     readme = (root / "README.md").read_text()
     caption = _readme_caption(readme)
     assert caption.startswith("*At tick ")
-    assert "game 19" in caption
+    assert re.search(r"\bgame 19\b", caption)
     # Planted: the GIF moved between the picture and its caption, so the line
     # under the picture is no caption at all.
     gif = next(line for line in readme.splitlines() if "spectator-journey.gif" in line)

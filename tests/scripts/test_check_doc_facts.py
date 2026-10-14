@@ -47,7 +47,7 @@ def _readme_pin_problems(readme: str) -> list[str]:
     return [f"missing {phrase!r}" for phrase in _README_HONESTY if phrase not in flat]
 
 
-def test_the_readme_keeps_its_pinned_lines() -> None:
+def test_the_readme_keeps_its_pinned_phrases() -> None:
     readme = (_REPO_ROOT / "README.md").read_text(encoding="utf-8")
     assert _readme_pin_problems(readme) == []
 
@@ -71,6 +71,8 @@ _COPIED = tuple(
     dict.fromkeys(
         (
             "RESULTS.md",
+            # The front page, whose findings quote figures the sources produce.
+            "README.md",
             ".env.example",
             "replays/samples/4p1i/MANIFEST.md",
             "replays/samples/9p2i/MANIFEST.md",
@@ -80,13 +82,13 @@ _COPIED = tuple(
             # process rows, the census's vent-proof table the vent and proof rows.
             "eval/reports/process-scorecard.md",
             "eval/reports/gameplay-census.md",
-            # The report the README's real-report example quotes.
+            # The report the results page's real-report example quotes.
             "replays/samples/9p2i/tournament-eval-report.json.gz",
             # The instrument whose pinned assertions own the citation row.
             "tests/eval/test_vj_instruments.py",
             "docs/ml-program.md",
             "training/reports/results-finalist-eval.jsonl",
-            # The import-linter config, whose contract sections the README counts.
+            # The import-linter config, whose contract sections the results page counts.
             ".importlinter",
         )
     )
@@ -109,6 +111,7 @@ _ENUMERATED_GLOBS = (
 _LINK_ABOVE_BYTES = 1_000_000
 
 _RESULTS = "RESULTS.md"
+_FRONT_PAGE = "README.md"
 _ENV_EXAMPLE = ".env.example"
 _MANIFEST_4P1I = "replays/samples/4p1i/MANIFEST.md"
 _MANIFEST_9P2I = "replays/samples/9p2i/MANIFEST.md"
@@ -192,6 +195,13 @@ def _write(root: Path, relative: str, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _without_front_page(errors: list[str]) -> list[str]:
+    """``errors`` minus the front page's: a perturbed source fails the README's
+    figures too, and the tests of that source assert the source's own errors."""
+
+    return [error for error in errors if not error.startswith(_FRONT_PAGE)]
+
+
 def _substitute(root: Path, relative: str, old: str, new: str) -> None:
     """Rewrite ``old`` -> ``new``, asserting the perturbation actually landed."""
 
@@ -210,7 +220,7 @@ def _set_census_cell(root: Path, row: str, cell: str) -> None:
     _substitute(root, _CENSUS_PAGE, lines[0], f"{head} | {cell} |")
 
 
-def test_committed_front_door_passes() -> None:
+def test_committed_results_page_passes() -> None:
     assert check_doc_facts.check_facts(_REPO_ROOT) == []
 
 
@@ -473,8 +483,8 @@ def test_a_stamp_like_token_outside_the_samples_paragraph_is_not_read(
     _substitute(
         doc_tree,
         _RESULTS,
-        "\n## Where the figures come from",
-        "\nThe viewer reads replay format v5.\n\n## Where the figures come from",
+        "\n## Checks you can run",
+        "\nThe viewer reads replay format v5.\n\n## Checks you can run",
     )
     assert check_doc_facts.check_facts(doc_tree) == []
 
@@ -895,7 +905,7 @@ def _readme_rebuilt(doc_tree: Path, *steps: tuple[tuple[str, str], ...]) -> list
     return [error for error in errors if error.startswith(_RESULTS)]
 
 
-def test_the_round_2_front_door_fails_on_the_promoted_tree(doc_tree: Path) -> None:
+def test_the_round_2_results_text_fails_on_the_promoted_tree(doc_tree: Path) -> None:
     # Planted: the whole README as it stood before round 3's promotion, dropped
     # into the promoted tree. It fails naming at least the 9p2i set's date, its
     # win rate and the era sentence, each from the set's own manifest and record.
@@ -914,7 +924,7 @@ def test_the_round_2_front_door_fails_on_the_promoted_tree(doc_tree: Path) -> No
     )
 
 
-def test_the_d41c9006_front_door_fails_on_the_promoted_tree(doc_tree: Path) -> None:
+def test_the_d41c9006_results_text_fails_on_the_promoted_tree(doc_tree: Path) -> None:
     # Planted: the whole README as it stood before round 2's promotion, dropped
     # into the promoted tree; it fails on the same three facts (it failed on the
     # round-2 tree too, against 24/50 and stage-b-r2).
@@ -1426,7 +1436,7 @@ def test_empty_replay_corpus_fails_loud(doc_tree: Path) -> None:
     for name in ("4p1i", "9p2i"):
         for replay in (doc_tree / "replays" / "samples" / name).glob("*.jsonl"):
             replay.unlink()
-    errors = check_doc_facts.check_facts(doc_tree)
+    errors = _without_front_page(check_doc_facts.check_facts(doc_tree))
     assert len(errors) == 2
     assert "no committed replays found" in errors[0]
     # The install block still counts the 100 candidate replays left beside them.
@@ -1473,7 +1483,7 @@ def test_citation_figure_derived_from_the_committed_instrument(
     assert _CITATION_INSTRUMENT in errors[0]
 
 
-def test_instrument_pin_move_reaches_the_front_door(doc_tree: Path) -> None:
+def test_instrument_pin_move_reaches_the_results_page(doc_tree: Path) -> None:
     # The binding runs the other way too: a re-record that moves the pinned
     # count must move the documents, rather than leaving them stale and green.
     _substitute(
@@ -1605,7 +1615,7 @@ def test_a_census_cell_that_is_no_count_fails_loud(doc_tree: Path) -> None:
 
 # ── the process rows, read off the scorecard page ────────────────────────────
 #
-# The README leads with how the votes were cast. Each of the four rows is held,
+# The results page leads with how the votes were cast. Each of the four rows is held,
 # value and before cell, to the shown set's table on the GENERATED markdown page
 # (never its JSON). Every case below fails naming the row it moved.
 
@@ -1699,7 +1709,7 @@ def test_a_process_before_cell_edited_detected(doc_tree: Path) -> None:
     assert f"{_SCORECARD_SOURCE} recomputes to '65 of 292 (22%)'" in errors[0]
 
 
-def test_a_scorecard_value_moved_under_an_unchanged_readme_detected(
+def test_a_scorecard_value_moved_under_an_unchanged_results_page_detected(
     doc_tree: Path,
 ) -> None:
     # Planted: the page moves and the README does not.
@@ -2222,7 +2232,7 @@ def test_eval_report_without_vote_correctness_block_fails_loud(
 # ── 5. the prose figures ─────────────────────────────────────────────────────
 
 
-# The README's prose figures, each perturbed in the live page: (the text, its
+# The results page's prose figures, each perturbed in the live page: (the text, its
 # perturbation, the claim the error names, the claim the source makes it).
 _PROSE_PERTURBATIONS = (
     pytest.param(
@@ -2434,7 +2444,9 @@ def test_a_re_recorded_role_correct_cell_moves_the_prose(doc_tree: Path) -> None
         f"| {_ROLE_CORRECT_CELL} |",
         "| 220/240 = 91.7% vs 1/51 = 2.0% (chance 24.6%) |",
     )
-    errors = check_doc_facts.check_facts(doc_tree)
+    every = check_doc_facts.check_facts(doc_tree)
+    assert any(error.startswith(_FRONT_PAGE) and "'215'" in error for error in every)
+    errors = _without_front_page(every)
     assert len(errors) == 3, errors
     assert "makes it 'hit an impostor 220 of 240 times (92%)'" in errors[0]
     assert "makes it 'the 51 against it hit one once (2%)'" in errors[1]
@@ -2479,7 +2491,7 @@ def test_a_scorecard_without_the_role_correct_row_fails_loud(doc_tree: Path) -> 
         if line.endswith(f"| {_ROLE_CORRECT_CELL} |\n")
     )
     _write(doc_tree, "eval/reports/process-scorecard.md", page.replace(row, ""))
-    errors = check_doc_facts.check_facts(doc_tree)
+    errors = _without_front_page(check_doc_facts.check_facts(doc_tree))
     assert len(errors) == 1, errors
     assert (
         "has no 'argmax-independence: role-correct, followers vs deviators' row"
@@ -2499,7 +2511,7 @@ def test_a_re_recorded_grounded_cell_moves_the_cited_vote_sentence(
         "| 394/397 = 0.9924 |",
         "| 393/397 = 0.9899 |",
     )
-    errors = check_doc_facts.check_facts(doc_tree)
+    errors = _without_front_page(check_doc_facts.check_facts(doc_tree))
     assert len(errors) == 2, errors
     assert "recomputes to '393 of 397 (99%)'" in errors[0]
     assert "the claim '394 of 397 votes to eject' disagrees" in errors[1]
@@ -2528,7 +2540,7 @@ def test_a_re_recorded_unflagged_cell_moves_the_vent_sentence(doc_tree: Path) ->
         doc_tree, "Ejections without vent proof that removed an impostor", "22/38"
     )
     _set_census_cell(doc_tree, "Crewmate ejections in the vent band", "0/16 (0.0%)")
-    errors = check_doc_facts.check_facts(doc_tree)
+    errors = _without_front_page(check_doc_facts.check_facts(doc_tree))
     assert len(errors) == 3, errors
     assert "vs 22 of 38 (58%)" in errors[0]
     assert "'16 of 16 innocent ejections sit in the no-proof cell'" in errors[1]
@@ -2771,3 +2783,70 @@ def test_cli_entry_point_exits_zero() -> None:
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "Doc facts verified" in proc.stdout
+
+
+# ── 11. the front page's figures ─────────────────────────────────────────────
+
+
+def test_a_front_page_figure_off_by_one_detected(doc_tree: Path) -> None:
+    # Planted: one figure under the README's findings heading moved by one.
+    _substitute(
+        doc_tree,
+        _FRONT_PAGE,
+        "hit an impostor 215 of 235 times",
+        "hit an impostor 216 of 235 times",
+    )
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert len(errors) == 1
+    assert errors[0].startswith(f"{_FRONT_PAGE}:")
+    assert "'216'" in errors[0]
+
+
+def test_a_front_page_figure_follows_its_source(doc_tree: Path) -> None:
+    # Planted: the scorecard's role-correct cell moved under an unchanged README,
+    # so the README's 215 is no longer a figure the sources produce. The results
+    # page fails on the same move; only the front-page error is asserted here.
+    _substitute(doc_tree, _SCORECARD_PAGE, "215/235 = 91.5%", "216/235 = 91.9%")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        error.startswith(f"{_FRONT_PAGE}:") and "'215'" in error for error in errors
+    )
+
+
+def test_a_front_page_without_its_findings_heading_fails_loud(
+    doc_tree: Path,
+) -> None:
+    _substitute(doc_tree, _FRONT_PAGE, "## What I found\n", "## Findings\n")
+    assert check_doc_facts.check_facts(doc_tree) == [
+        f"{_FRONT_PAGE}: no '## What I found' section — the front page's figures "
+        "have nothing to be checked against."
+    ]
+
+
+def test_names_and_decimals_under_the_findings_heading_are_not_figures(
+    doc_tree: Path,
+) -> None:
+    # A token glued to a letter, a dot, a comma or a hyphen is a set name, a
+    # player id, a decimal or a thousands group, never a figure to bind.
+    _substitute(
+        doc_tree,
+        _FRONT_PAGE,
+        "## What I found\n",
+        "## What I found\n\nIn 9p2i, p-5 accused p-4; 91.5% of 2,500 lines.\n",
+    )
+    assert check_doc_facts.check_facts(doc_tree) == []
+
+
+def test_a_missing_witness_row_fails_loud(doc_tree: Path) -> None:
+    # Planted: the census's lone-witness rows gone, so the README's witness
+    # figures have no source; the check names the band rather than passing.
+    page = _read(doc_tree, _CENSUS_PAGE)
+    kept = [
+        line for line in page.splitlines() if not line.startswith("| one living crew")
+    ]
+    _write(doc_tree, _CENSUS_PAGE, "\n".join(kept) + "\n")
+    errors = check_doc_facts.check_facts(doc_tree)
+    assert any(
+        error.startswith(f"{_CENSUS_PAGE}:") and "one living crew witness" in error
+        for error in errors
+    )

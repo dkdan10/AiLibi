@@ -8,7 +8,7 @@ that owns it, and every mismatch is reported, not only the first.
    names the recording model, links each set's manifest and the record of its
    era (``eval/eras.py``), and states each set's game count and impostor win
    rate. All of it is recomputed from ``replays/samples/<set>/MANIFEST.md``.
-   Every ``<rate>% (<set>)`` claim and every dated claim elsewhere in the
+   Every ``<rate>% (<set>)`` claim and every dated claim elsewhere on
    the results page is held to the same manifests, except in the results table's Before
    column, which is held to the frozen before cells (:data:`_RESULTS_BEFORE`).
 2. **The .env.example registries.** Each live substrate lever and each meeting
@@ -322,6 +322,21 @@ _VERIFIED_SET_GLOBS: Final[tuple[tuple[str, str], ...]] = (
 _VERIFIED_RECORDINGS_PROSE: Final = re.compile(
     r"\b(\d+) sample and candidate recordings\b"
 )
+# The front page restates a few of the figures above in its own words, under this
+# heading. No sentence shape is required of it; instead every bare whole number
+# under the heading must be a figure the committed sources produce. A token glued
+# to a letter, a dot, a comma or a hyphen (9p2i, p-5, 2,500, 91.5) is a name or a
+# decimal, not a figure.
+_FRONT_PAGE: Final = "README.md"
+_FINDINGS_HEADING: Final = "## What I found"
+_FIGURE_TOKEN: Final = re.compile(r"(?<![\w.,-])(\d+)(?![\w.,-])")
+# The census's witness rows: what the next meeting did after a held kill, by how
+# many crew witnesses were still alive. Each band's cells and their total are
+# figures the front page may state.
+_CENSUS_WITNESS_BANDS: Final[tuple[str, ...]] = (
+    "one living crew witness: ",
+    "two or more living crew witnesses: ",
+)
 _NUMBER_WORDS: Final[tuple[str, ...]] = (
     "no",
     "one",
@@ -422,7 +437,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{len(_SAMPLE_SETS)} sample manifests, the committed replays, "
         f"{_CITATION_INSTRUMENT}, {_CENSUS_PAGE}, {_SCORECARD_PAGE}, "
         f"{_RESULTS_BEFORE}, {_POPULATED_REPORT}, {_IMPORT_LINTER} and the "
-        f"candidate replays; {_ENV_EXAMPLE} agrees with the "
+        f"candidate replays, and {_FRONT_PAGE}'s findings quote only figures "
+        f"those sources produce; {_ENV_EXAMPLE} agrees with the "
         f"{len(SUBSTRATE_FLAG_KEYS)}-lever substrate registry and the "
         f"{len(EXPERIMENT_ENV_NAMES)}-switch experiment registry; {_ML_PAGE}'s "
         f"results table recomputes from {_FINALIST_JSONL}."
@@ -447,6 +463,9 @@ def check_facts(repo_root: Path) -> list[str]:
         check_demo_game_count(repo_root, readme, errors)
         check_import_contract_count(repo_root, readme, errors)
         check_verified_recording_count(repo_root, readme, errors)
+    front = read_document(repo_root, _FRONT_PAGE, errors)
+    if front is not None:
+        check_front_page_figures(repo_root, front, errors)
     # One read for both registry checks, so a missing template is reported
     # once rather than once per registry it would have been audited against.
     environment = read_document(repo_root, _ENV_EXAMPLE, errors)
@@ -1384,7 +1403,8 @@ def check_injustice_cell(
 
 
 class CensusPageError(ValueError):
-    """The census page lacks the section, table, column or cell the results page reads."""
+    """The census page lacks a section, table, column or cell the results page
+    reads."""
 
 
 class VentCells(NamedTuple):
@@ -1666,7 +1686,8 @@ def table_cells(line: str) -> list[str] | None:
 
 
 class ScorecardPageError(ValueError):
-    """The scorecard page lacks a section, table, column, row or line the results page reads."""
+    """The scorecard page lacks a section, table, column, row or line the results
+    page reads."""
 
 
 class _ProcessCells(NamedTuple):
@@ -1876,7 +1897,7 @@ def check_populated_report_example(
 ) -> None:
     """The results page's real-report example, held to that report's own numbers.
 
-    The front door hands a reader a populated report precisely because the
+    The results page hands a reader a populated report precisely because the
     default fake provider produces an empty one. Copying its headline counts
     into prose would put them one re-record away from being someone else's
     numbers, so each is re-derived from the report's own
@@ -2058,7 +2079,7 @@ def restated_claim(match: re.Match[str], values: Sequence[str]) -> str:
 
 
 def percent(numerator: int, denominator: int) -> str:
-    """A share as the front door prints it, rounded as :func:`fraction_figure`."""
+    """A share as the results page prints it, rounded as :func:`fraction_figure`."""
 
     return str(round(100 * numerator / denominator))
 
@@ -2070,7 +2091,7 @@ def repeat_word(count: int) -> str:
 
 
 def number_word(count: int) -> str:
-    """A small count as the front door spells it, or as digits beyond the list."""
+    """A small count as the results page spells it, or as digits beyond the list."""
 
     return _NUMBER_WORDS[count] if count < len(_NUMBER_WORDS) else str(count)
 
@@ -2311,6 +2332,150 @@ def check_verified_recording_count(
         f"the {recordings} replay files under {roots}",
         errors,
     )
+
+
+def census_witness_cells(page: str) -> dict[str, dict[str, int]]:
+    """The shown set's cells of the census's witness rows, by band then row.
+
+    The rows sit in whichever table's header names the shown set; a band's
+    rows are the outcomes of the next meeting after a held kill. Raises
+    :class:`CensusPageError` for a band with no row, a row with no header or
+    shown-set column, or a cell that is no count.
+    """
+
+    label = _SET_LABEL.format(name=_SHOWN_SET)
+    header: list[str] | None = None
+    previous: list[str] | None = None
+    bands: dict[str, dict[str, int]] = {band: {} for band in _CENSUS_WITNESS_BANDS}
+    for line in page.splitlines():
+        cells = table_cells(line)
+        if cells is None:
+            previous = None
+            continue
+        if all(_TABLE_RULE_CELL.match(cell) for cell in cells):
+            header = previous
+            previous = cells
+            continue
+        previous = cells
+        band = next((b for b in _CENSUS_WITNESS_BANDS if cells[0].startswith(b)), None)
+        if band is None:
+            continue
+        if header is None or len(cells) != len(header):
+            raise CensusPageError(f"the witness row {cells[0]!r} has no table header")
+        columns = [i for i, cell in enumerate(header) if cell.startswith(label)]
+        if len(columns) != 1:
+            raise CensusPageError(f"the witness table has no {label} column")
+        value = cells[columns[0]].strip()
+        if not value.isdigit():
+            raise CensusPageError(
+                f"the witness cell {cells[0]!r} reads {value!r}, not a count"
+            )
+        bands[band][cells[0]] = int(value)
+    missing = [band.strip(": ") for band, rows in bands.items() if not rows]
+    if missing:
+        raise CensusPageError(f"no witness rows for {', '.join(missing)}")
+    return bands
+
+
+def source_figures(repo_root: Path, errors: list[str]) -> set[int] | None:
+    """Every whole number the committed sources produce for the front page.
+
+    The shown set's scorecard cells; the census's vent-proof cells, their
+    complements and the meetings without vent proof; the census's witness cells
+    and each band's total; the committed replay count; and each sample set's
+    game count, impostor wins and win rate. ``None`` when a source cannot be
+    read: the check that owns it reports it by name, except the witness rows,
+    which only this check reads and so reports here.
+    """
+
+    values = shown_set_values(repo_root)
+    vent = shown_set_vent_cells(repo_root)
+    if values is None or vent is None:
+        return None
+    figures: set[int] = set()
+    for cell in values.values():
+        figures.update(int(token) for token in _FIGURE_TOKEN.findall(cell))
+    for held, total in vent:
+        figures.update((held, total, total - held))
+    try:
+        page = (repo_root / _CENSUS_PAGE).read_text(encoding="utf-8")
+        witness = census_witness_cells(page)
+    except (OSError, CensusPageError) as error:
+        errors.append(
+            f"{_CENSUS_PAGE}: {error} — the {_FRONT_PAGE} witness figures have "
+            "no source."
+        )
+        return None
+    for rows in witness.values():
+        figures.update(rows.values())
+        figures.add(sum(rows.values()))
+    figures.add(committed_sample_replays(repo_root))
+    for name in _SAMPLE_SETS:
+        try:
+            text = (repo_root / _MANIFEST_PATH.format(name=name)).read_text(
+                encoding="utf-8"
+            )
+        except OSError:
+            return None  # check_sample_provenance reports the missing manifest
+        games = list(parse_manifest(text).values())
+        if not games:
+            return None  # check_sample_provenance reports the unparseable manifest
+        wins = sum(
+            1 for game in games if game.winner.strip().upper() == _IMPOSTOR_WINNER
+        )
+        figures.update((len(games), wins, round(100 * wins / len(games))))
+    return figures
+
+
+def findings_section(readme: str) -> list[tuple[int, str]] | None:
+    """The ``(line, text)`` pairs under the front page's findings heading.
+
+    ``None`` when the heading is missing, which the caller reports: a renamed
+    heading must not pass the front page unchecked.
+    """
+
+    lines = readme.splitlines()
+    if _FINDINGS_HEADING not in lines:
+        return None
+    start = lines.index(_FINDINGS_HEADING) + 1
+    section: list[tuple[int, str]] = []
+    for number, line in enumerate(lines[start:], start=start + 1):
+        if _HEADING.match(line):
+            break
+        section.append((number, line))
+    return section
+
+
+def check_front_page_figures(repo_root: Path, readme: str, errors: list[str]) -> None:
+    """Every whole number under the front page's findings heading is a figure.
+
+    The README retells the results in its own words, so no sentence shape is
+    required of it. What is required is that each bare number under the
+    findings heading be one the committed sources produce
+    (:func:`source_figures`), so a re-record that moves a figure fails the gate
+    on the front page as well as on the results page. The check binds digits,
+    not meaning: a right figure quoted for the wrong thing passes it.
+    """
+
+    section = findings_section(readme)
+    if section is None:
+        errors.append(
+            f"{_FRONT_PAGE}: no {_FINDINGS_HEADING!r} section — the front page's "
+            "figures have nothing to be checked against."
+        )
+        return
+    figures = source_figures(repo_root, errors)
+    if figures is None:
+        return
+    for number, line in section:
+        text = strip_links(line)
+        for token in _FIGURE_TOKEN.findall(text):
+            if int(token) not in figures:
+                errors.append(
+                    f"{_FRONT_PAGE}:{number}: the figure {token!r} is none that the "
+                    "committed sources produce (the shown set's scorecard and "
+                    "census cells, the replay count and the sample manifests)."
+                )
 
 
 def prose_blocks(text: str, *, include_code: bool = True) -> Iterator[tuple[int, str]]:
