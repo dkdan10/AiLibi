@@ -6,7 +6,7 @@ pull requests from outside the project are not merged.**
 ## Why outside pull requests are not merged
 
 Every coding change here is written by an AI coding agent working against a
-task contract the owner has authorized. CI is the gate, separate AI reviewers
+task contract or a scope the owner has set. CI is the gate, separate AI reviewers
 check each change, and the owner decides what is accepted and published. The
 contract, not this file and not a conversation on a pull request, is the
 specification the agent sees.
@@ -27,8 +27,7 @@ and line.
 **Forks.** The license is MIT (see [LICENSE](LICENSE)). Fork it, take it apart,
 build something else with it. No permission needed.
 
-**Security reports** go through [SECURITY.md](SECURITY.md), not the issue
-tracker.
+**Security reports** follow [SECURITY.md](SECURITY.md).
 
 ## Read these first
 

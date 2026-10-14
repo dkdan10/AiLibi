@@ -27,7 +27,9 @@ here; `docs/history.md` means this page and `docs/cleanup-dispositions.md` means
 under [`eval/reports/`](../eval/reports/README.md); `docs/ownership-case-study.md`
 is the second part of [How this was built](../docs/lessons.md#one-decision-traced),
 and `docs/game-shape.md` and `engine/README.md` open
-[the game rules](../docs/observation-contract.md).
+[the game rules](../docs/observation-contract.md). The one audit tool code
+imports, `audits/workflows/extract_gameplay_facts.py`, is now
+[`experiments/extract_gameplay_facts.py`](../experiments/extract_gameplay_facts.py).
 
 ## Phase history
 

@@ -26,9 +26,9 @@ exposure would need first.
 Defects even under the loopback-only posture:
 
 - A default configuration or script that exposes the API beyond loopback.
-- A hidden-state leak across the **observation firewall**: role, killer
-  identity or kill attribution reaching an `ObservationPacket` or anything else
-  agents see.
+- A hidden-state leak across the **observation firewall**: another player's
+  role, killer identity or kill attribution reaching an `ObservationPacket` or
+  anything else agents see.
 - Replay or eval input (a crafted replay file, a game id) that escapes its
   directory, executes code, or does anything other than be parsed.
 - An API key written to a replay, a log or a committed artifact.
@@ -39,8 +39,10 @@ anything else that matters only once the API is exposed beyond loopback.
 ## How to report
 
 **Use GitHub's private vulnerability reporting** (the *Security* tab, then
-*Report a vulnerability*). If that is unavailable to you and the finding is
-**not** sensitive, open a normal issue instead, without working exploit details.
+*Report a vulnerability*) when the repository has it switched on; the owner
+enables it under *Settings*, *Code security*. If it is unavailable to you and
+the finding is **not** sensitive, open a normal issue instead, without working
+exploit details.
 
 Include what you observed, the file and line if you have it, and how to
 reproduce. This is a one-person project built with AI agents: expect a
