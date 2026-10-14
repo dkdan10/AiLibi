@@ -1,20 +1,10 @@
 # docs/media — the committed pictures
 
-Four visual assets are kept here. The repository [README](../../README.md)
-shows the two-perspective PNG and, below it, the GIF. The architecture note
-embeds the diagram; the meeting still is an archive asset no page embeds.
-The three spectator captures show the game the demo's guided tour opens on, 9p2i
-seed 19 from the shown 9-player set, a game the current demo serves.
-[provenance.json](provenance.json) identifies their source and exact asset bytes:
-
-Placement below refers to the README and architecture note.
-
-| File | What it is | Current placement |
-| --- | --- | --- |
-| `spectator-two-truths.png` | 2036×909 — the same scene through omniscient and crewmate views, with the following accusation | [README image](../../README.md) |
-| `spectator-meeting.png` | 1440×900 — accusation chain, ballots and mind inspector | Archive only |
-| `spectator-journey.gif` | 640×400, 13 frames — playback from the opening tick to a meeting | [README image](../../README.md) |
-| `architecture.svg` | Text SVG of the packages, data flow and observation firewall | [Architecture image](../architecture.md) |
+Four visual assets are kept here: three spectator captures and the architecture
+picture. The captures show the game the demo's guided tour opens on, 9p2i seed
+19 from the shown 9-player set, a game the current demo serves.
+[provenance.json](provenance.json) identifies their source and exact asset
+bytes.
 
 The three spectator assets were captured from the **static demo bundle**
 (`scripts/build_demo_bundle.py`) built at the capture revision below, whose
@@ -65,6 +55,10 @@ covered the whole map, so the asset most readers ever saw contained no map at
 all. The capture now asserts the map is clear of the dock before it shoots, and
 fails rather than shipping a picture of the dock.
 
+Budget: the directory is currently 1.0 MB. Keep each still under 400 kB and the
+GIF under 1.5 MB — the capture asserts both, so a walk that grows past them
+fails instead of landing in the tree.
+
 ### Provenance
 
 Every spectator asset is a capture of **9p2i seed 19** (`headless-seed-19`)
@@ -106,13 +100,14 @@ Two consecutive capture runs produce a byte-identical `spectator-two-truths.png`
 `prefers-reduced-motion: reduce`, which the map layer reads directly to snap
 token tweens and freeze the kill ring.
 
-### Current README presentation
+## Where each asset appears
 
-The README embeds `spectator-two-truths.png` under its opening paragraph, and
-`spectator-journey.gif` in its "The demo" section, after "Who did what"; it does not embed
-the meeting still. The picture's caption describes the scene and then names the game, its set
-and its recording date, and both images link to the interactive demo, which serves the same game.
+`tests/scripts/test_public_recording_provenance.py` holds each row to the links
+the README and the architecture note actually carry.
 
-Budget: the directory is currently 1.0 MB. Keep each still under 400 kB and the
-GIF under 1.5 MB — the capture asserts both, so a walk that grows past them
-fails instead of landing in the tree.
+| File | What it is | Current placement |
+| --- | --- | --- |
+| `spectator-two-truths.png` | 2036×909 — the same scene through omniscient and crewmate views, with the following accusation | [README image](../../README.md) |
+| `spectator-meeting.png` | 1440×900 — accusation chain, ballots and mind inspector | Archive only |
+| `spectator-journey.gif` | 640×400, 13 frames — playback from the opening tick to a meeting | [README image](../../README.md) |
+| `architecture.svg` | Text SVG of the packages, data flow and observation firewall | [Architecture image](../architecture.md) |

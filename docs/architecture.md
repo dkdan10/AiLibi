@@ -114,7 +114,7 @@ repeatability and optimizer portability.
 `testimony_shapes` and `temporal_observations`. Each toggle has a default-OFF
 `AILIBI_*` variable. Recordings and manifests stamp the substrate; readers refuse
 incompatible settings. Graduation deletes the resolver and env mechanism but
-keeps its provenance key (`docs/agent-procedures.md`).
+keeps its provenance key (`docs/workflow.md#retiring-substrate-levers`).
 
 Baselines are adopting records. Baseline 9, the current one, is the process
 re-record adopting the substrate wave

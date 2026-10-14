@@ -73,7 +73,7 @@ Twenty-one have graduated; five live substrate toggles remain — `impostor_roll
 `temporal_observations`
 ([`orchestrator/replay.py`](../orchestrator/replay.py));
 graduating requires deleting the mechanism and updating current prose
-([retirement procedure](agent-procedures.md#retiring-substrate-levers)).
+([retirement procedure](workflow.md#retiring-substrate-levers)).
 Separately versioned cleanup experiments use the closed recording configuration
 described in [architecture](architecture.md); they do not inflate this registry.
 

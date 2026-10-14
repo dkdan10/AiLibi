@@ -243,7 +243,7 @@ describe("FIREWALL: identity is identity only", () => {
   ];
 
   it("no identity hue collides with a reserved meaning channel", () => {
-    // Binding rule (frontend/CLAUDE.md): amber = suspicion, blue = trust,
+    // Binding rule (frontend/README.md): amber = suspicion, blue = trust,
     // orange = distrust, red = kill, fuchsia = contradiction, and identity is
     // identity ONLY. A shared hex would make an identity swatch readable as a
     // claim about role or guilt.

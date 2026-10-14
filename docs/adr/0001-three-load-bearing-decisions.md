@@ -71,6 +71,6 @@ on it, and both are one diff away from checkable.
   when a game passes 100. The figure is what the two-tier split was sized
   against.
 
-README.md's "What it is" restates these three decisions in its own words, names
-this record and DESIGN.md §0 as where they are kept, and says outright that the two
-figures above live here rather than repeating them as claims of its own.
+README.md describes the engine, the firewall and the two-tier split in its own
+words and repeats neither figure above as a claim of its own; this record and
+DESIGN.md §0 are where the decisions and both figures are kept.

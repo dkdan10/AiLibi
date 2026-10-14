@@ -412,7 +412,7 @@ why `_without_model_authored_provenance` (`:2982-3009`) strips first.
   evidence judgement. A test asserts these two plus `parse_default` are the only
   target-rewriting paths.
 - [x] Citation relevance is retired as a lever, per
-  [the procedure](../../../docs/agent-procedures.md#retiring-substrate-levers)
+  [the procedure](../../../docs/workflow.md#retiring-substrate-levers)
   and AGENTS craft rule 7. Deleted: the field on `MeetingEvidenceProfile`
   (`meetings/evidence_profile.py:82`) and `RecordedExperimentConfig`
   (`orchestrator/experiment_config.py:50`), both validator entries
@@ -583,7 +583,7 @@ recording and every MANIFEST `flags` cell keeps asserting `citation_gate` true
 D6 retired the coercion that key named. The key is kept deliberately: dropping
 it would shift `SUBSTRATE_FLAG_KEYS` and move the `flags` cell of all four
 committed MANIFESTs, which this card forbids. It now carries the one history
-line [the lever-retirement procedure](../../../docs/agent-procedures.md#retiring-substrate-levers)
+line [the lever-retirement procedure](../../../docs/workflow.md#retiring-substrate-levers)
 requires, in the registry comment and in the `.env.example` note, so a reader
 of a post-merge stamp is told what the cell does and does not mean. No
 committed byte moves here: the stamp's SHAPE, key order and values are
@@ -613,7 +613,7 @@ Delivered on `work/grounded-skip-and-guard-labels`, branched from `038a22a5`
 invalid input raises, no silent fallbacks) and craft rules 2, 3, 4, 5, 6 and 7;
 [docs/architecture.md](../../../docs/architecture.md) on the meeting layer and the
 observation firewall; and
-[the lever-retirement procedure](../../../docs/agent-procedures.md#retiring-substrate-levers).
+[the lever-retirement procedure](../../../docs/workflow.md#retiring-substrate-levers).
 The behaviour change is ruling D6 of
 [the direction of 2026-09-19](../direction-2026-09-19-process-over-outcome.md)
 §12, which supersedes AGENTS craft rule 7's default-OFF requirement for this
@@ -1262,7 +1262,7 @@ and MANIFEST `flags` cell asserts a mechanism that no longer exists. The key
 STAYS: dropping it shifts `SUBSTRATE_FLAG_KEYS` and moves the `flags` cell of
 all four committed MANIFESTs. What changed is the truth around it — the one
 history line
-[the procedure](../../../docs/agent-procedures.md#retiring-substrate-levers)
+[the procedure](../../../docs/workflow.md#retiring-substrate-levers)
 requires, at `orchestrator/replay.py:982-990` and `.env.example:120-126`,
 naming `citation_gate` provenance-only since ruling D6; the registry comment at
 `:973`, which now says twenty of the twenty-one name behaviour that is

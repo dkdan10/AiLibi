@@ -4,7 +4,7 @@
 // inspector header, and the meeting/belief surfaces.
 //
 // FIREWALL: this renders the IDENTITY colour only (greens/teals/purples) — never
-// role/guilt (`frontend/CLAUDE.md`). It is decorative (`aria-hidden`): the
+// role/guilt (`frontend/README.md`). It is decorative (`aria-hidden`): the
 // adjacent label carries the agent id for assistive tech.
 
 type SwatchSize = "sm" | "md";

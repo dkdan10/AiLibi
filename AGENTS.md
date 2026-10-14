@@ -1,43 +1,40 @@
 # AGENTS.md
 
-Read this file, [docs/architecture.md](docs/architecture.md), and the assigned
-`tasks/work/<slug>.md` card before each task. New cards follow
-[docs/workflow.md](docs/workflow.md); [tasks/README.md](process/tasks/README.md) names the
-active ownership and next candidates. Dispatch by card path, without generated
-prompt copies.
+Read this file, [docs/architecture.md](docs/architecture.md) and the assigned
+`process/tasks/work/<slug>.md` card before each task.
+[docs/workflow.md](docs/workflow.md) says how a card is written, delivered and
+reviewed; the [task index](process/tasks/README.md) names active ownership and
+the next candidates. Dispatch by card path.
 
 ## Delivery
 
-Implement a card on a short-lived branch named `work/<card-slug>` and deliver it
-into **`main`** through one pull request per card, populating
-[the PR template](.github/pull_request_template.md). Commits stay focused and
-verified; include the card path in the commit body. Planning and contract
-documents — plans, indexes, ledgers, checkpoints, records — may land on `main`
-directly as `docs:` or `coordination:` commits. Preserve published commit
-identities: merge or fast-forward, never a squash that orphans a commit another
-document cites. The inherited pull requests #431-#434 are merged or closed review
-records: do not reopen, retarget, or re-merge them.
+Implement a card on a short-lived `work/<card-slug>` branch and deliver it into
+**`main`** through one pull request per card that fills every section of
+[the PR template](.github/pull_request_template.md), as
+[branch and delivery](docs/workflow.md#branch-and-delivery) and
+[GitHub operations](docs/workflow.md#github-operations) describe. Commits stay
+focused and verified, with the card path in the body; never squash away a
+commit another document cites.
 
-A push to `main` publishes as well as merges: `.github/workflows/pages.yml`
-rebuilds the static demo bundle from the committed recordings and the featured
-list on every push, so a change to the viewer, the featured games, or the
-public-results payload is a publication decision
+A push to `main` also publishes the demo, so a change to the viewer, the
+featured games or the public-results payload is a publication decision
 ([deployment](docs/deployment.md)). Task completion never authorizes a
 deployment or an experimental adoption.
 
 ## Sources and scope
 
-- `docs/architecture.md` is authoritative for current layering, determinism,
-  and the substrate ladder. `DESIGN.md` is historical rationale.
-- The card defines acceptance, permitted boundaries, and record impact. Inspect
-  current consumers before changing a symbol, path, or constant. Directly
-  necessary call-site, test, generated-output, and documentation follow-through
-  within the card's boundaries is permitted; coordinate shared-file ownership
-  and record material decisions in Results.
+- `docs/architecture.md` is authoritative for current layering, determinism and
+  the substrate ladder. `process/DESIGN.md` is historical rationale.
+- The card defines acceptance, permitted boundaries and record impact. Inspect
+  current consumers before changing a symbol, path or constant. Directly
+  necessary call-site, test, generated-output and documentation follow-through
+  within the card's boundaries is permitted; record material decisions in
+  Results.
 - Protected architecture, additional behavior, public compatibility,
-  dependencies, spending, and experimental adoption need an owner decision
-  unless already authorized. Continue independent work while a decision waits.
-- Historical records (`tasks/phase-*.md`, past audits and
+  dependencies, spending and experimental adoption need an owner decision
+  unless already authorized. Explain the concrete blocking decision and ask; do
+  not guess or claim completion, and continue independent work while it waits.
+- Historical records under `process/` (phase contracts, past audits,
   `AGENT_IMPLEMENTATION.md`) are never rewritten.
 
 ## Load-bearing rules
@@ -60,7 +57,7 @@ deployment or an experimental adoption.
    on the claimed semantic defect.
 3. Retire means delete the dead mechanism and coupled consumers. For graduated
    levers, retain the replay stamp key and one history line; follow
-   [the full retirement procedure](docs/agent-procedures.md#retiring-substrate-levers).
+   [the retirement procedure](docs/workflow.md#retiring-substrate-levers).
 4. User-facing copy and model speech contain no task/audit IDs, unexplained
    jargon, or threshold arithmetic. Define necessary terms in `docs/glossary.md`.
 5. Claims name their enforcing mechanism; numbers are reproducible from
@@ -74,23 +71,17 @@ deployment or an experimental adoption.
 
 Use Python 3.11, type hints on every function, strict mypy, Pydantic v2 for data
 crossing boundaries, and frozen dataclasses for engine state. Use asyncio for
-concurrent dispatch, no threads. Ruff/format must pass; tests use pytest and
-Hypothesis. Follow [environment and history procedures](docs/agent-procedures.md#environment-and-history)
-for fresh setup, dependency changes, and complete history.
+concurrent dispatch, no threads. Ruff and its formatter must pass; tests use
+pytest and Hypothesis. Setup, dependency changes and complete history follow
+[environment and history](docs/workflow.md#environment-and-history).
 
 A task is done only when every acceptance item has evidence, scope is satisfied,
 `bash scripts/check.sh` passes, and Results references the card's architecture
-or design sections, decisions, verification, and limitations. Reopen a done
-card if review reveals unfinished work. Targeted tests are development checks,
-not a replacement for the full gate.
+or design sections, decisions, verification and limitations. Targeted tests are
+development checks, not a replacement for the full gate. Reopen a done card if
+review reveals unfinished work.
 
 CI and ordinary implementation use the fake provider. Live calls need an
-explicit provider plus token, wall-time, and cost budget, including on flat-rate
-service. Provider details are in [llm/README.md](llm/README.md) and `.env.example`;
-recording provenance is in each set's `MANIFEST.md`.
-
-Use [GitHub procedures](docs/agent-procedures.md#github-operations) for the pull
-request and populate every section of `.github/pull_request_template.md`; a
-planning commit that lands without one carries the same evidence in the card's
-Results. Explain concrete blocking decisions there and ask the owner; do not
-guess or claim completion.
+explicit provider plus a token, wall-time and cost budget, even on flat-rate
+service ([llm/README.md](llm/README.md), `.env.example`); recording provenance
+is in each set's `MANIFEST.md`.
