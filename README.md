@@ -1,106 +1,100 @@
-# AiLibi — an Among Us-style game played by LLM agents, built by directing AI coding agents
+# AiLibi
 
-*Recorded AI social deduction*
+**An Among Us-style game where every player is an LLM agent.**
 
-by **Daniel Keinan** · implemented by Claude Code and Codex agents · AI-reviewed · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml)
+by **Daniel Keinan** · code written by Claude Code and Codex agents under my direction · [MIT](LICENSE) · [![CI](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml/badge.svg)](https://github.com/dkdan10/AiLibi/actions/workflows/ci.yml)
 
-**[Watch a recorded game in your browser](https://dkdan10.github.io/AiLibi/)** · [See the results](https://dkdan10.github.io/AiLibi/?set=9p2i&view=tournament) · [Five-minute guide](docs/reading-guide.md)
+### [▶ Watch a recorded game in your browser](https://dkdan10.github.io/AiLibi/)
 
-## The demo
+100 recorded games, replayed in the browser. No install, no account, no model calls. Best on a laptop.
 
-[![The same game playing from its first tick to the meeting](docs/media/spectator-journey.gif)](https://dkdan10.github.io/AiLibi/)
+Nine AI players share a small space station. Seven crewmates do tasks. Two impostors kill, lie, sabotage and hide in vents. When someone finds a body, everyone meets, talks and votes to eject a player or skip. Simple rules move the players around; the game runs in ticks, and in one tick a player walks at most one room. An open model, Qwen3.6-27B, does the talking and voting, in one of 14 personalities, using only what that player actually saw and heard.
 
-The [demo](https://dkdan10.github.io/AiLibi/) carries all 100 games and replays them in the browser with no server and no model calls. Its guided tour opens on game 19 of the 9-player set and stops at the first meeting.
+[![The same moment seen by everyone and by one crewmate, with that crewmate's accusation below](docs/media/spectator-two-truths.png)](https://dkdan10.github.io/AiLibi/)
 
-- **Truth and fog.** *See as* any player dims the all-seeing map to what that player can see.
-- **Behind each accusation.** Click a ballot's citation to open the sighting or statement it names.
-- **A player's mind.** Click a player for its suspicions, memory and the exact prompt its model received.
-
-[![One scene in the omniscient view and through a crewmate's fog, with the agent's accusation below](docs/media/spectator-two-truths.png)](https://dkdan10.github.io/AiLibi/)
-
-*At tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. This is 9p2i seed 19, the game the demo's guided tour opens on, from the 2026-10-09 record (9p2i); [media provenance](docs/media/README.md#provenance) records its source and asset identities.*
+*At tick 9 two players lie dead, one impostor stands in MedBay and the other is inside a vent, while p-5 can see only p-4, whom p-5 accuses at the meeting that follows. This is game 19 of the nine-player set, the game the demo's guided tour opens on.*
 
 p-5 accuses p-4 on something it really saw, yet p-4 is a crewmate.
 
-What the picture shows: on the left, the whole station at tick 9; on the right, the same tick through p-5's eyes, every room it cannot see fogged out; below, p-5's accusation at the meeting three ticks later, with the sighting it cites under the speech ("saw p-4 in Labs at tick 11"). The accusation rests on something p-5 really saw and is still wrong. That gap between evidence and truth is what this project measures.
+The group did not follow p-5. Another player had seen p-6 use a vent, the meeting ejected p-6, an impostor, and the crew went on to win. That gap between evidence and truth is what the recorded games measure.
 
-## What it is
+## What a meeting sounds like
 
-AiLibi is a hidden-role game like Among Us. Nine players share a small space station: seven crewmates do tasks while two impostors kill, lie and sabotage. When a body is found, everyone meets, speaks and votes to eject someone or skip. Rules move each player; a language model speaks and votes for it at meetings, from a memory of what that player saw and heard. The question I wanted answered: does each vote rest on something the voter actually saw or heard? Two 50-game sets are recorded, 9p2i (nine players, two impostors) and 4p1i (four players, one impostor), and the gate recomputes the findings and the Figure column below from them.
+Game 19, at tick 12. Player 8 has just been found dead in MedBay.
+
+> **p-1** (crewmate): "I might be mistaken, but I distinctly saw p-6 vent in Engineering at tick 12, which is... well, it's hard to explain away, isn't it? …"
+>
+> **p-6** (impostor): "Actually, p-1's claim is a desperate fabrication to save themselves. I was standing right there in Engineering at tick 12, and I certainly didn't vent; …"
+>
+> **p-7** (crewmate): "Vent seen. Case closed. Vote p-6."
+
+Five votes to eject p-6, two skips. The game had checked p-1's claim against what p-1 actually saw and marked it as matching. In the demo you can watch as one player with the unseen rooms fogged out, click a vote to open the line behind it, and read the exact prompt each model received.
+
+[![A recorded game playing from its first tick to the first meeting](docs/media/spectator-journey.gif)](https://dkdan10.github.io/AiLibi/)
+
+## Why I built it
+
+I wanted an Among Us-like game where AI agents are the players and a language model is called only during meetings. I also wanted to try an AI-forward workflow: directing coding agents instead of typing the code myself.
+
+Then one question took over: **when an agent votes to eject someone, does that vote rest on something it actually saw or heard?** An accusation can be honest and still wrong; the picture above shows one. The recorded games are how I checked.
 
 ## How it works
 
-- **A pure engine** ([`engine/`](engine/)). One pure function advances the world one tick at a time; the random state is in every recorded hash.
-- **Hashed replays** ([`orchestrator/`](orchestrator/)). Each tick carries a SHA-256 of the whole state, and model replies are recorded, so replays never call a model.
-- **A firewall** ([`observation/`](observation/)). Agents get filtered packets, never engine state. One of five import contracts keeps [`agents/`](agents/) out of the engine; [a test](tests/test_firewall.py) plants a forbidden import that must fail.
-- **Two model calls** ([`meetings/`](meetings/), [`llm/`](llm/)). Movement, kills and tasks are rule-based; the model is called at exactly two sites, a speaking turn and a ballot, under token, cost and time budgets.
-- **One gate** ([`scripts/check.sh`](scripts/check.sh)). Lint, strict typing, import contracts, the Python and frontend test suites, and a checker that re-derives this page's findings and Figure column from the recordings.
+![How the pieces fit together](docs/media/architecture.svg)
 
-Python 3.11 · FastAPI/Pydantic · React/Vite/PixiJS · strict mypy · Hypothesis. [Architecture and enforced boundaries](docs/architecture.md) · [Game rules and what each player may know](docs/observation-contract.md) · [What each script does](scripts/README.md) · [Why these three decisions](docs/adr/0001-three-load-bearing-decisions.md).
+- **A pure engine** ([`engine/`](engine/)). One function takes the world and everyone's actions and returns the next world. Every tick's full state is hashed (SHA-256) and every model reply is recorded, so a game replays exactly without calling a model.
+- **A wall between the game and the agents** ([`observation/`](observation/)). Agents see only what their player can see. Import rules checked in CI forbid agent code from importing the engine, and [a test](tests/test_firewall.py) plants a forbidden import to prove the check fails.
+- **The model only at meetings** ([`meetings/`](meetings/), [`llm/`](llm/)). Movement, tasks and kills are rule-based. The model is called once per speaking turn and once per ballot, about 30 calls in a nine-player game, under token, cost and time limits. It reads a log of what its player saw and heard and the other players' words; at the ballot it also sees a suspicion score the rules compute for every player. A vote to eject must cite the line it rests on.
+- **One check script** ([`scripts/check.sh`](scripts/check.sh)). Lint, strict typing, import rules, the Python and frontend unit tests, and a check that the figures in this page's findings and on the [results page](RESULTS.md) still match the recordings and reports.
 
-## What the recordings show
+The engine is about 2,500 lines; most of the code is tests and evaluation or experiment tooling, and most of the bytes are recorded games. Start reading at `engine/tick.py`, `observation/service.py`, `meetings/voting.py` and `tests/test_firewall.py`. Python 3.11 (asyncio, FastAPI, Pydantic) · TypeScript, React, PixiJS · pytest, Hypothesis, Playwright · strict mypy. [Architecture](docs/architecture.md) · [Game rules](docs/observation-contract.md)
 
-In the 9-player set:
+## What I found
 
-1. **Votes follow a rule-based suspicion score, and going against it is usually wrong.** The ballot prompt shows the voter's rule-kept suspicion of every player ([`agents/memory/`](agents/memory/)). Crew votes for the highest-rated player hit an impostor [215 of 235 times](eval/reports/process-scorecard.md) (91%); the 56 against it hit one twice (4%), where chance is about one in three.
-2. **Meetings with a reported vent sighting never ejected a crewmate.** A vent claim counts only when the engine's witness record matches it. In the 24 meetings with one, every ejection removed an impostor; in the 95 without, [22 of 37](eval/reports/gameplay-census.md) did and 15 removed crewmates, near a coin flip: hard evidence, not general social deduction.
-3. **Votes cite what the voter saw.** [394 of 397](eval/reports/process-scorecard.md) votes to eject cite something the voter saw or heard; the ballot demands a citation, so this is by design.
+Two sets of 50 games were recorded, nine players with two impostors and four with one. Figures here are from the nine-player set; the rest are on the [results page](RESULTS.md). They describe this system, not the model in general.
 
-*Before* is each set's previously shown recording, copied from its record.
+- **The model mostly follows the suspicion score it is shown.** Of the 291 crew votes to eject where one player had the highest score, 235 named that player, and those votes hit an impostor 215 of 235 times. The 56 votes against the score hit an impostor twice. The model's own work is the talking: the accusations, alibis and lies above.
+- **Hard evidence works. Reading people doesn't, yet.** Only impostors can vent, and the prompt tells every player that a seen vent is proof. In the 24 meetings with a confirmed vent sighting, every ejection removed an impostor. In the 95 without one, 37 ended in an ejection: 22 removed an impostor and 15 removed a crewmate. Better than guessing, far from reliable.
+- **Lone eyewitnesses usually lose.** When only one crewmate who saw a kill was still alive at the next meeting, that meeting voted out the witness 6 times out of 9 and the killer twice. With two or more living witnesses, the killer went out all 5 times ([gameplay census](eval/reports/gameplay-census.md)).
+- **Every vote to eject points at a real line.** All 397 cite a line the voter saw or was told; in 394 that line is about the player they voted against, most often another player's claim, which can be a lie. The ballot requires a citation, so this shows the evidence trail works, not that the evidence was true.
+- **Exact replays.** 100 of 100 recorded games replay byte for byte. Impostors won 34% of the nine-player games.
 
-| What | Figure | Before | Recorded on, and where it lives |
-|---|---|---|---|
-| Sample games that replay byte for byte | 100 of 100 (100%) | 100 of 100 (100%) | `scripts/verify_samples.sh`; in CI, a [gate test](tests/api/test_replay_loader.py) for the 9-player set |
-| Eject ballots citing what the voter saw or heard about the accused (9p2i) | 394 of 397 (99%) | 407 of 410 (99%) | [process scorecard](eval/reports/process-scorecard.md); a floor: the ballot asks every eject to cite |
-| Crew eject ballots naming someone other than the voter's [top suspect](docs/glossary.md#top-suspect-the-player-a-voters-own-suspicion-rates-highest) (9p2i) | 56 of 291 (19%) | 65 of 292 (22%) | [process scorecard](eval/reports/process-scorecard.md) |
-| Ballots with no stated reason (9p2i) | 6 of 702 (1%) | 11 of 691 (2%) | [process scorecard](eval/reports/process-scorecard.md) |
-| Ballots whose target is the one their voter wrote (9p2i) | 692 of 702 (99%); 10 impostor votes against a partner turned into skips | 674 of 691 (98%) | [process scorecard](eval/reports/process-scorecard.md) |
-| Eject ballots with a valid citation of a statement or sighting (9p2i) | 397 of 397 (100%), zero dangling | 410 of 410 (100%), zero dangling | the 2026-10-09 record (9p2i) — [instrument](tests/eval/test_vj_instruments.py) |
-| Impostor win rate, sample games | 36% (4p1i), 34% (9p2i) | 36% (4p1i), 48% (9p2i) | the 2026-09-22 record (4p1i), the 2026-10-09 record (9p2i) — [4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md) |
-| Impostors among those ejected, with and without proof of their role (9p2i) | 24 of 24 (100%) vs 22 of 37 (59%) | 24 of 24 (100%) vs 20 of 42 (48%) | the 2026-10-09 record (9p2i) — [gameplay census](eval/reports/gameplay-census.md); 15 of 15 innocent ejections sit in the no-proof cell |
-| Impostors ejected after a reported sighting of them venting (9p2i) | 24 of 46 (52%) | 24 of 44 (55%) | the 2026-10-09 record (9p2i) — [gameplay census](eval/reports/gameplay-census.md). Reading: general social deduction, **not** demonstrated |
+## What this doesn't show
 
-*Valid* means resolvable, not supported.
+- **One model, one prompt set, 50 games per set, recorded once.** No figure ranks one version above another.
+- **General social deduction.** With hard proof the group never ejected a crewmate. Without it, better than guessing and far from reliable.
+- **Exact replay, not exact rerun.** A new game against a real model is not repeatable.
+- **The reviews here are AI reviews**, not independent human assurance.
 
-## Limitations
+## How I built it
 
-- **One model, one recording per round.** One open model and prompt set, recorded once per round, so no figure ranks one version above another.
-- **Learned policies stayed off.** Four learned impostor policies won more games than the scripted one and still failed gates written before measuring ([negative results](docs/ml-program.md)).
-- **Reproducibility has limits.** Recordings always reconstruct; fake-provider runs repeat on one machine; real-model games are not deterministic.
-- **Targets were missed twice.** I adopted the first recording anyway, in writing, and nothing from the second ([what each measured](process/README.md#evidence-honesty-phase-20)).
-- **One known leak.** In the 2026-09-22 recordings the opening prompts name each body by a label that reveals when it died; the shown 9-player set no longer carries it. The full repair stays switched off ([observation contract](docs/observation-contract.md)).
+I directed this project without hand-writing the production code. Claude Code and Codex agents wrote it. I chose the starting three rules: a pure engine, player agents that cannot see the full game state, and meetings run through an LLM fed with a memory of that player's own observations. I then designed a first MVP: 4 players (1 impostor), one static map, and the ability to replay and view the simulated games. The project was split into phases, and each phase into task cards for coding agents to implement, with the goal of a pull request per card that met the task's definition-of-done items. Codex reviewed most pull requests before I merged them. I decided what was accepted and what the demo shows, and the targets each measurement had to meet were written down before it ran.
 
-## How this project was created
+After the MVP was complete the process iterated, and each phase became a new feature, with planning and audits to build the tasks and the definition-of-done items for each. Those phases included changing the meeting LLM from Anthropic to a local Qwen model through Ollama (7B, later 9B) as a cost trade-off, making 9 players (2 impostors) the main game, a complete frontend redesign whose screens I designed in Claude Design, and then moving to Featherless for a larger model.
 
-This project was an experiment in an agentic workflow as much as a game. I directed it without hand-writing the production code. I set the question and the design: a pure engine, agents walled off from game state, a model only at meetings. Then I ran the work as task contracts: each card named its goal, its acceptance checks and the files it was allowed to touch, and was dispatched to a coding agent with a prompt. The agent delivered its work as pull requests, usually one per card, and a separate AI reviewer read them before I merged. I decided what was accepted, what the demo shows, and wrote the measurement targets down before measuring. The audits in this repository are AI reviews, not independent human assurance.
+My biggest lesson was the power and nuance of agentic coding workflows. I found the process rewarding but challenging. I built a project I find interesting, and I could not have built it at the same speed without an LLM, but there were real trade-offs. When I started with a clear vision for each phase, the LLM assistance was very effective and I could iterate well. In the later stages I wanted to push what I could do and spent many phases trying to build an ML model for the gameplay itself (how the players decide on tasks, movement, kills and other actions). That work got away from me because it was not well planned. The learned players won more games than the scripted ones but missed the targets written down before measuring, so none of them plays in the demo. The evidence is still in the repo: the [`training/`](training/) folder and [what was tried and why it stayed off](docs/ml-program.md).
 
-[How a change gets in](docs/workflow.md) · [How this was built](docs/lessons.md) · [One decision, traced](docs/lessons.md#one-decision-traced) · [The process record](process/README.md)
+Understanding what is being implemented, and what the limitations of a build are, is crucial for building anything sustainable. This project was a testing ground as much as it is a final product.
 
 ## Run it
 
-You need [uv](https://docs.astral.sh/uv/getting-started/installation/), Python 3.11 (`uv python install 3.11`) and Node.js 22 or newer. Nothing below needs an API key or the network.
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/), Python 3.11 (`uv python install 3.11`), Node.js 22 or newer, and `lsof`. Setup downloads the dependencies once. After that, nothing below needs an API key or the network.
 
 ```bash
-git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git
+git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git   # about 320 MB of files, mostly recorded games the tests replay
 cd AiLibi
 bash scripts/setup_env.sh
 
-# The viewer on the committed recordings: http://localhost:5173.
+# The viewer on the recorded games: http://localhost:5173
 bash scripts/run_spectator.sh
 
-# Re-run the 200 sample and candidate recordings (about 20 s).
+# Check that the 100 sample games and the 100 games from two earlier rounds of the nine-player game replay byte for byte (about 20 s, offline)
 UV_OFFLINE=1 bash scripts/verify_samples.sh
 
-# The full gate (about 18 min on four cores).
+# Everything CI checks except the browser tests, about 20 min
 bash scripts/check.sh
 ```
 
-The local API shows hidden roles, so it stays on localhost. Real games need a provider and spending limits ([setup](llm/README.md), [.env.example](.env.example)).
+The local server shows hidden roles, so keep it on localhost. New games need a model provider (a local Ollama model works) and spending limits ([setup](llm/README.md)).
 
-## The recordings
-
-A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was regenerated 2026-09-22 (4p1i) with every experimental switch off ([its record](process/audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the [route lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), a recorded setting ([its record](process/audits/audit-2026-10-09-stage-b-r3.md)): impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md)). The picture above is from the 9-player game the guided tour opens on.
-
-**The fake provider's report is empty on purpose:** it returns one fixed reply, so every meeting skips and nothing is ejected. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections; 46 removed an impostor, 36 of those 46 with evidence against that player on the meeting's record.
-
-[Glossary](docs/glossary.md) · [Audits](process/audits/README.md) · [Contributing](CONTRIBUTING.md)
+**More:** [results in full](RESULTS.md) · [five-minute reading guide](docs/reading-guide.md) · [glossary](docs/glossary.md) · [the raw, agent-written working record](process/README.md) · [contributing](CONTRIBUTING.md)

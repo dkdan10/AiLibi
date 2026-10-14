@@ -31,7 +31,8 @@ build something else with it. No permission needed.
 
 ## Read these first
 
-1. [README.md](README.md): what the project is, what the recordings show, and
+1. [README.md](README.md): what the project is, a plain summary of what the
+   recordings show (every checked figure is on [RESULTS.md](RESULTS.md)), and
    how to install and verify it offline.
 2. [docs/architecture.md](docs/architecture.md): the current architecture and
    its enforced boundaries.

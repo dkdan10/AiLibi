@@ -41,10 +41,8 @@ Reproducibility scope of the optimizer stream (Task 19.3)
 ---------------------------------------------------------
 
 Two scopes, stated separately because only one of them is confirmed. They are the
-optimizer half of the three reproducibility scopes the README states repo-wide
-(Task 19.1) — the third, replay integrity, is an engine property and is not this
-module's to promise; the README's cross-platform scope quotes the outcome below and
-the two texts must keep saying the same thing:
+optimizer half of the repository's reproducibility scopes; the third, replay
+integrity, is an engine property and is not this module's to promise:
 
 * **Same-runtime repeatability — GUARANTEED, and pinned.** Two runs under the same
   interpreter on the same host produce bit-identical champions, traces and digests;

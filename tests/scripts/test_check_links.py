@@ -130,6 +130,7 @@ def test_relative_links_decode_paths_and_include_images(tmp_path: Path) -> None:
     ("page", "expected"),
     [
         ("README.md", True),
+        ("RESULTS.md", True),
         ("docs/glossary.md", True),
         ("docs/media/README.md", True),
         ("experiments/README.md", True),

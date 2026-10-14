@@ -9,7 +9,7 @@ outrank summaries. See the [glossary](glossary.md) for terms and
 ## 1. The numbers worth knowing
 
 The headline figures, each beside what the previously shown recording read,
-are in the results table of the [README](../README.md); two more follow.
+are in the results table of the [results page](../RESULTS.md); two more follow.
 
 | What | Figure | Before | Where it lives |
 |---|---|---|---|

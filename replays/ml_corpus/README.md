@@ -164,7 +164,7 @@ Which item comes from which. Fold (a) gives item 1's crew-triggered meeting
 cell, item 7's partner-naming, role-statement and crew-control counts (the
 report's `scaffold_leakage` block) and item 8's coverage cells and
 macro-average. Since 2026-10-13 no gate check holds these cells: the doc
-checker reads only the README's figures, so this page is a record of the bytes
+checker reads only the results page's figures (`RESULTS.md`), so this page is a record of the bytes
 it names, re-derived by the folds above when someone asks. Item 2's rejection causes and resolved
 counts, item 4, item 8's truthfulness cells and item 9's kill census are fold
 (b), which reads the engine's own per-tick output rather than inferring it from

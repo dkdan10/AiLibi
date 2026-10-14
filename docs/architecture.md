@@ -105,8 +105,7 @@ compare owned tasks to engine truth. Strict mypy covers the repository;
 A seed, configuration, agent factory and provider responses determine replay
 bytes within their recorded runtime scope. The fake provider is deterministic;
 fresh hosted generation is not. For hosted runs, the recording is the
-reproducibility boundary. The README separates replay integrity, same-runtime
-repeatability and optimizer portability.
+reproducibility boundary.
 
 `orchestrator/replay.py` owns twenty-one graduated keys in
 `_RETIRED_ALWAYS_ON_LEVERS` and five live toggles:

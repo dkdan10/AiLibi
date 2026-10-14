@@ -260,8 +260,9 @@ git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git
 ```
 
 A blobless partial clone fetches the commit graph up front and file contents on
-demand, so a fresh checkout downloads roughly the 256 MiB the working tree
-actually needs rather than every version of every blob the history holds.
+demand, so a fresh checkout downloads roughly the 320 MB of tracked files the working
+tree actually needs (`git ls-files -z | xargs -0 stat -c %s | awk '{t+=$1} END {print t/1e6}'`)
+rather than every version of every blob the history holds.
 
 **The honest caveat: a full-history clone stays heavy.** Phase 19 rewrote no
 history (locked decision 5), so every byte the prune removed is still reachable
