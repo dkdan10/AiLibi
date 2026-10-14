@@ -2295,8 +2295,8 @@ _PROSE_PERTURBATIONS = (
         id="vent-unflagged-meetings",
     ),
     pytest.param(
-        "[22 of 37](docs/reading-guide.md) did",
-        "[21 of 37](docs/reading-guide.md) did",
+        "[22 of 37](eval/reports/gameplay-census.md) did",
+        "[21 of 37](eval/reports/gameplay-census.md) did",
         "in the 95 without, 21 of 37 did and 15 removed crewmates",
         "in the 95 without, 22 of 37 did and 15 removed crewmates",
         id="vent-unflagged-share",
