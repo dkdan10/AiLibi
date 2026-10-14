@@ -2177,8 +2177,8 @@ def test_missing_report_example_paragraph_fails_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
         _README,
-        "The fake provider's report is empty on purpose.",
-        "The fake provider's report is unusual.",
+        "The fake provider's report is empty on purpose:",
+        "The fake provider's report is unusual:",
     )
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1

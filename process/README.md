@@ -18,7 +18,8 @@ instructions; current work follows [AGENTS.md](../AGENTS.md) and
   findings of the September cleanup.
 
 The paths written inside these records predate their move into this folder, and
-a record is never rewritten to follow a move. A record that cites `tasks/…`,
+a record's text is never rewritten to follow a move; only the relative links it
+carries were re-pointed on 2026-10-13 so they still resolve. A record that cites `tasks/…`,
 `audits/…`, `design/…`, `DESIGN.md` or `AGENT_IMPLEMENTATION.md` means that path
 here; `docs/history.md` means this page and `docs/cleanup-dispositions.md` means
 `process/docs/cleanup-dispositions.md`. The generated pages it cites under

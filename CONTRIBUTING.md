@@ -1,7 +1,7 @@
 # Contributing
 
-Read this before opening anything. The short version: **issues are welcome,
-pull requests are not the workflow.**
+Read this before opening anything. The short version: **issues are welcome;
+pull requests from outside the project are not merged.**
 
 ## Why outside pull requests are not merged
 

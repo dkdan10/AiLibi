@@ -611,7 +611,7 @@ def _walk_replay(
 
     if config.reject_retired_levers_stamped_off:
         # The retired half of the shared substrate comparison — the same filter
-        # audits/workflows/extract_gameplay_facts.py applies: a live toggle
+        # experiments/extract_gameplay_facts.py applies: a live toggle
         # recorded the other way is a substrate this build can still reach, a
         # graduated lever recorded OFF is not.
         # Resolved, not terminal-only: the identity pair rides the first tick

@@ -82,6 +82,34 @@ def test_raw_html_targets_count_and_html_in_code_does_not(tmp_path: Path) -> Non
     ]
 
 
+def test_a_fragment_must_name_a_heading(tmp_path: Path) -> None:
+    # Planted: fragments on a link to another page and on the page itself, one
+    # of each naming no heading; a repeated heading gets a numbered anchor.
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "kept.md").write_text(
+        "# Kept page\n\n## The `code` rule, kept!\n\n## Twice\n\n## Twice\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs" / "page.md").write_text(
+        "## Intro\n\n[a](kept.md#kept-page) [b](kept.md#the-code-rule-kept) "
+        "[c](kept.md#twice-1) [d](#intro) [e](kept.md#missing) [f](#nope) "
+        "[g](kept.md?plain=1#twice)\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    assert check_links.heading_slugs((tmp_path / "docs" / "kept.md").read_text()) == {
+        "kept-page",
+        "the-code-rule-kept",
+        "twice",
+        "twice-1",
+    }
+    assert check_links.broken_links(tmp_path, ["docs/page.md"]) == [
+        ("docs/page.md", "kept.md#missing"),
+        ("docs/page.md", "#nope"),
+    ]
+
+
 def test_a_query_is_not_part_of_the_path(tmp_path: Path) -> None:
     text = "[plain](kept.md?plain=1) [both](kept.md?plain=1#top) [frag](kept.md#?x)\n"
     assert [
@@ -109,6 +137,9 @@ def test_relative_links_decode_paths_and_include_images(tmp_path: Path) -> None:
         ("replays/candidates/stage-b-r2/README.md", True),
         ("eval/reports/process-scorecard.md", True),
         ("process/README.md", True),
+        ("process/docs/training-campaigns.md", True),
+        ("scripts/README.md", True),
+        ("frontend/README.md", True),
         ("process/tasks/README.md", True),
         ("process/audits/README.md", True),
         ("process/audits/review-2026-09-06/correction-record.md", True),
@@ -134,7 +165,7 @@ def test_a_planted_broken_link_fails(
     # is on disk but not tracked, beside one that is tracked, and a record out
     # of scope with its own broken link.
     (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "kept.md").write_text("# kept\n", encoding="utf-8")
+    (tmp_path / "docs" / "kept.md").write_text("# kept\n\n## Top\n", encoding="utf-8")
     (tmp_path / "docs" / "page.md").write_text(
         "[kept](kept.md#top) and [gone](gone.md) and [ghost](ghost.md)\n",
         encoding="utf-8",

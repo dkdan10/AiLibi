@@ -6,7 +6,8 @@ follows. [AGENTS.md](../AGENTS.md) carries the standing rules and
 [task index](../process/tasks/README.md) names current work and the next
 candidates; only work ready to start receives a detailed card. Phase contracts
 and past audits under `process/` are historical records and are never
-rewritten.
+rewritten, except that a move of the folder re-points the relative links they
+carry.
 
 ## One card per change
 

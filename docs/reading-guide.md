@@ -20,7 +20,7 @@ are in the results table of the [README](../README.md); two more follow.
 
 Open the [recorded demo](https://dkdan10.github.io/AiLibi/) without installing.
 For prerequisites and the offline checks, follow the
-[README](../README.md#install-then-verify-offline).
+[README](../README.md#run-it).
 
 ```bash
 git clone --filter=blob:none https://github.com/dkdan10/AiLibi.git && cd AiLibi

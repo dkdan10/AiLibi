@@ -6,7 +6,8 @@ link, drops the ``?query`` and ``#fragment`` from every link and image target,
 including the ``href`` and ``src`` of raw HTML, resolves the path from the page's
 own folder and reports each target that is not a tracked file or folder: a file
 that is only on this disk is absent from every clone and from the published
-repository. Web addresses and in-page anchors are skipped.
+repository. A ``#fragment`` on a link to a page, or on its own, must name a
+heading of that page by GitHub's slug rule. Web addresses are skipped.
 
 By default only the live pages are read (:data:`DEFAULT_SCOPE`). Old records
 keep links that were true when they were written, so ``--all`` reads every
@@ -45,7 +46,10 @@ DEFAULT_SCOPE: Final[tuple[str, ...]] = (
     "training/README.md",
     "experiments/**/README.md",
     "replays/**/README.md",
+    "scripts/README.md",
+    "frontend/README.md",
     "process/README.md",
+    "process/docs/**",
     "process/tasks/README.md",
     "process/audits/README.md",
     "process/audits/audit-phase-21-close.md",
@@ -131,11 +135,14 @@ def broken_links(root: Path, pages: Sequence[str]) -> list[tuple[str, str]]:
     """``(page, target)`` for every relative target in ``pages`` that names no tracked path.
 
     Held to git's index, not to the disk: an untracked or ignored file at the
-    target is on this machine only, so a link to it breaks in every clone.
+    target is on this machine only, so a link to it breaks in every clone. A
+    fragment on a link to a tracked page, or on its own, must name one of that
+    page's headings.
     """
 
     files = tracked_paths(root)
     folders = tracked_folders(files)
+    slugs: dict[str, frozenset[str]] = {}
     misses: list[tuple[str, str]] = []
     for page in pages:
         text = (root / page).read_text(encoding="utf-8")
@@ -146,7 +153,56 @@ def broken_links(root: Path, pages: Sequence[str]) -> list[tuple[str, str]]:
             relative = resolved.relative_to(root).as_posix()
             if relative != "." and relative not in files and relative not in folders:
                 misses.append((page, target))
+        for target, document in fragment_targets(page, text):
+            if document not in files or not document.endswith(".md"):
+                continue  # a missing page is reported above; only pages have headings
+            if document not in slugs:
+                slugs[document] = heading_slugs(
+                    (root / document).read_text(encoding="utf-8")
+                )
+            if target.split("#", 1)[1].casefold() not in slugs[document]:
+                misses.append((page, target))
     return misses
+
+
+def fragment_targets(document: str, text: str) -> Iterator[tuple[str, str]]:
+    """Each target in ``text`` carrying a fragment, with the page the fragment names."""
+
+    base = posixpath.dirname(document)
+    for target in markdown_targets(MarkdownIt("commonmark").parse(text)):
+        if _ABSOLUTE_TARGET.match(target) or "#" not in target:
+            continue
+        path = unquote(target.split("?", 1)[0].split("#", 1)[0])
+        yield (
+            target,
+            posixpath.normpath(posixpath.join(base, path)) if path else document,
+        )
+
+
+def heading_slugs(text: str) -> frozenset[str]:
+    """The anchors GitHub gives the headings of ``text``.
+
+    GitHub lowercases the heading's text, drops punctuation other than hyphens
+    and underscores, turns spaces into hyphens and numbers a repeated slug
+    ``-1``, ``-2`` and so on.
+    """
+
+    tokens = MarkdownIt("commonmark").parse(text)
+    seen: dict[str, int] = {}
+    slugs: set[str] = set()
+    for opening, inline in zip(tokens, tokens[1:], strict=False):
+        if opening.type != "heading_open" or inline.type != "inline":
+            continue
+        heading = "".join(
+            child.content
+            for child in inline.children or ()
+            if child.type in ("text", "code_inline")
+        )
+        slug = re.sub(r"[^\w\- ]", "", heading.casefold()).strip().replace(" ", "-")
+        count = seen.get(slug, 0)
+        seen[slug] = count + 1
+        slugs.add(slug if count == 0 else f"{slug}-{count}")
+    return frozenset(slugs)
 
 
 def relative_targets(

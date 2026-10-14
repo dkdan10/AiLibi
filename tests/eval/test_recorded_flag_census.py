@@ -29,7 +29,7 @@ as an absent channel, so it grounds nothing while looking like compliance. A
 check that waves through what it cannot verify is not a check.
 
 The walk is restricted to those two packages by construction, not by an
-allowlist. ``audits/workflows/extract_gameplay_facts.py`` re-derives on purpose
+allowlist. ``experiments/extract_gameplay_facts.py`` re-derives on purpose
 -- a counterfactual is exactly what it is for -- and lives outside the swept
 roots, so no entry can rot into covering the sites this gate forbids.
 The recorded-input allowlist below remains empty. The reasoning

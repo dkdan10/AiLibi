@@ -1681,7 +1681,7 @@ def _testimony_vehicle(
     """How ``turn`` names ``subject`` + whether the mention is observation-backed.
 
     Returns ``(vehicle, observation_backed, observation_backed_any)``. The
-    vehicle mirrors ``audits/workflows/extract_gameplay_facts.py::_testimony_vehicle``:
+    vehicle mirrors ``experiments/extract_gameplay_facts.py::_testimony_vehicle``:
     ``"accusation"`` if the turn carries an :class:`AccusationClaim` against the
     subject, else ``"sighting"`` for a :class:`SawPlayerObservation` /
     :class:`SawVentObservation` / other-player :class:`AlibiClaim` naming them,

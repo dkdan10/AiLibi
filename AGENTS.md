@@ -35,7 +35,8 @@ deployment or an experimental adoption.
   unless already authorized. Explain the concrete blocking decision and ask; do
   not guess or claim completion, and continue independent work while it waits.
 - Historical records under `process/` (phase contracts, past audits,
-  `AGENT_IMPLEMENTATION.md`) are never rewritten.
+  `AGENT_IMPLEMENTATION.md`) are never rewritten, except that a move of the
+  folder re-points the relative links they carry.
 
 ## Load-bearing rules
 

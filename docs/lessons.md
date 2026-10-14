@@ -86,10 +86,10 @@ I found sentences on the front page describing behaviour the repository had stop
 they had been true when written. Prose rots silently because nothing runs it. So the
 front door now has a check in the same gate as the tests: outcomes are recomputed from the
 recording manifests, results are re-derived from the instruments rather than from a
-second copy of themselves, every relative link is resolved, every ageing count carries the
-date it was taken, and private vocabulary either stays off the page or links a
-glossary entry that exists. Treating a stale claim as a failing test — not as a chore — is the
-only version of this I have seen survive a moving codebase.
+second copy of themselves, and every relative link is resolved. The narrower checks that
+once policed ageing dates and private vocabulary were retired on 2026-10-13: they held
+pages in place for their own sake, not for a figure's. Treating a stale claim as a failing
+test — not as a chore — is the only version of this I have seen survive a moving codebase.
 
 ### Writing the bar down before the measurement
 

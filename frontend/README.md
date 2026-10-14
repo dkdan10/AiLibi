@@ -59,10 +59,10 @@ misleads the viewer. They come from the
    alignment in it.
 2. The ground-truth impostor reveal is an explicit icon or badge, never a hue,
    and it is hideable (hidden in the as-agent view).
-3. Suspicion is a sequential heat ramp, distinct from identity hues and
+3. Suspicion is a sequential amber heat ramp, distinct from identity hues and
    bucketed Low, Med and High.
 4. Trust and distrust are blue and orange, not red and green: colour-blind safe,
-   and red is reserved for kills.
+   red is reserved for kills, and fuchsia for a contradiction.
 5. Outcomes (ejected, skipped) use role-neutral colours, since colouring by
    guilt would leak who the impostor was.
 6. Never hue alone: pair every status with a shape or text.

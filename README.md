@@ -26,7 +26,7 @@ What the picture shows: on the left, the whole station at tick 9; on the right, 
 
 ## What it is
 
-AiLibi is a hidden-role game like Among Us. Nine players share a small space station: seven crewmates do tasks while two impostors kill, lie and sabotage. When a body is found, everyone meets, speaks and votes to eject someone or skip. Rules move each player; a language model speaks and votes for it at meetings, from a memory of what that player saw and heard. The question I wanted answered: does each vote rest on something the voter actually saw or heard? Two 50-game sets are recorded, 9p2i (nine players, two impostors) and 4p1i (four players, one impostor), and every figure below is recomputed from them by the gate.
+AiLibi is a hidden-role game like Among Us. Nine players share a small space station: seven crewmates do tasks while two impostors kill, lie and sabotage. When a body is found, everyone meets, speaks and votes to eject someone or skip. Rules move each player; a language model speaks and votes for it at meetings, from a memory of what that player saw and heard. The question I wanted answered: does each vote rest on something the voter actually saw or heard? Two 50-game sets are recorded, 9p2i (nine players, two impostors) and 4p1i (four players, one impostor), and the gate recomputes the findings and the Figure column below from them.
 
 ## How it works
 
@@ -34,9 +34,9 @@ AiLibi is a hidden-role game like Among Us. Nine players share a small space sta
 - **Hashed replays** ([`orchestrator/`](orchestrator/)). Each tick carries a SHA-256 of the whole state, and model replies are recorded, so replays never call a model.
 - **A firewall** ([`observation/`](observation/)). Agents get filtered packets, never engine state. One of five import contracts keeps [`agents/`](agents/) out of the engine; [a test](tests/test_firewall.py) plants a forbidden import that must fail.
 - **Two model calls** ([`meetings/`](meetings/), [`llm/`](llm/)). Movement, kills and tasks are rule-based; the model is called at exactly two sites, a speaking turn and a ballot, under token, cost and time budgets.
-- **One gate** ([`scripts/check.sh`](scripts/check.sh)). Lint, strict typing, import contracts, the Python and frontend test suites, and a checker that re-derives this page's figures from the recordings.
+- **One gate** ([`scripts/check.sh`](scripts/check.sh)). Lint, strict typing, import contracts, the Python and frontend test suites, and a checker that re-derives this page's findings and Figure column from the recordings.
 
-Python 3.11 · FastAPI/Pydantic · React/Vite/PixiJS · strict mypy · Hypothesis. [Architecture and enforced boundaries](docs/architecture.md) · [Game rules and what each player may know](docs/observation-contract.md) · [What each script does](scripts/README.md).
+Python 3.11 · FastAPI/Pydantic · React/Vite/PixiJS · strict mypy · Hypothesis. [Architecture and enforced boundaries](docs/architecture.md) · [Game rules and what each player may know](docs/observation-contract.md) · [What each script does](scripts/README.md) · [Why these three decisions](docs/adr/0001-three-load-bearing-decisions.md).
 
 ## What the recordings show
 
@@ -46,7 +46,7 @@ In the 9-player set:
 2. **Meetings with a reported vent sighting never ejected a crewmate.** A vent claim counts only when the engine's witness record matches it. In the 24 meetings with one, every ejection removed an impostor; in the 95 without, [22 of 37](eval/reports/gameplay-census.md) did and 15 removed crewmates, near a coin flip: hard evidence, not general social deduction.
 3. **Votes cite what the voter saw.** [394 of 397](eval/reports/process-scorecard.md) votes to eject cite something the voter saw or heard; the ballot demands a citation, so this is by design.
 
-*Before* is each set's previously shown recording.
+*Before* is each set's previously shown recording, copied from its record.
 
 | What | Figure | Before | Recorded on, and where it lives |
 |---|---|---|---|
@@ -72,7 +72,7 @@ In the 9-player set:
 
 ## How this project was created
 
-This project was an experiment in an agentic workflow as much as a game. I directed it without hand-writing the production code. I set the question and the design: a pure engine, agents walled off from game state, a model only at meetings. Then I ran the work as task contracts: each card named its goal, its acceptance checks and the files it was allowed to touch, and was dispatched to a coding agent with a prompt. The agent delivered one pull request per card; a separate AI reviewer read every PR before I merged it. I decided what was accepted, what the demo shows, and wrote the measurement targets down before measuring. The audits in this repository are AI reviews, not independent human assurance.
+This project was an experiment in an agentic workflow as much as a game. I directed it without hand-writing the production code. I set the question and the design: a pure engine, agents walled off from game state, a model only at meetings. Then I ran the work as task contracts: each card named its goal, its acceptance checks and the files it was allowed to touch, and was dispatched to a coding agent with a prompt. The agent delivered its work as pull requests, usually one per card, and a separate AI reviewer read them before I merged. I decided what was accepted, what the demo shows, and wrote the measurement targets down before measuring. The audits in this repository are AI reviews, not independent human assurance.
 
 [How a change gets in](docs/workflow.md) · [How this was built](docs/lessons.md) · [One decision, traced](docs/lessons.md#one-decision-traced) · [The process record](process/README.md)
 
@@ -101,6 +101,6 @@ The local API shows hidden roles, so it stays on localhost. Real games need a pr
 
 A clone includes 100 sample replays under `replays/samples/`: two 50-game tournaments played by the `Qwen/Qwen3.6-27B` model. The 4-player set was regenerated 2026-09-22 (4p1i) with every experimental switch off ([its record](process/audits/audit-2026-09-22-process-rerecord.md)): impostor win rate 36% (4p1i). The 9-player set was regenerated 2026-10-09 (9p2i) under the adopted gameplay changes plus the [route lines](docs/glossary.md#route-line-what-the-doors-say-about-a-players-stated-places), a recorded setting ([its record](process/audits/audit-2026-10-09-stage-b-r3.md)): impostor win rate 34% (9p2i). Each set's manifest lists its prompt versions game by game ([4p1i](replays/samples/4p1i/MANIFEST.md), [9p2i](replays/samples/9p2i/MANIFEST.md)). The picture above is from the 9-player game the guided tour opens on.
 
-**The fake provider's report is empty on purpose.** A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections; 46 removed an impostor, 36 of those 46 with evidence against that player on the meeting's record.
+**The fake provider's report is empty on purpose:** it returns one fixed reply, so every meeting skips and nothing is ejected. A real report, gzipped at [replays/samples/9p2i/tournament-eval-report.json.gz](replays/samples/9p2i/tournament-eval-report.json.gz), records 61 ejections; 46 removed an impostor, 36 of those 46 with evidence against that player on the meeting's record.
 
 [Glossary](docs/glossary.md) · [Audits](process/audits/README.md) · [Contributing](CONTRIBUTING.md)

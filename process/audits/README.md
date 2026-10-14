@@ -1,10 +1,10 @@
 # Audits index
 
 Every audit in this directory, once, with one line saying what it is. The
-records are never rewritten — apart from the 2026-10-13 personal-data scrub, which spells the operator's home directory `~` or elides its account name, elides scratch paths and redacts one mail address, keeping every line number —
+records are never rewritten — apart from the 2026-10-13 personal-data scrub, which spells the operator's home directory `~` or elides its account name, elides scratch paths and redacts one mail address, keeping every line number, and the re-pointing of relative links when the folder moved under `process/` the same day —
 and a correction is an additive, dated erratum inside the record it corrects, so an old audit is a snapshot of what was known then,
 not a claim about today. The current state is on the
-[README](../../README.md) and in [docs/history.md](../../README.md); the
+[README](../../README.md) and in [the process record](../README.md); the
 vocabulary is in [docs/glossary.md](../../docs/glossary.md). A reader new to the
 project can start with the close of 2026-10-10, under its own heading after the
 Stage-B gameplay wave below, whose first section is written for someone who did
