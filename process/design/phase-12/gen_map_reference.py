@@ -4,7 +4,7 @@ SVG (+ PNG if cairosvg is available) to attach to the Claude Design Wave-0 art
 exploration. The reference is intentionally style-neutral — it fixes the LAYOUT
 only; the exploration restyles it.
 
-Run: uv run python design/phase-12/gen_map_reference.py
+Run: uv run python process/design/phase-12/gen_map_reference.py
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import os
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(HERE))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 MAP = os.path.join(ROOT, "engine", "maps", "canonical_1.yaml")
 OUT_SVG = os.path.join(HERE, "canonical_1-map-reference.svg")
 OUT_PNG = os.path.join(HERE, "canonical_1-map-reference.png")

@@ -19,15 +19,10 @@ leg, and it is what the RED half of this test reproduces.
 
 from __future__ import annotations
 
-import importlib
 import re
-from typing import Any
 
-# Imported dynamically, as tests/api/test_sets.py imports the lab rubric scorer:
-# audits/workflows/ is not a package, so mypy maps the file as the top-level
-# module ``extract_gameplay_facts``, and a static ``audits.workflows...`` import
-# makes it "found twice under different module names" and stops the gate.
-_facts: Any = importlib.import_module("audits.workflows.extract_gameplay_facts")
+from experiments import extract_gameplay_facts as _facts
+
 _SUSPICION_GRAPH_HEADERS = _facts._SUSPICION_GRAPH_HEADERS
 _parse_suspicion_graph = _facts._parse_suspicion_graph
 

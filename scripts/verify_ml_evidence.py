@@ -2787,22 +2787,21 @@ _IN_TREE_PROBES: Final[dict[str, tuple[str, ...]]] = {
     "training/artifacts/coevo/EVIDENCE-MANIFEST.md": (EVIDENCE_MANIFEST,),
     "training/reports/": ("training/reports", FINALIST_RESULTS),
     "training/reports/_finalist_eval_raw/MANIFEST.md": (SLATE_MANIFEST,),
-    "audits/": ("audits",),
+    "process/audits/": ("process/audits",),
     "docs/media/": ("docs/media",),
-    # Three files, each named: the published pair and the frozen before columns
-    # the publisher copies into it, so a probe on one would leave another's
+    # Two files, each named: the published page and the frozen before columns
+    # the publisher copies into it, so a probe on one would leave the other's
     # deletion to the inventory leg alone.
-    "docs/process-scorecard.md": (
-        "docs/process-scorecard.md",
-        "docs/process-scorecard.json",
-        "docs/process-scorecard-before.json",
+    "eval/reports/process-scorecard.md": (
+        "eval/reports/process-scorecard.md",
+        "eval/reports/process-scorecard-before.json",
     ),
-    "docs/gameplay-census.md": (
-        "docs/gameplay-census.md",
-        "docs/gameplay-census.json",
+    "eval/reports/gameplay-census.md": (
+        "eval/reports/gameplay-census.md",
+        "eval/reports/gameplay-census.json",
     ),
-    "docs/game-profile.md": ("docs/game-profile.md",),
-    "design/phase-12/": ("design/phase-12",),
+    "eval/reports/game-profile.md": ("eval/reports/game-profile.md",),
+    "process/design/phase-12/": ("process/design/phase-12",),
     "experiments/lab/": ("experiments/lab", "experiments/model_probe"),
     "replays/*.jsonl": (),
 }
@@ -2858,22 +2857,21 @@ _IN_TREE_INVENTORY: Final[dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = 
     "training/artifacts/coevo/EVIDENCE-MANIFEST.md": ((EVIDENCE_MANIFEST,), ()),
     "training/reports/": (("training/reports",), ()),
     "training/reports/_finalist_eval_raw/MANIFEST.md": ((SLATE_MANIFEST,), ()),
-    "audits/": (("audits",), ()),
+    "process/audits/": (("process/audits",), ()),
     "docs/media/": (("docs/media",), ()),
-    "docs/process-scorecard.md": (
+    "eval/reports/process-scorecard.md": (
         (
-            "docs/process-scorecard.md",
-            "docs/process-scorecard.json",
-            "docs/process-scorecard-before.json",
+            "eval/reports/process-scorecard.md",
+            "eval/reports/process-scorecard-before.json",
         ),
         (),
     ),
-    "docs/gameplay-census.md": (
-        ("docs/gameplay-census.md", "docs/gameplay-census.json"),
+    "eval/reports/gameplay-census.md": (
+        ("eval/reports/gameplay-census.md", "eval/reports/gameplay-census.json"),
         (),
     ),
-    "docs/game-profile.md": (("docs/game-profile.md",), ()),
-    "design/phase-12/": (("design/phase-12",), ()),
+    "eval/reports/game-profile.md": (("eval/reports/game-profile.md",), ()),
+    "process/design/phase-12/": (("process/design/phase-12",), ()),
     "experiments/lab/": (("experiments/lab", "experiments/model_probe"), ()),
 }
 

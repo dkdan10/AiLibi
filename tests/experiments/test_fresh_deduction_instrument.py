@@ -90,6 +90,7 @@ from experiments.held_out_prefixes import (
     assert_no_legacy_body_handles,
     build_prefix,
     canonical_prefix_json,
+    current_path,
     prefix_sha256,
 )
 from llm.budget import BudgetExceededError, GameBudget
@@ -1244,7 +1245,7 @@ class TestLiveGate:
         self, tmp_path: Path
     ) -> None:
         # PERTURBED: this scratch root's own manifest, authorizing nothing.
-        stray = tmp_path / "audits" / "deduction-candidate" / "execution-manifest.md"
+        stray = tmp_path / EXECUTION_MANIFEST_PATH
         stray.parent.mkdir(parents=True)
         stray.write_text("# not an authorization\n", encoding="utf-8")
         with pytest.raises(LiveRunNotAuthorized, match="does not name"):
@@ -1261,7 +1262,7 @@ class TestLiveGate:
         """PLANTED: the review's own reproduction — a 41-byte file whose last
         three path components match, carrying none of the owner's limits."""
 
-        forged = tmp_path / "audits" / "deduction-candidate" / "execution-manifest.md"
+        forged = tmp_path / EXECUTION_MANIFEST_PATH
         forged.parent.mkdir(parents=True)
         forged.write_text(
             f"{AUTHORIZED_PROVIDER} {AUTHORIZED_MODEL} {AUTHORIZED_PROMPT_SET}",
@@ -3226,6 +3227,7 @@ class TestTruncationIsObservedAsWellAsInferred:
         payload = json.loads(
             (
                 _REPO_ROOT
+                / "process"
                 / "audits"
                 / "deduction-candidate"
                 / "calibration-2026-09-14"
@@ -4175,7 +4177,11 @@ class TestExecutionManifest:
 
     def test_the_manifest_quotes_the_cost_statement_verbatim(self) -> None:
         authorization = (
-            _REPO_ROOT / "tasks" / "work" / "fresh-deduction-authorization.md"
+            _REPO_ROOT
+            / "process"
+            / "tasks"
+            / "work"
+            / "fresh-deduction-authorization.md"
         ).read_text(encoding="utf-8")
         start = authorization.index(
             "> This evaluation runs on the Featherless AI Premium plan"
@@ -4869,7 +4875,11 @@ class TestExecutionManifest:
         the table is qualified and the row itself says so."""
 
         authorization = (
-            _REPO_ROOT / "tasks" / "work" / "fresh-deduction-authorization.md"
+            _REPO_ROOT
+            / "process"
+            / "tasks"
+            / "work"
+            / "fresh-deduction-authorization.md"
         ).read_text(encoding="utf-8")
         assert "Sampling temperature" not in authorization
         assert (
@@ -5061,7 +5071,7 @@ class TestExecutionManifest:
             f"{record['status']!r}: a freeze record is held out or converted"
         )
         converted = record["converted"]
-        assert converted["superseded_by"] == MANIFEST_PATH, (
+        assert current_path(converted["superseded_by"]) == MANIFEST_PATH, (
             f"{path.name} is bound while development and names "
             f"{converted['superseded_by']!r} as its replacement, not the live "
             f"freeze {MANIFEST_PATH}"
@@ -5069,7 +5079,7 @@ class TestExecutionManifest:
         live = _committed_manifest()
         assert live["status"] == "held_out"
         assert live["band"] != record["band"]
-        rebinding = _REPO_ROOT / converted["informed"]
+        rebinding = _REPO_ROOT / current_path(converted["informed"])
         # Read into booleans rather than asserting on the membership directly:
         # a failure here should name the card, not print it.
         rebinding_text = rebinding.read_text(encoding="utf-8")
@@ -5456,6 +5466,7 @@ class TestFeasibility:
         measured = json.loads(
             (
                 _REPO_ROOT
+                / "process"
                 / "audits"
                 / "deduction-candidate"
                 / "calibration-2026-09-14"
@@ -8076,6 +8087,7 @@ class TestAuthorizedConstants:
         recorded = json.loads(
             (
                 _REPO_ROOT
+                / "process"
                 / "audits"
                 / "deduction-candidate"
                 / "calibration-2026-09-14"
@@ -9836,7 +9848,7 @@ class TestTheManifestCarriesTheSecondCalibration:
 #: run recorded it under, and feed the run path's own function. No prefix, no
 #: rendered prompt and no seed's text is printed by any of them.
 _FIFTH_RUN: Final[Path] = (
-    _REPO_ROOT / "audits" / "deduction-candidate" / "run-2026-09-16"
+    _REPO_ROOT / "process" / "audits" / "deduction-candidate" / "run-2026-09-16"
 )
 
 
@@ -10966,7 +10978,7 @@ class TestPerCallFinishReasonsReachTheRun:
 #: The card this section implements, read for the one table it and the manifest
 #: both carry.
 _CALIBRATION_3_CARD: Final[Path] = (
-    _REPO_ROOT / "tasks" / "work" / "fresh-deduction-calibration-3.md"
+    _REPO_ROOT / "process" / "tasks" / "work" / "fresh-deduction-calibration-3.md"
 )
 
 #: The 2026-09-15 sitting's committed output. Its own published maxima are what
@@ -10975,6 +10987,7 @@ _CALIBRATION_3_CARD: Final[Path] = (
 #: record rather than a second copy of the strings.
 _CALIBRATION_2_ARCHIVE: Final[Path] = (
     _REPO_ROOT
+    / "process"
     / "audits"
     / "deduction-candidate"
     / "calibration-2-2026-09-15"
@@ -11395,7 +11408,8 @@ class TestTheThirdModesDraw:
             ConvertedBand(
                 band=SeedBand(first_seed=8000, last_seed=8999, size=50),
                 manifest_path=(
-                    "audits/deduction-candidate/held-out/manifest-band-8000-8999.json"
+                    "process/audits/deduction-candidate/held-out/"
+                    "manifest-band-8000-8999.json"
                 ),
             ),
         )
@@ -12087,11 +12101,17 @@ class TestTheSixPredictionsAreFixedBeforeTheSitting:
         """Which records were authorized, and the bytes each of them is."""
 
         section = self._manifest_section()
+        # The manifest predates the move under process/, so it names each record
+        # by the path it had then.
+        named = {
+            current_path(recorded)
+            for recorded in re.findall(r"`([\w/.-]+/held-out/[\w.-]+\.json)`", section)
+        }
         for converted in CONVERTED_BANDS[:2]:
             path = _REPO_ROOT / converted.manifest_path
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             assert digest in section, converted.manifest_path
-            assert converted.manifest_path in section
+            assert converted.manifest_path in named
         assert "5000 to 5009" in section
         assert "3000 to 3057" in section
         # And the one record this draw may never name.

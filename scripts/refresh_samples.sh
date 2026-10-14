@@ -586,7 +586,7 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] manifest: $MANIFEST"
   echo "[dry-run] eval report: would rebuild $SAMPLE_DIR/tournament-eval-report.json.gz from the refreshed replays (scripts/build_sample_report.py; \$0, no provider)"
   if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
-    echo "[dry-run] game-shape profile: would regenerate $SAMPLE_DIR/results-game-profile.json and docs/game-profile.md from the refreshed replays (scripts/publish_game_profile.py; \$0, no provider)"
+    echo "[dry-run] game-shape profile: would regenerate $SAMPLE_DIR/results-game-profile.json and eval/reports/game-profile.md from the refreshed replays (scripts/publish_game_profile.py; \$0, no provider)"
   fi
   echo "[dry-run] no API calls made; no files written."
   if ! substrate_lever_preflight; then
@@ -1132,7 +1132,7 @@ uv run python "$REPO_ROOT/scripts/build_sample_report.py" --sample-dir "$SAMPLE_
 if [[ "$SAMPLE_DIR" -ef "$REPO_ROOT/replays/samples/9p2i" ]]; then
   echo "Regenerating the game-shape profile (9p2i) ..."
   if (cd "$REPO_ROOT" && uv run python scripts/publish_game_profile.py); then
-    echo "  profile refreshed: $SAMPLE_DIR/results-game-profile.json and docs/game-profile.md"
+    echo "  profile refreshed: $SAMPLE_DIR/results-game-profile.json and eval/reports/game-profile.md"
   else
     echo "ERROR: the game-shape profile failed to regenerate. The re-recorded" >&2
     echo "  replays + MANIFEST + eval report are preserved on disk, but" >&2

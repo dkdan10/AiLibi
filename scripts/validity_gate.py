@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Run the HARD validity gate over a replay-set directory (Task 15.1; "
-            "audits/audit-phase-14-close.md §1). Pure, offline, CPU only."
+            "process/audits/audit-phase-14-close.md §1). Pure, offline, CPU only."
         ),
     )
     parser.add_argument(

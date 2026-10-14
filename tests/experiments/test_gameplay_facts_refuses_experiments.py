@@ -1,6 +1,6 @@
 """The gameplay-facts extractor reads only recordings made without experiment settings.
 
-``audits/workflows/extract_gameplay_facts.py`` re-simulates each recording with
+``experiments/extract_gameplay_facts.py`` re-simulates each recording with
 no settings and re-derives its meeting chain, so a recording made with experiment
 settings (the one-reply rebuttal, the regroup reset, ...) would fail a later
 extraction invariant or, worse, pass one on facts its settings changed. Before
@@ -16,23 +16,18 @@ turned on.
 
 from __future__ import annotations
 
-import importlib
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 
+from experiments import extract_gameplay_facts as _facts
 from orchestrator.experiment_config import RecordedExperimentConfig
 from tests._helpers.scripted_meeting import (
     ACCUSE_THE_OPENER,
     ScriptedMeetingClient,
     record_game,
 )
-
-# Imported dynamically: audits/workflows/ is not a package (see
-# tests/experiments/test_gameplay_facts_suspicion_row.py).
-_facts: Any = importlib.import_module("audits.workflows.extract_gameplay_facts")
 
 
 def _refuse_every_advance(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -67,7 +67,7 @@ def test_the_committed_census_matches_a_recomputation(
     """The gate: both published files are what the recordings say they are."""
 
     assert command.check_report(ROOT, load=census_inputs) == 0, (
-        "docs/gameplay-census.md / .json are STALE: re-run "
+        f"{command.MARKDOWN_PATH} / .json are STALE: re-run "
         f"`{command.REGENERATE_COMMAND}` and commit the result."
     )
     assert "are consistent with the committed recordings" in capsys.readouterr().out
@@ -135,7 +135,7 @@ def test_one_edited_cell_turns_check_red(
 
     monkeypatch.setattr(command, "compute_gameplay_census", computed)
     root = tmp_path / "tree"
-    (root / "docs").mkdir(parents=True)
+    (root / command.MARKDOWN_PATH).parent.mkdir(parents=True)
     command.publish(root)
     assert command.check_report(root) == 0
     assert capsys.readouterr().out == (
@@ -187,7 +187,7 @@ def test_a_missing_published_file_is_red(
     planted = _planted()
     monkeypatch.setattr(command, "compute_gameplay_census", lambda _root, load: planted)
     root = tmp_path / "tree"
-    (root / "docs").mkdir(parents=True)
+    (root / command.MARKDOWN_PATH).parent.mkdir(parents=True)
     command.publish(root)
     (root / missing).unlink()
     assert command.check_report(root) == 1
@@ -509,7 +509,7 @@ def test_main_publishes_and_checks_the_tree_it_is_given(
 
     monkeypatch.setattr(command, "compute_gameplay_census", computed)
     root = tmp_path / "tree"
-    (root / "docs").mkdir(parents=True)
+    (root / command.MARKDOWN_PATH).parent.mkdir(parents=True)
     monkeypatch.setattr(command, "_REPO_ROOT", root)
     assert command.main([]) == 0
     printed = capsys.readouterr().out

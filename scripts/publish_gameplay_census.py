@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish the gameplay census over the committed recordings.
 
-Writes ``docs/gameplay-census.md`` and ``docs/gameplay-census.json`` from
+Writes ``eval/reports/gameplay-census.md`` and its JSON twin from
 :func:`eval.gameplay_census.compute_gameplay_census`, a fold over bytes already
 in the tree with zero model calls. ``--check`` recomputes both and exits 1 on
 drift, naming the stale file and the command that regenerates it.
@@ -52,8 +52,8 @@ from eval.gameplay_census import (  # noqa: E402
 )
 from eval.process_scorecard import RECORDINGS_ROOT  # noqa: E402
 
-MARKDOWN_PATH = Path("docs/gameplay-census.md")
-JSON_PATH = Path("docs/gameplay-census.json")
+MARKDOWN_PATH = Path("eval/reports/gameplay-census.md")
+JSON_PATH = Path("eval/reports/gameplay-census.json")
 
 #: The one command a reader, or a red ``--check``, is told to run.
 REGENERATE_COMMAND = "uv run python scripts/publish_gameplay_census.py"

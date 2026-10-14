@@ -30,26 +30,27 @@ from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
 _REPO_ROOT: Final = Path(__file__).resolve().parents[1]
-# The live pages, plus the record pages the README and the reading guide send a
-# reader to. Task cards are left out: several link a card that is not written
-# yet.
+# The live pages and the generated report pages, plus the record pages the
+# README and the reading guide send a reader to. Task cards are left out:
+# several link a card that is not written yet.
 DEFAULT_SCOPE: Final[tuple[str, ...]] = (
     "README.md",
     "AGENTS.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
     "docs/**",
+    "eval/reports/**",
     "llm/README.md",
     "training/README.md",
     "experiments/**/README.md",
     "replays/**/README.md",
-    "tasks/README.md",
     "process/README.md",
-    "audits/README.md",
-    "audits/audit-phase-21-close.md",
-    "audits/review-2026-08-19/README.md",
-    "audits/review-2026-09-06/README.md",
-    "audits/review-2026-09-06/correction-record.md",
+    "process/tasks/README.md",
+    "process/audits/README.md",
+    "process/audits/audit-phase-21-close.md",
+    "process/audits/review-2026-08-19/README.md",
+    "process/audits/review-2026-09-06/README.md",
+    "process/audits/review-2026-09-06/correction-record.md",
 )
 _ABSOLUTE_TARGET: Final = re.compile(r"\A(?:[a-z][a-z0-9+.-]*:|//)", re.IGNORECASE)
 _HTML_TARGET: Final = re.compile(

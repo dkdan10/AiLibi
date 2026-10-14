@@ -1,12 +1,12 @@
 # The process scorecard
 
-**Role-correctness is REPORTED and is NOT a gate. The owner accepted decision D1 of tasks/direction-2026-09-19-process-over-outcome.md section 10 on 2026-09-19: the process suite is the headline, role-correctness is a reported cell beside it, and the preregistered supported_correct_ejection outcome stops being the project's gate. Nothing in this scorecard, and nothing any card derived from it gates on, pushes an agent toward the correct answer: a wrong decision on believable data is the game working, and it is counted in row 8, never penalised.**
+**Role-correctness is REPORTED and is NOT a gate. The owner accepted decision D1 of process/tasks/direction-2026-09-19-process-over-outcome.md section 10 on 2026-09-19: the process suite is the headline, role-correctness is a reported cell beside it, and the preregistered supported_correct_ejection outcome stops being the project's gate. Nothing in this scorecard, and nothing any card derived from it gates on, pushes an agent toward the correct answer: a wrong decision on believable data is the game working, and it is counted in row 8, never penalised.**
 
-Nine measures of whether a decision rested on data the agent actually held, computed with **zero model calls** from recordings already in the tree. The suite is [the direction of 2026-09-19](../tasks/direction-2026-09-19-process-over-outcome.md) section 8; the card that publishes it is [the process scorecard card](../tasks/work/process-scorecard.md). Every row's definition — numerator, denominator, non-coverage — is published beside the number here and as typed keys in [`process-scorecard.json`](process-scorecard.json).
+Nine measures of whether a decision rested on data the agent actually held, computed with **zero model calls** from recordings already in the tree. The suite is [the direction of 2026-09-19](../../process/tasks/direction-2026-09-19-process-over-outcome.md) section 8; the card that publishes it is [the process scorecard card](../../process/tasks/work/process-scorecard.md). Every row's definition — numerator, denominator, non-coverage — is published beside the number here.
 
-This page is GENERATED. Do not edit it by hand: run `uv run python scripts/publish_process_scorecard.py` and commit the result. `uv run python scripts/publish_process_scorecard.py --check` recomputes both files from the recordings and fails on drift.
+This page is GENERATED. Do not edit it by hand: run `uv run python scripts/publish_process_scorecard.py` and commit the result. `uv run python scripts/publish_process_scorecard.py --check` recomputes this page from the recordings and fails on drift.
 
-History (2026-10-09): the fifth run's appendix, folded from `audits/deduction-candidate/run-2026-09-16`, left this page; `e75780b7` is the last commit that published it, and the archive keeps its bytes.
+History (2026-10-09): the fifth run's appendix, folded from `process/audits/deduction-candidate/run-2026-09-16`, left this page; `e75780b7` is the last commit that published it, and the archive keeps its bytes.
 
 ## Why rows 2 and 3 are the point
 
@@ -16,12 +16,12 @@ Without **argmax-independence** the headline certifies an arithmetic aggregator 
 
 The four sets span 2 recorded eras, grouped by the era registry (`eval/eras.py`). An era is pooled only with itself and is never averaged across a boundary:
 
-* **baseline-9**, recorded 2026-09-22: `replays/ml_corpus/9p2i`, `replays/ml_corpus/4p1i`, `replays/samples/4p1i`. Owning record: [`audits/audit-2026-09-22-process-rerecord.md`](../audits/audit-2026-09-22-process-rerecord.md).
-* **stage-b-r3**, recorded 2026-10-09: `replays/samples/9p2i`. Owning record: [`audits/audit-2026-10-09-stage-b-r3.md`](../audits/audit-2026-10-09-stage-b-r3.md).
+* **baseline-9**, recorded 2026-09-22: `replays/ml_corpus/9p2i`, `replays/ml_corpus/4p1i`, `replays/samples/4p1i`. Owning record: [`process/audits/audit-2026-09-22-process-rerecord.md`](../../process/audits/audit-2026-09-22-process-rerecord.md).
+* **stage-b-r3**, recorded 2026-10-09: `replays/samples/9p2i`. Owning record: [`process/audits/audit-2026-10-09-stage-b-r3.md`](../../process/audits/audit-2026-10-09-stage-b-r3.md).
 
 The baseline-9 sets are the process re-record made after the substrate wave (the route claim, the grounded SKIP with its labelling guards, and the weighing channel); the column on the recordings made before that wave is committed in that record's section 1, the SKIP row read 0 there by instruction, and row 3's claims became routes across the same line, so no row pools with that column. A set whose bytes replaced an earlier recording carries that recording's published rows as a dated before column, read from [`process-scorecard-before.json`](process-scorecard-before.json) and never recomputed.
 
-Report format version 2; scorecard schema version 3; decision date 2026-09-19.
+Report format version 2; scorecard schema version 4; decision date 2026-09-19.
 
 ## Pooled within an era
 
@@ -225,5 +225,3 @@ Context: impostor alibis 1/1 survived contradiction detection; reporter slots 0/
 **wrong_but_believable_rate.** Numerator: EJECT ballots that are role-INCORRECT (the recorded target is a crewmate) AND grounded by row 1 AND not resting on a manufactured contradiction by row 3 (no manufactured flag in that meeting names the ballot's target). Denominator: all EJECT ballots. Not-evaluable: EJECT ballots whose voter has no recorded prompt, the same per-kind count row 1's EJECT cell carries. REPORTED, NEVER PENALISED: this is the owner's preferred case - a wrong decision on believable data - and the direction of this row is deliberately unstated.
 
 **role_correct_ejection_rate.** Numerator: ejections whose ejected player was an IMPOSTOR. Denominator: all ejections. REPORTED BESIDE the suite, NEVER A GATE (decision D1, 2026-09-19). It is published last on purpose.
-
-No component reads this file yet. It is published beside the markdown so a spectator surface can load it later; today its only consumer is scripts/publish_process_scorecard.py --check, which recomputes both files from the committed recordings and fails on drift.

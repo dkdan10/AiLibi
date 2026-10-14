@@ -7,9 +7,10 @@ read off the archived replays, never off the freeze record, so the rule this
 script enforces is the same one the four stopped runs' archives enforced when
 they wrote out only the handful they had reached.
 
-    .venv/bin/python audits/deduction-candidate/run-2026-09-16/render_rendered_prefixes.py \
-      audits/deduction-candidate/run-2026-09-16 \
-      > audits/deduction-candidate/run-2026-09-16/rendered-prefixes.json
+    .venv/bin/python \
+      process/audits/deduction-candidate/run-2026-09-16/render_rendered_prefixes.py \
+      process/audits/deduction-candidate/run-2026-09-16 \
+      > process/audits/deduction-candidate/run-2026-09-16/rendered-prefixes.json
 """
 
 from __future__ import annotations
@@ -20,8 +21,8 @@ from pathlib import Path
 
 # Run by path, ``sys.path[0]`` is this directory rather than the repository
 # root, so the generator this script exists to call would not import. The root
-# is three levels up from here (audits/deduction-candidate/run-<date>/).
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+# is four levels up from here (process/audits/deduction-candidate/run-<date>/).
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from experiments.held_out_prefixes import (  # noqa: E402
     MANIFEST_PATH,

@@ -66,7 +66,7 @@ def planted_root(tmp_path: Path) -> Iterator[Path]:
 
     root = tmp_path / "checkout"
     shutil.copytree(SAMPLES_9P2I, root / "replays" / "samples" / "9p2i")
-    (root / "docs").mkdir()
+    (root / command.MARKDOWN_PATH).parent.mkdir(parents=True)
     shutil.copyfile(ROOT / command.MARKDOWN_PATH, root / command.MARKDOWN_PATH)
     yield root
 
@@ -99,7 +99,7 @@ def test_an_edited_page_turns_check_red(
     page = planted_root / command.MARKDOWN_PATH
     page.write_text(page.read_text(encoding="utf-8") + "\nAn edit.\n", encoding="utf-8")
     assert command.check_report(planted_root, loaders=COMMITTED) == 1
-    assert "docs/game-profile.md is STALE" in capsys.readouterr().out
+    assert f"{command.MARKDOWN_PATH} is STALE" in capsys.readouterr().out
 
 
 def _never(_: Path) -> Any:
@@ -272,7 +272,7 @@ def test_main_checks_and_publishes_the_scripts_own_checkout(
         "gates nothing." in printed
     )
     assert era_of("replays/samples/9p2i").id == "stage-b-r3"
-    assert "Wrote docs/game-profile.md." in printed
+    assert f"Wrote {command.MARKDOWN_PATH}." in printed
 
 
 def test_the_script_runs_from_any_directory(tmp_path: Path) -> None:

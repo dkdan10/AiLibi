@@ -2078,7 +2078,7 @@ def test_the_era_verdict_follows_the_declared_file_on_disk(tmp_path: Path) -> No
 #: 9p2i set's.
 _PLANTED_ERA = Era(
     id="planted-era",
-    record="audits/planted-record.md",
+    record="process/audits/planted-record.md",
     recorded_on="2026-10-02",
     declared_config="replays/samples/4p1i/planted-config.json",
 )
@@ -2293,8 +2293,8 @@ def test_the_era_config_passes_the_dry_run_into_the_promoted_set() -> None:
 #: What the dry run says the profile step would do for the shown set.
 _PROFILE_LINE = (
     "[dry-run] game-shape profile: would regenerate "
-    "replays/samples/9p2i/results-game-profile.json and docs/game-profile.md from "
-    "the refreshed replays (scripts/publish_game_profile.py; $0, no provider)"
+    "replays/samples/9p2i/results-game-profile.json and eval/reports/game-profile.md "
+    "from the refreshed replays (scripts/publish_game_profile.py; $0, no provider)"
 )
 
 

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Publish the nine-row process scorecard over the committed recordings.
 
-Writes ``docs/process-scorecard.md`` and ``docs/process-scorecard.json`` from
+Writes ``eval/reports/process-scorecard.md`` from
 :func:`eval.process_scorecard.compute_process_scorecard` — a fold over bytes
-already in the tree with **zero model calls**. ``--check`` recomputes both and
-exits 1 on drift, in the remediation shape
+already in the tree with **zero model calls**. ``--check`` recomputes the page
+and exits 1 on drift, in the remediation shape
 ``scripts/build_sample_report.py::check_report`` uses: it names the stale file
 and the exact command that regenerates it.
 
 ``--set-dir DIR --json-stdout`` folds one directory (a candidate record, or a
 scratch rehearsal) into one set's scorecard and prints it to stdout as JSON with
-sorted keys, in the committed file's own format; it writes nothing and adds no
-row. Its source is the directory walked: relative to the checkout when it lies
-inside it, else absolute.
+sorted keys, in the format of a frozen before block's scorecard; it writes
+nothing and adds no row. Its source is the directory walked: relative to the
+checkout when it lies inside it, else absolute.
 
 Destinations are pre-flighted through
 ``scripts/_report_output.py`` before anything is computed, exactly as
@@ -57,19 +57,27 @@ from eval.process_scorecard import (  # noqa: E402
     load_set_inputs,
     scorecard_from_tally,
     scorecard_source_paths,
-    serialize_scorecard,
 )
 from eval.validity import seeds_on_disk  # noqa: E402
 
-MARKDOWN_PATH = Path("docs/process-scorecard.md")
-JSON_PATH = Path("docs/process-scorecard.json")
+MARKDOWN_PATH = Path("eval/reports/process-scorecard.md")
+
+#: The page's way back to the repository root, for the links it carries.
+_TO_ROOT = "../" * len(MARKDOWN_PATH.parent.parts)
+
+#: The frozen before columns, as the page links them from its own folder.
+_BEFORE_COLUMNS_LINK = (
+    Path(BEFORE_COLUMNS_PATH).relative_to(MARKDOWN_PATH.parent).as_posix()
+)
 
 #: The one command a reader — or a red ``--check`` — is told to run.
 REGENERATE_COMMAND = "uv run python scripts/publish_process_scorecard.py"
 
 #: Recorded archives outside ``replays/`` this writer must never write into. The
 #: fifth run's archive is one: the page no longer reads it, and it keeps its bytes.
-PROTECTED_ARCHIVES: tuple[str, ...] = ("audits/deduction-candidate/run-2026-09-16",)
+PROTECTED_ARCHIVES: tuple[str, ...] = (
+    "process/audits/deduction-candidate/run-2026-09-16",
+)
 
 
 def protected_inputs(root: Path) -> list[Path]:
@@ -316,7 +324,7 @@ def _era_lines(era: EraScorecard) -> list[str]:
     sets = ", ".join(f"`{source}`" for source in era.sets)
     return [
         f"* **{era.era_id}**, recorded {era.recorded_on}: {sets}. Owning record: "
-        f"[`{era.record}`](../{era.record}).",
+        f"[`{era.record}`]({_TO_ROOT}{era.record}).",
     ]
 
 
@@ -331,16 +339,17 @@ def render_markdown(scorecard: ProcessScorecard) -> str:
         "Nine measures of whether a decision rested on data the agent actually "
         "held, computed with **zero model calls** from recordings already in the "
         "tree. The suite is "
-        "[the direction of 2026-09-19](../tasks/direction-2026-09-19-process-over-outcome.md) "
+        "[the direction of 2026-09-19]"
+        f"({_TO_ROOT}process/tasks/direction-2026-09-19-process-over-outcome.md) "
         "section 8; the card that publishes it is "
-        "[the process scorecard card](../tasks/work/process-scorecard.md). Every "
-        "row's definition — numerator, denominator, non-coverage — is published "
-        "beside the number here and as typed keys in "
-        "[`process-scorecard.json`](process-scorecard.json).",
+        "[the process scorecard card]"
+        f"({_TO_ROOT}process/tasks/work/process-scorecard.md). Every row's "
+        "definition — numerator, denominator, non-coverage — is published beside "
+        "the number here.",
         "",
         "This page is GENERATED. Do not edit it by hand: run "
         f"`{REGENERATE_COMMAND}` and commit the result. "
-        f"`{REGENERATE_COMMAND} --check` recomputes both files from the "
+        f"`{REGENERATE_COMMAND} --check` recomputes this page from the "
         "recordings and fails on drift.",
         "",
         "History (2026-10-09): the fifth run's appendix, folded from "
@@ -380,8 +389,8 @@ def render_markdown(scorecard: ProcessScorecard) -> str:
             "claims became routes across the same line, so no row pools with "
             "that column. A set whose bytes replaced an earlier recording "
             "carries that recording's published rows as a dated before column, "
-            f"read from [`{BEFORE_COLUMNS_PATH.removeprefix('docs/')}`]"
-            f"({BEFORE_COLUMNS_PATH.removeprefix('docs/')}) and never recomputed.",
+            f"read from [`{_BEFORE_COLUMNS_LINK}`]({_BEFORE_COLUMNS_LINK}) and never "
+            "recomputed.",
             "",
             f"Report format version {scorecard.report_format_version}; scorecard "
             f"schema version {scorecard.schema_version}; decision date "
@@ -416,54 +425,39 @@ def render_markdown(scorecard: ProcessScorecard) -> str:
     lines.extend(["## Row definitions", ""])
     for name, definition in scorecard.row_definitions.items():
         lines.extend([f"**{name}.** {definition}", ""])
-    lines.extend([f"{scorecard.no_consumer_note}", ""])
     return "\n".join(lines)
 
 
 def publish(root: Path) -> ProcessScorecard:
-    """Compute the fold and replace both published files atomically."""
+    """Compute the fold and replace the published page atomically."""
 
-    protected = protected_inputs(root)
     markdown_path = root / MARKDOWN_PATH
-    json_path = root / JSON_PATH
-    preflight_report_output(markdown_path, protected)
-    preflight_report_output(json_path, protected)
+    preflight_report_output(markdown_path, protected_inputs(root))
     scorecard = compute_process_scorecard(root)
     atomic_write_report(markdown_path, render_markdown(scorecard))
-    atomic_write_report(json_path, serialize_scorecard(scorecard))
     return scorecard
 
 
 def check_report(root: Path) -> int:
-    """Recompute both files and diff; 0 when consistent, 1 on drift or absence."""
+    """Recompute the page and diff; 0 when consistent, 1 on drift or absence."""
 
-    stale: list[str] = []
     markdown_path = root / MARKDOWN_PATH
-    json_path = root / JSON_PATH
-    for path in (markdown_path, json_path):
-        if not path.exists():
-            print(f"--check: no committed scorecard at {path}")
-            return 1
+    if not markdown_path.exists():
+        print(f"--check: no committed scorecard at {markdown_path}")
+        return 1
     try:
         scorecard = compute_process_scorecard(root)
     except BeforeColumnsError as error:
         print(f"--check: {error}")
         return 1
     if markdown_path.read_text(encoding="utf-8") != render_markdown(scorecard):
-        stale.append(str(MARKDOWN_PATH))
-    if json_path.read_text(encoding="utf-8") != serialize_scorecard(scorecard):
-        stale.append(str(JSON_PATH))
-    if stale:
         print(
-            f"--check: {', '.join(stale)} is STALE — it does not match a "
+            f"--check: {MARKDOWN_PATH} is STALE — it does not match a "
             "recomputation from the committed recordings. Re-run "
             f"`{REGENERATE_COMMAND}` and commit the result."
         )
         return 1
-    print(
-        f"--check: {MARKDOWN_PATH} and {JSON_PATH} are consistent with the "
-        "committed recordings."
-    )
+    print(f"--check: {MARKDOWN_PATH} is consistent with the committed recordings.")
     return 0
 
 
@@ -480,9 +474,9 @@ def set_source(set_dir: Path, *, root: Path) -> str:
 def set_dir_json(set_dir: Path, *, root: Path) -> str:
     """One directory's scorecard as JSON. Computes; writes nothing.
 
-    Serialized with the committed file's settings (sorted keys, two-space
-    indent, one trailing newline), so a committed set's output equals its entry
-    in ``docs/process-scorecard.json``.
+    Serialized as the frozen before blocks are (sorted keys, two-space indent,
+    one trailing newline), so a committed set's output is the ``scorecard`` a
+    before block would freeze for it.
     """
 
     inputs = load_set_inputs(set_dir)
@@ -506,7 +500,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Recompute both files and diff against the committed ones; exit 1 on drift.",
+        help="Recompute the page and diff against the committed one; exit 1 on drift.",
     )
     parser.add_argument(
         "--set-dir",
@@ -538,7 +532,7 @@ def main(argv: list[str] | None = None) -> int:
     for era in scorecard.eras:
         group = era.pooled if era.pooled is not None else _only_set(scorecard, era)
         print(
-            f"Wrote {MARKDOWN_PATH} and {JSON_PATH}, era {era.era_id}: "
+            f"Wrote {MARKDOWN_PATH}, era {era.era_id}: "
             f"{group.ballots} ballots over {group.meetings} meetings; grounded "
             f"{group.grounded_all.numerator}/{group.grounded_all.denominator}; "
             f"deviating EJECTs {group.argmax_independence.deviators}/"

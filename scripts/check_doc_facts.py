@@ -19,12 +19,12 @@ that owns it, and every mismatch is reported, not only the first.
 3. **The results table.** The replay count is recounted from the replay files,
    the citation row from the pinned assertions in
    ``tests/eval/test_vj_instruments.py``, the vent and proof rows from the
-   shown 9p2i set's column of ``docs/gameplay-census.md``, and the four process
-   rows from that set's table on ``docs/process-scorecard.md``. The process
-   rows' Before cells come from that page's before column; the win-rate and
-   proof Before cells from the frozen before cells, values copied once from the
-   records and pinned here by their sha256. The other Before cells are not
-   checked.
+   shown 9p2i set's column of ``eval/reports/gameplay-census.md``, and the four
+   process rows from that set's table on ``eval/reports/process-scorecard.md``.
+   The process rows' Before cells come from that page's before column; the
+   win-rate and proof Before cells from the frozen before cells, values copied
+   once from the records and pinned here by their sha256. The other Before
+   cells are not checked.
 4. **The real-report example.** Its three ejection counts come from the
    ``vote_correctness`` block of the committed 9p2i report.
 5. **The prose figures.** The top-suspect sentence, the vent sentence, the
@@ -191,7 +191,7 @@ _INJUSTICE_CLAIM: Final = (
 # ejections a vent-sighting flag names) is the proof row's "with proof" half;
 # on the shown set it holds the same ejections as the eval report's
 # proof-present cell, compared one by one on 2026-10-13.
-_CENSUS_PAGE: Final = "docs/gameplay-census.md"
+_CENSUS_PAGE: Final = "eval/reports/gameplay-census.md"
 _CENSUS_SECTION: Final = "### Vent proof at meetings"
 _CENSUS_FIRST_HEADER: Final = "cell"
 # A census cell opens with ``k/n``; a cell reading "n/a" is no count at all.
@@ -222,7 +222,7 @@ _REPLACED_ERAS: Final[Mapping[str, str]] = MappingProxyType(
 # the shown set's table on the GENERATED scorecard page. The markdown page, never
 # its JSON, which no component reads (``eval/process_scorecard.py``'s
 # ``NO_CONSUMER_NOTE``). Each pair is the row's claim and the page's row label.
-_SCORECARD_PAGE: Final = "docs/process-scorecard.md"
+_SCORECARD_PAGE: Final = "eval/reports/process-scorecard.md"
 _GROUNDED_EJECT_CLAIM: Final = (
     "Eject ballots citing what the voter saw or heard about the accused (9p2i)"
 )

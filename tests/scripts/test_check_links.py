@@ -96,11 +96,14 @@ def test_relative_links_decode_paths_and_include_images(tmp_path: Path) -> None:
         ("experiments/README.md", True),
         ("experiments/lab/torch_probe/README.md", True),
         ("replays/candidates/stage-b-r2/README.md", True),
-        ("tasks/README.md", True),
-        ("audits/README.md", True),
-        ("audits/review-2026-09-06/correction-record.md", True),
-        ("audits/audit-2026-10-09-stage-b-r3.md", False),
-        ("tasks/phase-21.md", False),
+        ("eval/reports/process-scorecard.md", True),
+        ("process/README.md", True),
+        ("process/tasks/README.md", True),
+        ("process/audits/README.md", True),
+        ("process/audits/review-2026-09-06/correction-record.md", True),
+        ("process/audits/audit-2026-10-09-stage-b-r3.md", False),
+        ("process/tasks/phase-21.md", False),
+        ("process/DESIGN.md", False),
         ("experiments/lab/notes.md", False),
         ("docs.md", False),
     ],
@@ -123,8 +126,10 @@ def test_a_planted_broken_link_fails(
     (tmp_path / "docs" / "page.md").write_text(
         "[kept](kept.md#top) and [gone](gone.md)\n", encoding="utf-8"
     )
-    (tmp_path / "audits").mkdir()
-    (tmp_path / "audits" / "old.md").write_text("[gone](gone.md)\n", encoding="utf-8")
+    (tmp_path / "process" / "audits").mkdir(parents=True)
+    (tmp_path / "process" / "audits" / "old.md").write_text(
+        "[gone](gone.md)\n", encoding="utf-8"
+    )
     assert check_links.broken_links(tmp_path, ["docs/page.md"]) == [
         ("docs/page.md", "gone.md")
     ]
@@ -136,7 +141,7 @@ def test_a_planted_broken_link_fails(
     )
     assert check_links.main(["--root", str(tmp_path), "--all"]) == 1
     assert capsys.readouterr().out.splitlines() == [
-        "audits: 1",
         "docs: 1",
+        "process: 1",
         "2 broken relative links in 3 pages",
     ]

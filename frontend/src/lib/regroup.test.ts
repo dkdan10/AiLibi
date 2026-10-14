@@ -26,7 +26,7 @@ interface CensusSet {
 
 /** The published gameplay census's row for the shown set: the Python twin. */
 function shownCensus(): CensusSet {
-  const path = resolve(dirname(fileURLToPath(import.meta.url)), "../../../docs/gameplay-census.json");
+  const path = resolve(dirname(fileURLToPath(import.meta.url)), "../../../eval/reports/gameplay-census.json");
   const parsed = JSON.parse(readFileSync(path, "utf8")) as { readonly sets: readonly CensusSet[] };
   const found = parsed.sets.find((candidate) => candidate.label === "samples/9p2i");
   if (found === undefined) throw new Error("the published census carries no samples/9p2i row");

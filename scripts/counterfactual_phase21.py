@@ -4175,7 +4175,7 @@ def _assert_live_slate(when: str, *, shell_slate: frozenset[str] = frozenset()) 
             "orchestrator.replay._TOGGLEABLE_LEVER_RESOLVERS, so this build has "
             "no OFF derivation to compare against. A lever graduates at the "
             "record that adopts it; the memo's table is FROZEN as the pre-record "
-            "prediction it was: audits/audit-phase-21-counterfactual.md"
+            "prediction it was: process/audits/audit-phase-21-counterfactual.md"
         )
     empty = substrate_flag_snapshot({})
     graduated = sorted(key for key in WAVE_2_LEVERS if empty.get(key, False))
@@ -4187,7 +4187,7 @@ def _assert_live_slate(when: str, *, shell_slate: frozenset[str] = frozenset()) 
             "unconditionally ON at the record that adopted it and this build has "
             "no OFF derivation to compare against. The memo's table is FROZEN as "
             "the pre-record prediction it was: "
-            "audits/audit-phase-21-counterfactual.md"
+            "process/audits/audit-phase-21-counterfactual.md"
         )
     ambient = substrate_flag_snapshot()
     wrong = [
@@ -4457,7 +4457,8 @@ def run(
             raise SystemExit(
                 f"{set_name}: the innocent-ejection enumeration reproduced "
                 f"{walk.innocent_ejections}, not the committed record cell "
-                f"{expected} (audits/audit-2026-09-22-process-rerecord.md §6.2, published "
+                f"{expected} (process/audits/audit-2026-09-22-process-rerecord.md §6.2, "
+                "published "
                 "cell 2) — this is a DEFECT IN THIS SCRIPT's join, not a finding "
                 "about the committed bytes; fix the enumeration before reading "
                 "any ON number"
@@ -5098,7 +5099,8 @@ def _corroboration_pin_check(walks: Sequence[_SetWalk]) -> dict[str, object]:
     if disagreeing:
         raise SystemExit(
             "the corroboration ledger cells disagree with the pins re-derived on "
-            "the baseline-9 era's three sets (audits/audit-2026-10-01-stage-b-r2.md "
+            "the baseline-9 era's three sets "
+            "(process/audits/audit-2026-10-01-stage-b-r2.md "
             f"§9, under the counterfactual audit's Errata E.2 rule): {disagreeing}. "
             "This is a DEFECT IN THIS SCRIPT's walk, not a finding about the "
             "committed bytes; this script is where those four cells FIRST become "

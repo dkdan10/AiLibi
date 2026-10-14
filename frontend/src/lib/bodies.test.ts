@@ -156,7 +156,7 @@ function recordedRows(setName: string): { tickRows: number; appliedReports: numb
 
 /** The published gameplay census's cell for the shown set: the Python twin. */
 function shownCensusCell(cell: string): { readonly numerator: number; readonly denominator: number } {
-  const parsed = JSON.parse(readFileSync(resolve(LIB_DIR, "../../../docs/gameplay-census.json"), "utf8")) as {
+  const parsed = JSON.parse(readFileSync(resolve(LIB_DIR, "../../../eval/reports/gameplay-census.json"), "utf8")) as {
     readonly sets: readonly {
       readonly label: string;
       readonly cells: Readonly<Record<string, { readonly numerator: number; readonly denominator: number }>>;

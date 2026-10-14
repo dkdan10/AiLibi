@@ -664,7 +664,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Fold a replay set into the core R-gate baseline measurement (Task "
-            "15.1; audits/audit-phase-14-close.md §3). Pure, offline, CPU only."
+            "15.1; process/audits/audit-phase-14-close.md §3). Pure, offline, CPU "
+            "only."
         ),
     )
     parser.add_argument(

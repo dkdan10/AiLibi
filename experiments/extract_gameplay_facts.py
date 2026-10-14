@@ -71,7 +71,7 @@ classification still IMPORTS its one-home source (no era-frozen replica):
   the strip).
 
 Usage:
-    PYTHONPATH=<repo root> uv run python audits/workflows/extract_gameplay_facts.py
+    PYTHONPATH=<repo root> uv run python experiments/extract_gameplay_facts.py
 """
 
 from __future__ import annotations
@@ -177,7 +177,7 @@ from orchestrator.replay import (
 )
 from orchestrator.seeder import seed_initial_state
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DIR = REPO_ROOT / "replays" / "samples" / "9p2i"
 
 

@@ -2,7 +2,7 @@
 """Publish the game-shape profile (rubric version 2) of each profiled set.
 
 Writes ``results-game-profile.json`` beside the recordings of every set in
-:data:`PROFILE_SETS` and the generated page ``docs/game-profile.md``, from
+:data:`PROFILE_SETS` and the generated page ``eval/reports/game-profile.md``, from
 :func:`eval.game_profile.build_profile` over bytes already in the tree, with
 zero model calls. ``--check`` recomputes both and exits 1 naming the drifted
 file; an absent file is reported before anything is computed.
@@ -68,7 +68,7 @@ PROFILE_ROSTER: Final[tuple[int, int]] = (9, 2)
 #: The served file's name, beside the recordings of its set.
 PROFILE_FILENAME: Final[str] = "results-game-profile.json"
 
-MARKDOWN_PATH: Final[Path] = Path("docs/game-profile.md")
+MARKDOWN_PATH: Final[Path] = Path("eval/reports/game-profile.md")
 
 #: The one command a reader, or a red ``--check``, is told to run.
 REGENERATE_COMMAND: Final[str] = "uv run python scripts/publish_game_profile.py"

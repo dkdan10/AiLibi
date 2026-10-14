@@ -15,7 +15,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-TASKS_DIR = ROOT / "tasks"
+TASKS_DIR = ROOT / "process" / "tasks"
 
 _CARD_STATUSES = ("ready", "active", "done")
 _STATUS_LINE = re.compile(r"^\*\*Status:\*\* (.*)$", re.MULTILINE)

@@ -161,7 +161,41 @@ def filter_environment() -> Mapping[str, str]:
 MAX_TICKS: Final[int] = 14
 
 #: The frozen manifest, relative to the repository root.
-MANIFEST_PATH: Final[str] = "audits/deduction-candidate/held-out/manifest.json"
+MANIFEST_PATH: Final[str] = "process/audits/deduction-candidate/held-out/manifest.json"
+
+#: The top-level folders a recorded path names, mapped to where each lives now.
+#: The frozen manifests predate the move of the process record under
+#: ``process/`` and are sha256-pinned, so the card, ``informed`` and
+#: ``superseded_by`` paths they carry keep their recorded spelling; a reader
+#: that resolves one against the checkout maps it through :func:`current_path`.
+RECORDED_PATH_PREFIXES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "audits/": "process/audits/",
+        "design/": "process/design/",
+        "tasks/": "process/tasks/",
+    }
+)
+
+
+def current_path(recorded: str) -> str:
+    """Where the path a freeze record carries as ``recorded`` lives today.
+
+    A path recorded under an old folder maps to its new one; a path already
+    under a new folder, as a record written after the move spells it, is
+    returned as written. Anything else raises: every path a freeze record
+    carries lies under one of those folders.
+    """
+
+    for old, new in RECORDED_PATH_PREFIXES.items():
+        if recorded.startswith(new):
+            return recorded
+        if recorded.startswith(old):
+            return new + recorded.removeprefix(old)
+    raise ValueError(
+        f"{recorded!r} is not a recorded path: it lies under none of "
+        + ", ".join((*RECORDED_PATH_PREFIXES, *RECORDED_PATH_PREFIXES.values()))
+    )
+
 
 #: The legacy body handle: ``body-p-<victim>-<death tick>``. Temporal v2 renders
 #: ``observation.body_ids.public_body_id`` instead, which carries no death tick.
@@ -408,25 +442,25 @@ CONVERTED_BANDS: Final[tuple[ConvertedBand, ...]] = (
     ConvertedBand(
         band=SeedBand(first_seed=3000, last_seed=3999, size=50),
         manifest_path=(
-            "audits/deduction-candidate/held-out/manifest-band-3000-3999.json"
+            "process/audits/deduction-candidate/held-out/manifest-band-3000-3999.json"
         ),
     ),
     ConvertedBand(
         band=SeedBand(first_seed=5000, last_seed=5999, size=50),
         manifest_path=(
-            "audits/deduction-candidate/held-out/manifest-band-5000-5999.json"
+            "process/audits/deduction-candidate/held-out/manifest-band-5000-5999.json"
         ),
     ),
     ConvertedBand(
         band=SeedBand(first_seed=6000, last_seed=6999, size=50),
         manifest_path=(
-            "audits/deduction-candidate/held-out/manifest-band-6000-6999.json"
+            "process/audits/deduction-candidate/held-out/manifest-band-6000-6999.json"
         ),
     ),
     ConvertedBand(
         band=SeedBand(first_seed=7000, last_seed=7999, size=50),
         manifest_path=(
-            "audits/deduction-candidate/held-out/manifest-band-7000-7999.json"
+            "process/audits/deduction-candidate/held-out/manifest-band-7000-7999.json"
         ),
     ),
 )
@@ -1695,6 +1729,7 @@ __all__ = [
     "PrefixEvaluation",
     "PrefixRoster",
     "PrefixStep",
+    "RECORDED_PATH_PREFIXES",
     "ReasonTally",
     "RejectionReason",
     "ScheduleTickBudgetError",
@@ -1706,6 +1741,7 @@ __all__ = [
     "build_manifest",
     "build_prefix",
     "canonical_prefix_json",
+    "current_path",
     "development_definition_digests",
     "evaluate_prefix",
     "filter_environment",

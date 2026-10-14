@@ -27,9 +27,9 @@ impostor self-tell). Roles come from each replay's own tick rows — the actor o
 the scripted kill is that seed's impostor — so the ground truth is read off the
 archive rather than carried from the run.
 
-    .venv/bin/python audits/deduction-candidate/run-2026-09-16/reconcile.py \
-      audits/deduction-candidate/run-2026-09-16 \
-      > audits/deduction-candidate/run-2026-09-16/usage-reconciliation.json
+    .venv/bin/python process/audits/deduction-candidate/run-2026-09-16/reconcile.py \
+      process/audits/deduction-candidate/run-2026-09-16 \
+      > process/audits/deduction-candidate/run-2026-09-16/usage-reconciliation.json
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from experiments.fresh_deduction_instrument import (  # noqa: E402
     AUTHORIZED_TURN_MAX_TOKENS,

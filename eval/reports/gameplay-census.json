@@ -2341,7 +2341,7 @@
           }
         }
       },
-      "record": "audits/audit-2026-09-22-process-rerecord.md",
+      "record": "process/audits/audit-2026-09-22-process-rerecord.md",
       "recorded_on": "2026-09-22",
       "sets": [
         "ml_corpus/9p2i",
@@ -2360,7 +2360,7 @@
       "declared_config": "replays/samples/9p2i/experiment-config.json",
       "era_id": "stage-b-r3",
       "pooled": null,
-      "record": "audits/audit-2026-10-09-stage-b-r3.md",
+      "record": "process/audits/audit-2026-10-09-stage-b-r3.md",
       "recorded_on": "2026-10-09",
       "sets": [
         "samples/9p2i"

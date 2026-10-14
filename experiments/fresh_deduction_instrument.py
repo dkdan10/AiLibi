@@ -310,7 +310,9 @@ AUTHORIZED_EXECUTION_MODE: Final[Literal["sequential"]] = "sequential"
 
 #: The execution manifest this instrument is bound to. A live run names this
 #: exact path (:class:`LiveRunInvocation`).
-EXECUTION_MANIFEST_PATH: Final[str] = "audits/deduction-candidate/execution-manifest.md"
+EXECUTION_MANIFEST_PATH: Final[str] = (
+    "process/audits/deduction-candidate/execution-manifest.md"
+)
 
 #: The runner's explicit live-run flag, defined once. :func:`main` registers it
 #: from here and the tree-scan test searches for THIS value, so the scan needs no
@@ -1704,8 +1706,8 @@ def assert_the_evaluation_is_not_closed(manifest_text: str) -> None:
             f"{EXECUTION_MANIFEST_PATH} carries the closing clause of "
             "2026-09-19: the owner closed this evaluation that day (decisions "
             "D1, D2 and D8 of "
-            "tasks/direction-2026-09-19-process-over-outcome.md), so no live "
-            "run and no calibration under this manifest is authorized. The "
+            "process/tasks/direction-2026-09-19-process-over-outcome.md), so no "
+            "live run and no calibration under this manifest is authorized. The "
             "results it recorded stand; the gate does not. Reopening it means "
             "removing that clause from the manifest under a card that says why."
         )

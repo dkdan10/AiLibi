@@ -98,8 +98,8 @@ _COPIED = tuple(
             "docs/results-before.json",
             # The generated pages: the scorecard's shown-set table owns the four
             # process rows, the census's vent-proof table the vent and proof rows.
-            "docs/process-scorecard.md",
-            "docs/gameplay-census.md",
+            "eval/reports/process-scorecard.md",
+            "eval/reports/gameplay-census.md",
             # The report the README's real-report example quotes.
             "replays/samples/9p2i/tournament-eval-report.json.gz",
             # The instrument whose pinned assertions own the citation row.
@@ -135,15 +135,17 @@ _MANIFEST_9P2I = "replays/samples/9p2i/MANIFEST.md"
 _TOGGLE_EXAMPLE_LINE = "# AILIBI_IMPOSTOR_ROLL_CALL=0"
 _EVAL_REPORT_9P2I = "replays/samples/9p2i/tournament-eval-report.json.gz"
 _CITATION_INSTRUMENT = "tests/eval/test_vj_instruments.py"
-_CORRECTION_INDEX = "audits/review-2026-09-06/README.md"
+_CORRECTION_INDEX = "process/audits/review-2026-09-06/README.md"
 _ML_PAGE = "docs/ml-program.md"
 _ML_DROPPED_ARM_ROW = (
     "| `bfd145cb…` | 28/50 = 0.56 | 13/50 = 0.26 | **0.0041** | **FAIL** |\n"
 )
 _ML_COMPARATOR_ROW = "| `p18-fsm-comparator` (scripted) | 13/50 = 0.26 |"
-_CENSUS_PAGE = "docs/gameplay-census.md"
+_CENSUS_PAGE = "eval/reports/gameplay-census.md"
 _RESULTS_BEFORE = "docs/results-before.json"
-_CENSUS_SOURCE = "the samples/9p2i column of docs/gameplay-census.md's vent-proof table"
+_CENSUS_SOURCE = (
+    "the samples/9p2i column of eval/reports/gameplay-census.md's vent-proof table"
+)
 _VENT_CLAIM = "Impostors ejected after a reported sighting of them venting (9p2i)"
 # The records each sample set's era links in the samples paragraph.
 _BASELINE_9_RECORD = BASELINE_9.record
@@ -1627,7 +1629,7 @@ def test_a_census_cell_that_is_no_count_fails_loud(doc_tree: Path) -> None:
 # value and before cell, to the shown set's table on the GENERATED markdown page
 # (never its JSON). Every case below fails naming the row it moved.
 
-_SCORECARD_PAGE = "docs/process-scorecard.md"
+_SCORECARD_PAGE = "eval/reports/process-scorecard.md"
 _GROUNDED_CLAIM = (
     "Eject ballots citing what the voter saw or heard about the accused (9p2i)"
 )
@@ -1639,7 +1641,7 @@ _AUTHORED_CLAIM = "Ballots whose target is the one their voter wrote (9p2i)"
 _PROOF_CLAIM = (
     "Impostors among those ejected, with and without proof of their role (9p2i)"
 )
-_SCORECARD_SOURCE = "the samples/9p2i table of docs/process-scorecard.md"
+_SCORECARD_SOURCE = "the samples/9p2i table of eval/reports/process-scorecard.md"
 # The shown set's row-4 and row-7 lines on the page: round 2's before cell,
 # then round 3's value.
 _SCORECARD_UNEXPLAINED_ROW = (
@@ -2251,8 +2253,8 @@ _PROSE_PERTURBATIONS = (
         id="followers-hit",
     ),
     pytest.param(
-        "times](docs/process-scorecard.md) (91%)",
-        "times](docs/process-scorecard.md) (92%)",
+        "times](eval/reports/process-scorecard.md) (91%)",
+        "times](eval/reports/process-scorecard.md) (92%)",
         "hit an impostor 215 of 235 times (92%)",
         "hit an impostor 215 of 235 times (91%)",
         id="followers-percent",
@@ -2307,8 +2309,8 @@ _PROSE_PERTURBATIONS = (
         id="vent-unflagged-innocent",
     ),
     pytest.param(
-        "[394 of 397](docs/process-scorecard.md) votes to eject",
-        "[393 of 397](docs/process-scorecard.md) votes to eject",
+        "[394 of 397](eval/reports/process-scorecard.md) votes to eject",
+        "[393 of 397](eval/reports/process-scorecard.md) votes to eject",
         "393 of 397 votes to eject",
         "394 of 397 votes to eject",
         id="cited-votes",
@@ -2448,7 +2450,7 @@ def test_a_re_recorded_role_correct_cell_moves_the_prose(doc_tree: Path) -> None
     # retells the old cell fails rather than standing beside the new one.
     _substitute(
         doc_tree,
-        "docs/process-scorecard.md",
+        "eval/reports/process-scorecard.md",
         f"| {_ROLE_CORRECT_CELL} |",
         "| 220/240 = 91.7% vs 1/51 = 2.0% (chance 24.6%) |",
     )
@@ -2477,7 +2479,7 @@ def test_a_deviator_count_past_twice_reads_as_times() -> None:
 def test_a_misshapen_role_correct_cell_fails_loud(doc_tree: Path) -> None:
     _substitute(
         doc_tree,
-        "docs/process-scorecard.md",
+        "eval/reports/process-scorecard.md",
         f"| {_ROLE_CORRECT_CELL} |",
         "| 215/235 = 91.5% vs 2/56 = 3.6% |",
     )
@@ -2490,13 +2492,13 @@ def test_a_misshapen_role_correct_cell_fails_loud(doc_tree: Path) -> None:
 def test_a_scorecard_without_the_role_correct_row_fails_loud(doc_tree: Path) -> None:
     # Planted: the row the sentence retells dropped from the shown set's table.
     # No other check reads it, so this one names it.
-    page = _read(doc_tree, "docs/process-scorecard.md")
+    page = _read(doc_tree, "eval/reports/process-scorecard.md")
     row = next(
         line
         for line in page.splitlines(keepends=True)
         if line.endswith(f"| {_ROLE_CORRECT_CELL} |\n")
     )
-    _write(doc_tree, "docs/process-scorecard.md", page.replace(row, ""))
+    _write(doc_tree, "eval/reports/process-scorecard.md", page.replace(row, ""))
     errors = check_doc_facts.check_facts(doc_tree)
     assert len(errors) == 1, errors
     assert (
@@ -2513,7 +2515,7 @@ def test_a_re_recorded_grounded_cell_moves_the_cited_vote_sentence(
     # named with it rather than left behind.
     _substitute(
         doc_tree,
-        "docs/process-scorecard.md",
+        "eval/reports/process-scorecard.md",
         "| 394/397 = 0.9924 |",
         "| 393/397 = 0.9899 |",
     )

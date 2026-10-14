@@ -5,7 +5,7 @@ committed sets and ``scripts/check.sh`` runs pytest, so the consistency gate
 needs no new shell line — this module is the second, independent ``--check``
 over the NEW artifact, added the same way.
 
-Three things are pinned here. The published pair recomputes byte-identically
+Three things are pinned here. The published page recomputes byte-identically
 from the committed recordings; ``--check`` goes RED on a single edited cell,
 demonstrated by planting one rather than asserted in prose; and the writer
 refuses a destination inside a recording location BEFORE it computes anything,
@@ -14,9 +14,10 @@ and not file identity: a destination that does not exist yet, inside a recording
 set, is refused too, and the perturbed half shows the files-only list accepting
 the same destination.
 
-The committed fold runs ONCE here, in the first test. The planted-drift case
-runs the real ``publish`` / ``check_report`` pair against a planted scorecard in
-a temp tree, so the gate itself is exercised end to end without a second walk.
+The committed fold runs ONCE here, in a module fixture the first test hands to
+the real ``check_report``. The planted-drift case runs the real ``publish`` /
+``check_report`` pair against a planted scorecard in a temp tree, so the gate
+itself is exercised end to end without a second walk.
 """
 
 from __future__ import annotations
@@ -34,7 +35,6 @@ from eval import process_scorecard as scorecard_module
 from eval.process_scorecard import (
     BEFORE_COLUMNS_PATH,
     DECISION_DATE,
-    NO_CONSUMER_NOTE,
     RECORDINGS_ROOT,
     ROLE_CORRECTNESS_NOTE,
     ROW_DEFINITIONS,
@@ -53,16 +53,28 @@ from eval.process_scorecard import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_the_committed_scorecard_matches_a_recomputation() -> None:
-    """The gate: both published files are what the recordings say they are.
+@pytest.fixture(scope="module")
+def committed_scorecard() -> ProcessScorecard:
+    """The fold over the committed recordings, computed once for this module.
 
     This is the only committed-bytes fold in the suite for this instrument; the
     per-row semantics are planted in ``tests/eval/test_process_scorecard.py``,
     which walks nothing.
     """
 
+    return compute_process_scorecard(ROOT)
+
+
+def test_the_committed_scorecard_matches_a_recomputation(
+    committed_scorecard: ProcessScorecard, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gate: the published page is what the recordings say it is."""
+
+    monkeypatch.setattr(
+        command, "compute_process_scorecard", lambda _root: committed_scorecard
+    )
     assert command.check_report(ROOT) == 0, (
-        "docs/process-scorecard.md / .json are STALE — re-run "
+        f"{command.MARKDOWN_PATH} is STALE — re-run "
         f"`{command.REGENERATE_COMMAND}` and commit the result."
     )
 
@@ -91,7 +103,6 @@ def _planted_scorecard() -> ProcessScorecard:
         role_correctness_is_a_gate=False,
         role_correctness_reported=True,
         role_correctness_note=ROLE_CORRECTNESS_NOTE,
-        no_consumer_note=NO_CONSUMER_NOTE,
         row_definitions=dict(ROW_DEFINITIONS),
         report_format_version=2,
         recording_provenance=("planted",),
@@ -109,6 +120,14 @@ def _planted_scorecard() -> ProcessScorecard:
     )
 
 
+def _published_tree(tmp_path: Path) -> Path:
+    """A scratch tree holding the folder the page is published into."""
+
+    root = tmp_path / "tree"
+    (root / command.MARKDOWN_PATH).parent.mkdir(parents=True)
+    return root
+
+
 def test_one_edited_cell_turns_check_red(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -116,51 +135,46 @@ def test_one_edited_cell_turns_check_red(
 
     planted = _planted_scorecard()
     monkeypatch.setattr(command, "compute_process_scorecard", lambda _root: planted)
-    root = tmp_path / "tree"
-    (root / "docs").mkdir(parents=True)
+    root = _published_tree(tmp_path)
     command.publish(root)
     assert command.check_report(root) == 0
 
-    published = root / command.JSON_PATH
-    payload = json.loads(published.read_text(encoding="utf-8"))
-    payload["eras"][0]["pooled"]["role_correct_ejection"]["numerator"] += 1
+    published = root / command.MARKDOWN_PATH
+    page = published.read_text(encoding="utf-8")
+    cell = "| role-correct ejection rate | 1/1 = 1.0000 —"
+    assert page.count(cell) == 2
     published.write_text(
-        json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        page.replace(cell, "| role-correct ejection rate | 2/1 = 1.0000 —", 1),
         encoding="utf-8",
     )
 
     assert command.check_report(root) == 1
     message = capsys.readouterr().out
-    assert str(command.JSON_PATH) in message
+    assert str(command.MARKDOWN_PATH) in message
     assert command.REGENERATE_COMMAND in message
 
 
-def test_a_published_json_carrying_the_retired_appendix_turns_check_red(
+def test_publish_writes_the_page_and_no_json_copy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Schema 3 carries no appendix: a restored ``appendix`` key is drift.
+    """The page is the one published file; nothing writes a JSON copy beside it.
 
-    A version-2 reader expects the key; the version bump and the recomputation
-    are what keep a stale page from passing as the current one.
+    Perturbed: a stale JSON copy left beside the page is neither rewritten nor
+    read, so ``--check`` stays green on the page alone.
     """
 
     planted = _planted_scorecard()
     monkeypatch.setattr(command, "compute_process_scorecard", lambda _root: planted)
-    root = tmp_path / "tree"
-    (root / "docs").mkdir(parents=True)
+    root = _published_tree(tmp_path)
     command.publish(root)
+    folder = (root / command.MARKDOWN_PATH).parent
+    assert sorted(path.name for path in folder.iterdir()) == [
+        command.MARKDOWN_PATH.name
+    ]
+    stale = folder / "process-scorecard.json"
+    stale.write_text("{}\n", encoding="utf-8")
     assert command.check_report(root) == 0
-    assert SCHEMA_VERSION == 3
-
-    published = root / command.JSON_PATH
-    payload = json.loads(published.read_text(encoding="utf-8"))
-    assert "appendix" not in payload
-    payload["appendix"] = {"label": "Appendix: the fifth run (2026-09-16)"}
-    published.write_text(
-        json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    assert command.check_report(root) == 1
+    assert stale.read_text(encoding="utf-8") == "{}\n"
 
 
 def test_main_prints_one_line_per_era(
@@ -190,12 +204,12 @@ def test_main_prints_one_line_per_era(
     )
     monkeypatch.setattr(command, "compute_process_scorecard", lambda _root: two_eras)
     monkeypatch.setattr(command, "_REPO_ROOT", tmp_path)
-    (tmp_path / "docs").mkdir()
+    (tmp_path / command.MARKDOWN_PATH).parent.mkdir(parents=True)
     assert command.main([]) == 0
     printed = capsys.readouterr().out.splitlines()
     assert [line.split(":", 1)[0] for line in printed] == [
-        f"Wrote {command.MARKDOWN_PATH} and {command.JSON_PATH}, era planted",
-        f"Wrote {command.MARKDOWN_PATH} and {command.JSON_PATH}, era solo-era",
+        f"Wrote {command.MARKDOWN_PATH}, era planted",
+        f"Wrote {command.MARKDOWN_PATH}, era solo-era",
     ]
     assert " 2 ballots over 1 meetings;" in printed[0]
     assert " 7 ballots over 5 meetings;" in printed[1]
@@ -204,9 +218,8 @@ def test_main_prints_one_line_per_era(
 def _before_tree(tmp_path: Path) -> Path:
     """A scratch tree holding the committed pages and the pinned before columns."""
 
-    root = tmp_path / "tree"
-    (root / "docs").mkdir(parents=True)
-    for relative in (command.MARKDOWN_PATH, command.JSON_PATH, BEFORE_COLUMNS_PATH):
+    root = _published_tree(tmp_path)
+    for relative in (command.MARKDOWN_PATH, BEFORE_COLUMNS_PATH):
         (root / relative).write_bytes((ROOT / relative).read_bytes())
     return root
 
@@ -247,10 +260,9 @@ def test_the_before_columns_are_each_replaced_recordings_entry() -> None:
         117,
         691,
     )
-    published = json.loads((ROOT / command.JSON_PATH).read_text(encoding="utf-8"))
-    assert published["before"] == json.loads(
-        (ROOT / BEFORE_COLUMNS_PATH).read_text(encoding="utf-8")
-    )
+    page = (ROOT / command.MARKDOWN_PATH).read_text(encoding="utf-8")
+    assert command._before_heading(second) in page
+    assert command._before_heading(first) not in page
 
 
 def test_the_grown_files_first_block_is_the_old_file_as_text() -> None:
@@ -306,20 +318,16 @@ def test_another_sets_block_never_shows_as_this_sets_before_column() -> None:
     assert before_column_of("replays/ml_corpus/9p2i", "baseline-9", grown) is None
 
 
-def test_a_registry_filing_samples_9p2i_under_stage_b_r2_fails_the_pages_check() -> (
-    None
-):
+def test_a_registry_filing_samples_9p2i_under_stage_b_r2_fails_the_pages_check(
+    committed_scorecard: ProcessScorecard,
+) -> None:
     """Planted: the committed fold with ``samples/9p2i`` filed under the era its
     bytes replaced reads the baseline-9 block, so the page differs from the
     committed one and ``--check`` would be red; the committed fold renders the
     committed page."""
 
-    published = json.loads((ROOT / command.JSON_PATH).read_text(encoding="utf-8"))
     committed = (ROOT / command.MARKDOWN_PATH).read_text(encoding="utf-8")
-    # The JSON's keys are sorted; the page lists the row definitions in their order.
-    scorecard = ProcessScorecard.model_validate(published).model_copy(
-        update={"row_definitions": dict(ROW_DEFINITIONS)}
-    )
+    scorecard = committed_scorecard
     assert command.render_markdown(scorecard) == committed
     stale = scorecard.model_copy(
         update={
@@ -366,8 +374,7 @@ def _pinned_planted(
 ) -> Path:
     """A scratch tree whose before file the module's pin is moved to accept."""
 
-    root = tmp_path / "tree"
-    (root / "docs").mkdir(parents=True)
+    root = _published_tree(tmp_path)
     data = (json.dumps(payload) + "\n").encode("utf-8")
     (root / BEFORE_COLUMNS_PATH).write_bytes(data)
     monkeypatch.setattr(
@@ -416,8 +423,7 @@ def test_a_missing_published_file_is_red_rather_than_absent(
     monkeypatch.setattr(
         command, "compute_process_scorecard", lambda _root: _planted_scorecard()
     )
-    root = tmp_path / "tree"
-    (root / "docs").mkdir(parents=True)
+    root = _published_tree(tmp_path)
     assert command.check_report(root) == 1
 
 
@@ -428,13 +434,13 @@ def test_a_missing_published_file_is_red_rather_than_absent(
         "replays/samples/4p1i/replay-seed-0.jsonl",
         "replays/samples/9p2i/roster.json",
         "replays/ml_corpus/9p2i/tournament-eval-report.json.gz",
-        "audits/deduction-candidate/run-2026-09-16/RESULTS.md",
+        "process/audits/deduction-candidate/run-2026-09-16/RESULTS.md",
         # Destinations that do NOT exist yet, inside a recording location.
         # Nothing on a files-only protected list matches them, so containment —
         # the recording roots — is the only thing that can refuse them.
         "replays/new-process-scorecard.md",
         "replays/samples/9p2i/new-scorecard.md",
-        "audits/deduction-candidate/run-2026-09-16/new-scorecard.md",
+        "process/audits/deduction-candidate/run-2026-09-16/new-scorecard.md",
     ),
 )
 def test_the_writer_refuses_a_recording_destination_before_computing(
@@ -496,7 +502,7 @@ def test_the_fifth_run_archive_is_protected_from_the_writer() -> None:
     """
 
     protected = {path.resolve() for path in command.protected_inputs(ROOT)}
-    archive = ROOT / "audits" / "deduction-candidate" / "run-2026-09-16"
+    archive = ROOT / "process" / "audits" / "deduction-candidate" / "run-2026-09-16"
     present = [path for path in archive.iterdir() if path.is_file()]
     assert present, archive
     assert all(path.resolve() in protected for path in present)
@@ -528,22 +534,20 @@ def _listing(root: Path) -> list[tuple[str, int, int]]:
 
 
 def _repository_listing() -> str:
-    """The checkout's own status where this script writes, and its two files."""
+    """The checkout's own status where this script writes, and its page."""
 
     import subprocess
 
+    folder = command.MARKDOWN_PATH.parent.as_posix()
     status = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=all", "--", "docs"],
+        ["git", "status", "--porcelain", "--untracked-files=all", "--", folder],
         cwd=ROOT,
         capture_output=True,
         text=True,
         check=True,
     ).stdout
-    published = [
-        (path.name, path.stat().st_size, path.stat().st_mtime_ns)
-        for path in (ROOT / command.MARKDOWN_PATH, ROOT / command.JSON_PATH)
-    ]
-    return f"{status}{published}"
+    page = ROOT / command.MARKDOWN_PATH
+    return f"{status}{(page.name, page.stat().st_size, page.stat().st_mtime_ns)}"
 
 
 def test_set_dir_prints_the_in_process_fold_and_writes_nothing(
