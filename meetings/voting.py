@@ -50,7 +50,7 @@ rule. :meth:`meetings.manager.MeetingManager._tally` — the call site
 the live game resolves every meeting through — delegates to it, so
 the tally the game applies and the tally eval / replay analysis
 re-checks are the same code rather than two bodies held equal by this
-paragraph (audits/audit-phase-19-triage.md §7 item 27).
+paragraph (process/audits/audit-phase-19-triage.md §7 item 27).
 
 Until Task 19.26 the manager carried its own private copy (written in
 Task 3.8, out of Task 3.10's scope) and this note claimed the two

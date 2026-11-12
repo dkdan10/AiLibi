@@ -425,8 +425,8 @@ def _validated_stamp_field(value: str) -> str:
 
     The shared mechanics behind both provenance-stamp classes' ``@field_validator``
     (Task 15.9's :class:`TacticalPolicyStamp` and Task 18.7's
-    :class:`CrewTacticalPolicyStamp`, audits/audit-phase-18-planning.md §4 #7): a
-    stamp field is a single-line provenance token rendered into line-based
+    :class:`CrewTacticalPolicyStamp`, process/audits/audit-phase-18-planning.md §4 #7):
+    a stamp field is a single-line provenance token rendered into line-based
     artifacts — the JSONL replay row and the Markdown MANIFEST ``policy`` cell
     (``scripts/_manifest_writer.py``) — so a blank / whitespace-only value or one
     carrying a ``"|"`` / newline / carriage-return fails loud at the stamp boundary
@@ -583,8 +583,9 @@ def fsm_default_tactical_policy_stamp() -> TacticalPolicyStamp:
 class CrewTacticalPolicyStamp(BaseModel):
     """The CREW-side provenance stamp for a learned-crew recording (Task 18.7).
 
-    The crew twin of :class:`TacticalPolicyStamp` (audits/audit-phase-18-planning.md
-    §4 #7): a learned-crew recording names its crew policy in a DISTINCT record
+    The crew twin of :class:`TacticalPolicyStamp`
+    (process/audits/audit-phase-18-planning.md §4 #7): a learned-crew recording names
+    its crew policy in a DISTINCT record
     class so a crew recording can NEVER wear the impostor champion's stamp — the
     conflation guard (the CLI arm asserts distinct ``policy_id`` /
     ``weights_sha256`` namespaces across the two stamps). It carries the SAME five
@@ -705,7 +706,7 @@ class GameEndReplayEntry(BaseModel):
     # serve a stamped replay under a CONFLICTING policy claim.
     tactical_policy: TacticalPolicyStamp | None = None
     # The CREW-side tactical-policy provenance stamp (Task 18.7;
-    # audits/audit-phase-18-planning.md §4 #7). Mirrors ``tactical_policy`` but
+    # process/audits/audit-phase-18-planning.md §4 #7). Mirrors ``tactical_policy`` but
     # names the CREW policy in its own DISTINCT :class:`CrewTacticalPolicyStamp`
     # record class, so a learned-crew recording can never wear the impostor
     # champion's stamp (the conflation guard). ADDITIVE and OPTIONAL: ``None``
@@ -1026,7 +1027,7 @@ def recorded_completion_status(entries: Sequence[ReplayLogEntry]) -> CompletionS
 # Phase-13.5 levers), 14.12, 15.7, 16.17 (the three Phase-16 levers), 18.12 (the
 # four meeting-layer levers, CREW-ONLY ruling) and the baseline-7 record (the
 # eight Phase-20 evidence-honesty levers, adopted by owner override of a FINDING
-# verdict — audits/audit-phase-20-baseline-7.md §6.1).
+# verdict — process/audits/audit-phase-20-baseline-7.md §6.1).
 _RETIRED_ALWAYS_ON_LEVERS: Final[tuple[str, ...]] = (
     "testimony_as_content",
     "witnessed_kill_evidence",

@@ -1,7 +1,7 @@
 """The productized learned tactical champion (Task 15.20).
 
 The pause's champion — the ``utility-es`` learned utility scorer over
-FSM-proposed impostor options (audits/audit-phase-15-pause.md decision 1) —
+FSM-proposed impostor options (process/audits/audit-phase-15-pause.md decision 1) —
 promoted into production inference behind the observation firewall:
 
 - :mod:`agents.tactical.learned.forward` — the pure-Python forward pass, ported

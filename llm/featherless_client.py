@@ -32,7 +32,7 @@ always worked: prompt + extract + validate + FailedCall, no constrained
 decoding).
 
 The Task 16.1 probe RE-VERIFIED this posture UNCHANGED on the locked production
-model ``Qwen/Qwen3.6-27B`` (Task 16.2, audits/audit-phase-16-model-lock.md):
+model ``Qwen/Qwen3.6-27B`` (Task 16.2, process/audits/audit-phase-16-model-lock.md):
 ``json_object`` accepted 2/2 on BOTH production schemas (MeetingTurn, VoteBallot,
 JSON content), while strict ``json_schema`` was deterministically rejected 0/2 on
 both (HTTP 400 — the incumbent's same-day re-verify rejected 0/2 too, at drifting
@@ -139,7 +139,7 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 DEFAULT_FEATHERLESS_BASE_URL: Final[str] = "https://api.featherless.ai/v1"
 # Default model id (HuggingFace repo form, as Featherless expects). This IS the
 # canonical PRODUCTION model — locked at Task 16.2
-# (audits/audit-phase-16-model-lock.md, 2026-07-12), no longer a non-binding
+# (process/audits/audit-phase-16-model-lock.md, 2026-07-12), no longer a non-binding
 # slate lead. ``Qwen/Qwen3.6-27B`` is the EXACT served id: the ``-Instruct``
 # variant 404s, so the un-suffixed id is the only servable form
 # (generation-preflight-confirmed). Still overridable per ``call_kind`` via
@@ -176,8 +176,8 @@ ResponseFormatMode = Literal["json_object", "json_schema", "none"]
 # prompts under ``json_object`` (and even with ``none``). The Task 16.1 probe
 # re-verified this posture UNCHANGED on the locked ``Qwen/Qwen3.6-27B``
 # (``json_object`` accepted 2/2, strict ``json_schema`` rejected 0/2 — Task 16.2,
-# audits/audit-phase-16-model-lock.md). There is NO silent fallback between modes
-# (AGENTS.md): the mode is chosen explicitly at construction time; a rejected
+# process/audits/audit-phase-16-model-lock.md). There is NO silent fallback between
+# modes (AGENTS.md): the mode is chosen explicitly at construction time; a rejected
 # ``json_schema`` request fails loud.
 DEFAULT_RESPONSE_FORMAT_MODE: Final[ResponseFormatMode] = "json_object"
 
@@ -597,7 +597,7 @@ _THINKING_KWARG_BY_MODEL: Final[tuple[tuple[str, bool], ...]] = (
     ("Qwen/Qwen3-30B-A3B", True),
     ("Qwen/Qwen3-30B-A3B-Instruct-2507", True),
     # Locked production model (probe-verified Task 16.1, locked Task 16.2 —
-    # audits/audit-phase-16-model-lock.md). The 16.1 probe confirmed this served
+    # process/audits/audit-phase-16-model-lock.md). The 16.1 probe confirmed this served
     # id HONORS the Qwen3 ``chat_template_kwargs.enable_thinking`` kwarg, so it
     # is classified True. CRITICAL: this generation REASONS BY DEFAULT — with the
     # kwarg ABSENT it leaks inline ``</think>`` reasoning into ``content``;

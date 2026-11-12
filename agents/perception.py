@@ -14,7 +14,7 @@ Provenance values:
   directly perceive (system-wide task progress, sabotage status). The
   number is derived from world state the agent could not see itself.
 
-Observation ids (Task 16.5, C8; audits/post-phase-14-Voice-and-Judgment-
+Observation ids (Task 16.5, C8; process/audits/post-phase-14-Voice-and-Judgment-
 planning.md §3.4 C3/C8). Every ``"observed"`` row this module writes is stamped
 with a stable ``{agent_id}:{tick}:{seq}`` :data:`~agents.memory.episodic.ObservationId`
 via :func:`~agents.memory.episodic.derive_observation_id` — the citation handle the

@@ -10,7 +10,7 @@ In the 9-player set:
 
 1. **Votes follow a rule-based suspicion score, and going against it is usually wrong.** The ballot prompt shows the voter's rule-kept suspicion of every player ([`agents/memory/`](agents/memory/)). Crew votes for the highest-rated player hit an impostor [215 of 235 times](eval/reports/process-scorecard.md) (91%); the 56 against it hit one twice (4%), where chance is about one in three.
 2. **Meetings with a reported vent sighting never ejected a crewmate.** A vent claim counts only when the engine's witness record matches it. In the 24 meetings with one, every ejection removed an impostor; in the 95 without, [22 of 37](eval/reports/gameplay-census.md) did and 15 removed crewmates, better than chance and far from reliable: hard evidence, not general social deduction.
-3. **Every vote to eject cites a real line.** All 397 citations resolve to a line the voter saw or heard, and [394 of 397](eval/reports/process-scorecard.md) votes to eject cite one about the player voted against; most of those lines are other players' claims, which can be lies. The ballot demands a citation, so this is by design.
+3. **Every vote to eject cites a real line.** All 397 citations resolve to a line the voter saw or heard, and [394 of 397](eval/reports/process-scorecard.md) votes to eject cite one about the player voted against; most of those lines are other players' claims, which can be lies. The ballot asks for a citation, so this is by design.
 
 *Before* is each set's previously shown recording, copied from its record.
 

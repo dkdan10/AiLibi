@@ -115,7 +115,7 @@ def corroboration_discipline_enabled(env: Mapping[str, str] | None = None) -> bo
     :func:`orchestrator.game.prompt_versions_for_set`
     (:data:`~orchestrator.game.CORROBORATION_DISCIPLINE_PROMPT_VERSION_SETS`),
     so lever-shaped ballot bytes and default ballot bytes never share a version
-    stamp (audits/audit-phase-17-absence-gate.md Ruling 3(d)).
+    stamp (process/audits/audit-phase-17-absence-gate.md Ruling 3(d)).
     """
 
     environment = env if env is not None else os.environ
@@ -635,7 +635,7 @@ def build_testimony_ledger(
     weakens charges and mints nothing, and because the shaped placements reach
     ``walkable_transits`` alone, while ``first_hand``, ``adopted`` and
     ``flagged`` keep the inputs they had. Both are measured over the committed
-    bytes in ``audits/audit-phase-21-counterfactual.md`` Errata E.2.
+    bytes in ``process/audits/audit-phase-21-counterfactual.md`` Errata E.2.
     """
 
     accusations = _accused_by_turn(transcript)

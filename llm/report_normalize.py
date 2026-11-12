@@ -17,7 +17,7 @@ two complementary repairs at every discriminated-union point:
 1. **Misplaced-key stripping** (the ``co_present`` case above): drop keys not
    declared on the matched variant so ``extra="forbid"`` no longer rejects them.
 2. **Chronological-alibi repair** (Task 7.10, audit
-   ``audits/audit-2026-06-01-1425-gameplay-data.md`` gp-2): when a model
+   ``process/audits/audit-2026-06-01-1425-gameplay-data.md`` gp-2): when a model
    declares both ``from_tick`` and ``to_tick`` and the payload has them
    reversed (``from_tick > to_tick``), swap them so the strict chronological
    ``model_validator`` accepts the claim. ``qwen2.5:7b-instruct`` emits this

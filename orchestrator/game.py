@@ -478,7 +478,7 @@ PROMPT_VERSION_SETS: Final[Mapping[str, Mapping[str, str]]] = {
 # the actual variant FILE (``impostor_report_roll_call``) on its OWN v1
 # lineage: a variant body can never share a stamp with any default
 # ``impostor_report.qwen3_6_27b.vN`` body, past or future — the provenance
-# separation audits/audit-phase-17-absence-gate.md Ruling 3(d) requires when
+# separation process/audits/audit-phase-17-absence-gate.md Ruling 3(d) requires when
 # impostor bytes move (the bar re-reads on the new bytes, distinguished by
 # stamp). If the 18.11 gate rules SHIP, Task 18.12 flips these values into
 # :data:`PROMPT_VERSION_SETS` as the default-served entries; until then the
@@ -630,7 +630,7 @@ def _served_experiment_arm_values(
 # renders the SET's own ``crewmate_report.j2`` / ``accusation_round.j2`` with a
 # guarded block, so exactly those two keys carry arm stamps and the two the
 # lever leaves alone inherit the default registry's values. Provenance moves
-# with the BODIES that moved (audits/audit-phase-17-absence-gate.md Ruling
+# with the BODIES that moved (process/audits/audit-phase-17-absence-gate.md Ruling
 # 3(d)): an arm-rendered opening or reply can never wear a default stamp.
 _REPORTER_REASONING_ARM: Final[Mapping[str, str]] = _lever_arm_versions(
     "qwen3_6_27b", "reporter_reasoning"

@@ -18,7 +18,7 @@ value, and no production row reads anything else.
 Read paths beyond the simple ``view`` accessor and prompt rendering ship
 in Phase 3 (Task 3.3).
 
-Suspicion provenance (Task 16.3; audits/post-phase-14-Voice-and-Judgment-
+Suspicion provenance (Task 16.3; process/audits/post-phase-14-Voice-and-Judgment-
 planning.md §3.2, the J1 foundation). Alongside the aggregate ``suspicion``
 scalar every belief row now carries a :class:`SuspicionProvenance` -- a
 source-tagged decomposition of the lift that produced the scalar (flag-lift /
@@ -212,7 +212,8 @@ point should 15.7's live measurement warrant a non-zero cap."""
 
 HARD_EVIDENCE_GATE_RENDER_CEIL: Final[float] = 0.59
 """Sub-gate render value the J1 clamp folds an entirely-soft conviction-grade row
-down to (Task 16.4; audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J1).
+down to (Task 16.4;
+process/audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 J1).
 
 One display-precision notch under the §4.6 0.60 eject gate
 (:data:`meetings.constants.DEFAULT_SKIP_CONFIDENCE_THRESHOLD`): a row clamped to
@@ -238,7 +239,7 @@ def hard_evidence_gated_suspicion(
 ) -> float:
     """Clamp an entirely-soft conviction-grade suspicion to the J1 render ceiling.
 
-    The PURE J1 classification predicate (Task 16.4; audits/post-phase-14-Voice-
+    The PURE J1 classification predicate (Task 16.4; process/audits/post-phase-14-Voice-
     and-Judgment-planning.md §3.4 J1). Classifies on the 16.3 typed
     :class:`SuspicionProvenance` decomposition ONLY -- never on the ``suspicion``
     scalar, never on prose. A row is ENTIRELY soft when its grounded evidence is
@@ -289,7 +290,7 @@ def hard_evidence_gated_suspicion(
 
 ABSENCE_SUSPICION_DELTA: Final[float] = 0.08
 """The Task 16.8 absence prior: the WEAK pre-vote delta a publicly UNPLACED
-living player takes (audits/post-phase-14-Voice-and-Judgment-planning.md's
+living player takes (process/audits/post-phase-14-Voice-and-Judgment-planning.md's
 pooling program; the phase-16 "visibility as a resource" channel).
 
 At the pre-vote fold, every subject in the meeting's ABSENT set -- the living

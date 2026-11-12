@@ -6,7 +6,7 @@ Aggregates the three stores introduced in Task 2.3 (`agents/memory/episodic.py`,
 components to produce the token-budgeted Markdown view per DESIGN.md §6.6.
 
 This composite is the integration point Phase 3 strategic agents import
-through (audit R-6, `audits/audit-2026-05-15-0225-reconciled.md`).
+through (audit R-6, `process/audits/audit-2026-05-15-0225-reconciled.md`).
 """
 
 from __future__ import annotations
@@ -2048,7 +2048,7 @@ def _build_observations(
             # (observation/service.py), so its rotating pretend id never leaves
             # the set. Both rows must carry the set -- a payload without it is
             # no evidence, so nothing is minted.
-            # G-3 / C-2, audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3.
+            # G-3 / C-2, process/audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3.
             if last_owned_task_ids is not None and owned is not None:
                 observations.extend(
                     _completed_task_observation(

@@ -57,7 +57,7 @@ from observation.action_intent import ActionIntent
 from observation.packet import ObservationPacket, PlayerId, Role
 from observation.public_map import PublicMapView
 
-# The champion's five stamp-field values (audits/audit-phase-15-pause.md
+# The champion's five stamp-field values (process/audits/audit-phase-15-pause.md
 # decision 1). ``policy_id`` is the bake-off entrant name the audit locked;
 # ``method`` is the single-line training-method token for "learned utility
 # scorer over FSM-proposed options + (1+λ)-ES"; the anchor is the frozen
@@ -240,7 +240,7 @@ def build_learned_agent_factory(
 
 
 # The crew surface's five stamp-field values (Task 18.7;
-# audits/audit-phase-18-planning.md §4 #7). The stamp namespace is DELIBERATELY
+# process/audits/audit-phase-18-planning.md §4 #7). The stamp namespace is DELIBERATELY
 # disjoint from the impostor champion's on ``policy_id`` / ``weights_sha256`` (the
 # 18.7 conflation guard: a crew recording must never wear the impostor champion's
 # stamp). ``policy_id`` is the committed measurement-tier crew entrant name;

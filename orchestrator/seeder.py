@@ -75,7 +75,7 @@ def seed_initial_state(
     every later one (the engine resets the cooldown to the same value after each
     kill and decrements it per tick in ``engine/tick.py``). Seeding to 0 granted
     a free, unwitnessed first kill in half the games
-    (audits/audit-2026-06-06-0632-gameplay-data.md gp-1). An invalid
+    (process/audits/audit-2026-06-06-0632-gameplay-data.md gp-1). An invalid
     ``kill_cooldown_ticks`` raises before anything is built.
     """
 
