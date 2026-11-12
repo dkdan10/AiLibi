@@ -2048,7 +2048,7 @@ def _build_observations(
             # (observation/service.py), so its rotating pretend id never leaves
             # the set. Both rows must carry the set -- a payload without it is
             # no evidence, so nothing is minted.
-            # G-3 / C-2, process/audits/review-2026-08-19/D/FINAL-synthesis.md §1 RC3.
+            # G-3 / C-2 of the 2026-08-19 review (process/audits/review-2026-08-19/README.md §3).
             if last_owned_task_ids is not None and owned is not None:
                 observations.extend(
                     _completed_task_observation(

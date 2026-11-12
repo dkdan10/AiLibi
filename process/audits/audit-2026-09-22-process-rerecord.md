@@ -1346,7 +1346,7 @@ denominator is zero.
   here and left.
 - **Historical records keep their baseline-8 fingerprints**:
   `audits/tactical-gameplay/held-out.json` and
-  `tasks/work/portfolio-evidence-experience.md` describe the bytes of their own
+  `tasks/work/evidence-experience.md` describe the bytes of their own
   day and were not edited.
 
 ### 7.3 Limitations, stated at the strength the code delivers

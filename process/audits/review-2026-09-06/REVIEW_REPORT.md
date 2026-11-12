@@ -71,7 +71,7 @@ Each item: severity, anchor at HEAD, introducing commit, trigger, expected versu
 - Severity medium, introduced regression against a checked acceptance box. Anchor `frontend/src/components/MeetingView.tsx:193-202` (`gateReadout`), called unconditionally at `:242`. Introduced by 9b0735ba (the lens gating was added there without covering this line).
 - Trigger: `/?set=9p2i&game_id=headless-seed-23&tick=10&perspective=p-1&selectedAgent=p-1&selectedMeeting=headless-seed-23%3Ameeting-0&view=workspace`.
 - Expected: every non-own ballot hidden, as the ballot cards do. Actual: the resolution line reads "plurality leader p-6, top ballot 1.00 ≥ 0.60 threshold → EJECTED"; 1.00 is p-5's confidence, which the same page has just refused to show. Reproduced by three verifiers in their own servers, on two recordings.
-- Affected: `tasks/work/portfolio-evidence-experience.md` acceptance "All private ballot reasoning … require the voter's … own lens, or omniscient mode."
+- Affected: `tasks/work/evidence-experience.md` acceptance "All private ballot reasoning … require the voter's … own lens, or omniscient mode."
 - Fix: pass the observer/omniscient decision into `gateReadout` and omit the numeric confidence when the viewer is not entitled to the leader's ballot. Add a `VerdictPanel` case to `PrivateReasoning.test.tsx`.
 
 ### 5.3 Stale-rubric cards claim the set ships no rubric (G6-1)
@@ -248,12 +248,12 @@ Classifications: D = implemented and verified in default behaviour; X = implemen
 | 23 | tactical-gameplay-experiments | X | provenance-gated risk; 4p row rests on one game |
 | 24 | tactical-gameplay-experiments | R | guard deleted; retained-controls hashes match current baseline 16/16; acceptance text rewritten in the checking commit |
 | 25 | tactical-gameplay-experiments | X | thin effect; trigger is any concluded meeting |
-| 26 | portfolio-evidence-experience | D | 176/176 cited observations resolve to text and a scene; forged ids disclosed; one malformed-URL hang (M5-01) |
-| 27 | portfolio-evidence-experience | D | every denominator recomputed; tampered outcome refuses publication |
-| 28 | portfolio-evidence-experience | D | verified in the bundle with no API |
-| 29 | portfolio-evidence-experience | D | both source sha pins verified; cases reconstructed independently |
-| 30 | portfolio-evidence-experience | D | README 1,439 words under a machine-enforced 1,600 |
-| 31 | portfolio-evidence-experience | D | journeys reproduced; clean-clone evidence is `/tmp`-only |
+| 26 | evidence-experience | D | 176/176 cited observations resolve to text and a scene; forged ids disclosed; one malformed-URL hang (M5-01) |
+| 27 | evidence-experience | D | every denominator recomputed; tampered outcome refuses publication |
+| 28 | evidence-experience | D | verified in the bundle with no API |
+| 29 | evidence-experience | D | both source sha pins verified; cases reconstructed independently |
+| 30 | evidence-experience | D | README 1,439 words under a machine-enforced 1,600 |
+| 31 | evidence-experience | D | journeys reproduced; clean-clone evidence is `/tmp`-only |
 | 32 | replay-loading-performance | D | 86.2% byte reduction reproduced at HEAD |
 | 33 | replay-loading-performance | D | every table number recomputed; after-capture bound to an earlier tree |
 | 34 | map-traversal-contract | D | `traversal_ticks=2` accepted on main, rejected on HEAD |
