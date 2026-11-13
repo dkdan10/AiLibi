@@ -1,10 +1,12 @@
-// The shell header and the guided tour's welcome step, rendered.
+// The shell header and the guided tour's steps, rendered.
 //
-// Both carry one link to the repository and nothing about who made what: the
-// header reads the name, the tagline and a link whose text is "GitHub", and the
-// welcome step keeps the same link in a sentence of its own. Each render is held
-// to `HEADER_COPY` here; `lib/copy.test.ts` holds the copy tree and the two
-// sources to the same words.
+// The header and the tour's closing step each carry one link to the repository
+// and nothing about who made what: the header reads the name, the tagline and a
+// link whose text is "GitHub", and the closing step keeps the same link in a
+// sentence of its own. Each render is held to `HEADER_COPY` here;
+// `lib/copy.test.ts` holds the copy tree and the two sources to the same words.
+// The welcome step is the short card a first-time visitor reads beside a game in
+// motion, and it is held to `TOUR_COPY`.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -110,8 +112,8 @@ function titleProblems(html: string): readonly string[] {
   return problems;
 }
 
-/** What differs from the welcome step the copy describes; empty when they agree. */
-function welcomeProblems(html: string): readonly string[] {
+/** What differs from the closing step the copy describes; empty when they agree. */
+function sourceStepProblems(html: string): readonly string[] {
   const problems: string[] = [];
   const links = linksOf(html);
   if (
@@ -126,6 +128,15 @@ function welcomeProblems(html: string): readonly string[] {
     problems.push(`the step says ${hit[0]}`);
   }
   return problems;
+}
+
+/** The tour's last step: the one that carries the source link, the rules and the Results pointer. */
+const CLOSING_STEP = STEPS.length - 1;
+
+function sourceStepHtml(): string {
+  const closing = STEPS[CLOSING_STEP];
+  if (closing === undefined) throw new Error("the tour has no closing step");
+  return renderToStaticMarkup(<>{closing.body}</>);
 }
 
 function welcomeHtml(): string {
@@ -188,9 +199,43 @@ describe("the shell header", () => {
 
 describe("the guided tour's welcome step", () => {
   const html = welcomeHtml();
+  const words = (text: string): number => text.split(/\s+/).filter(Boolean).length;
+
+  it("is one short paragraph from the copy, under its title", () => {
+    expect(STEPS[0]?.title).toBe(TOUR_COPY.welcomeTitle);
+    expect(html.match(/<p\b/g)).toHaveLength(1);
+    expect(textOf(html)).toBe(TOUR_COPY.welcomeBody);
+    expect(words(TOUR_COPY.welcomeBody)).toBeLessThanOrEqual(45);
+    expect(words(TOUR_COPY.welcomeBodyAnyGame)).toBeLessThanOrEqual(45);
+  });
+
+  it("carries no link, no legend and nothing about who made what", () => {
+    expect(linksOf(html)).toEqual([]);
+    expect(html).not.toContain("ground truth (solid)");
+    expect(ATTRIBUTION_WORDS.exec(`${TOUR_COPY.welcomeTitle} ${textOf(html)}`)).toBeNull();
+  });
+
+  it("promises a citation on a vote to eject, and on no other vote", () => {
+    for (const body of [TOUR_COPY.welcomeBody, TOUR_COPY.welcomeBodyAnyGame]) {
+      expect(body).toContain("open a vote to eject to read the line that voter cited");
+      expect(body).not.toMatch(/\b(?:every|any|each) vote\b/i);
+    }
+  });
+
+  it("names a cast and motion only on the card for the teaching game", () => {
+    expect(TOUR_COPY.welcomeBody).toMatch(/^Nine AI players .* two are impostors\./);
+    expect(TOUR_COPY.welcomeBody).toContain("already moving behind this card");
+    expect(TOUR_COPY.welcomeBodyAnyGame).not.toMatch(/\b(?:nine|two|four|one)\b|already moving/i);
+    expect(TOUR_COPY.welcomeBodyAnyGame).toContain("press Play to start or resume it");
+  });
+});
+
+describe("the guided tour's closing step", () => {
+  const html = sourceStepHtml();
 
   it("keeps one plain link to the source and says nothing about who made what", () => {
-    expect(welcomeProblems(html)).toEqual([]);
+    expect(STEPS[CLOSING_STEP]?.title).toBe(TOUR_COPY.rulesTitle);
+    expect(sourceStepProblems(html)).toEqual([]);
     const opening = /<p\b[^>]*>([\s\S]*?)<\/p>/.exec(html)?.[1] ?? "";
     expect(textOf(opening)).toBe(
       "AiLibi asks whether AI agents can reason from what they actually saw. You are watching saved games, not making live model calls. Read the source on GitHub.",
@@ -205,7 +250,7 @@ describe("the guided tour's welcome step", () => {
         `not making live model calls. ${word}`,
       );
       expect(planted).not.toBe(html);
-      expect(welcomeProblems(planted)).toEqual([`the step says ${word}`]);
+      expect(sourceStepProblems(planted)).toEqual([`the step says ${word}`]);
     },
   );
 
@@ -215,13 +260,13 @@ describe("the guided tour's welcome step", () => {
       "not making live model calls. Daniel Keinan directs the project; Claude Code and Codex agents write code and supporting material, with separate AI review.",
     );
     expect(sentence).not.toBe(html);
-    expect(welcomeProblems(sentence)).toEqual(["the step says Claude Code"]);
+    expect(sourceStepProblems(sentence)).toEqual(["the step says Claude Code"]);
     const link = html.replace(
       `>${HEADER_COPY.tourSourceLinkText}</a>`,
       ">Read the source and ownership case study.</a>",
     );
     expect(link).not.toBe(html);
-    expect(welcomeProblems(link)).toEqual([
+    expect(sourceStepProblems(link)).toEqual([
       `the links are ${JSON.stringify([{ href: HEADER_COPY.sourceUrl, text: "Read the source and ownership case study." }])}`,
       "the step says ownership",
     ]);
@@ -230,7 +275,7 @@ describe("the guided tour's welcome step", () => {
   it("names the link when only its address changes (planted)", () => {
     const moved = html.replace(`href="${HEADER_COPY.sourceUrl}"`, 'href="https://example.test"');
     expect(moved).not.toBe(html);
-    expect(welcomeProblems(moved)).toEqual([
+    expect(sourceStepProblems(moved)).toEqual([
       `the links are ${JSON.stringify([{ href: "https://example.test", text: HEADER_COPY.tourSourceLinkText }])}`,
     ]);
   });
@@ -238,7 +283,7 @@ describe("the guided tour's welcome step", () => {
   it("names a second link beside the source link (planted)", () => {
     const twoLinks = html.replace("</a>", '</a> <a href="https://example.test">More</a>');
     expect(twoLinks).not.toBe(html);
-    expect(welcomeProblems(twoLinks)).toEqual([
+    expect(sourceStepProblems(twoLinks)).toEqual([
       `the links are ${JSON.stringify([
         { href: HEADER_COPY.sourceUrl, text: HEADER_COPY.tourSourceLinkText },
         { href: "https://example.test", text: "More" },
@@ -431,16 +476,24 @@ describe("the tour's other steps", () => {
   const text = (index: number) => textOf(renderToStaticMarkup(<>{STEPS[index]?.body}</>));
 
   it("names the Results tab, and states the endings in the ending words", () => {
-    expect(renderToStaticMarkup(<>{STEPS[0]?.body}</>)).toContain(
+    expect(renderToStaticMarkup(<>{STEPS[CLOSING_STEP]?.body}</>)).toContain(
       `Start at <strong>${NAV_COPY.tournament}</strong> for each set`,
     );
-    expect(text(0)).toContain(TOUR_COPY.rules);
-    expect(text(0)).not.toMatch(/Results & cases|parity|unresolved sabotage/);
+    expect(text(CLOSING_STEP)).toContain(TOUR_COPY.rules);
+    expect(text(CLOSING_STEP)).not.toMatch(/Results & cases|parity|unresolved sabotage/);
+    // Both left the first card, which is the short one.
+    expect(text(0)).not.toContain(TOUR_COPY.rules);
+    expect(text(0)).not.toContain("Start at");
   });
 
-  it("names one player's view as the controls do", () => {
+  it("names one player's view as the controls do, above the legend", () => {
     expect(STEPS[1]?.title).toBe(TOUR_COPY.perspectiveTitle);
-    expect(text(1)).toBe(TOUR_COPY.perspectiveBody);
+    const html = renderToStaticMarkup(<>{STEPS[1]?.body}</>);
+    const paragraph = /<p\b[^>]*>([\s\S]*?)<\/p>/.exec(html)?.[1] ?? "";
+    expect(textOf(paragraph)).toBe(TOUR_COPY.perspectiveBody);
+    expect(html.match(/<p\b/g)).toHaveLength(1);
+    expect(text(1)).toContain("ground truth (solid)");
+    expect(text(1)).toContain("belief (ghosted)");
     expect(text(1)).not.toMatch(/As-agent|\bfog\b/);
   });
 

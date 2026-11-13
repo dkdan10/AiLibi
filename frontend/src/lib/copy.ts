@@ -196,6 +196,15 @@ export const SPECTATOR_COPY = Object.freeze({
   }),
   /** The guided tour's words this copy owns. */
   tour: Object.freeze({
+    // The first card. `welcomeBody` is what a first-time visitor reads while the
+    // nine-player teaching game plays behind it; `welcomeBodyAnyGame` is the same
+    // card for every other opening, where neither the cast nor the motion is known.
+    welcomeTitle: "Welcome: every player here is an AI",
+    welcomeBody:
+      "Nine AI players share a small station; two are impostors. You are watching a recorded game, replayed exactly, and it is already moving behind this card. When a meeting starts, open a vote to eject to read the line that voter cited.",
+    welcomeBodyAnyGame:
+      "The players share a small station, and some of them are impostors. You are watching a recorded game, replayed exactly; press Play to start or resume it. When a meeting starts, open a vote to eject to read the line that voter cited.",
+    rulesTitle: "The rules, and where to start",
     // The game's rules in the cards' ending words.
     rules:
       "Players move one room edge per tick. The crew wins by finishing its tasks or voting out every impostor; impostors kill, deceive, and sabotage, and win when they match the crew in number or a sabotage runs out. Body reports and emergency calls begin discussion and voting. Movement is rule-based; models deliberate at meetings.",
