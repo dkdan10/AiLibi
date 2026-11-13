@@ -1102,7 +1102,7 @@ class ImpostorPolicy:
         ``BodyState.player_id``; perception surfaces it on every
         ``saw_body`` event payload. This used to parse a regex over the
         body id format -- see R-4 in
-        ``audits/audit-2026-05-16-0036-reconciled.md`` for the
+        ``process/audits/audit-2026-05-16-0036-reconciled.md`` for the
         retired coupling. A missing or non-string ``victim_id`` is a
         boundary contract violation: the impostor policy refuses to
         guess and raises immediately.

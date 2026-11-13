@@ -30,12 +30,12 @@ third-party review.
    phase, and the clearest example of the machinery holding under a result
    nobody wanted.
 
-## The 2026-08-19 review — [`review-2026-08-19/`](review-2026-08-19/D/FINAL-synthesis.md)
+## The 2026-08-19 review — [`review-2026-08-19/`](review-2026-08-19/README.md)
 
-A directory rather than a file: a three-track review of the whole tree —
-**A** gameplay, **B** code, **C** portfolio and front door — plus **D**, the
-synthesis that ruled between them and produced the phase-20 plan. Start at
-`D/FINAL-synthesis.md`; each track has its own `collated-findings.md`.
+A directory rather than a file: the two technical tracks of a review of the
+whole tree, **A** gameplay and **B** code, each with its own
+`collated-findings.md` and adversarial `verdicts.md`. Start at the directory's
+`README.md`, which also says what is no longer kept here.
 
 Two more directories sit beside the records: `prompts/` holds the prompts the
 early audits were commissioned with, and `workflows/` holds the scripts that

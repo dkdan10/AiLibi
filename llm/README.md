@@ -84,7 +84,7 @@ Per-provider model defaults and cost:
 
 Featherless has been the **canonical eval provider since Phase 14**; its
 model was **locked on 2026-07-12 at Task 16.2**
-(`audits/audit-phase-16-model-lock.md`) to `Qwen/Qwen3.6-27B` in
+(`process/audits/audit-phase-16-model-lock.md`) to `Qwen/Qwen3.6-27B` in
 non-thinking mode. `Qwen/Qwen3.6-27B` is the exact served id — the
 `-Instruct` variant 404s. Anthropic is retained as a still-supported
 alternative (baseline re-recording, cross-provider validation), not dead

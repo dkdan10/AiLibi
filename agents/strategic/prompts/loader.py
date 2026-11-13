@@ -80,7 +80,7 @@ The gate's highest-variance arm, built inert: behind the default-OFF
 the two impostor-facing templates are swapped for their ``*_roll_call.j2``
 VARIANT siblings — the impostor opening and reply ANSWER the whereabouts
 ask with a structured self-placement instead of the hard-coded
-``"observations": []`` (audits/audit-phase-18-planning.md §3.4, the
+``"observations": []`` (process/audits/audit-phase-18-planning.md §3.4, the
 structural refusal). Routing is by template FILENAME: the wrapper
 callables take an explicit ``template_name`` and
 :func:`build_prompt_renderers` resolves the lever ONCE at construction and
@@ -412,7 +412,7 @@ def impostor_roll_call_enabled(env: Mapping[str, str] | None = None) -> bool:
     whereabouts ask with one structured ``whereabouts`` self-placement — the
     two-tier design lets the claim be a lie, manufacturing exactly the
     contradiction material the alibi rules prosecute
-    (audits/audit-phase-18-planning.md §3.4) — at the measured risk of the
+    (process/audits/audit-phase-18-planning.md §3.4) — at the measured risk of the
     >=44% self-flag class the prompt ladder closed. The 18.11 probe measures
     both (pre-registered bar (c): probe impostor win >= 0.20 AND STRONG
     self-flag rate <= 0.25 of answered impostor roll-calls); the graduation
@@ -420,7 +420,7 @@ def impostor_roll_call_enabled(env: Mapping[str, str] | None = None) -> bool:
     through :func:`orchestrator.game.prompt_versions_for_set`
     (:data:`~orchestrator.game.IMPOSTOR_ROLL_CALL_PROMPT_VERSION_SETS`), so
     variant bytes and default bytes never share a version stamp
-    (audits/audit-phase-17-absence-gate.md Ruling 3(d)).
+    (process/audits/audit-phase-17-absence-gate.md Ruling 3(d)).
     """
 
     environment = env if env is not None else os.environ

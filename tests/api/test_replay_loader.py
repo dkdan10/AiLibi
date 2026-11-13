@@ -1220,12 +1220,10 @@ def test_committed_9p2i_set_reconstructs_byte_identically(
     # the action stream, so this only reconstructs because the committed descriptor
     # is correct — making this both the determinism gate and a roster.json check.
     #
-    # The committed set was re-recorded on the Featherless / Qwen/Qwen3-32B
-    # substrate (Task 14.12 baseline 2) with all four Phase-13.5 levers ON PLUS
-    # the Task-14.10 evidence_quality_lift lever ON, stamped on each game_over
-    # record. Every lever is unconditional (the 13.5 four since Task 14.9, the
-    # 14.10 lever since the 14.12 close follow-up), so the committed set
-    # reconstructs under a genuinely BARE environment — no AILIBI_* export.
+    # The committed set is recorded on the Featherless / Qwen/Qwen3.6-27B
+    # substrate, the model every row of replays/samples/9p2i/MANIFEST.md names,
+    # with its levers stamped on each game_over record. It reconstructs under a
+    # genuinely BARE environment — no AILIBI_* export.
     _delete_ailibi_env(monkeypatch)
     assert replay_loader._load_roster_config(_COMMITTED_9P2I_DIR) == RosterConfig(
         num_players=9, num_impostors=2, tasks_per_crewmate=2

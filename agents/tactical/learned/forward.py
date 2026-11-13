@@ -2,7 +2,7 @@
 
 The shipped inference path for the pause's champion — the ``utility-es``
 learned utility scorer over the FSM's own impostor option menu
-(audits/audit-phase-15-pause.md decision 1) — ported from the training-side
+(process/audits/audit-phase-15-pause.md decision 1) — ported from the training-side
 reference ``training/bakeoff/utility_es.py`` under the firewall contract:
 
 - **No engine import.** The reference module's one live ``engine.world`` import

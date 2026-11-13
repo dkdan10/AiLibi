@@ -114,7 +114,7 @@ result; implementing a candidate was not enough to adopt it.
 ### The critique I am keeping
 
 The sharpest thing anyone said about this project is not a defect report. The review's
-[research-lead read](../process/audits/review-2026-08-19/C/p2-ml-research-lead.md) closed with:
+research-lead read closed with:
 *"strong on measurement, weak on knowing when to stop building measurement."* Nobody rebutted
 it, and [the code track](../process/audits/review-2026-08-19/B/repo-health-architecture.md) then handed
 over the measurement that makes it concrete: **95,824 lines of process narration** — contracts,

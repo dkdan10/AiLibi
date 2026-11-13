@@ -527,7 +527,7 @@ class AdvantageView(_FrozenView):
 
 class MeetingResolutionView(_FrozenView):
     """Explicit pre/post-resolution labeling for a RESOLVED meeting's tick frame
-    (Task 19.10; audits/audit-phase-19-triage.md §7 item 11).
+    (Task 19.10; process/audits/audit-phase-19-triage.md §7 item 11).
 
     A meeting :class:`TickView` carries two vintages of the same tick at once.
     Its ``agent_states`` / ``events`` / ``tasks_*_total`` are the **PRE**-resolution
@@ -858,7 +858,7 @@ class TurnView(_FrozenView):
 
 
 # ---------------------------------------------------------------------------
-# Evidence taxonomy (Task 19.11; audits/audit-phase-19-triage.md §7 item 12)
+# Evidence taxonomy (Task 19.11; process/audits/audit-phase-19-triage.md §7 item 12)
 # ---------------------------------------------------------------------------
 
 
@@ -1017,7 +1017,7 @@ class ContradictionView(_FrozenView):
     load (:func:`classify_evidence`), so the spectator surface can render
     proof as proof instead of as a self-linked ``p-X ↔ p-X`` "contradiction",
     and subordinate weak-stamped flags instead of drawing them at hard-evidence
-    weight (audits/audit-phase-19-triage.md §7 item 12; §8 rows 10, 14). It is
+    weight (process/audits/audit-phase-19-triage.md §7 item 12; §8 rows 10, 14). It is
     ADDITIVE and derived: ``kind`` / ``event_a_id`` / ``event_b_id`` /
     ``description`` keep their recorded meanings, and every committed
     recording — including those made before ``vent_sighting`` existed —

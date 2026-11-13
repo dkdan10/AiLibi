@@ -2,7 +2,7 @@
 
 ``weights.json`` / ``weights.json.sha256`` beside this module are the
 agents-side COPY of the frozen training-side champion artifact
-``training/artifacts/impostor/utility-es/`` (audits/audit-phase-15-pause.md
+``training/artifacts/impostor/utility-es/`` (process/audits/audit-phase-15-pause.md
 decision 1, sha256 ``6d327dcb…``) — float64-hex JSON, the decision-6 retained
 lossless representation (:func:`agents.tactical.features.weights_from_hex_json`
 round-trips it bit-for-bit). The copy is pinned by test, never read across the

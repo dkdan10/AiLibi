@@ -1912,8 +1912,8 @@ def detect_contradictions(
     participant's ``sighting_records_for_meeting()`` output. Its three
     rules apply only when this mapping is non-empty:
     a caller that supplies no records (the record-free re-derivers in ``eval/``
-    and ``audits/workflows/``, legacy unit tests) keeps the pre-grounding rules by
-    construction rather than reading every spoken sighting as fabricated. With
+    and ``process/audits/workflows/``, legacy unit tests) keeps the pre-grounding rules
+    by construction rather than reading every spoken sighting as fabricated. With
     records, an ``alibi_vs_sighting`` whose sighting side the speaker's own records do
     not support bands WEAK, one that fewer than
     :data:`meetings.constants.GROUNDED_PROSECUTION_MIN_SOURCES` distinct

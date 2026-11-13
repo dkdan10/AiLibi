@@ -1078,7 +1078,7 @@ class VoteBallot(ModelAuthoredVoteBallot):
     post-hoc for transparency. ``primary_reason_id`` references a
     :class:`MeetingTurn` ``turn_id`` from the chain when applicable.
 
-    Task 16.5 (C8/C3, audits/post-phase-14-Voice-and-Judgment-planning.md
+    Task 16.5 (C8/C3, process/audits/post-phase-14-Voice-and-Judgment-planning.md
     §3.4). ``primary_reason_observation_id`` is the private-hard-evidence
     citation channel: a stable episodic observation id drawn from the
     VOTER'S OWN memory (the ``{agent_id}:{tick}:{seq}`` scheme minted in

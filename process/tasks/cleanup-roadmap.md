@@ -99,7 +99,7 @@ Card: [tactical gameplay experiments](work/tactical-gameplay-experiments.md)
 Exit: a visitor understands the project and can follow a claim through its
 evidence, decision, outcome, and limitations using the published recordings.
 
-Card: [portfolio evidence experience](work/portfolio-evidence-experience.md) (26–31).
+Card: [portfolio evidence experience](work/evidence-experience.md) (26–31).
 
 | Item | Outcome / acceptance direction |
 | --- | --- |

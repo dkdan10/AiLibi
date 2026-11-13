@@ -50,8 +50,8 @@ Roll-call round
 A roll-call round sits between the opt-in phase (PHASE 3) and voting. Every
 living player who has not yet spoken takes one terminal ``opt_in``-surface turn
 in ascending player-id order, executing the turn-taking routing of
-``audits/audit-phase-17-absence-gate.md`` Ruling 3(a). The measured cost is
-honest and large (``audits/audit-phase-18-planning.md`` §3.4): +3.13 turn
+``process/audits/audit-phase-17-absence-gate.md`` Ruling 3(a). The measured cost is
+honest and large (``process/audits/audit-phase-18-planning.md`` §3.4): +3.13 turn
 calls/meeting at today's economy (496 -> 1057 turn calls over the 179-meeting
 canonical samples denominator, 2.13x), ~+36% meeting LLM calls -- the number
 the 18.11 gate and the 18.13 duration plan both quote.
@@ -418,7 +418,7 @@ INVALID_COUNTER_REASON_MARKER: Final[str] = (
 
 # READ-ONLY HISTORY, exactly like :data:`BALLOT_TARGET_REDIRECT_MARKER` above.
 # The citation gate that minted this marker (Task 16.6, J2;
-# audits/post-phase-14-Voice-and-Judgment-planning.md §3.4) coerced an EJECT
+# process/audits/post-phase-14-Voice-and-Judgment-planning.md §3.4) coerced an EJECT
 # ballot to ``SKIP`` when its target carried NO contradiction flag this meeting
 # and the ballot cited NOTHING. Ruling D6 of 2026-09-19 ended that coercion:
 # dropping an unsupported EJECT is the engine deciding, one-sidedly, toward
@@ -646,7 +646,7 @@ def reporter_reasoning_enabled(env: Mapping[str, str] | None = None) -> bool:
     :func:`orchestrator.game.prompt_versions_for_set`
     (:data:`~orchestrator.game.REPORTER_REASONING_PROMPT_VERSION_SETS`), so
     lever-shaped bytes and default bytes never share a version stamp
-    (audits/audit-phase-17-absence-gate.md Ruling 3(d)).
+    (process/audits/audit-phase-17-absence-gate.md Ruling 3(d)).
     """
 
     environment = env if env is not None else os.environ
@@ -1541,9 +1541,9 @@ class MeetingManager:
 
         # The roll-call round. Every living player who has not yet spoken --
         # the Phase-3 co-presence gate leaves 53% of living player-meetings
-        # silent (audits/audit-phase-18-planning.md §3.4) -- takes one terminal
+        # silent (process/audits/audit-phase-18-planning.md §3.4) -- takes one terminal
         # ``opt_in``-surface turn in ascending player-id order, the
-        # turn-allocation routing audits/audit-phase-17-absence-gate.md
+        # turn-allocation routing process/audits/audit-phase-17-absence-gate.md
         # Ruling 3(a) sends to Phase 18. Each turn reuses the existing opt-in
         # surface through the single per-turn chokepoint, so it inherits the
         # same guards and the same deadline/default fail-soft (no ``retries``
@@ -2676,7 +2676,7 @@ class MeetingManager:
 
         Before the consolidation the manager carried its own private copy
         (Task 3.8) and the two bodies were held equal by a paragraph in
-        ``meetings/voting.py`` -- audits/audit-phase-19-triage.md §7 item 27.
+        ``meetings/voting.py`` -- process/audits/audit-phase-19-triage.md §7 item 27.
         ``tests/meetings/test_vote_tally_parity.py`` ran both over every
         committed meeting's recorded ballots (707 meetings / 3,934 ballots,
         all four committed sets) plus synthetic edge fixtures and found zero
@@ -4542,7 +4542,7 @@ def coerce_teammate_ballot_to_skip(
 
     For the same reason the model-authored ``rationale_text`` is REPLACED
     with :data:`TEAMMATE_COERCED_VOTE_RATIONALE` rather than preserved
-    (Task 19.15; audits/audit-phase-19-triage.md §7 item 16). That text was
+    (Task 19.15; process/audits/audit-phase-19-triage.md §7 item 16). That text was
     written to justify the betrayal target, so it can state the impostor's
     private knowledge outright ("p-3 is my partner", "I did the kill"), and
     it rides the coerced ballot onto the spectator surface, where the

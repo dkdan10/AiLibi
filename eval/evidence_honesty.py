@@ -122,8 +122,8 @@ Three definitional collisions, resolved
   −0.05 vouch, not a measurement — so the tolerance is an explicit parameter here
   and ±0, ±1 and ±2 are emitted side by side.
 * **I-5's disputed pooled count.** ``A/verdicts.md`` G-3's per-set table sums to
-  68/594 over the two ``samples`` sets while ``D/FINAL-synthesis.md`` §4 item 2.1
-  quotes 65/594. The instrument's recount is authoritative; the test comment names
+  68/594 over the two ``samples`` sets while that review's final synthesis (§4 item
+  2.1, no longer in the tree) quotes 65/594. The instrument's recount is authoritative; the test comment names
   which reading was wrong.
 
 Nothing in production moves

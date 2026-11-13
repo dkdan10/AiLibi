@@ -1,8 +1,11 @@
 # The 2026-08-19 review: four headline claims it had to retract
 
-Three blind AI review tracks were run over this repository in August 2026 — one on gameplay
-behaviour, one on code and architecture, one on it as a portfolio — plus a fourth track that
-synthesised them. They produced 171 findings. The interesting part is not the findings.
+Three blind AI review tracks were run over this repository in August 2026, plus a fourth track
+that synthesised them. The two technical tracks, one on gameplay behaviour and one on code and
+architecture, are kept here; between them they produced 171 findings. The third track and the
+synthesis were removed from the tree on 2026-11-12 by the owner's decision and remain in the
+repository's history before that date, so a citation of a `C/` or `D/` file in an older record
+points there. The interesting part is not the findings.
 
 The interesting part is that the reviews **disproved four of their own headline claims** and
 corrected severities in both directions, because each track's flagship conclusions were then
@@ -45,22 +48,20 @@ The verifier was not a rubber stamp in one direction only.
 ## 2. What each track was, and how it was run
 
 The three review tracks were run **blind to one another** — no track saw another's findings
-until the synthesis track collated them. The four track directories below hold **49 markdown
-files, 16,849 lines, roughly 249,000 words, 1.7 MB** between them, not counting this index.
+until the synthesis track collated them. The two track directories below hold **37 markdown
+files, 12,897 lines, roughly 188,000 words, 1.3 MB** between them, not counting this index.
 Nobody should read that end to end; this index exists so that nobody has to.
 
 | Track | Files | What it did | Adversarial verdicts |
 |---|---|---|---|
 | [`A/`](A/collated-findings.md) — gameplay | 19 | 13 behavioural reports over the committed corpus — 8 full game walks, 4 evidence-economy slices, 1 spectator UX pass — across 300 replays and 707 meetings, collated into findings `G-1`…`G-41` plus 43 design ideas | **12** ([`A/verdicts.md`](A/verdicts.md)) |
 | [`B/`](B/collated-findings.md) — code and architecture | 18 | 16 area reviews (engine, agents, meetings, orchestrator, api, llm, eval, training, frontend ×2, tests/CI, perf, repo health, observation firewall), collated into `C-1`…`C-130`. **No P0** at this track's definition of P0 | **14** ([`B/verdicts.md`](B/verdicts.md)) |
-| [`C/`](C/collated-portfolio.md) — the repository as a portfolio | 7 | 6 reads: four hiring personas (backend hiring manager, ML research lead, frontend product engineer, recruiter skimmer) and two cross-cuts (a cold front-door reproduction attempt, a narrative and positioning pass), collated into lettered items with rulings | none — this track issues rulings, not verdicts |
-| [`D/`](D/FINAL-synthesis.md) — synthesis | 5 | Three independent syntheses of the same inputs (ambition, pragmatic, credibility), a cross-track map, and one final synthesis that ruled where they disagreed | none — it adjudicates the other three |
 
 The single most useful output of the synthesis is its reconciliation of the two technical
 tracks' disagreement about severity: they were using different definitions, and *nearly* every
 gameplay defect was a faithful implementation of correct code — the qualifier matters, because
 some of them (the spectator painting corpses the engine had deleted, for one) were plain code
-defects ([`D/FINAL-synthesis.md`](D/FINAL-synthesis.md) §0, ruling R11).
+defects (the final synthesis, §0, ruling R11).
 
 ---
 

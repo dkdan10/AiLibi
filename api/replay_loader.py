@@ -3982,7 +3982,8 @@ def _expected_seedset(replay_dir: Path) -> str | None:
 _REPLAY_GLOB: Final[str] = REPLAY_FILENAME_GLOB
 
 # The default set served when a request carries no ``set`` query param — the
-# CURATED spectator default (Task 19.9; audits/audit-phase-19-triage.md §7 item 10).
+# CURATED spectator default (Task 19.9;
+# process/audits/audit-phase-19-triage.md §7 item 10).
 # Flipped from the flat 4p1i baseline (the pre-12.12 default-served set): 4p1i is a
 # fast technical fixture, not a demo — median 12 ticks, at most one meeting (39/50
 # have exactly one, 11/50 none), 23/50 decided by the task timer against the map's

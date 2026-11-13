@@ -1,7 +1,7 @@
 """The opt-in crew surface's pure-Python forward pass (Task 18.7).
 
 The shipped inference path for the OPT-IN crew deployment surface
-(audits/audit-phase-18-planning.md §4 #7) — the learned crew option scorer over
+(process/audits/audit-phase-18-planning.md §4 #7) — the learned crew option scorer over
 the scripted crew FSM's own option menu, widened to the owned-task basis — ported
 line-for-line from the training-side references
 (``training/crew/options.py`` + ``training/crew/scorer.py`` + ``training/env.py``)
@@ -24,7 +24,7 @@ edition):
   impostor forward pass rather than redefined.
 - **No numpy / torch.** The forward pass is a 27-weight LINEAR scorer — a
   ``math.fsum`` dot product plus bias per option, no activation, no
-  transcendental — so the Q4 bit-exact gate (audits/audit-phase-15-pause.md
+  transcendental — so the Q4 bit-exact gate (process/audits/audit-phase-15-pause.md
   decision 6) can pin token-identical equality of this pass against the
   training-side reference (``training/crew/scorer.py::CrewOptionScorer``) over
   the committed float-hex weights.
@@ -174,8 +174,9 @@ def crew_genome_length() -> int:
 
 
 # --------------------------------------------------------------------------- #
-# The Task 15.22 widened option basis (audits/audit-phase-15-pause.md decision  #
-# 5). The legacy CREW_OPTION_* surfaces above are PINNED (byte-identical);      #
+# The Task 15.22 widened option basis                                           #
+# (process/audits/audit-phase-15-pause.md decision 5). The legacy               #
+# CREW_OPTION_* surfaces above are PINNED (byte-identical);                     #
 # these are the additive widened surfaces the wrapper basis re-bases onto.      #
 # --------------------------------------------------------------------------- #
 

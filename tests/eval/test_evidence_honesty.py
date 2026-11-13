@@ -1921,8 +1921,8 @@ def test_i5_fabricated_completion_pins(
     assert _counts(reports[_SAMPLES_4P1I].fabricated_completions.fabricated) == (0, 37)
     assert _counts(reports[_CORPUS_4P1I].fabricated_completions.fabricated) == (0, 39)
     # The review disagrees with itself on the samples-pooled count: A/verdicts.md
-    # G-3's per-set table sums to 53 + 15 = 68 while D/FINAL-synthesis.md §4 item
-    # 2.1 quotes 65. The 68 is the arithmetic of G-3's own published rows and 65
+    # G-3's per-set table sums to 53 + 15 = 68 while the review's final synthesis
+    # (§4 item 2.1, no longer in the tree) quotes 65. The 68 is the arithmetic of G-3's own published rows and 65
     # has no per-set decomposition anywhere in the review, so 65 is the wrong
     # reading. This instrument's own recount over the prompt population is 0.
     samples_pooled = (

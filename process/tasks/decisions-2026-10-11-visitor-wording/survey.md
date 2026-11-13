@@ -10,7 +10,7 @@ Visitor-facing wording an agent or the orchestrator chose by default; your heade
 
 ## Demo: first visit
 
-**1. Project name.** Tab "AiLibi — Replay Viewer", no share text (`frontend/index.html:6`); README "AiLibi — can agents reason from what they actually saw?" (`README.md:1`). By: workers (Task 4.3; portfolio-evidence-experience). Why: neither carries your kept tagline. (a) keep; **(b) tab and share text "AiLibi — Recorded AI social deduction"; tagline under the README question** — one name; (c) tagline as both titles.
+**1. Project name.** Tab "AiLibi — Replay Viewer", no share text (`frontend/index.html:6`); README "AiLibi — can agents reason from what they actually saw?" (`README.md:1`). By: workers (Task 4.3; evidence-experience). Why: neither carries your kept tagline. (a) keep; **(b) tab and share text "AiLibi — Recorded AI social deduction"; tagline under the README question** — one name; (c) tagline as both titles.
 
 **2. Landing.** With no link, the tour opens over a loaded game (`GuidedTour.tsx:49-85, :257-286`). By: workers (Tasks 12.11, 19.9). Why: every first visit. **(a) keep** — quickest way in; (b) open on Replays with a "Take the tour" button; (c) the tour without a game.
 
@@ -42,7 +42,7 @@ Visitor-facing wording an agent or the orchestrator chose by default; your heade
 
 ## Demo: Results tab
 
-**13. Proof box.** "Separate direct proof from uncertain inference", "24/24 (100%)"; 4-player "The 1 ejections" (`PublicResults.tsx:100-109`). By: worker (portfolio-evidence-experience); the baselines memo: "published last, never a headline". Why: role-correct percentages in the boldest box. (a) keep; **(b) a plain row after the cases, headed by what it counts** — your README order; (c) fractions only.
+**13. Proof box.** "Separate direct proof from uncertain inference", "24/24 (100%)"; 4-player "The 1 ejections" (`PublicResults.tsx:100-109`). By: worker (evidence-experience); the baselines memo: "published last, never a headline". Why: role-correct percentages in the boldest box. (a) keep; **(b) a plain row after the cases, headed by what it counts** — your README order; (c) fractions only.
 
 **14. Case cards.** Two editorial cases from one game; "Inspect the meeting" shows roles beside "Reveal case analysis (spoilers)"; "Pinned recording source" opens raw JSON lines (`api/public_results.py:66-84`; `PublicResults.tsx:61-68`). By: card framing, worker words. Why: the page's only story. (a) keep; **(b) links "Inspect the meeting (shows roles)", "Raw recording file"** — keeps the spoiler; (c) your titles, a second game.
 
@@ -50,9 +50,9 @@ Visitor-facing wording an agent or the orchestrator chose by default; your heade
 
 ## GitHub: README and linked pages
 
-**16. Byline and "Who did what".** "implemented by Claude Code and Codex agents · AI-reviewed" (`README.md:3`); "Codex… now also implements cleanup" (`:56`). By: worker (portfolio-evidence-experience); unconfirmed. Why: your ruling sends visitors here; "now" is stale. (a) keep; **(b) keep the byline, linked to an updated "Who did what"**; (c) "by Daniel Keinan · MIT · CI".
+**16. Byline and "Who did what".** "implemented by Claude Code and Codex agents · AI-reviewed" (`README.md:3`); "Codex… now also implements cleanup" (`:56`). By: worker (evidence-experience); unconfirmed. Why: your ruling sends visitors here; "now" is stale. (a) keep; **(b) keep the byline, linked to an updated "Who did what"**; (c) "by Daniel Keinan · MIT · CI".
 
-**17. Hero picture.** Still embedded; motion only a WebM link; GIF archive-only (`README.md:11`). By: workers (portfolio-evidence-experience; promote-round-3). Why: GitHub plays GIFs inline, not WebM. **(a) keep** — motion needs a fresh capture; (b) GIF under the still; (c) GIF instead.
+**17. Hero picture.** Still embedded; motion only a WebM link; GIF archive-only (`README.md:11`). By: workers (evidence-experience; promote-round-3). Why: GitHub plays GIFs inline, not WebM. **(a) keep** — motion needs a fresh capture; (b) GIF under the still; (c) GIF instead.
 
 **18. README jargon.** Caption in ids; "its own era… baseline 9… ML corpus"; "394/397 = 0.9924" beside "56/291 = 19.2%"; "vote correctness 0.783"; a scorecard opening on decision ids. By: workers; doc checks pin tokens. Why: ids before a stranger's first number. (a) keep; **(b) plain words, one number style, ids in manifests, checks updated**; (c) gloss ids once.
 
@@ -113,14 +113,14 @@ Still waiting, asked elsewhere: the local dashboard's "gate" words and the "vote
 | Item | Current text | Location | Chosen by | Plain-words suggestion |
 |---|---|---|---|---|
 | 6 | "seed 19"; banner "seed 19 · 9p · outcome hidden" | `HighlightCard.tsx:304`; `ReplayPicker.tsx:324`; `App.tsx:307-308` | Tasks 12.9, 19.9, 19.10 | "Game 19", seed in a tooltip |
-| 6 | "9p2i — 9 players, 2 impostors"; chip "9p2i"; "Loading 9p2i…"; Results intro "…in 9p2i" | `copy.ts:104-125`; `ReplayFilters.tsx:185-189`; `ReplayPicker.tsx:566`; `PublicResults.tsx:80` | Tasks 20.2, 12.9, 12.13; portfolio-evidence-experience | "9 players, 2 impostors (9p2i)"; drop the chip |
+| 6 | "9p2i — 9 players, 2 impostors"; chip "9p2i"; "Loading 9p2i…"; Results intro "…in 9p2i" | `copy.ts:104-125`; `ReplayFilters.tsx:185-189`; `ReplayPicker.tsx:566`; `PublicResults.tsx:80` | Tasks 20.2, 12.9, 12.13; evidence-experience | "9 players, 2 impostors (9p2i)"; drop the chip |
 | 7 | "Show outcome filters" with "⚠ reveals winners and endings across the whole set" | `ReplayFilters.tsx:141-144` | default: `tasks/phase-19.md:758-779`; words: Task 19.10 | "Reveal outcomes" |
 | 7 | "The replays this build serves for the selected set. Click a card to open it." | `copy.ts:457-464` | Task 20.2 | "Recorded games for this set. Open one to watch it." |
 | 7 | "…each list in seed order. Nothing here ranks or scores a game." | `copy.ts:457-464` | rubric-v2-profile | drop the second sentence |
 | 7 | "…including any a tripwire keeps off the shelves."; "The two halves always show together." | `copy.ts:546-547, :649` | rubric-v2-profile (showing the label before the reveal is your ruling, `:657`) | "including games kept off the shelves" |
 | 7 | "No replays found" / "No replays in the configured replay directory."; "Failed to load replays:" plus raw error or "unknown error" | `ReplayPicker.tsx:574-578, :607-609, :926, :945` | Tasks 12.9, 12.13 | "No recorded games are available for this set." |
 | 8 | "9p", "3 mtg", "crew 7 · imp 2" | `App.tsx:307-308, :319, :330, :456, :465-471` | Tasks 12.4, 12.13, 19.10 | "9 players", "3 meetings", "crew 7 · impostors 2" |
-| 8 | "As p-3 · fog", "Exit fog", "As-agent", "fog of war · as", "Show what they saw", "Switch to p-1's perspective", "View p-1's perspective to inspect it." | `App.tsx:364-366`; `MapToolbar.tsx:162, :171`; `MindInspector.tsx:717-723`; `BallotCard.tsx:325`; `EvidencePanel.tsx:76` | Tasks 12.5, 12.13; portfolio-evidence-experience | "perspective" everywhere: "Watching as p-3", "See as p-1" |
+| 8 | "As p-3 · fog", "Exit fog", "As-agent", "fog of war · as", "Show what they saw", "Switch to p-1's perspective", "View p-1's perspective to inspect it." | `App.tsx:364-366`; `MapToolbar.tsx:162, :171`; `MindInspector.tsx:717-723`; `BallotCard.tsx:325`; `EvidencePanel.tsx:76` | Tasks 12.5, 12.13; evidence-experience | "perspective" everywhere: "Watching as p-3", "See as p-1" |
 | 8 | "Next beat →"; Resume tooltip "…the pause is edge-triggered, so this advances past the meeting" | `App.tsx:676-687` | Task 19.10 | "Next key moment →"; "Resume playback past this meeting" |
 | 8 | Tour "Perspective switcher + the fog firewall", "Open the Belief × Truth hero", "impostor = icon, not a hue"; Tour button "…the two-truth grammar" | `GuidedTour.tsx:118-132, :179, :194-198`; `App.tsx:242` | Tasks 12.11, 12.13 | "What one player could see"; "Open the Belief × Truth panel"; step 3 after the held Error-layer ruling |
 | 8 | Map chip "canonical_1 · 10 rooms · 11 corridors · 6-vent ring"; "† = impostor"; "† p-4" under a body | `MapToolbar.tsx:108-129`; `BodyMarker.tsx:164-170` | Tasks 12.5, 12.13 | "Map"; "killed by p-4" |
@@ -132,24 +132,24 @@ Still waiting, asked elsewhere: the local dashboard's "gate" words and the "vote
 | 10 | "outcome is role-neutral · guilt is never coloured in" | `MeetingView.tsx:346` | Task 12.7 | delete |
 | 10 | "Accusation edges use distrust orange — direction = who points at whom."; "redirects" on every reply | `MeetingView.tsx:127, :164-166` | Task 12.7 | "Arrows point from accuser to accused"; "accuses" |
 | 10 | "Weak signals — the detector stamped these weak (… endpoint tick)"; "Role proof — grounded against the witness's own record…" | `MeetingView.tsx:452-485` | Task 19.11 | plain captions; a glossary entry for any term kept |
-| 10 | "t12 · opt-in"; "Source 1 · p-3 (opening)" | `MeetingView.tsx:396-400, :613`; `TurnCard.tsx:47-51` | Tasks 8.10, 12.7; portfolio-evidence-experience | "spoke up", "first statement", "reply" |
+| 10 | "t12 · opt-in"; "Source 1 · p-3 (opening)" | `MeetingView.tsx:396-400, :613`; `TurnCard.tsx:47-51` | Tasks 8.10, 12.7; evidence-experience | "spoke up", "first statement", "reply" |
 | 10 | Panel heading "What the recording shows", near twin of the Results heading | `copy.ts:380-396` | spectator-tour-round-2 | "Where everyone really was" |
-| 10 | Eleven vote-adjustment chips, e.g. "Vote redirected by the meeting rule" | `BallotCard.tsx:22-36` | portfolio-evidence-experience | "changed by the vote rule", with a glossary entry |
-| 10 | "Cited statement · {meeting id}:turn-3"; "Cited observation · p-1:12:0" | `BallotCard.tsx:262-264`; `EvidencePanel.tsx:63` | portfolio-evidence-experience | "Statement by p-3 (turn 3)"; "What p-1 saw at tick 12" |
+| 10 | Eleven vote-adjustment chips, e.g. "Vote redirected by the meeting rule" | `BallotCard.tsx:22-36` | evidence-experience | "changed by the vote rule", with a glossary entry |
+| 10 | "Cited statement · {meeting id}:turn-3"; "Cited observation · p-1:12:0" | `BallotCard.tsx:262-264`; `EvidencePanel.tsx:63` | evidence-experience | "Statement by p-3 (turn 3)"; "What p-1 saw at tick 12" |
 | 10 | Finding chip beside "Weighed on this ballot", its label "Basis on the record" only on hover | `BallotCard.tsx:279-294`; `copy.ts:420-452` | grounded-skip-and-guard-labels | a visible "Basis on the record:" prefix |
-| 10 | "A resolved citation identifies a source. It does not establish…", also shown when nothing resolved | `EvidencePanel.tsx:64` | portfolio-evidence-experience (review finding retained) | only when resolved: "A citation shows where a claim came from, not that it is right." |
+| 10 | "A resolved citation identifies a source. It does not establish…", also shown when nothing resolved | `EvidencePanel.tsx:64` | evidence-experience (review finding retained) | only when resolved: "A citation shows where a claim came from, not that it is right." |
 | 11 | "Thought → Action → Observation"; "Meeting ejected — p-4 ejected" | `MindInspector.tsx:57-61, :132, :251` | Phase-12 contract; Task 12.8 | "Said / Claimed / Voted / Result"; "Meeting: p-4 was ejected" |
 | 11 | "9×9 suspicion matrix"; "rows = believer · columns = subject"; "Belief · Ground-truth"; "fog · ground-truth hidden" | `BeliefPanel.tsx:33-37, :247-253` | Task 12.6 | "Who suspects whom"; "Real roles" |
 | 11 | "A badge, never a hue — and hidden in fog."; "an agent holds no suspicion file on itself"; "0–100 (mono)" | `BeliefPanel.tsx:488-522, :552` | Task 12.6 | "Dagger: a real impostor, all-roles view only" |
 | 12 | Inspector "conf 0.73" | `MindInspector.tsx:66, :124, :221` | Task 12.8 | Low / Med / High |
-| 13 | Caption "…this group is 100% by construction…", "ejectee" | `PublicResults.tsx:108` | portfolio-evidence-experience (post-review sentence) | "Ejected players who were impostors, with and without a vent sighting" |
+| 13 | Caption "…this group is 100% by construction…", "ejectee" | `PublicResults.tsx:108` | evidence-experience (post-review sentence) | "Ejected players who were impostors, with and without a vent sighting" |
 | 14 | Titles "A sighting the table can check", "When accounts do not settle the question", both from seed 19 | `api/public_results.py:66-69, :81-84` | framing by the card; words by the worker, re-derived by promote-round-3 | keep, or your own titles |
-| 15 | "…The engine reconstructed each recording…" | `PublicResults.tsx:79-81` | portfolio-evidence-experience | "each recording was replayed and checked before counting" |
-| 15 | "No source-matched editorial cases are published for this set." | `PublicResults.tsx:113` | portfolio-evidence-experience | "No worked examples for this set yet; the 9-player set has two." |
+| 15 | "…The engine reconstructed each recording…" | `PublicResults.tsx:79-81` | evidence-experience | "each recording was replayed and checked before counting" |
+| 15 | "No source-matched editorial cases are published for this set." | `PublicResults.tsx:113` | evidence-experience | "No worked examples for this set yet; the 9-player set has two." |
 | 15 | "Rules adopted for the current game: … impostor ballots cast by strategy." | `copy.ts:501, :509-518` | post-promotion-follow-through (adoption yours, words not) | one plain sentence per rule |
 | 15 | "Impostor policy: not recorded. Crew policy: not recorded. Rule settings: recorded."; "Observation clock: not recorded." | `copy.ts:492, :535, :538` | experimental-evaluation-integrity; recorded-provenance-gaps; post-promotion-follow-through | name the default ("the built-in scripted policy"), per `orchestrator/replay.py:698` |
-| 15 | "Prompt versions: accusation_round.qwen3_6_27b.v6, …"; "a flat-rate adapter can report $0"; "Source fingerprint: sha256:…" | `PublicResults.tsx:114-122` | portfolio-evidence-experience | under "Technical identifiers, for reproduction"; "$0: a flat-rate service, so usage, not a bill" |
-| 16 | "Claude Code implemented the initial project; Codex reviewed it and now also implements cleanup… Daniel did not hand-write the production code." | `README.md:56` | portfolio-evidence-experience, replacing a draft marked for your confirmation | later work by Claude workers; some merges by the orchestrator under your written delegation |
+| 15 | "Prompt versions: accusation_round.qwen3_6_27b.v6, …"; "a flat-rate adapter can report $0"; "Source fingerprint: sha256:…" | `PublicResults.tsx:114-122` | evidence-experience | under "Technical identifiers, for reproduction"; "$0: a flat-rate service, so usage, not a bill" |
+| 16 | "Claude Code implemented the initial project; Codex reviewed it and now also implements cleanup… Daniel did not hand-write the production code." | `README.md:56` | evidence-experience, replacing a draft marked for your confirmation | later work by Claude workers; some merges by the orchestrator under your written delegation |
 | 18 | Hero caption in set and player ids | `README.md:13` | promote-round-3 (a test checks each clause) | a plain caption first, ids after |
 | 18 | "in its own era; the 4-player set and the ML corpus stay at baseline 9 … No figure pools the two." | `README.md:17` | promote-round-2 (doc-facts check) | dated plain names |
 | 18 | "394/397 = 0.9924", "56/291 = 19.2%", "24 / 46 = 52%"; no row says which way is better | `README.md:23-30` | front-door-process-first | "394 of 397 (99%)" and a direction word per row |

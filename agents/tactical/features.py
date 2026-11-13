@@ -3,7 +3,7 @@
 The prior ML-spike encoder (``experiments/lab/ml_spike/core.py:60-83``) is 34-dim
 and **memoryless**: a single-packet room-count vector. That is the structural
 reason its behavior clone capped below FSM parity — the FSM's stalk is
-history-dependent (``audits/post-phase-14-ML-planning.md`` §6.3), and a
+history-dependent (``process/audits/post-phase-14-ML-planning.md`` §6.3), and a
 single-packet encoder cannot represent it. This module ships the production
 encoder that carries the agent's OWN memory into the feature vector.
 
@@ -27,7 +27,7 @@ Doctrine (all four are load-bearing and enforced by tests):
   and every roster iteration is ``sorted()`` (the repo's lexical-tie-break
   idiom). Belief suspicion / trust are floats accumulated from non-power-of-two
   deltas and ``BeliefState.known_players()`` is dict-insertion-ordered
-  (``audits/post-phase-14-ML-planning.md`` §6.3 determinism hazard); quantizing
+  (``process/audits/post-phase-14-ML-planning.md`` §6.3 determinism hazard); quantizing
   first kills the float residue that could flip an argmax, and sorted iteration
   kills the ordering hazard. There is NO raw-float comparison in this module.
 * **Total.** Every packet shape the committed corpora produce encodes without

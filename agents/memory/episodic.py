@@ -7,7 +7,7 @@ through belief and working memory.
 
 Read paths beyond ``recent`` and prompt rendering ship in Phase 3 (Task 3.3).
 
-Task 16.5 (C8; audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 C3/C8)
+Task 16.5 (C8; process/audits/post-phase-14-Voice-and-Judgment-planning.md §3.4 C3/C8)
 adds a stable, deterministic ``observation_id`` to each first-hand
 ``EpisodicEvent``: the citation handle the §6.6 render surfaces (lever-ON) and
 the vote ballot cites (16.6 enforces). The id is assigned at WRITE time in

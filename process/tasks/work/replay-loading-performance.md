@@ -215,7 +215,7 @@ and warm batches performed none. Coalescing those in-flight requests remains a
 bounded follow-up; broad cache or loader decomposition is deferred.
 
 Follow-through was coordinated with the
-[portfolio card](portfolio-evidence-experience.md): added public result DTOs,
+[portfolio card](evidence-experience.md): added public result DTOs,
 `/eval/summary`, generated/client wiring and numeric JSON-literal codegen support.
 The portfolio owner owns the summary helper, builder and UI. The new pure
 `api/observation_references.py` projects only IDs cited by that observer's ballot

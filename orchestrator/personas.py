@@ -17,7 +17,7 @@ repeats within a game. The naive alternative ``bank[hash(seed, seat) %
 len(bank)]`` (independent per-seat hashing) is explicitly REJECTED: its
 per-seat hashes collide (the birthday problem), handing two seats the same
 persona and re-introducing the very homogeneity personas exist to break
-(audits/post-phase-14-Voice-and-Judgment-planning.md §4.1).
+(process/audits/post-phase-14-Voice-and-Judgment-planning.md §4.1).
 
 Role-neutrality is guaranteed two ways. By construction: assignment is a
 pure function of ``(seed, roster)`` computed with no reference to roles —
