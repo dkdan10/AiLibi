@@ -4,12 +4,13 @@
 // tokens (no Claude Design pass — see tasks/phase-12.md Wave-B note).
 //
 // On the first visit it auto-opens, loads the head of the hand-curated FEATURED
-// list for 9p2i (Task 19.9 — so the walkthrough has real drama to point at),
-// and steps through the viewer's load-bearing ideas: the two-truth grammar, the
-// perspective switcher and what one player could see, the Belief × Truth panel,
-// and the keyboard-operable transport. It is dismissible and remembers that via
-// localStorage; the header "Tour" button re-opens it on demand without yanking
-// the replay you are already watching.
+// list for 9p2i (Task 19.9 — so the walkthrough has real drama to point at) and
+// starts that game playing, so the first view is a replay in motion beside a
+// short card. It then steps through the viewer's load-bearing ideas: what one
+// player could see and the two-truth grammar, the Belief × Truth panel, the
+// keyboard-operable transport, and the rules. It is dismissible and remembers
+// that via localStorage; the header "Tour" button re-opens it on demand without
+// yanking the replay you are already watching.
 //
 // Honesty + firewall stay intact even in the teaching legend: identity ≠ guilt
 // (the impostor reveal is an ICON, never a hue), suspicion is a bucketed heat
@@ -22,6 +23,7 @@ import type { ReactNode } from "react";
 import { getSets, listReplays } from "../api/client";
 import { OVERLAY_RANK, useFocusTrap } from "../hooks/useFocusTrap";
 import { HEADER_COPY, NAV_COPY, TOUR_COPY } from "../lib/copy";
+import { tickNumberAt } from "../lib/playback";
 import { useReplayStore } from "../store/replayStore";
 import { tokens } from "../tokens";
 
@@ -37,6 +39,14 @@ export function openGuidedTour(): void {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT));
 }
 
+/** Whether the visitor asked the system for less motion. Read at call time. */
+export function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 // Best-effort: open the head of the CURATED featured list for the target set
 // (Task 19.9) — a hand-read game. When the served set carries no featured seed,
 // the fallback is the first game in seed order: nothing ranks a game, so nothing
@@ -47,7 +57,20 @@ export function openGuidedTour(): void {
 // the live store right before the navigation and bail if the user moved on —
 // dismissed the tour, opened a replay, or switched the set — so a slow load can't
 // yank them back to the teaching seed and clobber their URL/workspace state.
-async function loadCuratedSeed(): Promise<void> {
+//
+// Once the game is loaded it starts PLAYING, so a first-time visitor sees the
+// replay move instead of a paused first frame. Not under reduced motion, where
+// nothing should start moving unasked, and only when this call's game is the one
+// on screen with the tour still open over it.
+//
+// Auto-follow is held OFF with it. The teaching game's first meeting comes a few
+// seconds in, and a meeting that opens UNDER the card swaps the whole screen
+// mid-sentence, takes focus out of the card, and closes with the card on one
+// Escape. Held off, playback still stops on the meeting frame and the pause bar
+// says why; `releaseTeachingHold` opens the meeting when the tour closes.
+//
+// Resolves true when it started the game and took that hold. Exported for its test.
+export async function loadCuratedSeed(): Promise<boolean> {
   const store = useReplayStore.getState();
   const aborted = (set: string): boolean => {
     const now = useReplayStore.getState();
@@ -57,12 +80,12 @@ async function loadCuratedSeed(): Promise<void> {
     const { sets, default: defaultSet } = await getSets();
     const set = sets.includes(TARGET_SET) ? TARGET_SET : defaultSet;
     if (useReplayStore.getState().currentReplay !== null) {
-      return; // user already opened a replay before /sets resolved
+      return false; // user already opened a replay before /sets resolved
     }
     store.setSeedSet(set);
     const list = await listReplays(set);
     if (list.length === 0 || aborted(set)) {
-      return;
+      return false;
     }
     let gameId = [...list].sort((a, b) => a.seed - b.seed)[0]!.game_id;
     // The curated head wins over the first game where the set has one. The
@@ -77,11 +100,41 @@ async function loadCuratedSeed(): Promise<void> {
       }
     }
     if (aborted(set)) {
-      return;
+      return false;
     }
     await store.selectReplay(gameId);
+    const loaded = useReplayStore.getState();
+    if (
+      loaded.currentReplay?.metadata.game_id !== gameId ||
+      !loaded.guidedTourOpen ||
+      prefersReducedMotion()
+    ) {
+      return false;
+    }
+    loaded.setAutoFollow(false);
+    loaded.setIsPlaying(true);
+    return true;
   } catch {
     // Best-effort — the tour still teaches the grammar without a loaded replay.
+    return false;
+  }
+}
+
+/**
+ * Give back what `loadCuratedSeed` held: follow meetings again, and open the one
+ * the playhead is parked on, so closing the card lands on the meeting it promised.
+ */
+export function releaseTeachingHold(): void {
+  const store = useReplayStore.getState();
+  store.setAutoFollow(true);
+  const replay = store.currentReplay;
+  if (replay === null || store.selectedMeetingId !== null) {
+    return;
+  }
+  const tick = tickNumberAt(replay.ticks, store.currentTick);
+  const meeting = replay.meetings.find((candidate) => candidate.tick === tick);
+  if (meeting !== undefined) {
+    store.selectMeeting(meeting.meeting_id);
   }
 }
 
@@ -152,27 +205,20 @@ interface Step {
 // Exported so the welcome step's render is testable without opening the tour.
 export const STEPS: readonly Step[] = [
   {
-    title: "Welcome — investigate a recorded decision",
-    body: (
-      <>
-        <p className="mb-2 text-sm text-ink-700">
-          AiLibi asks whether AI agents can reason from what they actually saw.
-          You are watching saved games, not making live model calls. <a className="underline" href={HEADER_COPY.sourceUrl} target="_blank" rel="noreferrer">{HEADER_COPY.tourSourceLinkText}</a>
-        </p>
-        <p className="mb-2 text-sm text-ink-700">{TOUR_COPY.rules}</p>
-        <p className="mb-2 text-sm text-ink-700">
-          Start at <strong>{NAV_COPY.tournament}</strong> for each set's figures and any decisions to investigate.
-          A ballot citation opens its exact source, scene, and meeting memory.
-          Missing evidence is labelled; a real citation can still be irrelevant.
-          Ground truth is solid; attributed belief is ghosted.
-        </p>
-        <TwoTruthLegend />
-      </>
-    ),
+    // The card a first-time visitor reads while the teaching game plays behind
+    // it. `GuidedTour` swaps the body for `welcomeBodyAnyGame` on every other
+    // opening, where "nine players" or "already moving" need not be true.
+    title: TOUR_COPY.welcomeTitle,
+    body: <p className="text-sm text-ink-700">{TOUR_COPY.welcomeBody}</p>,
   },
   {
     title: TOUR_COPY.perspectiveTitle,
-    body: <p className="text-sm text-ink-700">{TOUR_COPY.perspectiveBody}</p>,
+    body: (
+      <>
+        <p className="mb-2 text-sm text-ink-700">{TOUR_COPY.perspectiveBody}</p>
+        <TwoTruthLegend />
+      </>
+    ),
   },
   {
     title: "Belief × Truth — who suspected whom",
@@ -226,17 +272,48 @@ export const STEPS: readonly Step[] = [
       </div>
     ),
   },
+  {
+    title: TOUR_COPY.rulesTitle,
+    body: (
+      <>
+        <p className="mb-2 text-sm text-ink-700">
+          AiLibi asks whether AI agents can reason from what they actually saw.
+          You are watching saved games, not making live model calls. <a className="underline" href={HEADER_COPY.sourceUrl} target="_blank" rel="noreferrer">{HEADER_COPY.tourSourceLinkText}</a>
+        </p>
+        <p className="mb-2 text-sm text-ink-700">{TOUR_COPY.rules}</p>
+        <p className="mb-2 text-sm text-ink-700">
+          Start at <strong>{NAV_COPY.tournament}</strong> for each set's figures and any decisions to investigate.
+          A ballot citation opens its exact source, scene, and meeting memory.
+          Missing evidence is labelled; a real citation can still be irrelevant.
+          Ground truth is solid; attributed belief is ghosted.
+        </p>
+      </>
+    ),
+  },
 ];
 
 export function GuidedTour() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
+  // True only for the opening that starts the teaching game itself: a first
+  // visit on an empty URL, with motion allowed. The first card describes that
+  // game in motion, so every other opening shows the card that fits any game.
+  const [startsTeachingGame, setStartsTeachingGame] = useState(false);
+  // Whether this opening holds auto-follow off (see `loadCuratedSeed`).
+  const holdsAutoFollow = useRef(false);
 
   const finish = useCallback(() => {
     try {
       localStorage.setItem(SEEN_KEY, "1");
     } catch {
       /* private mode / storage disabled — the tour just won't be remembered */
+    }
+    // Told to the store here, not only by the effect below, so a teaching game
+    // that finishes loading in the same moment cannot take a hold nobody releases.
+    useReplayStore.getState().setGuidedTourOpen(false);
+    if (holdsAutoFollow.current) {
+      holdsAutoFollow.current = false;
+      releaseTeachingHold();
     }
     setOpen(false);
   }, []);
@@ -268,7 +345,12 @@ export function GuidedTour() {
     const hasUrlState =
       [...new URLSearchParams(window.location.search).keys()].length > 0;
     if (!hasUrlState) {
-      void loadCuratedSeed();
+      setStartsTeachingGame(!prefersReducedMotion());
+      void loadCuratedSeed().then((held) => {
+        if (held) {
+          holdsAutoFollow.current = true;
+        }
+      });
     }
   }, []);
 
@@ -276,6 +358,12 @@ export function GuidedTour() {
   // suppressed, and the meeting/belief overlays can yield Escape, while the tour
   // is up. (Explicit store state — not a module-level flag — per AGENTS.md.)
   const setGuidedTourOpen = useReplayStore((s) => s.setGuidedTourOpen);
+  // The teaching game is the 9p2i one; a set without it, or a load that failed,
+  // leaves nothing moving for the first card to describe.
+  const seedSet = useReplayStore((s) => s.seedSet);
+  const replayLoadError = useReplayStore((s) => s.replayLoadError);
+  const teachingGameMoving =
+    startsTeachingGame && (seedSet === null || seedSet === TARGET_SET) && replayLoadError === null;
   useEffect(() => {
     setGuidedTourOpen(open);
     return () => {
@@ -288,6 +376,7 @@ export function GuidedTour() {
   useEffect(() => {
     const onOpen = (): void => {
       setStep(0);
+      setStartsTeachingGame(false);
       setOpen(true);
     };
     window.addEventListener(OPEN_EVENT, onOpen);
@@ -339,16 +428,28 @@ export function GuidedTour() {
 
   const current = STEPS[Math.min(step, lastStep)]!;
   const isLast = step >= lastStep;
+  const body =
+    step === 0 && !teachingGameMoving ? (
+      <p className="text-sm text-ink-700">{TOUR_COPY.welcomeBodyAnyGame}</p>
+    ) : (
+      current.body
+    );
 
   return (
     // A light scrim (not an opaque cover) so the surfaces being described stay
-    // visible behind the card. Above the transport (z-70) and meeting (z-50) but
-    // below nothing else — it is the top-most teaching layer.
+    // visible behind the card, and lighter still on the first card, which sits
+    // beside a game in motion. The card keeps to the bottom edge, and to the
+    // right-hand corner on wide screens, so it stays off the map. Above the
+    // transport (z-70) and meeting (z-50) but below nothing else — it is the
+    // top-most teaching layer.
     <div
-      className="fixed inset-0 z-[90] flex items-end justify-center p-4 sm:items-center"
+      className="fixed inset-0 z-[90] flex items-end justify-center p-4 sm:justify-end"
       onClick={finish}
     >
-      <div className="absolute inset-0 bg-ink-900/30" aria-hidden />
+      <div
+        className={"absolute inset-0 " + (step === 0 ? "bg-ink-900/10" : "bg-ink-900/30")}
+        aria-hidden
+      />
       <div
         ref={stepRef}
         tabIndex={-1}
@@ -379,7 +480,7 @@ export function GuidedTour() {
           </button>
         </div>
 
-        <div className="min-h-[7rem]">{current.body}</div>
+        <div className="min-h-[7rem]">{body}</div>
 
         <div className="mt-4 flex items-center justify-between gap-2">
           {/* Step dots — paired with the "n/N" label above so progress reads
