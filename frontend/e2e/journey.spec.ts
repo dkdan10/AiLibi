@@ -21,7 +21,9 @@
 // 1×, and the curated head's first meeting is ~11 frames in).
 //
 // The guided tour is suppressed via `localStorage` before the first paint —
-// see `openFeaturedReplay`.
+// see `openFeaturedReplay`. The two first-visit tests are the exception: they
+// arrive with no "seen" key and an empty URL, the one path on which the tour
+// loads its own teaching game and starts it.
 
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
@@ -709,6 +711,58 @@ test.describe("spectator journey", () => {
     await expect(meeting).toBeVisible();
     await openGuidedTourOverOverlay(page);
     await expectTourOwnsTab(page, meeting);
+  });
+
+  test("a first visit plays the teaching game beside the tour and holds its first meeting", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const tour = tourDialog(page);
+    await expect(tour).toBeVisible();
+    await expect(tour).toContainText("it is already moving behind this card");
+
+    // The game starts by itself: the playhead leaves the Start frame with no
+    // input. Generous timeout, no sleep: the wait is for the first advance.
+    await expect
+      .poll(async () => Number(await frameIndex(page).inputValue()), { timeout: 60_000 })
+      .toBeGreaterThan(0);
+
+    // It runs to its first meeting and stops there, and the bar says why.
+    const pauseBar = page.getByRole("status").filter({ hasText: "playback paused" });
+    await expect(pauseBar).toBeVisible({ timeout: 60_000 });
+    await expect(pauseBar).toContainText(/Meeting at tick \d+ — playback paused/);
+
+    // Nothing opened UNDER the card. A meeting that mounts beneath the tour
+    // takes the focus out of it and closes with it on one Escape, so on this
+    // path auto-follow is held off: the tour is the only dialog and keeps focus.
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await expect(tour).toBeFocused();
+    await expect(page.getByRole("button", { name: "Auto-follow off" })).toBeVisible();
+
+    // Closing the tour is what opens the meeting, and gives auto-follow back.
+    await page.keyboard.press("Escape");
+    await expect(tour).toBeHidden();
+    await expect(page.getByRole("dialog", { name: /Meeting at tick \d+/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Auto-follow on" })).toBeVisible();
+  });
+
+  test("a first visit under reduced motion loads the teaching game and starts nothing", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await page.goto("/");
+    const tour = tourDialog(page);
+    await expect(tour).toBeVisible();
+    // The card for a game that is not moving: it names no cast and no motion.
+    await expect(tour).toContainText("press Play to start or resume it");
+    await expect(tour).not.toContainText("already moving");
+
+    // The game is loaded and parked on its Start frame, with auto-follow left on.
+    await expect(page.getByRole("button", { name: "▶ Play" })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("button", { name: "Auto-follow on" })).toBeVisible();
+    await expect(frameIndex(page)).toHaveValue("0");
+    await context.close();
   });
 
   test("the transport dock leaves the map on screen at laptop heights", async ({

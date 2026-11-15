@@ -553,7 +553,7 @@ describe("the public results tab's ejection heading", () => {
 // ── the header's and the tour's source link ──────────────────────────────────
 //
 // The header reads the name, the tagline and one link to the repository, and
-// the guided tour's welcome step keeps the same link in plain words; the
+// the guided tour's closing step keeps the same link in plain words; the
 // attribution line both used to carry is gone. Their words live in
 // `HEADER_COPY`, so the attribution's words are refused anywhere in the copy
 // tree, and the two places that typed them inline carry no prose of their own.
@@ -615,17 +615,27 @@ function missingHeaderReads(title: string): readonly string[] {
   return HEADER_READS.filter((key) => !title.includes(`HEADER_COPY.${key}`));
 }
 
-/** The tour's welcome step, and the one link inside it. */
-function welcomeSpans(source: string): readonly [string, string] {
-  const stepStart = source.indexOf("export const STEPS");
-  const stepEnd = source.indexOf("title: TOUR_COPY.perspectiveTitle", stepStart);
+/** The tour's closing step, which carries the source link, and the one link inside it. */
+function sourceStepSpans(source: string): readonly [string, string] {
+  const stepStart = source.indexOf("title: TOUR_COPY.rulesTitle");
+  const stepEnd = source.indexOf("export function GuidedTour(", stepStart);
   const step = source.slice(stepStart, stepEnd);
   const linkStart = step.indexOf("<a ");
   const linkEnd = step.indexOf("</a>", linkStart);
   if (stepStart < 0 || stepEnd <= stepStart || linkStart < 0 || linkEnd <= linkStart) {
-    throw new Error("the welcome step moved");
+    throw new Error("the closing step moved");
   }
   return [bareSpan(step), bareSpan(step.slice(linkStart, linkEnd + "</a>".length))];
+}
+
+/** The tour's welcome step: from the head of the steps to the step after it. */
+function welcomeSpan(source: string): string {
+  const stepStart = source.indexOf("export const STEPS");
+  const stepEnd = source.indexOf("title: TOUR_COPY.perspectiveTitle", stepStart);
+  if (stepStart < 0 || stepEnd <= stepStart) {
+    throw new Error("the welcome step moved");
+  }
+  return bareSpan(source.slice(stepStart, stepEnd));
 }
 
 /**
@@ -644,14 +654,14 @@ function headerSpanProblems(title: string, header: string): readonly string[] {
 }
 
 /**
- * What the welcome step of a tour source carries beyond copy reads: each prose
+ * What the closing step of a tour source carries beyond copy reads: each prose
  * literal its link types, then the first attribution word anywhere in the step,
  * inside the link or outside it. Empty when the step says none. The helper cuts
  * both spans from the source itself, so no caller can hand it one span in the
  * other's place.
  */
-function welcomeSpanProblems(source: string): readonly string[] {
-  const [step, link] = welcomeSpans(source);
+function sourceStepSpanProblems(source: string): readonly string[] {
+  const [step, link] = sourceStepSpans(source);
   const problems = proseLiterals(link).map((text) => `the link types ${text}`);
   const hit = ATTRIBUTION_WORDS.exec(step);
   if (hit !== null) problems.push(`the step says ${hit[0]}`);
@@ -778,12 +788,29 @@ describe("the header's and the tour's source link", () => {
     ]);
   });
 
-  it("renders the welcome step's one link from the copy", () => {
-    const [step, link] = welcomeSpans(tour);
+  it("renders the closing step's one link from the copy", () => {
+    const [step, link] = sourceStepSpans(tour);
     expect(step.split("<a ")).toHaveLength(2);
     expect(link).toContain("HEADER_COPY.sourceUrl");
     expect(link).toContain("HEADER_COPY.tourSourceLinkText");
-    expect(welcomeSpanProblems(tour)).toEqual([]);
+    expect(sourceStepSpanProblems(tour)).toEqual([]);
+    // The link sits in that step and nowhere else in the tour.
+    expect(tour.split("<a ")).toHaveLength(2);
+  });
+
+  it("renders the welcome step from the copy alone, with no link in it", () => {
+    const step = welcomeSpan(tour);
+    expect(step).toContain("title: TOUR_COPY.welcomeTitle");
+    expect(step).toContain("{TOUR_COPY.welcomeBody}");
+    expect(step).not.toContain("<a ");
+    expect(proseLiterals(step)).toEqual([]);
+    expect(ATTRIBUTION_WORDS.exec(step)).toBeNull();
+  });
+
+  it("names a sentence typed into the welcome step in place of its copy read (planted)", () => {
+    const typed = tour.replace("{TOUR_COPY.welcomeBody}", "Every vote cites a line.");
+    expect(typed).not.toBe(tour);
+    expect(proseLiterals(welcomeSpan(typed))).toEqual(["Every vote cites a line."]);
   });
 
   it("catches the old link text, or the old sentence, typed back into the step (planted)", () => {
@@ -792,7 +819,7 @@ describe("the header's and the tour's source link", () => {
       "Read the source and ownership case study.",
     );
     expect(literal).not.toBe(tour);
-    expect(welcomeSpanProblems(literal)).toEqual([
+    expect(sourceStepSpanProblems(literal)).toEqual([
       "the link types Read the source and ownership case study.",
       "the step says ownership",
     ]);
@@ -802,7 +829,7 @@ describe("the header's and the tour's source link", () => {
       "not making live model calls. Daniel Keinan directs the project; Claude Code and Codex agents write code and supporting material, with separate AI review.",
     );
     expect(sentence).not.toBe(tour);
-    expect(welcomeSpanProblems(sentence)).toEqual(["the step says Claude Code"]);
+    expect(sourceStepSpanProblems(sentence)).toEqual(["the step says Claude Code"]);
   });
 });
 
@@ -1721,6 +1748,18 @@ describe("the navigation and the tour", () => {
       tournament: "Results",
       tourTitle: "A short tour of how to watch a recorded game",
     });
+  });
+
+  it("opens on a short card that says what is on screen", () => {
+    expect(TOUR_COPY.welcomeTitle).toBe("Welcome: every player here is an AI");
+    expect(TOUR_COPY.welcomeBody).toBe(
+      "Nine AI players share a small station; two are impostors. You are watching a recorded game, replayed exactly, and it is already moving behind this card. When a meeting starts, open a vote to eject to read the line that voter cited.",
+    );
+    expect(TOUR_COPY.welcomeBody.split(" ")).toHaveLength(42);
+    expect(TOUR_COPY.welcomeBodyAnyGame).toBe(
+      "The players share a small station, and some of them are impostors. You are watching a recorded game, replayed exactly; press Play to start or resume it. When a meeting starts, open a vote to eject to read the line that voter cited.",
+    );
+    expect(TOUR_COPY.rulesTitle).toBe("The rules, and where to start");
   });
 
   it("states the game's endings in the ending words and names one player's view", () => {

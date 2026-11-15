@@ -30,8 +30,11 @@ bash scripts/run_spectator.sh  # API + UI, opens http://localhost:5173
 
 The served default is the 9-player, 2-impostor set; the 4-player set is a
 fast fixture of short games. The games the guided tour can open are
-spoiler-free; the tour opens game 19 at its start, and Play stops at its
-first meeting, which ejects a player a reported vent sighting names.
+spoiler-free. On a first visit the tour opens game 19 and starts it playing
+beside a short card; it stops at its first meeting, which ejects a player a
+reported vent sighting names, and that meeting opens when the tour is
+closed. Under reduced motion the game stays at its start until you press
+Play.
 
 **Results** shows each set's figures, and source-bound cases from the
 first 9-player featured game. Start from the featured games: **9p2i seed 19**
